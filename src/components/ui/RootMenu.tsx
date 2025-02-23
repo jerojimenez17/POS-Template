@@ -4,7 +4,7 @@ const RootMenu = () => {
   return (
     <div className="h-full w-full flex flex-col">
       <main className="flex items-center my-auto">
-        <section className="w-full mx-3 p-4 flex justify-between md:justify-center md:gap-5 my-auto">
+        <section className="w-full mx-auto p-4 flex justify-between md:justify-center md:gap-5 my-auto">
           <MenuCard url="/newBill" title="Facturar">
             <svg
               xmlns="http://www.w3.org/2000/svg"

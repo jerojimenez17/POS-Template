@@ -95,3 +95,14 @@ export const ClientSchema = z.object({
   ),
   balance: z.coerce.number(),
 });
+
+export const BillParametersSchema = z.object({
+  clientCondition: z.string(),
+  paidMethod: z.string(),
+  twoMethods: z.boolean(),
+  discount: z.coerce.number(),
+  CUIT: z.coerce.number().optional(),
+  DNI: z.coerce.number().optional(),
+  secondPaidMethod: z.string().optional(),
+  totalSecondMethod: z.coerce.number().optional(),
+});
