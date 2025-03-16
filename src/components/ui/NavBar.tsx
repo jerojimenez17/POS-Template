@@ -1,11 +1,12 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 // const NavBar = () => {
 //   return (
-//     <div className="flex mx-auto opacity-90 shadow h-14 w-full justify-between px-4 py-5">
+//     <div className="flex mx-auto opacity-90 shadow-sm h-14 w-full justify-between px-4 py-5">
 //       <section className="flex justify-between">
 //         <span className="text-white font-bold text-2xl">Genesis</span>
 //       </section>
-//       <ul className="justify-center flex flex-grow">
+//       <ul className="justify-center flex grow">
 //         <li className="justify-center items-center hover:shadow-inner hover:shadow-white py-2 align-baseline">
 //           <Link href="/stock">
 //             <p className="text-center text-white font-semibold ">Stock</p>
@@ -19,17 +20,10 @@
 // export default NavBar;
 
 import { cn } from "@/lib/utils";
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-} from "@/components/ui/navigation-menu";
+import { NavigationMenuLink } from "@/components/ui/navigation-menu";
 import { Poppins } from "next/font/google";
-import Image from "next/image";
 import React from "react";
+import Link from "next/link";
 
 const components: { title: string; href: string; description: string }[] = [
   // {
@@ -63,18 +57,20 @@ export function NavigationMenuHeader() {
   return (
     <div
       className={cn(
-        `w-screen items-center h-12 shadow-md shadow-gray-400 flex justify-center  align-middle`,
+        `w-screen items-center h-12 shadow-md shadow-gray-400 relative flex justify-center  align-middle`,
         font.className
       )}
     >
-      <div className="flex flex-grow w-full text-center">
+      <div className="flex grow w-full text-center">
         <span
           className={cn(
             `text-center text-2xl font-semibold text-gray-800 mx-auto my-2`,
             font.className
           )}
         >
-          <h1 className="mx-auto">Nombre</h1>
+          <Link href="/">
+            <h1 className="mx-auto">Nombre</h1>
+          </Link>
           {/* <Image
             className={`w-32 h-12 antialiased`}
             height={100}
@@ -91,7 +87,7 @@ export function NavigationMenuHeader() {
         <NavigationMenuList>
           {true && (
             <NavigationMenuItem className="">
-              <NavigationMenuTrigger className="backdrop-filter backdrop-blur-xl bg-gray font-bold text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur ">
+              <NavigationMenuTrigger className="backdrop-filter backdrop-blur-xl bg-gray font-bold text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-sm ">
                 Stock
               </NavigationMenuTrigger>
               <NavigationMenuContent>
@@ -131,7 +127,7 @@ export function NavigationMenuHeader() {
           </NavigationMenuItem>
         </NavigationMenuList>
       </NavigationMenu> */}
-      <div className="flex flex-grow text-center align-middle justify-end">
+      <div className="flex grow text-center align-middle justify-end">
         <span></span>
       </div>
     </div>
@@ -148,7 +144,7 @@ const ListItem = React.forwardRef<
         <a
           ref={ref}
           className={cn(
-            "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+            "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
             className
           )}
           {...props}

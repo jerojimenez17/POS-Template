@@ -36,7 +36,8 @@ const NewSubcategoryModal = () => {
             </Label>
             <Input
               id="subcategory"
-              defaultValue="Pedro Duarte"
+              value={subcategory}
+              placeholder="Nueva subcategoria"
               onChange={(e) => {
                 setSubcategory(e.currentTarget.value);
               }}
@@ -57,7 +58,7 @@ const NewSubcategoryModal = () => {
           >
             Agregar
           </Button>
-          {success && <FormSuccess />}
+          {success && <FormSuccess message="Subcategoria creada" />}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -24,7 +24,7 @@ const CodeBarModal = ({ value }: props) => {
 
   const printRef = useRef(null);
   const handlePrint = useReactToPrint({
-    content: () => printRef.current,
+    contentRef: printRef,
   });
   useEffect(() => {
     if (print === true) {
@@ -63,7 +63,6 @@ const CodeBarModal = ({ value }: props) => {
           <DialogTitle>Codigo de Barras</DialogTitle>
         </DialogHeader>
         <div ref={printRef} className="mx-auto gap-4 py-4 grid">
-
           <svg className="mx-auto w-full" ref={barcodeRef}></svg>
         </div>
 

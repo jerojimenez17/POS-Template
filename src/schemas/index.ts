@@ -48,9 +48,9 @@ export const ProductSchema = z.object({
   client_bonus: z.coerce.number(),
   brand: z.string(),
   imageName: z.string(),
-  peso: z.string(),
-  medidas: z.string(),
-  color: z.string(),
+  // peso: z.string(),
+  // medidas: z.string(),
+  // color: z.string(),
   image: z.union([
     z.any(),
     z.string(), // Para cuando image es una URL
@@ -94,4 +94,15 @@ export const ClientSchema = z.object({
     })
   ),
   balance: z.coerce.number(),
+});
+
+export const BillParametersSchema = z.object({
+  clientCondition: z.string(),
+  paidMethod: z.string(),
+  twoMethods: z.boolean(),
+  discount: z.coerce.number(),
+  CUIT: z.coerce.number().optional(),
+  DNI: z.coerce.number().optional(),
+  secondPaidMethod: z.string().optional(),
+  totalSecondMethod: z.coerce.number().optional(),
 });

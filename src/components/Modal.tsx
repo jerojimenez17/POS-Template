@@ -25,17 +25,17 @@ const Modal = ({
   if (!visible) return null;
   return (
     <div
-      className={`fixed h-full  w-full inset-0 bg-black bg-opacity-25 backdrop-blur-sm flex flex-col items-center ${className}`}
+      className={`fixed h-full  w-full inset-0 bg-black/25 backdrop-blur-xs flex flex-col items-center ${className}`}
     >
-      <div className=" flex flex-col w-fit mt-24 h-full">
+      <div className=" flex flex-col w-3/4 md:w-1/2 items-center mt-24 h-full">
         <button
-          className="text-white text-xl place-self-end hover:text-black"
+          className="text-white text-2xl font-bold place-self-end md:mr-28 hover:text-black"
           onClick={onClose}
         >
           X
         </button>
-        <div className="bg-white p-4 bg-opacity-70 rounded-lg w-[50vh] h-[75vh] flex flex-col overflow-auto">
-          <div className="m-3 flex flex-grow mx-auto text-black">{message}</div>
+        <div className="bg-white px-12 py-2 bg-opacity-70 rounded-lg w-lg h-[75vh] flex flex-col overflow-auto">
+          <div className="m-3 flex grow mx-auto text-black">{message}</div>
           {children}
           {/* {link && (
             <a href={link} className="text-black font-semibold">

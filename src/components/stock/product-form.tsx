@@ -42,6 +42,7 @@ import { editProduct } from "@/firebase/stock/editProduct";
 import NewSuplierModal from "./new-suplier-modal";
 import { Suplier } from "@/models/Suplier";
 import { SuplierFirebaseAdapter } from "@/models/SuplierFirebaseAdapter";
+import CodeScanner from "../CodeScanner";
 
 interface props {
   product?: Product;
@@ -107,6 +108,7 @@ const ProductForm = ({ product, onClose }: props) => {
   const onSubmit = async (values: z.infer<typeof ProductSchema>) => {
     startTransition(async () => {
       try {
+        console.log("Hola");
         let imageURL = product?.image || "";
         let imageName = product?.imageName || "";
 
@@ -277,6 +279,12 @@ const ProductForm = ({ product, onClose }: props) => {
                     disabled={isPending}
                   />
                 </FormControl>
+                <CodeScanner
+                  onScan={(result) => {
+                    field.onChange(result[0].rawValue);
+                  }}
+                  errorMessage=""
+                />
                 <FormMessage />
               </FormItem>
             )}
@@ -319,7 +327,7 @@ const ProductForm = ({ product, onClose }: props) => {
             )}
           />
         </div>
-        <div className="space-y-4 flex w-full">
+        <div className="space-y-4 flex items-center w-full">
           <FormField
             control={form.control}
             name="category"
@@ -358,7 +366,7 @@ const ProductForm = ({ product, onClose }: props) => {
             <NewCategoryModal />
           </div>
         </div>
-        <div className="space-y-4 flex w-full">
+        <div className="space-y-4 flex w-full items-center">
           <FormField
             control={form.control}
             name="subCategory"
@@ -397,7 +405,7 @@ const ProductForm = ({ product, onClose }: props) => {
             <NewSubcategoryModal />
           </div>
         </div>
-        <div className="space-y-4 flex w-full">
+        <div className="space-y-4 flex w-full items-center">
           <FormField
             control={form.control}
             name="brand"
@@ -436,7 +444,7 @@ const ProductForm = ({ product, onClose }: props) => {
             <NewBrandModal />
           </div>
         </div>
-        <div className="space-y-4 flex w-full">
+        <div className="space-y-4 flex w-full items-center">
           <FormField
             control={form.control}
             name="suplier"
