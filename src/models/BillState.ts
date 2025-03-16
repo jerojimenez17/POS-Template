@@ -8,7 +8,7 @@ export default interface BillState {
   totalWithDiscount: number;
   seller: string;
   discount: number;
-  date: Date;
+  date: Date | null;
   typeDocument: string;
   documentNumber: number;
   IVACondition: string;

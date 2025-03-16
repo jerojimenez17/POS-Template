@@ -64,6 +64,11 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
             Código
           </div>
         ),
+        cell: (info) => (
+          <div className="font-medium text-center">
+            {info.getValue() as string}
+          </div>
+        ),
       },
       {
         accessorKey: "description",
@@ -108,45 +113,45 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
           </div>
         ),
       },
-      {
-        accessorKey: "color",
-        header: () => (
-          <div className="text-center font-extrabold text-white text-lg p-2">
-            Color
-          </div>
-        ),
-        cell: (info) => (
-          <div className="font-medium text-center">
-            {info.getValue() as string}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "peso",
-        header: () => (
-          <div className="text-center font-extrabold text-white text-lg p-2">
-            Peso
-          </div>
-        ),
-        cell: (info) => (
-          <div className="font-medium text-center">
-            {info.getValue() as string}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "medidas",
-        header: () => (
-          <div className="text-center font-extrabold text-white text-lg p-2">
-            Medidas
-          </div>
-        ),
-        cell: (info) => (
-          <div className="font-medium text-center">
-            {info.getValue() as string}
-          </div>
-        ),
-      },
+      // {
+      //   accessorKey: "color",
+      //   header: () => (
+      //     <div className="text-center font-extrabold text-white text-lg p-2">
+      //       Color
+      //     </div>
+      //   ),
+      //   cell: (info) => (
+      //     <div className="font-medium text-center">
+      //       {info.getValue() as string}
+      //     </div>
+      //   ),
+      // },
+      // {
+      //   accessorKey: "peso",
+      //   header: () => (
+      //     <div className="text-center font-extrabold text-white text-lg p-2">
+      //       Peso
+      //     </div>
+      //   ),
+      //   cell: (info) => (
+      //     <div className="font-medium text-center">
+      //       {info.getValue() as string}
+      //     </div>
+      //   ),
+      // },
+      // {
+      //   accessorKey: "medidas",
+      //   header: () => (
+      //     <div className="text-center font-extrabold text-white text-lg p-2">
+      //       Medidas
+      //     </div>
+      //   ),
+      //   cell: (info) => (
+      //     <div className="font-medium text-center">
+      //       {info.getValue() as string}
+      //     </div>
+      //   ),
+      // },
       {
         accessorKey: "image",
         header: () => (
@@ -239,7 +244,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
   });
 
   return (
-    <div className="z-0 p-0 mx-auto mb-20 w-full h-full rounded-xl shadow overflow-hidden">
+    <div className="z-0 p-0 mx-auto mb-20 w-full h-full rounded-xl shadow-sm overflow-hidden">
       <div className=" h-[90%] overflow-auto">
         <table className="text-gray-800 max-h-full border-separate border-spacing-0 bg-white bg-opacity-20 backdrop-filter w-full z-0">
           <thead className="bg-black h-20 mt-0">

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Poppins } from "next/font/google";
 import "./globals.css";
 import { NavigationMenuHeader } from "@/components/ui/NavBar";
 
@@ -13,6 +13,11 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const poppins = Poppins({
+  variable: "--font-poppins-sans",
+  subsets: ["latin"],
+  weight: "400",
+});
 export const metadata: Metadata = {
   title: "Tu app",
   description: "A template for Point of Sales Apps",
@@ -26,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full overflow-hidden`}
+        className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased h-screen w-screen overflow-hidden`}
       >
         <NavigationMenuHeader />
         {children}

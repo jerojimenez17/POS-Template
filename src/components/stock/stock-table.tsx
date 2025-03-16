@@ -43,7 +43,7 @@ const StockTable = ({ session, descriptionFilter }: props) => {
   return (
     <div className="z-0 p-0 mx-auto mb-20 w-full h-[90%] flex px-4">
       <div className="rounded-t-xl overflow-auto shadow-lg w-full mx-auto">
-        <Table className="text-gray-800 bg-white bg-opacity-20 shadow p-5 w-full my-2  mx-auto z-0">
+        <Table className="text-gray-800 bg-white bg-opacity-20 shadow-sm p-5 w-full my-2  mx-auto z-0">
           <TableHeader className="bg-black bg-opacity-80 rounded-t-xl">
             <TableRow className=" hover:bg-gray hover:backdrop-filter">
               <TableHead className="hover:text-gray-800 text-center font-extrabold text-white text-lg p-2 -z-10 ">
@@ -127,8 +127,8 @@ const StockTable = ({ session, descriptionFilter }: props) => {
                     className="text-center hover:text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-lg items-center"
                     key={product.id}
                   >
-                    <TableCell className="font-medium w-10">
-                      {product.code}
+                    <TableCell className="font-medium">
+                      {product.code ? product.code : "asd"}
                     </TableCell>
 
                     <TableCell className="font-medium">
@@ -150,7 +150,7 @@ const StockTable = ({ session, descriptionFilter }: props) => {
                         maximumFractionDigits: 2,
                       })}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    {/* <TableCell className="font-medium">
                       {product.color}
                     </TableCell>
                     <TableCell className="font-medium">
@@ -158,7 +158,7 @@ const StockTable = ({ session, descriptionFilter }: props) => {
                     </TableCell>
                     <TableCell className="font-medium">
                       {product.medidas}
-                    </TableCell>
+                    </TableCell> */}
                     <TableCell className="items-center align-middle">
                       {product.image.includes("https") ? (
                         <Image

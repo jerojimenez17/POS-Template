@@ -31,12 +31,13 @@ const NewCategoryModal = () => {
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
+            <Label htmlFor="category" className="text-right">
               Categoria
             </Label>
             <Input
               id="category"
-              defaultValue="Nueva Categoria"
+              value={category}
+              placeholder="Nueva Categoria"
               onChange={(e) => {
                 setCategory(e.currentTarget.value);
               }}
@@ -57,7 +58,7 @@ const NewCategoryModal = () => {
           >
             Agregar
           </Button>
-          {success && <FormSuccess />}
+          {success && <FormSuccess message="Categoria creada" />}
         </DialogFooter>
       </DialogContent>
     </Dialog>

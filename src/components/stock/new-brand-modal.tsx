@@ -36,7 +36,8 @@ const NewCategoryModal = () => {
             </Label>
             <Input
               id="brand"
-              defaultValue="Marca"
+              value={brand}
+              placeholder="Marca"
               onChange={(e) => {
                 if (e.currentTarget.value !== "") {
                   setBrand(e.currentTarget.value);
@@ -59,7 +60,7 @@ const NewCategoryModal = () => {
           >
             Agregar
           </Button>
-          {success && <FormSuccess />}
+          {success && <FormSuccess message="Marca agregada!" />}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,13 +1,17 @@
 import BillParametersForm from "@/components/Billing/BillParametersForm";
+import ProductsTable from "@/components/Billing/ProductsTable";
+import BillProvider from "@/context/BillProvider";
 
 const page = () => {
   return (
-    <div className="h-full flex flex-col">
-      <div className="bg-slate-300 h-40 w-full">
-        <BillParametersForm />
+    <BillProvider>
+      <div className="flex flex-col overflow-auto">
+        <div className="h-fit py-4 md:h-1/4 container my-3 mx-auto w-full shadow rounded-xl">
+          <BillParametersForm />
+        </div>
+        <ProductsTable />
       </div>
-      <div className="h-full w-full bg-slate-600"></div>
-    </div>
+    </BillProvider>
   );
 };
 

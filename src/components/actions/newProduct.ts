@@ -26,9 +26,9 @@ export const newProduct = async (values: z.infer<typeof ProductSchema>) => {
     suplier: adaptedSuplier ? { ...adaptedSuplier } : { ...new Suplier() },
     client_bonus: 0,
     id: "",
-    cod: values.cod,
+    code: values.code,
     price: values.price,
-    creation_date: values.creation_date,
+    creation_date: values.creation_date || new Date(),
     amount: values.amount,
     image: values.image,
     imageName: values.imageName,
@@ -48,6 +48,7 @@ export const newProduct = async (values: z.infer<typeof ProductSchema>) => {
     return { error: "Campos Invalidos" };
   }
   const response = await addProduct(product);
+  console.log(response);
 
   const { success, error } = response || {};
   if (error) {

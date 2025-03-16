@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import ProductForm from "./product-form";
-import StockTable from "./stock-table";
 import StockFilterPanel from "./stock-filter-panel";
 import Modal from "../Modal";
 import { useRouter } from "next/navigation";
@@ -60,7 +59,7 @@ const ProductDashboad = ({ session }: props) => {
     <div className="h-screen text-center  items-center flex justify-center text-pink-400 mx-auto overflow-auto  sm:w-screen-sm mb-10">
       <div className="justify-center align-middle">
         <button
-          className="p-2 px-3 align-middle justify-center my-auto hover:shadow rounded-full hover:shadow-pink-300 bg-gradient-to-r from-rose-200 to-pink-200 hover:text-white font-semibold"
+          className="p-2 px-3 align-middle justify-center my-auto hover:shadow-sm rounded-full hover:shadow-pink-300 bg-linear-to-r from-rose-200 to-pink-200 hover:text-white font-semibold"
           onClick={() => router.push("/login")}
         >
           Iniciar Sesion

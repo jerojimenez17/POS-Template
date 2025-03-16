@@ -15,7 +15,7 @@ const StockFilterPanel = ({
   const [scanerOpen, setScanerOpen] = useState(false);
   const [descriptionFilterInput, setDescriptionFilterInput] = useState("");
   return (
-    <div className="h-28 w-full flex items-center justify-center bg-white bg-opacity-25 shadow rounded-lg mx-auto my-2">
+    <div className="h-28 w-full flex items-center justify-center bg-white bg-opacity-25 shadow-sm rounded-lg mx-auto my-2">
       <Input
         className="w-1/2 h-10 font-bold rounded-full appearance-none border border-gray-800 text-gray-800"
         type="search"
@@ -35,7 +35,7 @@ const StockFilterPanel = ({
       />
       <Button
         variant="outline"
-        className="rounded-full hover:shadow-md shadow-sm h-10 p-1 m-2 text-gray-800 ring-2 ring-gray-800 font-bold hover:font-bold target:bg-blue-400"
+        className="rounded-full hover:shadow-md shadow-xs h-10 p-1 m-2 text-gray-800 ring-2 ring-gray-800 font-bold hover:font-bold target:bg-blue-400"
         onClick={handleOpenModal}
       >
         ➕Nuevo Producto

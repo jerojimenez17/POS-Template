@@ -30,11 +30,11 @@ export class ProductFirebaseAdapter {
     const product = new Product();
     product.id = dataId;
     data.code ? (product.code = data.code) : (product.code = ""),
-      data.peso || data.details
-        ? (product.peso = data.peso)
-        : (product.peso = ""),
-      data.color ? (product.color = data.color) : (product.color = ""),
-      data.medidas ? (product.medidas = data.medidas) : (product.medidas = ""),
+      // data.peso || data.details
+      //   ? (product.peso = data.peso)
+      //   : (product.peso = ""),
+      // data.color ? (product.color = data.color) : (product.color = ""),
+      // data.medidas ? (product.medidas = data.medidas) : (product.medidas = ""),
       data.description
         ? (product.description = data.description)
         : (product.description = ""),
@@ -44,7 +44,6 @@ export class ProductFirebaseAdapter {
     data.price ? (product.price = data.price) : (product.price = 0),
       data.unit ? (product.unit = data.unit) : (product.unit = "unidades"),
       data.gain ? (product.gain = data.gain) : (product.gain = 0),
-      data.cod ? (product.code = data.cod) : (product.code = ""),
       (product.salePrice = data.price + data.price * data.gain * 0.01);
     data.amount ? (product.amount = data.amount) : (product.amount = 0);
     if (data.image.length !== 0) {

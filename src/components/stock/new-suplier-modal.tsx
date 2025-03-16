@@ -53,6 +53,7 @@ const NewSuplierModal = () => {
             </Label>
             <Input
               id="suplier-email"
+              value={suplierEmail}
               placeholder="ejemplo@ejemplo.com"
               onChange={(e) => {
                 if (e.currentTarget.value !== "") {
@@ -96,6 +97,7 @@ const NewSuplierModal = () => {
               const newSuplier = new Suplier();
               newSuplier.name = suplier;
               newSuplier.bonus = suplierBonus;
+              newSuplier.phone = suplierPhone;
               newSuplier.email = suplierEmail;
               if (suplier !== "") {
                 await addSuplier(newSuplier);
@@ -107,7 +109,7 @@ const NewSuplierModal = () => {
           >
             Agregar
           </Button>
-          {success && <FormSuccess />}
+          {success && <FormSuccess message="Proveedor agregado" />}
         </DialogFooter>
       </DialogContent>
     </Dialog>

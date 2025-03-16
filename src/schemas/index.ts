@@ -48,9 +48,9 @@ export const ProductSchema = z.object({
   client_bonus: z.coerce.number(),
   brand: z.string(),
   imageName: z.string(),
-  peso: z.string(),
-  medidas: z.string(),
-  color: z.string(),
+  // peso: z.string(),
+  // medidas: z.string(),
+  // color: z.string(),
   image: z.union([
     z.any(),
     z.string(), // Para cuando image es una URL
