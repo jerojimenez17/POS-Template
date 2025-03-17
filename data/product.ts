@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { db } from "@/lib/db";
 
 export const getProductByDescription = async (description: string) => {
@@ -21,7 +20,7 @@ export const getProducts = async () => {
   try {
     const products = await db.product.findMany();
     return products;
-  } catch (err) {
+  } catch {
     return null;
   }
 };
