@@ -1,6 +1,6 @@
 "use client";
 import FilterState from "@/models/FiltersState";
-import { useReducer } from "react";
+import { JSX, useReducer } from "react";
 import { FiltersReducer } from "./FiltersReducer";
 import { FiltersContext } from "./FiltersContext";
 import FilterField from "@/models/FilterField";
