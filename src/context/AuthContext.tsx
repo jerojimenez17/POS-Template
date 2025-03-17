@@ -22,6 +22,7 @@ const AuthContext = createContext<AuthContextType>({ user: null });
 
 export const AuthContextProvider = ({ children }: props) => {
   const [user, setUser] = useState<User | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
