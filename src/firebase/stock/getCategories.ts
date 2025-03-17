@@ -1,12 +1,11 @@
-import Product from "@/models/Product";
-import { fbDB } from "../config";
-import { addDoc, collection, getDoc, onSnapshot } from "firebase/firestore";
+import { db } from "../config";
+import { collection, onSnapshot } from "firebase/firestore";
 
 export const getCategories = async () => {
-  const collectionRef = collection(fbDB, "categories");
+  const collectionRef = collection(db, "categories");
 
   onSnapshot(collectionRef, (querySnapshot) => {
-    let categories: string[] = [];
+    const categories: string[] = [];
     querySnapshot.docs.forEach((snapshot) => {
       categories.push(snapshot.data().name);
       return categories;

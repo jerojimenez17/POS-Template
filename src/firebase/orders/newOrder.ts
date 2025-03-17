@@ -1,4 +1,4 @@
-import { fbDB } from "../config";
+import { db } from "../config";
 import {
   addDoc,
   arrayUnion,
@@ -16,11 +16,11 @@ export const addOrder = async (order: Order) => {
     for (let i = 0; i < order.products.length; i++) {
       await discountStock(order.products[i].id, order.products[i].amount);
     }
-    const collectionOrderRef = collection(fbDB, "orders");
+    const collectionOrderRef = collection(db, "orders");
     // Serialización de productos
     const serializedProducts = order.products.map((product) => ({
       id: product.id,
-      cod: product.cod,
+      code: product.code,
       description: product.description,
       brand: product.brand,
       subCategory: product.subCategory,
@@ -56,9 +56,9 @@ export const addOrder = async (order: Order) => {
   }
 };
 // export const confirmOrder = async (orderID: string) => {
-//   const orderRef = doc(fbDB, "orders", orderID);
+//   const orderRef = doc(db, "orders", orderID);
 //   try {
-//     await runTransaction(fbDB, async (transaction) => {
+//     await runTransaction(db, async (transaction) => {
 //       const orderDoc = await transaction.get(orderRef);
 //       if (!orderDoc.exists()) {
 //         throw new Error(`Order dosen't exists`);
@@ -75,9 +75,9 @@ export const addOrder = async (order: Order) => {
 //   }
 // };
 export const paidOrder = async (orderID: string) => {
-  const orderRef = doc(fbDB, "orders", orderID);
+  const orderRef = doc(db, "orders", orderID);
   try {
-    await runTransaction(fbDB, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
       const orderDoc = await transaction.get(orderRef);
       if (!orderDoc.exists()) {
         throw new Error(`Order dosen't exists`);
@@ -97,10 +97,10 @@ async function addOrderToClient(
   clientId: string,
   orderRef: DocumentReference
 ): Promise<void> {
-  const clientRef = doc(fbDB, "clients", clientId);
+  const clientRef = doc(db, "clients", clientId);
 
   try {
-    await runTransaction(fbDB, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
       const clientDoc = await transaction.get(clientRef);
 
       if (!clientDoc.exists()) {
@@ -121,9 +121,9 @@ async function addOrderToClient(
 async function updateBalance(clientID: string, total: number) {
   const clientDocID: string = clientID;
   console.log(clientDocID);
-  const clientRef = doc(fbDB, "clients", clientDocID);
+  const clientRef = doc(db, "clients", clientDocID);
   try {
-    await runTransaction(fbDB, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
       const clientDoc = await transaction.get(clientRef);
       if (!clientDoc.exists()) {
         throw new Error("Error: Cliente " + clientID + " no existe");
@@ -141,10 +141,10 @@ export async function discountStock(
   productId: string,
   discountValue: number
 ): Promise<void> {
-  const productRef = doc(fbDB, "stock", productId.split("id")[1]);
+  const productRef = doc(db, "stock", productId.split("id")[1]);
 
   try {
-    await runTransaction(fbDB, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
       const productDoc = await transaction.get(productRef);
 
       if (!productDoc.exists()) {
@@ -173,12 +173,12 @@ export async function changeStatus(
   orderId: string,
   newStatus: Status
 ): Promise<void> {
-  const orderRef = doc(fbDB, "orders", orderId);
+  const orderRef = doc(db, "orders", orderId);
   if (newStatus === Status.confirmado) {
     // confirmOrder(orderId);
   } else {
     try {
-      await runTransaction(fbDB, async (transaction) => {
+      await runTransaction(db, async (transaction) => {
         const orderDoc = await transaction.get(orderRef);
 
         if (!orderDoc.exists()) {
@@ -205,12 +205,12 @@ export async function changePaidStatus(
   orderId: string,
   newStatus: PaidStatus
 ): Promise<void> {
-  const orderRef = doc(fbDB, "orders", orderId);
+  const orderRef = doc(db, "orders", orderId);
   if (newStatus === PaidStatus.pago) {
     paidOrder(orderId);
   }
   try {
-    await runTransaction(fbDB, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
       const orderDoc = await transaction.get(orderRef);
 
       if (!orderDoc.exists()) {

@@ -8,7 +8,7 @@ export default async function newMovement(movement: Movement) {
     const collectionRef = collection(db, "movements");
     const res = await addDoc(collectionRef, { ...movement });
     console.log(res);
-  } catch (err) {
+  } catch {
     return { error: "Error al guardar producto" };
   }
 }

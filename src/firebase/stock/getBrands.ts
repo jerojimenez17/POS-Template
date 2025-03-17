@@ -1,11 +1,11 @@
-import { fbDB } from "../config";
-import { addDoc, collection, getDoc, onSnapshot } from "firebase/firestore";
+import { db } from "../config";
+import { collection, onSnapshot } from "firebase/firestore";
 
 export const getBrands = async () => {
-  const collectionRef = collection(fbDB, "brands");
+  const collectionRef = collection(db, "brands");
 
   onSnapshot(collectionRef, (querySnapshot) => {
-    let brands: string[] = [];
+    const brands: string[] = [];
     querySnapshot.docs.forEach((snapshot) => {
       brands.push(snapshot.data().name);
       return brands;

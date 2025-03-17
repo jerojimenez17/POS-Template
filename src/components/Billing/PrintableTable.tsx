@@ -20,6 +20,7 @@ const PrintableTable = ({ print, className }: Props) => {
   const [searchCode, setSearchCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [scanerOpen, setScanerOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [state, setState] = useState(BillState);
 
   // const inputDescription = useRef<any>();
@@ -37,6 +38,7 @@ const PrintableTable = ({ print, className }: Props) => {
     if (print === true) {
       handlePrint();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [print]);
 
   // const handleBlur = () => {
