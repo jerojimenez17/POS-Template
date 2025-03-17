@@ -20,7 +20,7 @@ export const getProducts = async () => {
   try {
     const products = await db.product.findMany();
     return products;
-  } catch {
-    return null;
+  } catch (err) {
+    return err || null;
   }
 };
