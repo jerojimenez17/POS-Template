@@ -11,7 +11,10 @@ export default interface BillState {
   date: Date | null;
   typeDocument: string;
   documentNumber: number;
+  secondPaidMethod?: string;
+  totalSecondMethod?: number | null;
   IVACondition: string;
+  twoMethods: boolean;
   CAE?: CAE;
   entrega?: number;
   pago?: boolean;

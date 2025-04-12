@@ -7,6 +7,7 @@ import Product from "@/models/Product";
 import CAE from "@/models/CAE";
 
 const INITIAL_STATE: BillState = {
+  twoMethods: false,
   id: "",
   products: [],
   total: 0,
@@ -18,7 +19,7 @@ const INITIAL_STATE: BillState = {
   IVACondition: "Consumidor Final",
   paidMethod: "Efectivo",
   nroAsociado: 0,
-  tipoFactura: "C",
+  tipoFactura: "Remito",
   pago: false,
   entrega: 0,
   CAE: { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" },

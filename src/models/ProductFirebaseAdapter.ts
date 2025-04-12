@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 import { DocumentData, Timestamp } from "firebase/firestore";
 import Product from "./Product";
+import { Suplier } from "./Suplier";
 
 export class ProductFirebaseAdapter {
   public static fromDocumentDataArray(data: DocumentData[]): Product[] {
@@ -35,9 +36,12 @@ export class ProductFirebaseAdapter {
       //   : (product.peso = ""),
       // data.color ? (product.color = data.color) : (product.color = ""),
       // data.medidas ? (product.medidas = data.medidas) : (product.medidas = ""),
-      data.description
-        ? (product.description = data.description)
-        : (product.description = ""),
+      data.suplier
+        ? (product.suplier = data.suplier)
+        : (product.suplier = new Suplier());
+    data.description
+      ? (product.description = data.description)
+      : (product.description = ""),
       data.category
         ? (product.category = data.category)
         : (product.category = "");

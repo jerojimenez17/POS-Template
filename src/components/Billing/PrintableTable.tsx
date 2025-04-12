@@ -8,14 +8,16 @@ import { BillContext } from "@/context/BillContext";
 import { Input } from "../ui/input";
 import getProductByCode from "@/firebase/stock/getProduct";
 import { Button } from "../ui/button";
+import { Session } from "next-auth";
 
 interface Props {
   print: boolean;
   className: string;
   // handleClose: () => void;
+  session: Session | null;
   externalState?: BillState;
 }
-const PrintableTable = ({ print, className }: Props) => {
+const PrintableTable = ({ print, className, externalState }: Props) => {
   const { BillState, addItem, removeItem } = useContext(BillContext);
   const [searchCode, setSearchCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -40,6 +42,14 @@ const PrintableTable = ({ print, className }: Props) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [print]);
+
+  useEffect(() => {
+    if (externalState) {
+      setState(externalState);
+    } else {
+      setState(BillState);
+    }
+  }, [externalState, print, addItem]);
 
   // const handleBlur = () => {
   //   if (description !== "" && units !== 0 && price !== 0) {
@@ -83,7 +93,7 @@ const PrintableTable = ({ print, className }: Props) => {
           )}
         </div>
       </div>
-      <div className="w-full m-0 flex justify-center gap-0 h-12">
+      <div className="w-full m-0 flex justify-center flex-col place-items-center gap-0 h-12">
         <div className="flex mx-auto w-1/3">
           <div className=" align-middle mx-auto items-center">
             <Input
@@ -95,6 +105,7 @@ const PrintableTable = ({ print, className }: Props) => {
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
+                  console.log("Entra");
                   getProductByCode(e.currentTarget.value).then((product) => {
                     if (product) {
                       const adaptedProduct =
@@ -102,7 +113,7 @@ const PrintableTable = ({ print, className }: Props) => {
                           product[0],
                           product[0].id
                         );
-                      const productToCart = { ...adaptedProduct, units: 1 };
+                      const productToCart = { ...adaptedProduct, amount: 1 };
                       addItem(productToCart);
                       setSearchCode("");
                     } else {
@@ -207,7 +218,7 @@ const PrintableTable = ({ print, className }: Props) => {
                           product[0],
                           product[0].id
                         );
-                      const productToCart = { ...adaptedProduct, units: 1 };
+                      const productToCart = { ...adaptedProduct, amount: 1 };
                       addItem(productToCart);
                       console.log(BillState);
                       setSearchCode("");
@@ -222,7 +233,7 @@ const PrintableTable = ({ print, className }: Props) => {
           </div>
         )}
         {errorMessage !== "" && (
-          <div className=" w-full mx-auto text-red-600 text-lg">
+          <div className="text-center flex mx-auto text-red-600 text-lg">
             {errorMessage}
           </div>
         )}
@@ -339,7 +350,7 @@ const PrintableTable = ({ print, className }: Props) => {
             </tbody>
           </table>
         </div>
-        <div className="flex print:h-12 bg-white/20 text-center w-3/4 shadow rounded-xl mb-4 mx-auto justify-center flex-col">
+        <div className=" mt-20 flex print:h-12 bg-white/20 text-center w-3/4 shadow-lg shadow-gray-300 rounded-xl mb-4 mx-auto justify-center flex-col">
           <p className="print:text-gray-900 font-mono font-bold print:text-3xl text-lg  print:mx-auto">
             Total: $
             {state.products
