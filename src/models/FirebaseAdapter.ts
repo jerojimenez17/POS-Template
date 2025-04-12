@@ -18,6 +18,7 @@ export class FirebaseAdapter {
   ): BillState {
     return {
       id: dataId,
+      twoMethods: data.twoMethods,
       products: ProductFirebaseAdapter.forBill(data.products),
       total: data.total,
       totalWithDiscount:
