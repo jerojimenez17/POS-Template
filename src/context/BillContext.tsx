@@ -21,7 +21,7 @@ export default interface BillContextProps {
   nroAsociado: (number: number) => void;
   IVACondition: (condition: string) => void;
   paidMethod: (method: string) => void;
-  tipoFactura: (tipoFactura: string) => void;
+  billType: (billType: string) => void;
   date: (newDate: Date) => void;
   CAE: (cae: CAE) => void;
   setState: (BillState: BillState) => void;

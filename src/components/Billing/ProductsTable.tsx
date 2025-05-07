@@ -14,10 +14,12 @@ const ProductsTable = ({ session }: props) => {
       <PrintableTable
         session={session}
         print={print}
-        className="h-full w-full"
+        className="h-3/5 print:h-3/4 w-full overflow-auto"
       />
 
-      <BillButtons session={session} handlePrint={() => setPrint(!print)} />
+      <div className="flex flex-col relative">
+        <BillButtons session={session} handlePrint={() => setPrint(!print)} />
+      </div>
     </div>
   );
 };

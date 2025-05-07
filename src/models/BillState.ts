@@ -18,7 +18,7 @@ export default interface BillState {
   CAE?: CAE;
   entrega?: number;
   pago?: boolean;
-  tipoFactura?: string;
+  billType?: string;
   nroAsociado?: number;
   paidMethod?: string;
 }

@@ -23,7 +23,7 @@ type BillAction =
   | { type: "IVACondition"; payload: string }
   | { type: "date"; payload: Date }
   | { type: "paidMethod"; payload: string }
-  | { type: "tipoFactura"; payload: string }
+  | { type: "billType"; payload: string }
   | { type: "CAE"; payload: CAE }
   | { type: "setState"; payload: BillState };
 
@@ -95,7 +95,7 @@ export const BillReducer = (
         ...state,
         products: [],
         documentNumber: 0,
-        tipoFactura: "C",
+        billType: "Factura C",
         IVACondition: "Consumidor Final",
         nroAsociado: 0,
         total: 0,
@@ -169,10 +169,10 @@ export const BillReducer = (
         ...state,
         typeDocument: action.payload,
       };
-    case "tipoFactura":
+    case "billType":
       return {
         ...state,
-        tipoFactura: action.payload,
+        billType: action.payload,
       };
     case "documentNumber": {
       return {
@@ -217,7 +217,7 @@ export const BillReducer = (
         ...state,
         CAE: action.payload.CAE,
         IVACondition: action.payload.IVACondition,
-        tipoFactura: action.payload.tipoFactura,
+        billType: action.payload.billType,
         documentNumber: action.payload.documentNumber,
         typeDocument: action.payload.typeDocument,
       };

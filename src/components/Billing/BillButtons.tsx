@@ -25,7 +25,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
   const [response, setResponse] = useState("");
   const [respAfip, setRespAfip] = useState<CAE | undefined>();
   const [openRemitoModal, setOpenRemitoModal] = useState(false);
-  const { BillState, tipoFactura, CAE, sellerName, removeAll } =
+  const { BillState, billType, CAE, sellerName, removeAll } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
@@ -124,9 +124,6 @@ const BillButtons = ({ session, handlePrint }: props) => {
     );
     setBlockButton(true);
     setOpenRemitoModal(false);
-    if (afip) {
-      await handleCreateVoucher();
-    }
     const totalAmount =
       BillState.products.reduce((acc, act) => acc + act.price * act.amount, 0) -
       BillState.discount *
@@ -138,10 +135,13 @@ const BillButtons = ({ session, handlePrint }: props) => {
     const remainingAmount = totalAmount - (BillState.totalSecondMethod || 0);
 
     console.log(totalAmount, productTotal);
-    if (totalAmount < 0) {
+    if (totalAmount <= 0) {
       setErrorMessage("El monto debe ser mayor a 0");
       setOpenErrorModal(true);
     } else {
+      if (afip) {
+        await handleCreateVoucher();
+      }
       if (
         BillState.twoMethods &&
         BillState.totalSecondMethod &&
@@ -240,7 +240,12 @@ const BillButtons = ({ session, handlePrint }: props) => {
         move.paidMethod = BillState.paidMethod || "Efectivo";
         move.total = totalAmount;
         await newMovement(move);
-        await handleSaveSale({ ...BillState, CAE: latestCAE.current });
+        await handleSaveSale({
+          ...BillState,
+          CAE: latestCAE.current,
+          totalWithDiscount:
+            BillState.total - BillState.total * BillState.discount * 0.01,
+        });
       }
 
       await updateAmount(BillState.products);
@@ -257,7 +262,6 @@ const BillButtons = ({ session, handlePrint }: props) => {
           onClick={() => {
             if (session?.user.email) {
               sellerName(session.user.email || "");
-              tipoFactura("C");
             }
             setOpenFacturaModal(true);
           }}
@@ -285,37 +289,47 @@ const BillButtons = ({ session, handlePrint }: props) => {
         blockButton={blockButton}
         visible={openFacturaModal}
         onClose={() => setOpenFacturaModal(false)}
+        onCancel={() => setOpenFacturaModal(false)}
         message={"Confirmar creacion de Factura C"}
         onAcept={async () => {
           setBlockButton(true);
           await createSale(true);
-          handlePrint();
-          setTimeout(() => {
-            removeAll();
-          }, 5000);
+          if (!openErrorModal && BillState.total > 0) {
+            handlePrint();
+            setTimeout(() => {
+              removeAll();
+            }, 5000);
+          }
           setOpenFacturaModal(false);
 
           setBlockButton(false);
         }}
-        onCancel={() => setOpenRemitoModal(false)}
       />
       <Modal
         blockButton={blockButton}
         visible={openRemitoModal}
-        onClose={() => setOpenFacturaModal(false)}
+        onClose={() => setOpenRemitoModal(false)}
         message={"Confirmar creacion de Remito"}
         onAcept={async () => {
           setBlockButton(true);
           await createSale(false);
-          handlePrint();
-          setTimeout(() => {
-            removeAll();
-          }, 5000);
+          if (!openErrorModal && BillState.total > 0) {
+            handlePrint();
+            setTimeout(() => {
+              removeAll();
+            }, 5000);
+          }
           setOpenRemitoModal(false);
           setBlockButton(false);
         }}
         onCancel={() => setOpenRemitoModal(false)}
       />
+      <Modal
+        visible={openErrorModal}
+        onClose={() => setOpenErrorModal(false)}
+        blockButton={false}
+        message={errorMessage}
+      ></Modal>
     </div>
   );
 };

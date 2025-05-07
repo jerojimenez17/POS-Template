@@ -77,7 +77,7 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
             Fecha: {state.date?.toLocaleDateString()}
             {state.date?.toLocaleTimeString()}
           </p>
-          <p>Factura: {state.tipoFactura}</p>
+          <p>Factura: {state.billType}</p>
           <p>Cuit: 27374057893</p>
           <p>Condicion IVA: Monotributo</p>
           <p>IIBB: 27374057893</p>
@@ -88,7 +88,7 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
         <div className="hidden print:flex flex-col justify-center text-center mx-auto print:text-lg">
           <p>Compronte: 000001-{state.CAE?.nroComprobante}</p>
           <p>Condicion IVA Cliente: {state.IVACondition}</p>
-          {state.tipoFactura !== "C" && (
+          {state.billType !== "C" && (
             <p>Comprobante asociado: {state.nroAsociado}</p>
           )}
         </div>
@@ -239,9 +239,9 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
         )}
       </div>
 
-      <div className="h-3/4 w-full my-2 mx-auto overflow-auto">
-        <div className="size-3/4 h-[80%] flex rounded-xl mx-auto overflow-hidden shadow-xl">
-          <table className="table-auto w-full h-full mx-auto print:w-2/3">
+      <div className=" w-full my-2 mx-auto overflow-auto">
+        <div className="w-3/4 flex rounded-xl mx-auto overflow-hidden shadow-xl">
+          <table className="table-auto w-full mx-auto print:w-2/3">
             <thead className="bg-black rounded-xl backdrop-blur-3xl text-center text-white">
               <tr>
                 <th className="p-3">Descripcion</th>
@@ -254,8 +254,11 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
             <tbody className="overflow-auto text-center">
               {state.products.map((product) => {
                 return (
-                  <tr key={product.id} className="even:bg-slate-200 text-black">
-                    <td className="p-2">{product.description} </td>
+                  <tr
+                    key={product.id}
+                    className="even:bg-slate-200 text-black h-fit"
+                  >
+                    <td className="">{product.description} </td>
                     <td className="p-2">{product.amount}</td>
                     <td className="p-2">
                       $
@@ -350,7 +353,7 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
             </tbody>
           </table>
         </div>
-        <div className=" mt-20 flex print:h-12 bg-white/20 text-center w-3/4 shadow-lg shadow-gray-300 rounded-xl mb-4 mx-auto justify-center flex-col">
+        <div className=" mt-20 h-fit relative flex print:h-18 bg-white/20 text-center w-3/4 shadow-lg shadow-gray-300 rounded-xl mb-4 mx-auto justify-center flex-col">
           <p className="print:text-gray-900 font-mono font-bold print:text-3xl text-lg  print:mx-auto">
             Total: $
             {state.products

@@ -18,6 +18,7 @@ import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
 import { useContext, useMemo, useState } from "react";
 import { BillContext } from "@/context/BillContext";
+import BillTypes from "@/models/billType";
 
 const BillParametersForm = () => {
   const [editParamters, setEditParameters] = useState(false);
@@ -30,6 +31,7 @@ const BillParametersForm = () => {
       clientCondition: ClientConditions.CONSUMIDOR_FINAL,
       discount: 0,
       twoMethods: false,
+      billType: BillTypes.C,
       totalSecondMethod: 0,
       secondPaidMethod: PaidMethods.DEBITO,
     },
@@ -44,6 +46,7 @@ const BillParametersForm = () => {
       total: BillState.total,
       totalWithDiscount: BillState.totalWithDiscount,
       seller: BillState.seller,
+      billType: form.getValues().billType,
       date: currentDate,
       typeDocument: form.getValues().clientCondition,
       documentNumber: form.getValues().DNI ?? 0,
@@ -55,9 +58,36 @@ const BillParametersForm = () => {
   return editParamters ? (
     <Form {...form}>
       <form className="size-full" onSubmit={form.handleSubmit(onSubmit)}>
-        <div className="size-full flex flex-col">
+        <div className="size-full flex gap-2 flex-col">
           <div className=" text-gray-700 container items-center flex-col md:flex-row size-full justify-evenly mx-auto gap-1 flex">
             <div className=" mx-auto w-full md:w-1/3 h-1/2 md:h-full my-auto gap-0 flex flex-col">
+              <div className="h-full w-full text-center my-auto flex items-center">
+                <FormField
+                  control={form.control}
+                  name={"billType"}
+                  render={({ field }) => (
+                    <FormItem className="w-1/2 md:w-1/3 mx-auto">
+                      <FormLabel className=" font-semibold">
+                        Tipo Factura
+                      </FormLabel>
+                      <FormControl>
+                        <Select {...field} onValueChange={field.onChange}>
+                          <SelectTrigger className="rounded-xl shadow-md w-full mx-auto">
+                            <SelectValue placeholder={field.value} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.values(BillTypes).map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
               <div className="h-full w-full text-center my-auto flex items-center">
                 <FormField
                   control={form.control}
@@ -265,6 +295,9 @@ const BillParametersForm = () => {
     <div
       className={`items-center flex justify-center gap-2 flex-col font-medium`}
     >
+      <div>
+        <p>Tipo Factura: {form.getValues().billType}</p>
+      </div>
       <div>
         <p>Condicion de Cliente: {form.getValues().clientCondition}</p>
       </div>
