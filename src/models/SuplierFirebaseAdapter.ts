@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 import { DocumentData } from "firebase/firestore";
 import { Suplier } from "./Suplier";
 
 export class SuplierFirebaseAdapter {
   public static fromDocumentDataArray(data: DocumentData[]): Suplier[] {
-    let state: Suplier[] = [];
+    const state: Suplier[] = [];
     data.forEach((d) => {
       state.push(SuplierFirebaseAdapter.fromDocumentData(d.data(), d.id));
     });
@@ -11,7 +12,7 @@ export class SuplierFirebaseAdapter {
   }
 
   public static fromDocumentData(data: DocumentData, dataId: string): Suplier {
-    let suplier = new Suplier();
+    const suplier = new Suplier();
     suplier.id = dataId;
     data.name ? (suplier.name = data.name) : (suplier.name = "");
     data.bonus ? (suplier.bonus = data.bonus) : (suplier.bonus = 0);

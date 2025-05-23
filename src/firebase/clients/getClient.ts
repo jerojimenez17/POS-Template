@@ -1,11 +1,11 @@
 import { collection, getDocs } from "firebase/firestore";
-import { fbDB } from "../config";
+import { db } from "../config";
 import { ClientFirebaseAdapter } from "@/models/ClientFirebaseAdapter";
 import Client from "@/models/Client";
 
 export const getClients = async (): Promise<Client[]> => {
   try {
-    const data = await getDocs(collection(fbDB, `clients`)); // Obtén los documentos
+    const data = await getDocs(collection(db, `clients`)); // Obtén los documentos
     if (data.docs) {
       return ClientFirebaseAdapter.fromDocumentDataArray(data.docs); // Adapta y retorna los datos
     }

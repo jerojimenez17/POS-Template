@@ -8,19 +8,22 @@ import { BillContext } from "@/context/BillContext";
 import { Input } from "../ui/input";
 import getProductByCode from "@/firebase/stock/getProduct";
 import { Button } from "../ui/button";
+import { Session } from "next-auth";
 
 interface Props {
   print: boolean;
   className: string;
-  // handleClose: () => void;
+  handleClose: () => void;
+  session: Session | null;
   externalState?: BillState;
 }
-const PrintableTable = ({ print, className }: Props) => {
+const PrintableTable = ({ print, className, externalState }: Props) => {
   const { BillState, addItem, removeItem } = useContext(BillContext);
   const [searchCode, setSearchCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [scanerOpen, setScanerOpen] = useState(false);
-  const [state, setState] = useState(BillState);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [state, setState] = useState<BillState>(externalState || BillState);
 
   // const inputDescription = useRef<any>();
   // useEffect(() => {
@@ -33,12 +36,23 @@ const PrintableTable = ({ print, className }: Props) => {
       setErrorMessage("");
     }, 3000);
   }, [errorMessage]);
+
+  useEffect(() => {
+    if (externalState !== undefined) {
+      console.log(externalState);
+      setState(externalState);
+    } else {
+      setState(BillState);
+    }
+    console.log(externalState ? "externalState" : "BillState");
+  }, [externalState, print, addItem]);
+
   useEffect(() => {
     if (print === true) {
       handlePrint();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [print]);
-
   // const handleBlur = () => {
   //   if (description !== "" && units !== 0 && price !== 0) {
   //     addItem(new Product(description, units, Number(price.toFixed(2))));
@@ -65,7 +79,7 @@ const PrintableTable = ({ print, className }: Props) => {
             Fecha: {state.date?.toLocaleDateString()}
             {state.date?.toLocaleTimeString()}
           </p>
-          <p>Factura: {state.tipoFactura}</p>
+          <p>Factura: {state.billType}</p>
           <p>Cuit: 27374057893</p>
           <p>Condicion IVA: Monotributo</p>
           <p>IIBB: 27374057893</p>
@@ -76,12 +90,12 @@ const PrintableTable = ({ print, className }: Props) => {
         <div className="hidden print:flex flex-col justify-center text-center mx-auto print:text-lg">
           <p>Compronte: 000001-{state.CAE?.nroComprobante}</p>
           <p>Condicion IVA Cliente: {state.IVACondition}</p>
-          {state.tipoFactura !== "C" && (
+          {state.billType !== "C" && (
             <p>Comprobante asociado: {state.nroAsociado}</p>
           )}
         </div>
       </div>
-      <div className="w-full m-0 flex justify-center gap-0 h-12">
+      <div className="w-full m-0 flex justify-center flex-col place-items-center gap-0 h-12">
         <div className="flex mx-auto w-1/3">
           <div className=" align-middle mx-auto items-center">
             <Input
@@ -93,6 +107,7 @@ const PrintableTable = ({ print, className }: Props) => {
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
+                  console.log("Entra");
                   getProductByCode(e.currentTarget.value).then((product) => {
                     if (product) {
                       const adaptedProduct =
@@ -100,7 +115,7 @@ const PrintableTable = ({ print, className }: Props) => {
                           product[0],
                           product[0].id
                         );
-                      const productToCart = { ...adaptedProduct, units: 1 };
+                      const productToCart = { ...adaptedProduct, amount: 1 };
                       addItem(productToCart);
                       setSearchCode("");
                     } else {
@@ -205,7 +220,7 @@ const PrintableTable = ({ print, className }: Props) => {
                           product[0],
                           product[0].id
                         );
-                      const productToCart = { ...adaptedProduct, units: 1 };
+                      const productToCart = { ...adaptedProduct, amount: 1 };
                       addItem(productToCart);
                       console.log(BillState);
                       setSearchCode("");
@@ -220,15 +235,15 @@ const PrintableTable = ({ print, className }: Props) => {
           </div>
         )}
         {errorMessage !== "" && (
-          <div className=" w-full mx-auto text-red-600 text-lg">
+          <div className="text-center flex mx-auto text-red-600 text-lg">
             {errorMessage}
           </div>
         )}
       </div>
 
-      <div className="h-3/4 w-full my-2 mx-auto overflow-auto">
-        <div className="size-3/4 h-[80%] flex rounded-xl mx-auto overflow-hidden shadow-xl">
-          <table className="table-auto w-full h-full mx-auto print:w-2/3">
+      <div className=" w-full my-2 mx-auto overflow-auto">
+        <div className="w-3/4 flex rounded-xl mx-auto overflow-hidden shadow-xl">
+          <table className="table-auto w-full mx-auto print:w-2/3">
             <thead className="bg-black rounded-xl backdrop-blur-3xl text-center text-white">
               <tr>
                 <th className="p-3">Descripcion</th>
@@ -241,8 +256,11 @@ const PrintableTable = ({ print, className }: Props) => {
             <tbody className="overflow-auto text-center">
               {state.products.map((product) => {
                 return (
-                  <tr key={product.id} className="even:bg-slate-200 text-black">
-                    <td className="p-2">{product.description} </td>
+                  <tr
+                    key={product.id}
+                    className="even:bg-slate-200 text-black h-fit"
+                  >
+                    <td className="">{product.description} </td>
                     <td className="p-2">{product.amount}</td>
                     <td className="p-2">
                       $
@@ -337,7 +355,7 @@ const PrintableTable = ({ print, className }: Props) => {
             </tbody>
           </table>
         </div>
-        <div className="flex print:h-12 bg-white/20 text-center w-3/4 shadow rounded-xl mb-4 mx-auto justify-center flex-col">
+        <div className=" mt-20 h-fit relative flex print:h-18 bg-white/20 text-center w-3/4 shadow-lg shadow-gray-300 rounded-xl mb-4 mx-auto justify-center flex-col">
           <p className="print:text-gray-900 font-mono font-bold print:text-3xl text-lg  print:mx-auto">
             Total: $
             {state.products

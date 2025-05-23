@@ -1,19 +1,16 @@
-import { doc, DocumentData, getDoc, Timestamp } from "firebase/firestore";
+import { DocumentData, Timestamp } from "firebase/firestore";
 import Order from "./Order";
-import noImg from "@/public/no-image.svg";
-import { ClientFirebaseAdapter } from "./ClientFirebaseAdapter";
-import { fbDB } from "@/firebase/config";
 import { getClients } from "@/firebase/clients/getClient";
 import Client from "./Client";
 import Product from "./Product";
 
 export class OrderFirebaseAdapter {
-  public formated = async (d: DocumentData[]) => {};
+  public formated = async () => {};
   public static async fromDocumentDataArray(data: DocumentData[]) {
     const clients: Client[] = await getClients();
-    let state: Order[] = [];
+    const state: Order[] = [];
     for (let i = 0; i < data.length; i++) {
-      let formatedData = OrderFirebaseAdapter.fromDocumentData(
+      const formatedData = OrderFirebaseAdapter.fromDocumentData(
         data[i].data(),
         data[i].id
       );
@@ -33,7 +30,7 @@ export class OrderFirebaseAdapter {
   }
 
   public static fromDocumentData(data: DocumentData, dataId: string) {
-    let order = new Order();
+    const order = new Order();
     order.seller = data.seller;
     order.status = data.status;
     order.id = dataId;

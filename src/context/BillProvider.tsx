@@ -7,6 +7,7 @@ import Product from "@/models/Product";
 import CAE from "@/models/CAE";
 
 const INITIAL_STATE: BillState = {
+  twoMethods: false,
   id: "",
   products: [],
   total: 0,
@@ -18,11 +19,11 @@ const INITIAL_STATE: BillState = {
   IVACondition: "Consumidor Final",
   paidMethod: "Efectivo",
   nroAsociado: 0,
-  tipoFactura: "C",
+  billType: "Remito",
   pago: false,
   entrega: 0,
   CAE: { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" },
-  date: null,
+  date: new Date(),
 };
 
 interface props {
@@ -108,9 +109,9 @@ const BillProvider = ({ children }: props) => {
       payload: type,
     });
   };
-  const tipoFactura = (tipoFactura: string) => {
+  const billType = (tipoFactura: string) => {
     dispatch({
-      type: "tipoFactura",
+      type: "billType",
       payload: tipoFactura,
     });
   };
@@ -174,7 +175,7 @@ const BillProvider = ({ children }: props) => {
     documentNumber: documentNumber,
     IVACondition: IVACondition,
     CAE: CAE,
-    tipoFactura: tipoFactura,
+    billType: billType,
     entrega: entrega,
     nroAsociado: nroAsociado,
     setState: setState,

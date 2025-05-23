@@ -1,13 +1,11 @@
 import { collection, getDocs } from "firebase/firestore";
-import { fbDB } from "../config";
-import { ClientFirebaseAdapter } from "@/models/ClientFirebaseAdapter";
-import Client from "@/models/Client";
+import { db } from "../config";
 import { Suplier } from "@/models/Suplier";
 import { SuplierFirebaseAdapter } from "@/models/SuplierFirebaseAdapter";
 
 export const getSuppliers = async (): Promise<Suplier[]> => {
   try {
-    const data = await getDocs(collection(fbDB, `supliers`)); // Obtén los documentos
+    const data = await getDocs(collection(db, `supliers`)); // Obtén los documentos
     if (data.docs) {
       return SuplierFirebaseAdapter.fromDocumentDataArray(data.docs); // Adapta y retorna los datos
     }

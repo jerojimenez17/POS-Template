@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 import { DocumentData } from "firebase/firestore";
 import Client from "./Client";
 
 export class ClientFirebaseAdapter {
   public static fromDocumentDataArray(data: DocumentData[]): Client[] {
-    let state: Client[] = [];
+    const state: Client[] = [];
     data.forEach((d) => {
       state.push(ClientFirebaseAdapter.fromDocumentData(d.data(), d.id));
     });
@@ -11,7 +12,7 @@ export class ClientFirebaseAdapter {
   }
 
   public static fromDocumentData(data: DocumentData, dataId: string): Client {
-    let client = new Client();
+    const client = new Client();
     client.id = dataId;
     data.name ? (client.name = data.name) : (client.name = "");
     data.address ? (client.address = data.address) : (client.address = "");

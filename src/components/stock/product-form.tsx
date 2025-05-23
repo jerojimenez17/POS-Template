@@ -105,10 +105,49 @@ const ProductForm = ({ product, onClose }: props) => {
     }
   }, [product, form]);
 
+  useEffect(() => {
+    const collectionRef = collection(db, "categories");
+
+    onSnapshot(collectionRef, (querySnapshot) => {
+      const categories: string[] = [];
+      querySnapshot.docs.forEach((snapshot) => {
+        categories.push(snapshot.data().name);
+      });
+      setCategories(categories);
+    });
+    const collectionSuplierRef = collection(db, "supliers");
+
+    onSnapshot(collectionSuplierRef, (querySnapshot) => {
+      const newSupliers = SuplierFirebaseAdapter.fromDocumentDataArray(
+        querySnapshot.docs
+      );
+      setSupliers(newSupliers);
+    });
+
+    const collectionSubRef = collection(db, "subcategories");
+
+    onSnapshot(collectionSubRef, (querySnapshot) => {
+      const subcategories: string[] = [];
+      querySnapshot.docs.forEach((snapshot) => {
+        subcategories.push(snapshot.data().name);
+      });
+      setSubcategories(subcategories);
+    });
+
+    const collectionBrandRef = collection(db, "brands");
+
+    onSnapshot(collectionBrandRef, (querySnapshot) => {
+      const brands: string[] = [];
+      querySnapshot.docs.forEach((snapshot) => {
+        brands.push(snapshot.data().name);
+      });
+      setBrands(brands);
+    });
+  }, []);
+
   const onSubmit = async (values: z.infer<typeof ProductSchema>) => {
     startTransition(async () => {
       try {
-        console.log("Hola");
         let imageURL = product?.image || "";
         let imageName = product?.imageName || "";
 
@@ -142,11 +181,13 @@ const ProductForm = ({ product, onClose }: props) => {
 
         if (product) {
           // Modo de edición: Actualiza el producto
-
-          const docData = await getDoc(
-            doc(db, "supliers", values.suplier || "")
-          );
-          if (docData.exists()) {
+          let docData = null;
+          if (values.suplier) {
+            docData = await getDoc(doc(db, "supliers", values.suplier));
+          } else {
+            docData = null;
+          }
+          if (docData && docData.exists()) {
             const newSuplier = SuplierFirebaseAdapter.fromDocumentData(
               docData.data(),
               docData.id
@@ -275,7 +316,7 @@ const ProductForm = ({ product, onClose }: props) => {
                     placeholder=""
                     type="text"
                     className="border-black"
-                    autoComplete="cod"
+                    autoComplete="code"
                     disabled={isPending}
                   />
                 </FormControl>
@@ -452,6 +493,7 @@ const ProductForm = ({ product, onClose }: props) => {
               <FormItem className="w-full">
                 <FormLabel>Proveedor</FormLabel>
                 <Select
+                  {...field}
                   onValueChange={field.onChange}
                   defaultValue={field.value}
                 >

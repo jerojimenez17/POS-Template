@@ -1,5 +1,6 @@
 "use client";
 import { CardWrapper } from "./card-wrapper";
+import { Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -26,12 +27,6 @@ export const LoginForm = () => {
   const [success, setSuccess] = useState<string | undefined>("");
   const [error, setError] = useState<string | undefined>("");
 
-  const searchParams = useSearchParams();
-  const urlError =
-    searchParams.get("error") === "OAuthAccountNotLinked"
-      ? "El email ya esta en uso con credenciales"
-      : "";
-
   const form = useForm<z.infer<typeof LoginSchema>>({
     resolver: zodResolver(LoginSchema),
     defaultValues: { email: "", password: "" },
@@ -46,12 +41,31 @@ export const LoginForm = () => {
       });
     });
   };
+
+  const SearchParamsHandler = ({
+    setError,
+  }: {
+    setError: (msg: string) => void;
+  }) => {
+    const searchParams = useSearchParams();
+    const urlError =
+      searchParams.get("error") === "OAuthAccountNotLinked"
+        ? "El email ya está en uso con credenciales"
+        : "";
+
+    setError(urlError);
+    return null; // No renderiza nada, solo actualiza el estado
+  };
   return (
     <CardWrapper
       headerLabel="Bienvenido!"
       backButtonLabel="No tenes una cuenta?"
       backButtonHref="/auth/register"
     >
+      <Suspense fallback={null}>
+        <SearchParamsHandler setError={setError} />
+      </Suspense>
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div className="space-y-4">
@@ -94,7 +108,7 @@ export const LoginForm = () => {
               )}
             />
           </div>
-          {(error || urlError) && <FormError message={error || urlError} />}
+          {error && <FormError message={error} />}
           {success && <FormSuccess message={success} />}
           <Button type="submit" disabled={isPending} className="w-full">
             Login

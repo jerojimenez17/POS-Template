@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import ProductForm from "./product-form";
 import StockFilterPanel from "./stock-filter-panel";
 import Modal from "../Modal";
-import { useRouter } from "next/navigation";
 import { Session } from "next-auth";
 import ProductDataTable from "../ProductDataTable";
 import Product from "@/models/Product";
@@ -17,6 +16,7 @@ interface props {
   session: Session | null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ProductDashboad = ({ session }: props) => {
   const [openModal, setOpenModal] = useState(false);
   const [descriptionFilter, setDescriptionFilter] = useState("");
@@ -32,7 +32,7 @@ const ProductDashboad = ({ session }: props) => {
     });
   }, []);
 
-  const router = useRouter();
+
   return (
     <div className="flex flex-col h-full w-full items-center">
       <Modal

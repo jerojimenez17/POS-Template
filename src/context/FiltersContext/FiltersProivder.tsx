@@ -1,6 +1,6 @@
 "use client";
 import FilterState from "@/models/FiltersState";
-import { useReducer } from "react";
+import { JSX, useReducer } from "react";
 import { FiltersReducer } from "./FiltersReducer";
 import { FiltersContext } from "./FiltersContext";
 import FilterField from "@/models/FilterField";
@@ -44,7 +44,7 @@ const INITIAL_STATE: FilterState = {
   } as FilterField,
   CuentaDNI: {
     active: false,
-    filter: "cuenta dni",
+    filter: "cuentaDNI",
   } as FilterField,
   startDate: {
     active: false,

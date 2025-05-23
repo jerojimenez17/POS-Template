@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 import { DocumentData, Timestamp } from "firebase/firestore";
 import Movement from "./Movement";
 
 export class MovementAdapter {
   public static fromDocumentDataArray(data: DocumentData[]): Movement[] {
-    let state: Movement[] = [];
+    const state: Movement[] = [];
     data.forEach((d) => {
       state.push({
         ...MovementAdapter.fromDocumentData(d.data(), d.id),
@@ -13,7 +14,7 @@ export class MovementAdapter {
     return state;
   }
   public static fromDocumentData(data: DocumentData, dataId: string): Movement {
-    let moveAdapted = new Movement();
+    const moveAdapted = new Movement();
     moveAdapted.id = dataId;
     data.total ? (moveAdapted.total = data.total) : (moveAdapted.total = 0);
     data.seller

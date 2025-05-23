@@ -7,6 +7,7 @@ export class FirebaseAdapter {
   public static fromDocumentDataArray(data: DocumentData[]): BillState[] {
     const state: BillState[] = [];
     data.forEach((d) => {
+      console.log(d);
       state.push(FirebaseAdapter.fromDocumentData(d.data(), d.id));
     });
     return state;
@@ -18,6 +19,7 @@ export class FirebaseAdapter {
   ): BillState {
     return {
       id: dataId,
+      twoMethods: data.twoMethods,
       products: ProductFirebaseAdapter.forBill(data.products),
       total: data.total,
       totalWithDiscount:
@@ -48,7 +50,7 @@ export class FirebaseAdapter {
       CAE: data.CAE,
       date:
         data.date &&
-        new Date(data.date.seconds * 1000 + data.date.nanoseconds / 1000000000),
+        new Date(data.date.seconds * 1000 + data.date.nanoseconds / 1000000),
     } as BillState;
   }
 }

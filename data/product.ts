@@ -20,8 +20,7 @@ export const getProducts = async () => {
   try {
     const products = await db.product.findMany();
     return products;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (err) {
-    return null;
+    return err || null;
   }
 };

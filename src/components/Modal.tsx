@@ -48,7 +48,7 @@ const Modal = ({
               <button
                 disabled={blockButton}
                 onClick={onAcept}
-                className="p-2 bg-black text-white font-semibold rounded-2xl hover:shadow-md hover:shadow-pink-200"
+                className="p-2 bg-black text-white font-semibold rounded-2xl hover:shadow-md hover:shadow-gray-200"
               >
                 Aceptar
               </button>
@@ -56,7 +56,7 @@ const Modal = ({
             {onCancel && (
               <button
                 onClick={onCancel}
-                className="p-2 border border-gray-800 text-black font-semibold rounded-2xl hover:shadow-md hover:shadow-pink-200"
+                className="p-2 border border-gray-800 text-black font-semibold rounded-2xl hover:shadow-md hover:shadow-gray-200"
               >
                 Cancelar
               </button>

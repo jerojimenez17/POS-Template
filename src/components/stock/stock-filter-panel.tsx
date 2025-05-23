@@ -41,13 +41,13 @@ const StockFilterPanel = ({
         ➕Nuevo Producto
       </Button>
       <Button
-        className="text-pink-400 font-bold text-lg"
+        className="text-gray-400 font-bold bg-white text-5xlg"
         onClick={() => setScanerOpen(true)}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="40px"
-          height="40px"
+          width="50px"
+          height="50px"
           viewBox="0 0 32 32"
           id="svg5"
           version="1.1"
@@ -115,7 +115,7 @@ const StockFilterPanel = ({
       {scanerOpen && (
         <div className="h-screen w-screen items-center flex  z-10">
           <Button
-            className="bg-pink-400 absolute top-24 z-20 right-4 text-white font-bold"
+            className="bg-black absolute top-24 z-20 right-4 text-white font-bold"
             onClick={() => setScanerOpen(false)}
           >
             Cerrar Scaner
