@@ -33,7 +33,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider !== "credentials") return true;
       if (account.provider === "credentials" && user.id) {
         const existingUser = await getUserById(user.id);
-        if (!existingUser?.emailVerified) return false;
+        if (!existingUser?.emailVerified) return true;
       }
       return true;
     },
