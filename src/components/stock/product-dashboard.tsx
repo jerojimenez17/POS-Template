@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -30,6 +31,7 @@ const ProductDashboad = ({ session }: props) => {
       setProducts(products);
     });
   }, []);
+
 
   return (
     <div className="flex flex-col h-full w-full items-center">
