@@ -13,7 +13,7 @@ import { Session } from "next-auth";
 interface Props {
   print: boolean;
   className: string;
-  // handleClose: () => void;
+  handleClose: () => void;
   session: Session | null;
   externalState?: BillState;
 }
@@ -23,7 +23,7 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
   const [errorMessage, setErrorMessage] = useState("");
   const [scanerOpen, setScanerOpen] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [state, setState] = useState(BillState);
+  const [state, setState] = useState<BillState>(externalState || BillState);
 
   // const inputDescription = useRef<any>();
   // useEffect(() => {
@@ -36,21 +36,23 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
       setErrorMessage("");
     }, 3000);
   }, [errorMessage]);
+
+  useEffect(() => {
+    if (externalState !== undefined) {
+      console.log(externalState);
+      setState(externalState);
+    } else {
+      setState(BillState);
+    }
+    console.log(externalState ? "externalState" : "BillState");
+  }, [externalState, print, addItem]);
+
   useEffect(() => {
     if (print === true) {
       handlePrint();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [print]);
-
-  useEffect(() => {
-    if (externalState) {
-      setState(externalState);
-    } else {
-      setState(BillState);
-    }
-  }, [externalState, print, addItem]);
-
   // const handleBlur = () => {
   //   if (description !== "" && units !== 0 && price !== 0) {
   //     addItem(new Product(description, units, Number(price.toFixed(2))));

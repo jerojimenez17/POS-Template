@@ -6,7 +6,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
+  query,
   runTransaction,
+  where,
 } from "firebase/firestore";
 import { cache } from "react";
 export const revalidate = 0;
@@ -29,10 +33,45 @@ export const fetchSales = cache(async () => {
   }
 });
 
+export const fetchSalesOnce = async () => {
+  try {
+    const PAGE_SIZE = 1100;
+    const q = query(
+      collection(db, "sales"),
+      orderBy("date", "desc"),
+      limit(PAGE_SIZE)
+    );
+    const querySnapshot = await getDocs(q);
+    console.log(FirebaseAdapter.fromDocumentDataArray(querySnapshot.docs));
+    return FirebaseAdapter.fromDocumentDataArray(querySnapshot.docs);
+  } catch (err) {
+    console.error("Error fetching sales:", err);
+    return [];
+  }
+};
+export const fetchSalesByDate = async (startDate: Date, endDate: Date) => {
+  try {
+    const PAGE_SIZE = 1100;
+    const q = query(
+      collection(db, "sales"),
+      where("date", "<", endDate),
+      where("date", ">", startDate),
+      orderBy("date", "desc"),
+      limit(PAGE_SIZE)
+    );
+    const querySnapshot = await getDocs(q);
+    console.log(FirebaseAdapter.fromDocumentDataArray(querySnapshot.docs));
+    return FirebaseAdapter.fromDocumentDataArray(querySnapshot.docs);
+  } catch (err) {
+    console.error("Error fetching sales:", err);
+    return [];
+  }
+};
+
 export const fetchTotalRegiter = async () => {
   try {
     const documentData = await getDoc(
-      doc(db, "cashRegister", "5jKCM1IiNGINqOcQ8zqK")
+      doc(db, "cashRegister", "DjnQREkrJnRkXiY4p3a5")
     );
     console.log(documentData.data()?.Total);
     return documentData.data()?.Total;
@@ -59,7 +98,7 @@ export const updateTotal = async (saleTotal: number) => {
 export const changeTotal = async (total: number) => {
   try {
     await runTransaction(db, async (transaction) => {
-      const docRef = doc(db, "cashRegister", "5jKCM1IiNGINqOcQ8zqK");
+      const docRef = doc(db, "cashRegister", "DjnQREkrJnRkXiY4p3a5");
       const sfDoc = await transaction.get(docRef);
       if (!sfDoc.exists()) {
         throw "Document doesn't exists";
@@ -72,7 +111,7 @@ export const changeTotal = async (total: number) => {
 export const addToTotal = async (amount: number) => {
   try {
     await runTransaction(db, async (transaction) => {
-      const docRef = doc(db, "cashRegister", "5jKCM1IiNGINqOcQ8zqK");
+      const docRef = doc(db, "cashRegister", "DjnQREkrJnRkXiY4p3a5");
       const sfDoc = await transaction.get(docRef);
 
       if (!sfDoc.exists()) {

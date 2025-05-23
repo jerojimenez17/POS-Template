@@ -139,119 +139,130 @@ const BillButtons = ({ session, handlePrint }: props) => {
       setErrorMessage("El monto debe ser mayor a 0");
       setOpenErrorModal(true);
     } else {
-      if (afip) {
-        await handleCreateVoucher();
-      }
       if (
-        BillState.twoMethods &&
         BillState.totalSecondMethod &&
-        BillState.totalSecondMethod > 0
+        totalAmount < BillState.totalSecondMethod
       ) {
-        // Crear dos listas de productos, ajustando las unidades y precios para cada método de pago
-        console.log(respAfip);
-        const primaryProducts = BillState.products.map((product, index) => {
-          const newProduct = { ...product };
-          if (index === 0) {
-            newProduct.salePrice = remainingAmount;
-            newProduct.gain = 1;
-            newProduct.amount = 1;
-            newProduct.price = remainingAmount;
-          } else {
-            newProduct.amount = 0;
-          }
-          return newProduct;
-        });
-
-        const secondaryProducts = BillState.products.map((product, index) => {
-          const newProduct = { ...product };
-          if (index === 0) {
-            newProduct.price = BillState.totalSecondMethod || 0;
-            newProduct.amount = 1;
-            newProduct.gain = 1;
-            newProduct.salePrice = BillState.totalSecondMethod || 0;
-          } else {
-            newProduct.amount = 0;
-          }
-          return newProduct;
-        });
-
-        // Crear y registrar movimientos separados para cada método de pago
-        if (BillState.paidMethod === "Efectivo") {
-          await updateTotal(remainingAmount); // Actualizar el total para el primer método de pago si es efectivo
-        }
-
-        const primaryMove = new Movement();
-        primaryMove.seller = session?.user?.email || "";
-        primaryMove.paidMethod = BillState.paidMethod || "Efectivo";
-        primaryMove.total = remainingAmount;
-        await newMovement(primaryMove);
-
-        if (BillState.secondPaidMethod === "Efectivo") {
-          await updateTotal(BillState.totalSecondMethod); // Actualizar el total para el segundo método de pago si es efectivo
-        }
-
-        const secondaryMove = new Movement();
-        secondaryMove.seller = session?.user?.email || "";
-        secondaryMove.paidMethod = BillState.secondPaidMethod || "";
-        secondaryMove.total = BillState.totalSecondMethod;
-        await newMovement(secondaryMove);
-
-        // Guardar ambas listas de productos en la base de datos (ajusta según tu lógica de negocio)
-        console.log(respAfip);
-        console.log(BillState.CAE);
-        await handleSaveSale({
-          ...BillState,
-          products: primaryProducts,
-          discount: 0,
-          total: primaryMove.total,
-          CAE: latestCAE.current,
-          totalWithDiscount: primaryMove.total,
-        });
-        console.log({
-          ...BillState,
-          products: primaryProducts,
-          total: primaryMove.total,
-          totalWithDiscount: primaryMove.total,
-        });
-        console.log({
-          ...BillState,
-          total: secondaryMove.total,
-          totalWithDiscount: secondaryMove.total,
-          paidMethod: BillState.secondPaidMethod,
-          products: secondaryProducts,
-        });
-        await handleSaveSale({
-          ...BillState,
-          discount: 0,
-          total: secondaryMove.total,
-          totalWithDiscount: secondaryMove.total,
-          paidMethod: BillState.secondPaidMethod,
-          products: secondaryProducts,
-        });
+        setErrorMessage(
+          "El monto del segundo medio de pago debe ser menor al total"
+        );
+        setOpenErrorModal(true);
       } else {
-        // Lógica original para una sola venta
+        if (afip) {
+          await handleCreateVoucher();
+        }
+        if (
+          BillState.twoMethods &&
+          BillState.totalSecondMethod &&
+          BillState.totalSecondMethod > 0
+        ) {
+          // Crear dos listas de productos, ajustando las unidades y precios para cada método de pago
+          console.log(respAfip);
+          const primaryProducts = BillState.products.map((product, index) => {
+            const newProduct = { ...product };
+            if (index === 0) {
+              newProduct.salePrice = remainingAmount;
+              newProduct.gain = 1;
+              newProduct.amount = 1;
+              newProduct.price = remainingAmount;
+            } else {
+              newProduct.amount = 0;
+            }
+            return newProduct;
+          });
 
-        if (BillState.paidMethod === "Efectivo") {
-          await updateTotal(totalAmount); // Actualizar total si el único método de pago es efectivo
+          const secondaryProducts = BillState.products.map((product, index) => {
+            const newProduct = { ...product };
+            if (index === 0) {
+              newProduct.price = BillState.totalSecondMethod || 0;
+              newProduct.amount = 1;
+              newProduct.gain = 1;
+              newProduct.salePrice = BillState.totalSecondMethod || 0;
+            } else {
+              newProduct.amount = 0;
+            }
+            return newProduct;
+          });
+
+          // Crear y registrar movimientos separados para cada método de pago
+          if (BillState.paidMethod === "Efectivo") {
+            await updateTotal(remainingAmount); // Actualizar el total para el primer método de pago si es efectivo
+          }
+
+          const primaryMove = new Movement();
+          primaryMove.seller = session?.user?.email || "";
+          primaryMove.paidMethod = BillState.paidMethod || "Efectivo";
+          primaryMove.total = remainingAmount;
+          await newMovement(primaryMove);
+
+          if (BillState.secondPaidMethod === "Efectivo") {
+            await updateTotal(BillState.totalSecondMethod); // Actualizar el total para el segundo método de pago si es efectivo
+          }
+
+          const secondaryMove = new Movement();
+          secondaryMove.seller = session?.user?.email || "";
+          secondaryMove.paidMethod = BillState.secondPaidMethod || "";
+          secondaryMove.total = BillState.totalSecondMethod;
+          await newMovement(secondaryMove);
+
+          // Guardar ambas listas de productos en la base de datos (ajusta según tu lógica de negocio)
+          console.log(respAfip);
+          console.log(BillState.CAE);
+          await handleSaveSale({
+            ...BillState,
+            products: primaryProducts,
+            discount: 0,
+            total: primaryMove.total,
+            CAE: latestCAE.current,
+            totalWithDiscount: primaryMove.total,
+          });
+          console.log({
+            ...BillState,
+            products: primaryProducts,
+            total: primaryMove.total,
+            totalWithDiscount: primaryMove.total,
+          });
+          console.log({
+            ...BillState,
+            total: secondaryMove.total,
+            totalWithDiscount: secondaryMove.total,
+            paidMethod: BillState.secondPaidMethod,
+            products: secondaryProducts,
+          });
+          await handleSaveSale({
+            ...BillState,
+            CAE: latestCAE.current,
+            discount: 0,
+            total: secondaryMove.total,
+            totalWithDiscount: secondaryMove.total,
+            paidMethod: BillState.secondPaidMethod,
+            products: secondaryProducts,
+          });
+        } else {
+          // Lógica original para una sola venta
+
+          if (BillState.paidMethod === "Efectivo") {
+            await updateTotal(totalAmount); // Actualizar total si el único método de pago es efectivo
+          }
+
+          const move = new Movement();
+          move.seller = session?.user?.email || "";
+          move.paidMethod = BillState.paidMethod || "Efectivo";
+          move.total = totalAmount;
+          await newMovement(move);
+          await handleSaveSale({
+            ...BillState,
+            CAE: latestCAE.current,
+            totalWithDiscount:
+              BillState.total - BillState.total * BillState.discount * 0.01,
+          });
         }
 
-        const move = new Movement();
-        move.seller = session?.user?.email || "";
-        move.paidMethod = BillState.paidMethod || "Efectivo";
-        move.total = totalAmount;
-        await newMovement(move);
-        await handleSaveSale({
-          ...BillState,
-          CAE: latestCAE.current,
-          totalWithDiscount:
-            BillState.total - BillState.total * BillState.discount * 0.01,
-        });
+        await updateAmount(BillState.products);
       }
-
-      await updateAmount(BillState.products);
+      // setTimeout(() => {
+      // }, 5000);
     }
-    // setTimeout(() => {
-    // }, 5000);
   };
   const [openFacturaModal, setOpenFacturaModal] = useState(false);
   const [blockButton, setBlockButton] = useState(false);
@@ -298,6 +309,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
             handlePrint();
             setTimeout(() => {
               removeAll();
+              handlePrint();
             }, 5000);
           }
           setOpenFacturaModal(false);
@@ -317,6 +329,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
             handlePrint();
             setTimeout(() => {
               removeAll();
+              handlePrint();
             }, 5000);
           }
           setOpenRemitoModal(false);

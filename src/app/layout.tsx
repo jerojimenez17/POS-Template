@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Poppins } from "next/font/google";
 import "./globals.css";
 import { NavigationMenuHeader } from "@/components/ui/NavBar";
+import FiltersProvider from "@/context/FiltersContext/FiltersProivder";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,12 +31,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased h-screen w-screen overflow-hidden`}
-      >
-        <NavigationMenuHeader />
-        {children}
-      </body>
+      <FiltersProvider>
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased h-screen w-screen overflow-hidden`}
+        >
+          <NavigationMenuHeader />
+          {children}
+        </body>
+      </FiltersProvider>
     </html>
   );
 }

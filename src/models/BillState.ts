@@ -8,7 +8,7 @@ export default interface BillState {
   totalWithDiscount: number;
   seller: string;
   discount: number;
-  date: Date | null;
+  date: Date;
   typeDocument: string;
   documentNumber: number;
   secondPaidMethod?: string;

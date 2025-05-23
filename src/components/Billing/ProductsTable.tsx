@@ -15,6 +15,9 @@ const ProductsTable = ({ session }: props) => {
         session={session}
         print={print}
         className="h-3/5 print:h-3/4 w-full overflow-auto"
+        handleClose={function (): void {
+          throw new Error("Function not implemented.");
+        }}
       />
 
       <div className="flex flex-col relative">

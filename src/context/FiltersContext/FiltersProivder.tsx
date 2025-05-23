@@ -44,7 +44,7 @@ const INITIAL_STATE: FilterState = {
   } as FilterField,
   CuentaDNI: {
     active: false,
-    filter: "cuenta dni",
+    filter: "cuentaDNI",
   } as FilterField,
   startDate: {
     active: false,
