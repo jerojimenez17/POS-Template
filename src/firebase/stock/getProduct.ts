@@ -12,7 +12,13 @@ export default async function getProductByCode(code: string) {
       querySnapshot.forEach((doc) => {
         console.log("Document data:", doc.data());
       });
-      return ProductFirebaseAdapter.fromDocumentDataArray(querySnapshot.docs);
+      const prod = ProductFirebaseAdapter.fromDocumentDataArray(
+        querySnapshot.docs
+      );
+      if (prod[0].amount > 0) {
+        return prod;
+      }
+      return prod;
     } else {
       console.log("No such document with the specified code!");
       return null;

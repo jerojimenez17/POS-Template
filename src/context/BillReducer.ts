@@ -40,7 +40,10 @@ export const BillReducer = (
       if (isPresent) {
         return {
           ...state,
-          total: state.total + action.payload.price * action.payload.amount,
+          total: state.total + action.payload.salePrice * action.payload.amount,
+          totalWithDiscount:
+            state.totalWithDiscount +
+            action.payload.salePrice * action.payload.amount * state.discount,
           products: state.products.map((product) => {
             if (product.id === action.payload.id) {
               return {
@@ -55,7 +58,10 @@ export const BillReducer = (
       } else {
         return {
           ...state,
-          total: state.total + action.payload.price * action.payload.amount,
+          totalWithDiscount:
+            state.totalWithDiscount +
+            action.payload.salePrice * action.payload.amount * state.discount,
+          total: state.total + action.payload.salePrice * action.payload.amount,
           products: state.products.concat({
             ...action.payload,
           }),
@@ -64,7 +70,10 @@ export const BillReducer = (
     case "addUnit":
       return {
         ...state,
-
+        totalWithDiscount:
+          state.totalWithDiscount +
+          action.payload.salePrice * action.payload.amount * state.discount,
+        total: state.total + action.payload.salePrice * action.payload.amount,
         products: state.products.map(({ ...product }) => {
           if (product.id === action.payload.id) {
             product.amount++;
@@ -134,7 +143,7 @@ export const BillReducer = (
       return {
         ...state,
         total: state.products.reduce(
-          (acc: number, cur: Product) => acc + cur.price * cur.amount,
+          (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
           0
         ),
       };
@@ -142,13 +151,13 @@ export const BillReducer = (
       return {
         ...state,
         discount: action.payload,
-        total:
+        totalWithDiscount:
           state.products.reduce(
-            (acc: number, cur: Product) => acc + cur.price * cur.amount,
+            (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
             0
           ) -
           state.products.reduce(
-            (acc: number, cur: Product) => acc + cur.price * cur.amount,
+            (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
             0
           ) *
             action.payload *
