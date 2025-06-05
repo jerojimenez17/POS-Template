@@ -25,17 +25,17 @@ export class FirebaseAdapter {
       totalWithDiscount:
         data.discount && data.discount !== 0 && data.discount !== null
           ? ProductFirebaseAdapter.forBill(data.products).reduce(
-              (acc: number, p: Product) => acc + p.price * p.amount,
+              (acc: number, p: Product) => acc + p.salePrice * p.amount,
               0
             ) -
             ProductFirebaseAdapter.forBill(data.products).reduce(
-              (acc: number, p: Product) => acc + p.price * p.amount,
+              (acc: number, p: Product) => acc + p.salePrice * p.amount,
               0
             ) *
-              data.discount *
+              Number(data.discount) *
               0.01
           : ProductFirebaseAdapter.forBill(data.products).reduce(
-              (acc: number, p: Product) => acc + p.price * p.amount,
+              (acc: number, p: Product) => acc + p.salePrice * p.amount,
               0
             ),
       client: data.client,
