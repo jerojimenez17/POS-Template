@@ -110,14 +110,18 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
                   console.log("Entra");
                   getProductByCode(e.currentTarget.value).then((product) => {
                     if (product) {
-                      const adaptedProduct =
-                        ProductFirebaseAdapter.fromDocumentData(
-                          product[0],
-                          product[0].id
-                        );
-                      const productToCart = { ...adaptedProduct, amount: 1 };
-                      addItem(productToCart);
-                      setSearchCode("");
+                      if (product[0].amount > 0) {
+                        const adaptedProduct =
+                          ProductFirebaseAdapter.fromDocumentData(
+                            product[0],
+                            product[0].id
+                          );
+                        const productToCart = { ...adaptedProduct, amount: 1 };
+                        addItem(productToCart);
+                        setSearchCode("");
+                      } else {
+                        setErrorMessage("Producto sin Stock");
+                      }
                     } else {
                       setErrorMessage("Producto no encontrado");
                     }
@@ -264,12 +268,14 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
                     <td className="p-2">{product.amount}</td>
                     <td className="p-2">
                       $
-                      {product.price.toLocaleString("es-AR", {
+                      {product.salePrice.toLocaleString("es-AR", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
                     </td>
-                    <td className="p-2">${product.price * product.amount}</td>
+                    <td className="p-2">
+                      ${product.salePrice * product.amount}
+                    </td>
                     <td className="p-2 print:hidden">
                       <button onClick={() => removeItem(product)}>
                         <svg
@@ -359,7 +365,7 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
           <p className="print:text-gray-900 font-mono font-bold print:text-3xl text-lg  print:mx-auto">
             Total: $
             {state.products
-              .reduce((acc, p) => acc + p.price * p.amount, 0)
+              .reduce((acc, p) => acc + p.salePrice * p.amount, 0)
               .toLocaleString("es-AR", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
@@ -374,11 +380,11 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
                 Final: $
                 {(
                   state.products.reduce(
-                    (acc, p) => acc + p.price * p.amount,
+                    (acc, p) => acc + p.salePrice * p.amount,
                     0
                   ) -
                   state.products.reduce(
-                    (acc, p) => acc + p.price * p.amount,
+                    (acc, p) => acc + p.salePrice * p.amount,
                     0
                   ) *
                     state.discount *

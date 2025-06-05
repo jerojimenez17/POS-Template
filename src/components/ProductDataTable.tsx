@@ -84,7 +84,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         ),
       },
       {
-        accessorKey: "units",
+        accessorKey: "amount",
         header: () => (
           <div className="text-center font-extrabold text-white text-lg p-2">
             Cantidad
