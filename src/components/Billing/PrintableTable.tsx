@@ -76,7 +76,7 @@ const PrintableTable = ({ print, className, externalState }: Props) => {
       <div>
         <div className="hidden print:flex flex-col justify-center text-center mx-auto my-10 print:text-lg">
           <p>
-            Fecha: {state.date?.toLocaleDateString()}
+            Fecha: {state.date?.toLocaleDateString()}{" "}
             {state.date?.toLocaleTimeString()}
           </p>
           <p>Factura: {state.billType}</p>
