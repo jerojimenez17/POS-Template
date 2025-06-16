@@ -14,6 +14,7 @@ import newMovement from "@/firebase/cashMovements/newMovement";
 import { addDoc, collection } from "firebase/firestore";
 import { db } from "@/firebase/config";
 import { updateAmount } from "@/firebase/stock/updateAmount";
+import { updateMonthlyRanking } from "@/firebase/stock/updateRanking";
 
 interface props {
   session: Session | null;
@@ -259,6 +260,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
         }
 
         await updateAmount(BillState.products);
+        await updateMonthlyRanking(BillState.products);
       }
       // setTimeout(() => {
       // }, 5000);
@@ -278,7 +280,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
           }}
           className="rounded-xl w-24"
         >
-          Factura C
+          Facturar
         </Button>
       </div>
       <div className="flex">
