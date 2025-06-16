@@ -5,9 +5,9 @@ import { Suspense } from "react";
 const page = () => {
   return (
     <div className="h-full w-full">
-      <PickDateStockRanking />
-
       <Suspense fallback={<div>Cargando selector de mes...</div>}>
+        <PickDateStockRanking />
+
         <ProductRanking />
       </Suspense>
     </div>
