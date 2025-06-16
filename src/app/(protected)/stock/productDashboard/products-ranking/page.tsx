@@ -1,5 +1,3 @@
-"use client";
-
 import PickDateStockRanking from "@/components/stock/pick-date-stock-ranking";
 import ProductRanking from "@/components/stock/product-ranking";
 import { Suspense } from "react";
