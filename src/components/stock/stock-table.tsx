@@ -112,6 +112,12 @@ const StockTable = ({ session, descriptionFilter }: props) => {
                   return 0; // Son iguales en términos de fecha y hora
                 }
               })
+              .sort((a, b) => {
+                //sort first with amount equal to zero
+                if (a.amount <= 0 && b.amount !== 0) return -1;
+                if (a.amount !== 0 && b.amount <= 0) return 1;
+                return 0;
+              })
               .map((product) => {
                 return (
                   <TableRow
@@ -134,7 +140,11 @@ const StockTable = ({ session, descriptionFilter }: props) => {
                     <TableCell className="font-medium">
                       {product.description}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell
+                      className={`font-medium ${
+                        product.amount <= 0 ? "text-red-500" : ""
+                      }`}
+                    >
                       {product.amount}
                     </TableCell>
                     <TableCell className="font-medium">

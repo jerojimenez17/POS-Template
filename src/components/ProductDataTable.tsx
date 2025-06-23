@@ -51,6 +51,12 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         const timeA = new Date(a.creation_date).getTime();
         const timeB = new Date(b.creation_date).getTime();
         return timeB - timeA; // Más reciente primero
+      })
+      .sort((a, b) => {
+        //sort first with units equal to zero
+        if (a.amount <= 0 && b.amount !== 0) return -1;
+        if (a.amount !== 0 && b.amount <= 0) return 1;
+        return 0;
       });
   }, [products, descriptionFilter]);
 
@@ -86,12 +92,20 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
       {
         accessorKey: "amount",
         header: () => (
-          <div className="text-center font-extrabold text-white text-lg p-2">
+          <div
+            className={`text-center font-extrabold text-white text-lg p-2 $`}
+          >
             Cantidad
           </div>
         ),
         cell: (info) => (
-          <div className="font-medium text-center">
+          <div
+            className={`font-medium text-center ${
+              (info.getValue() as number) <= 0
+                ? "text-red-500 font-semibold"
+                : ""
+            }`}
+          >
             {info.getValue() as string}
           </div>
         ),
