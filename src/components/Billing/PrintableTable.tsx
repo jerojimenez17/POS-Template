@@ -148,7 +148,7 @@ const PrintableTable = ({
         {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
           <div className="flex items-center">
             <button
-              className="px-1 font-bold text-lg bg-gray-200 rounded hover:bg-gray-300 print:hidden"
+              className="px-1 font-bold text-lg bg-red-600/40  rounded hover:bg-gray-300 print:hidden"
               onClick={() =>
                 updateProductAmount(product.id, product.amount - 1)
               }
@@ -157,7 +157,7 @@ const PrintableTable = ({
             </button>
             <span className="mx-1 print:mx-0">{product.amount}</span>
             <button
-              className="px-1 font-bold text-lg bg-gray-200 rounded hover:bg-gray-300 print:hidden"
+              className="px-1 font-bold text-lg bg-green-700/40 rounded hover:bg-gray-300 print:hidden"
               onClick={() =>
                 updateProductAmount(product.id, product.amount + 1)
               }
@@ -174,10 +174,18 @@ const PrintableTable = ({
         )}
       </td>
       <td className="p-1 print:p-1 print:text-sm">
-        ${product.salePrice.toFixed(2)}
+        $
+        {product.salePrice.toLocaleString("es-AR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}
       </td>
       <td className="p-1 print:p-1 print:text-sm">
-        ${(product.salePrice * product.amount).toFixed(2)}
+        $
+        {(product.salePrice * product.amount).toLocaleString("es-AR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}
       </td>
       <td className="p-1 print:hidden">
         <button onClick={() => removeItem(product)}>
@@ -263,10 +271,16 @@ const PrintableTable = ({
                 {suggestions.map((product) => (
                   <div
                     key={product.id}
-                    className="p-2 hover:bg-gray-100 cursor-pointer"
+                    className="p-2 hover:bg-gray-100 even:bg-gray-200 cursor-pointer"
                     onClick={() => handleAddProduct(product.code)}
                   >
-                    {product.code} - {product.description}
+                    {product.code} - {product.description} - $
+                    {product.salePrice.toLocaleString("es-AR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                    <span className="font-semibold"> Restan: </span>
+                    {product.amount}
                   </div>
                 ))}
               </div>
