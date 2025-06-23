@@ -16,6 +16,7 @@ import { db } from "@/firebase/config";
 import { updateAmount } from "@/firebase/stock/updateAmount";
 import { updateMonthlyRanking } from "@/firebase/stock/updateRanking";
 import { toast, Toaster } from "sonner";
+import Spinner from "../ui/Spinner";
 
 interface props {
   session: Session | null;
@@ -295,6 +296,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
         </Button>
       </div>
 
+      {blockButton && <Spinner />}
       <Modal
         blockButton={blockButton}
         visible={openFacturaModal}
@@ -328,7 +330,6 @@ const BillButtons = ({ session, handlePrint }: props) => {
         onAcept={async () => {
           setBlockButton(true);
           try {
-            await createSale(true);
             await createSale(false);
             if (!openErrorModal && BillState.total > 0) {
               handlePrint();
