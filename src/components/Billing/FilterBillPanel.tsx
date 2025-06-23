@@ -50,6 +50,7 @@ const FilterBillPanel = ({ session }: props) => {
       newArray.push(session.user.email);
       setSellerArray(newArray);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
     <>
@@ -61,11 +62,7 @@ const FilterBillPanel = ({ session }: props) => {
           <Select
             active={filtersState.Seller.active}
             value={filtersState.Seller.filter}
-            options={
-              session?.user?.email === process.env.ADMIN_EMAIL
-                ? sellers
-                : sellerArray
-            }
+            options={sellers}
             handleChange={(e) => {
               if (e.target.value === "Seleccionar Vendedor") {
                 disableSeller();
@@ -75,9 +72,7 @@ const FilterBillPanel = ({ session }: props) => {
             }}
             id="SellersSelector"
             defaultValue={
-              session?.user?.email === process.env.ADMIN_EMAIL
-                ? "Seleccionar Vendedor"
-                : undefined
+              sellerArray.length > 0 ? "Seleccionar Vendedor" : undefined
             }
           />
         </div>

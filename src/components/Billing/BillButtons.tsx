@@ -2,7 +2,7 @@
 "use client";
 import { Session } from "next-auth";
 import { Button } from "../ui/button";
-import { useContext, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { BillContext } from "@/context/BillContext";
 import Modal from "../Modal";
 import typeBillState from "@/models/BillState";
@@ -14,6 +14,9 @@ import newMovement from "@/firebase/cashMovements/newMovement";
 import { addDoc, collection } from "firebase/firestore";
 import { db } from "@/firebase/config";
 import { updateAmount } from "@/firebase/stock/updateAmount";
+import { updateMonthlyRanking } from "@/firebase/stock/updateRanking";
+import { toast, Toaster } from "sonner";
+import Spinner from "../ui/Spinner";
 
 interface props {
   session: Session | null;
@@ -29,9 +32,36 @@ const BillButtons = ({ session, handlePrint }: props) => {
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
-  const latestCAE = useRef(BillState.CAE);
+  const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
+  const [isOnline, setIsOnline] = useState(true);
+
+  // Verificar estado de conexión al montar el componente
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // Función para verificar conexión y mostrar error
+  const checkConnection = () => {
+    if (!isOnline) {
+      toast.error("Sin conexión a internet");
+      return false;
+    }
+    return true;
+  };
 
   const handleCreateVoucher = async () => {
+    if (!checkConnection()) return; // Verificar conexión
     try {
       const resp = await postBill(BillState);
       if (resp.afip) {
@@ -43,65 +73,24 @@ const BillButtons = ({ session, handlePrint }: props) => {
           nroComprobante: resp.nroCbte,
           qrData: resp.qrData,
         });
+        toast.success("Factura generada correctamente");
         setBlockButton(false);
       } else {
+        toast.error(resp);
         setResponse(resp);
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setResponse(err.message);
+      toast.error(err.message);
       setCreateVoucherError(true);
       setBlockButton(false);
       console.error(err);
     }
   };
 
-  // const handleAcept = async () => {
-  //   setBlockButton(true);
-  //   setOpenModal(false);
-  //   await handleCreateVoucher();
-
-  //   if (BillState.paidMethod === "Efectivo") {
-  //     await updateTotal(
-  //       BillState.products.reduce(
-  //         (acc, act) => acc + act.price * act.amount,
-  //         0
-  //       ) -
-  //         BillState.products.reduce(
-  //           (acc, act) => acc + act.price * act.amount,
-  //           0
-  //         ) *
-  //           BillState.discount *
-  //           0.01
-  //     );
-
-  //     let move: Movement = new Movement();
-  //     move.total =
-  //       BillState.products.reduce(
-  //         (acc, act) => acc + act.price * act.amount,
-  //         0
-  //       ) -
-  //       BillState.products.reduce(
-  //         (acc, act) => acc + act.price * act.amount
-  // ,
-  //         0
-  //       ) *
-  //         BillState.discount *
-  //         0.01;
-  //     move.seller = user?.email ? user.email : "";
-
-  //     await newMovement(move);
-  //   }
-  //   // await handleSaveSale();`
-  //   await updateAmount(BillState.products);
-  //   setPrint(true);
-  //   setTimeout(() => {
-  //     removeAll();
-  //     setBlockButton(false);
-  //   }, 5000);
-  // };
-
   const handleSaveSale = async (billState: typeBillState) => {
+    if (!checkConnection()) return; // Verificar conexión
     try {
       const collectionRef = collection(db, "sales");
       console.log(billState);
@@ -118,156 +107,167 @@ const BillButtons = ({ session, handlePrint }: props) => {
   };
 
   const createSale = async (afip: boolean) => {
-    const productTotal = BillState.products.reduce(
-      (acc, p) => acc + p.price * p.amount,
-      0
-    );
-    setBlockButton(true);
-    setOpenRemitoModal(false);
-    const totalAmount =
-      BillState.products.reduce((acc, act) => acc + act.price * act.amount, 0) -
-      BillState.discount *
-        0.01 *
+    if (!checkConnection()) return; // Verificar conexión
+    try {
+      const productTotal = BillState.products.reduce(
+        (acc, p) => acc + p.price * p.amount,
+        0
+      );
+      setBlockButton(true);
+      setOpenRemitoModal(false);
+      const totalAmount =
         BillState.products.reduce(
           (acc, act) => acc + act.price * act.amount,
           0
-        );
-    const remainingAmount = totalAmount - (BillState.totalSecondMethod || 0);
+        ) -
+        BillState.discount *
+          0.01 *
+          BillState.products.reduce(
+            (acc, act) => acc + act.price * act.amount,
+            0
+          );
+      const remainingAmount = totalAmount - (BillState.totalSecondMethod || 0);
 
-    console.log(totalAmount, productTotal);
-    if (totalAmount <= 0) {
-      setErrorMessage("El monto debe ser mayor a 0");
-      setOpenErrorModal(true);
-    } else {
-      if (
-        BillState.totalSecondMethod &&
-        totalAmount < BillState.totalSecondMethod
-      ) {
-        setErrorMessage(
-          "El monto del segundo medio de pago debe ser menor al total"
-        );
+      console.log(totalAmount, productTotal);
+      if (totalAmount <= 0) {
+        setErrorMessage("El monto debe ser mayor a 0");
         setOpenErrorModal(true);
       } else {
-        if (afip) {
-          await handleCreateVoucher();
-        }
         if (
-          BillState.twoMethods &&
           BillState.totalSecondMethod &&
-          BillState.totalSecondMethod > 0
+          totalAmount < BillState.totalSecondMethod
         ) {
-          // Crear dos listas de productos, ajustando las unidades y precios para cada método de pago
-          console.log(respAfip);
-          const primaryProducts = BillState.products.map((product, index) => {
-            const newProduct = { ...product };
-            if (index === 0) {
-              newProduct.salePrice = remainingAmount;
-              newProduct.gain = 1;
-              newProduct.amount = 1;
-              newProduct.price = remainingAmount;
-            } else {
-              newProduct.amount = 0;
-            }
-            return newProduct;
-          });
-
-          const secondaryProducts = BillState.products.map((product, index) => {
-            const newProduct = { ...product };
-            if (index === 0) {
-              newProduct.price = BillState.totalSecondMethod || 0;
-              newProduct.amount = 1;
-              newProduct.gain = 1;
-              newProduct.salePrice = BillState.totalSecondMethod || 0;
-            } else {
-              newProduct.amount = 0;
-            }
-            return newProduct;
-          });
-
-          // Crear y registrar movimientos separados para cada método de pago
-          if (BillState.paidMethod === "Efectivo") {
-            await updateTotal(remainingAmount); // Actualizar el total para el primer método de pago si es efectivo
-          }
-
-          const primaryMove = new Movement();
-          primaryMove.seller = session?.user?.email || "";
-          primaryMove.paidMethod = BillState.paidMethod || "Efectivo";
-          primaryMove.total = remainingAmount;
-          await newMovement(primaryMove);
-
-          if (BillState.secondPaidMethod === "Efectivo") {
-            await updateTotal(BillState.totalSecondMethod); // Actualizar el total para el segundo método de pago si es efectivo
-          }
-
-          const secondaryMove = new Movement();
-          secondaryMove.seller = session?.user?.email || "";
-          secondaryMove.paidMethod = BillState.secondPaidMethod || "";
-          secondaryMove.total = BillState.totalSecondMethod;
-          await newMovement(secondaryMove);
-
-          // Guardar ambas listas de productos en la base de datos (ajusta según tu lógica de negocio)
-          console.log(respAfip);
-          console.log(BillState.CAE);
-          await handleSaveSale({
-            ...BillState,
-            products: primaryProducts,
-            discount: 0,
-            total: primaryMove.total,
-            CAE: latestCAE.current,
-            totalWithDiscount: primaryMove.total,
-          });
-          console.log({
-            ...BillState,
-            products: primaryProducts,
-            total: primaryMove.total,
-            totalWithDiscount: primaryMove.total,
-          });
-          console.log({
-            ...BillState,
-            total: secondaryMove.total,
-            totalWithDiscount: secondaryMove.total,
-            paidMethod: BillState.secondPaidMethod,
-            products: secondaryProducts,
-          });
-          await handleSaveSale({
-            ...BillState,
-            CAE: latestCAE.current,
-            discount: 0,
-            total: secondaryMove.total,
-            totalWithDiscount: secondaryMove.total,
-            paidMethod: BillState.secondPaidMethod,
-            products: secondaryProducts,
-          });
+          setErrorMessage(
+            "El monto del segundo medio de pago debe ser menor al total"
+          );
+          setOpenErrorModal(true);
         } else {
-          // Lógica original para una sola venta
-
-          if (BillState.paidMethod === "Efectivo") {
-            await updateTotal(totalAmount); // Actualizar total si el único método de pago es efectivo
+          if (afip) {
+            await handleCreateVoucher();
           }
+          if (
+            BillState.twoMethods &&
+            BillState.totalSecondMethod &&
+            BillState.totalSecondMethod > 0
+          ) {
+            // Crear dos listas de productos, ajustando las unidades y precios para cada método de pago
+            console.log(respAfip);
+            const primaryProducts = BillState.products.map((product, index) => {
+              const newProduct = { ...product };
+              if (index === 0) {
+                newProduct.salePrice = remainingAmount;
+                newProduct.gain = 1;
+                newProduct.amount = 1;
+                newProduct.price = remainingAmount;
+              } else {
+                newProduct.amount = 0;
+              }
+              return newProduct;
+            });
 
-          const move = new Movement();
-          move.seller = session?.user?.email || "";
-          move.paidMethod = BillState.paidMethod || "Efectivo";
-          move.total = totalAmount;
-          await newMovement(move);
-          await handleSaveSale({
-            ...BillState,
-            CAE: latestCAE.current,
-            totalWithDiscount:
-              BillState.total - BillState.total * BillState.discount * 0.01,
-          });
+            const secondaryProducts = BillState.products.map(
+              (product, index) => {
+                const newProduct = { ...product };
+                if (index === 0) {
+                  newProduct.price = BillState.totalSecondMethod || 0;
+                  newProduct.amount = 1;
+                  newProduct.gain = 1;
+                  newProduct.salePrice = BillState.totalSecondMethod || 0;
+                } else {
+                  newProduct.amount = 0;
+                }
+                return newProduct;
+              }
+            );
+
+            // Crear y registrar movimientos separados para cada método de pago
+            if (BillState.paidMethod === "Efectivo") {
+              await updateTotal(remainingAmount); // Actualizar el total para el primer método de pago si es efectivo
+            }
+
+            const primaryMove = new Movement();
+            primaryMove.seller = session?.user?.email || "";
+            primaryMove.paidMethod = BillState.paidMethod || "Efectivo";
+            primaryMove.total = remainingAmount;
+            await newMovement(primaryMove);
+
+            if (BillState.secondPaidMethod === "Efectivo") {
+              await updateTotal(BillState.totalSecondMethod); // Actualizar el total para el segundo método de pago si es efectivo
+            }
+
+            const secondaryMove = new Movement();
+            secondaryMove.seller = session?.user?.email || "";
+            secondaryMove.paidMethod = BillState.secondPaidMethod || "";
+            secondaryMove.total = BillState.totalSecondMethod;
+            await newMovement(secondaryMove);
+
+            // Guardar ambas listas de productos en la base de datos (ajusta según tu lógica de negocio)
+            console.log(respAfip);
+            console.log(BillState.CAE);
+            await handleSaveSale({
+              ...BillState,
+              products: primaryProducts,
+              discount: 0,
+              total: primaryMove.total,
+              CAE: latestCAE.current,
+              totalWithDiscount: primaryMove.total,
+            });
+            toast.success("Factura 1 guardada correctamente");
+            await handleSaveSale({
+              ...BillState,
+              CAE: latestCAE.current,
+              discount: 0,
+              total: secondaryMove.total,
+              totalWithDiscount: secondaryMove.total,
+              paidMethod: BillState.secondPaidMethod,
+              products: secondaryProducts,
+            });
+            toast.success("Factura 2 guardada correctamente");
+          } else {
+            // Lógica original para una sola venta
+
+            if (BillState.paidMethod === "Efectivo") {
+              await updateTotal(totalAmount); // Actualizar total si el único método de pago es efectivo
+            }
+
+            const move = new Movement();
+            move.seller = session?.user?.email || "";
+            move.paidMethod = BillState.paidMethod || "Efectivo";
+            move.total = totalAmount;
+            await newMovement(move);
+            await handleSaveSale({
+              ...BillState,
+              CAE: latestCAE.current,
+              totalWithDiscount:
+                BillState.total - BillState.total * BillState.discount * 0.01,
+            });
+          }
+          toast.success("Factura guardada correctamente");
+
+          await updateAmount(BillState.products);
+
+          await updateMonthlyRanking(BillState.products);
         }
-
-        await updateAmount(BillState.products);
+        // setTimeout(() => {
+        // }, 5000);
       }
-      // setTimeout(() => {
-      // }, 5000);
+    } catch (err) {
+      // Agregar manejo de error de conexión en el catch general
+      if (!isOnline) {
+        toast.error("Operación cancelada: Sin conexión a internet");
+      } else {
+        toast.error(
+          "Error inesperado: " + (err instanceof Error ? err.message : "")
+        );
+      }
+      setBlockButton(false);
     }
   };
   const [openFacturaModal, setOpenFacturaModal] = useState(false);
   const [blockButton, setBlockButton] = useState(false);
   return (
     <div className="w-full flex h-14 gap-1 justify-center">
+      <Toaster position="top-right" richColors />
       <div className="flex">
         <Button
           onClick={() => {
@@ -278,7 +278,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
           }}
           className="rounded-xl w-24"
         >
-          Factura C
+          Facturar
         </Button>
       </div>
       <div className="flex">
@@ -296,6 +296,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
         </Button>
       </div>
 
+      {blockButton && <Spinner />}
       <Modal
         blockButton={blockButton}
         visible={openFacturaModal}
@@ -304,17 +305,21 @@ const BillButtons = ({ session, handlePrint }: props) => {
         message={"Confirmar creacion de Factura C"}
         onAcept={async () => {
           setBlockButton(true);
-          await createSale(true);
-          if (!openErrorModal && BillState.total > 0) {
-            handlePrint();
-            setTimeout(() => {
-              removeAll();
+          try {
+            await createSale(true);
+            if (!openErrorModal && BillState.total > 0) {
               handlePrint();
-            }, 5000);
-          }
-          setOpenFacturaModal(false);
+              setTimeout(() => {
+                removeAll();
+                handlePrint();
+              }, 5000);
+            }
+            setOpenFacturaModal(false);
 
-          setBlockButton(false);
+            setBlockButton(false);
+          } catch (err) {
+            console.error(err);
+          }
         }}
       />
       <Modal
@@ -324,16 +329,20 @@ const BillButtons = ({ session, handlePrint }: props) => {
         message={"Confirmar creacion de Remito"}
         onAcept={async () => {
           setBlockButton(true);
-          await createSale(false);
-          if (!openErrorModal && BillState.total > 0) {
-            handlePrint();
-            setTimeout(() => {
-              removeAll();
+          try {
+            await createSale(false);
+            if (!openErrorModal && BillState.total > 0) {
               handlePrint();
-            }, 5000);
+              setTimeout(() => {
+                removeAll();
+                handlePrint();
+              }, 5000);
+            }
+            setOpenRemitoModal(false);
+            setBlockButton(false);
+          } catch (err) {
+            console.error(err);
           }
-          setOpenRemitoModal(false);
-          setBlockButton(false);
         }}
         onCancel={() => setOpenRemitoModal(false)}
       />

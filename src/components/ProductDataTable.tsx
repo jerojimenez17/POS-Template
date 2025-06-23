@@ -51,6 +51,12 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         const timeA = new Date(a.creation_date).getTime();
         const timeB = new Date(b.creation_date).getTime();
         return timeB - timeA; // Más reciente primero
+      })
+      .sort((a, b) => {
+        //sort first with units equal to zero
+        if (a.amount <= 0 && b.amount !== 0) return -1;
+        if (a.amount !== 0 && b.amount <= 0) return 1;
+        return 0;
       });
   }, [products, descriptionFilter]);
 
@@ -86,12 +92,20 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
       {
         accessorKey: "amount",
         header: () => (
-          <div className="text-center font-extrabold text-white text-lg p-2">
+          <div
+            className={`text-center font-extrabold text-white text-lg p-2 $`}
+          >
             Cantidad
           </div>
         ),
         cell: (info) => (
-          <div className="font-medium text-center">
+          <div
+            className={`font-medium text-center ${
+              (info.getValue() as number) <= 0
+                ? "text-red-500 font-semibold"
+                : ""
+            }`}
+          >
             {info.getValue() as string}
           </div>
         ),
@@ -244,7 +258,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
   });
 
   return (
-    <div className="z-0 p-0 mx-auto mb-20 w-full h-full rounded-xl shadow-sm overflow-hidden">
+    <div className="z-0 p-0 mx-auto mb-28 md:mb-20 w-full h-full rounded-xl shadow-sm overflow-hidden">
       <div className=" h-[90%] overflow-auto">
         <table className="text-gray-800 max-h-full border-separate border-spacing-0 bg-white bg-opacity-20 backdrop-filter w-full z-0">
           <thead className="bg-black h-20 mt-0">
@@ -285,7 +299,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
           </tbody>
         </table>
       </div>
-      <div className="w-full flex justify-end ">
+      <div className="w-full flex justify-end mb-4 ">
         <Button
           className="font-bold text-xl rounded-xl"
           onClick={() => {

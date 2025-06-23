@@ -43,6 +43,7 @@ import NewSuplierModal from "./new-suplier-modal";
 import { Suplier } from "@/models/Suplier";
 import { SuplierFirebaseAdapter } from "@/models/SuplierFirebaseAdapter";
 import CodeScanner from "../CodeScanner";
+import { toast, Toaster } from "sonner";
 
 interface props {
   product?: Product;
@@ -169,6 +170,9 @@ const ProductForm = ({ product, onClose }: props) => {
               `/productImage/${product.imageName}`
             );
             await deleteObject(oldImageRef).catch(() => {
+              toast.error(
+                "La imagen anterior no se pudo encontrar o eliminar."
+              );
               console.warn(
                 "La imagen anterior no se pudo encontrar o eliminar."
               );
@@ -187,21 +191,23 @@ const ProductForm = ({ product, onClose }: props) => {
           } else {
             docData = null;
           }
+          let newSuplier = null;
           if (docData && docData.exists()) {
-            const newSuplier = SuplierFirebaseAdapter.fromDocumentData(
+            newSuplier = SuplierFirebaseAdapter.fromDocumentData(
               docData.data(),
               docData.id
             );
-            console.log(newSuplier);
-            await editProduct(product.id, {
-              ...values,
-              suplier: newSuplier || undefined,
-              image: imageURL,
-              last_update: new Date(),
-              creation_date: product.creation_date,
-              imageName,
-            });
+            console.log("Entro" + { ...values });
           }
+          await editProduct(product.id, {
+            ...values,
+            suplier: newSuplier || new Suplier(),
+            image: imageURL,
+            last_update: new Date(),
+            creation_date: product.creation_date,
+            imageName,
+          });
+          toast.success("Producto editado con éxito");
           setUploadMessage(["Producto editado con éxito"]);
         } else {
           // Modo de creación: Crea un nuevo producto
@@ -209,19 +215,25 @@ const ProductForm = ({ product, onClose }: props) => {
           const { error } = await newProduct(values);
           if (error) {
             const newErrors = errorMessages;
+            toast.error(error.toString());
             newErrors.push(error.toString());
             setErrorMessages(newErrors);
           }
           setUploadMessage(["Producto cargado con éxito"]);
+          toast.success("Producto cargado con éxito");
         }
 
         form.reset();
-        onClose(); // Cerrar el modal o hacer cualquier acción posterior
+        setTimeout(() => {
+          onClose();
+        }, 800); // Cerrar el modal o hacer cualquier acción posterior
       } catch (error) {
         console.error(error);
         if (error instanceof Error) {
+          toast.error(error.message);
           setErrorMessages([error.message]);
         } else {
+          toast.error("Ha ocurrido un error desconocido");
           setErrorMessages(["Ha ocurrido un error desconocido"]);
         }
       }
@@ -272,9 +284,10 @@ const ProductForm = ({ product, onClose }: props) => {
 
   return (
     <Form {...form}>
+      <Toaster position="top-left" duration={3000} richColors />
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="space-y-2 bg-opacity-10"
+        className="space-y-2 p-8 sm:p-2 bg-opacity-10"
       >
         <div className="space-y-4">
           <FormField

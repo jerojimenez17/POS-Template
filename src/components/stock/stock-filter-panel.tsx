@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Scanner } from "@yudiel/react-qr-scanner";
+import { useRouter } from "next/navigation";
 
 interface props {
   handleOpenModal: () => void;
@@ -14,6 +15,7 @@ const StockFilterPanel = ({
 }: props) => {
   const [scanerOpen, setScanerOpen] = useState(false);
   const [descriptionFilterInput, setDescriptionFilterInput] = useState("");
+  const router = useRouter();
   return (
     <div className="h-28 w-full flex items-center justify-center bg-white bg-opacity-25 shadow-sm rounded-lg mx-auto my-2">
       <Input
@@ -111,6 +113,14 @@ const StockFilterPanel = ({
             />
           </g>
         </svg>
+      </Button>
+      <Button
+        onClick={() => {
+          router.push("productDashboard/products-ranking");
+        }}
+        className="text-gray-400 font-bold bg-white text-5xlg"
+      >
+        Ranking
       </Button>
       {scanerOpen && (
         <div className="h-screen w-screen items-center flex  z-10">
