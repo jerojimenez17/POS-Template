@@ -34,7 +34,7 @@ const Modal = ({
         >
           X
         </button>
-        <div className="bg-white px-12 py-2 bg-opacity-70 rounded-lg w-lg h-[75vh] flex flex-col overflow-auto">
+        <div className="bg-white px-12 py-2 bg-opacity-70 rounded-lg w-lg h-[70vh] md:h-[75vh] flex flex-col overflow-auto">
           <div className="m-3 flex grow mx-auto text-black">{message}</div>
           {children}
           {/* {link && (
