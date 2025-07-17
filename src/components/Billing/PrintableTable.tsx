@@ -411,7 +411,10 @@ const PrintableTable = ({
             $
             {state.products
               .reduce((sum, p) => sum + p.salePrice * p.amount, 0)
-              .toFixed(2)}
+              .toLocaleString("es-AR", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
           </div>
 
           {state.discount > 0 && (
@@ -425,7 +428,10 @@ const PrintableTable = ({
                     0
                   ) *
                   (state.discount / 100)
-                ).toFixed(2)}
+                ).toLocaleString("es-AR", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </div>
             </>
           )}
@@ -441,7 +447,10 @@ const PrintableTable = ({
                 0
               ) *
               (1 - state.discount / 100)
-            ).toFixed(2)}
+            ).toLocaleString("es-AR", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </div>
         </div>
       </div>

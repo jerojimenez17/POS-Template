@@ -1,6 +1,6 @@
 import { Suplier } from "./Suplier";
 
-export default class Product {
+export default abstract class Product {
   id = "";
   code = "";
   description = "";

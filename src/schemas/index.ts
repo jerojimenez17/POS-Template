@@ -107,3 +107,23 @@ export const BillParametersSchema = z.object({
   secondPaidMethod: z.string().optional(),
   totalSecondMethod: z.coerce.number().optional(),
 });
+export const AccountSchema = z
+  .object({
+    clientName: z.string().min(1, { message: "Nombre es obligatorio" }),
+    deliveryName: z.string().optional(),
+    clientEmail: z
+      .string()
+      .trim()
+      .optional()
+      .refine((val) => !val || /\S+@\S+\.\S+/.test(val), {
+        message: "Email inválido",
+      }),
+    clientPhone: z.preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.string().min(6, "Teléfono inválido").optional()
+    ),
+  })
+  .refine((data) => data.clientEmail || data.clientPhone, {
+    message: "Debe ingresar al menos un email o un teléfono.",
+    path: ["clientEmail"],
+  });

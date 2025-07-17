@@ -57,6 +57,25 @@ const RootMenu = () => {
               </g>
             </svg>
           </MenuCard>{" "}
+          <MenuCard url="/account-ledger" title="Fichero">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              xmlnsXlink="http://www.w3.org/1999/xlink"
+              version="1.0"
+              id="Layer_1"
+              width="80px"
+              height="120px"
+              viewBox="0 0 64 64"
+              enableBackground="new 0 0 64 64"
+              xmlSpace="preserve"
+            >
+              <path
+                fill="#464455"
+                className="hover:fill-white"
+                d="M60,8H36V4c0-2.209-1.789-4-4-4H4C1.789,0,0,1.791,0,4v56c0,1.009,0.385,1.919,1,2.622V63h0.378  C2.081,63.615,2.991,64,4,64h56c1.009,0,1.919-0.385,2.622-1H63v-0.378c0.615-0.703,1-1.613,1-2.622V12C64,9.789,62.211,8,60,8z   M49,46H15c-0.553,0-1-0.447-1-1s0.447-1,1-1h34c0.553,0,1,0.447,1,1S49.553,46,49,46z M49,40H15c-0.553,0-1-0.447-1-1s0.447-1,1-1  h34c0.553,0,1,0.447,1,1S49.553,40,49,40z M14,33c0-0.553,0.447-1,1-1h16c0.553,0,1,0.447,1,1s-0.447,1-1,1H15  C14.447,34,14,33.553,14,33z M62,14H2V4c0-1.104,0.896-2,2-2h28c1.104,0,2,0.896,2,2v6h26c1.104,0,2,0.896,2,2V14z"
+              />
+            </svg>
+          </MenuCard>
           <MenuCard url="/cashRegister" title="Caja">
             <svg
               xmlnsXlink="http://www.w3.org/1999/xlink"
