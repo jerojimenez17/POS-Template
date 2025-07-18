@@ -17,6 +17,17 @@ import { updateAmount } from "@/firebase/stock/updateAmount";
 import { updateMonthlyRanking } from "@/firebase/stock/updateRanking";
 import { toast, Toaster } from "sonner";
 import Spinner from "../ui/Spinner";
+import AccountLedgerModal from "../ledger/AccountLedgerModal";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+  DialogHeader,
+  DialogTrigger,
+  DialogDescription,
+} from "../ui/dialog";
 
 interface props {
   session: Session | null;
@@ -34,6 +45,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(true);
+  const [openLedgerModal, setOpenLedgerModal] = useState(false);
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
@@ -295,57 +307,167 @@ const BillButtons = ({ session, handlePrint }: props) => {
           Remito
         </Button>
       </div>
+      {/* <Button
+          variant="outline"
+          onClick={() => {
+            if (session?.user.email) {
+              sellerName(session.user.email || "");
+            }
+            setOpenLedgerModal(true);
+          }}
+          className="rounded-xl w-24"
+        >
+          A cuenta
+        </Button> */}
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button variant="outline" className="rounded-xl w-24">
+            A cuenta
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              <p>Buscar Cuenta</p>
+            </DialogTitle>
+          </DialogHeader>
+          <AccountLedgerModal billState={BillState} />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button>Cerrar</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {blockButton && <Spinner />}
-      <Modal
-        blockButton={blockButton}
-        visible={openFacturaModal}
-        onClose={() => setOpenFacturaModal(false)}
-        onCancel={() => setOpenFacturaModal(false)}
-        message={"Confirmar creacion de Factura C"}
-        onAcept={async () => {
-          setBlockButton(true);
-          try {
-            await createSale(true);
-            if (!openErrorModal && BillState.total > 0) {
-              handlePrint();
-              setTimeout(() => {
-                removeAll();
-                handlePrint();
-              }, 5000);
-            }
-            setOpenFacturaModal(false);
+      <Dialog
+        // blockButton={blockButton}
+        open={openFacturaModal}
+        // onClose={() => setOpenFacturaModal(false)}
+        // onCancel={() => setOpenFacturaModal(false)}
+        // message={"Confirmar creacion de Factura C"}
+        // onAcept={async () => {
+        //   setBlockButton(true);
+        //   try {
+        //     await createSale(true);
+        //     if (!openErrorModal && BillState.total > 0) {
+        //       handlePrint();
+        //       setTimeout(() => {
+        //         removeAll();
+        //         handlePrint();
+        //       }, 5000);
+        //     }
+        //     setOpenFacturaModal(false);
 
-            setBlockButton(false);
-          } catch (err) {
-            console.error(err);
-          }
-        }}
-      />
-      <Modal
-        blockButton={blockButton}
-        visible={openRemitoModal}
-        onClose={() => setOpenRemitoModal(false)}
-        message={"Confirmar creacion de Remito"}
-        onAcept={async () => {
-          setBlockButton(true);
-          try {
-            await createSale(false);
-            if (!openErrorModal && BillState.total > 0) {
-              handlePrint();
-              setTimeout(() => {
-                removeAll();
-                handlePrint();
-              }, 5000);
-            }
-            setOpenRemitoModal(false);
-            setBlockButton(false);
-          } catch (err) {
-            console.error(err);
-          }
-        }}
-        onCancel={() => setOpenRemitoModal(false)}
-      />
+        //     setBlockButton(false);
+        //   } catch (err) {
+        //     console.error(err);
+        //   }
+        // }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar creacion de Factura</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            Seguro que desea crear una Factura?
+          </DialogDescription>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button onClick={() => setOpenFacturaModal(false)}>
+                Cancelar
+              </Button>
+            </DialogClose>
+            <DialogClose asChild>
+              <Button
+                onClick={async () => {
+                  setBlockButton(true);
+                  try {
+                    await createSale(true);
+                    if (!openErrorModal && BillState.total > 0) {
+                      handlePrint();
+                      setTimeout(() => {
+                        removeAll();
+                        handlePrint();
+                      }, 5000);
+                    }
+                    setOpenFacturaModal(false);
+                    setBlockButton(false);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+              >
+                Aceptar
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        // blockButton={blockButton}
+        open={openRemitoModal}
+        // onClose={() => setOpenRemitoModal(false)}
+        // message={"Confirmar creacion de Remito"}
+        // onAcept={async () => {
+        //   setBlockButton(true);
+        //   try {
+        //     await createSale(false);
+        //     if (!openErrorModal && BillState.total > 0) {
+        //       handlePrint();
+        //       setTimeout(() => {
+        //         removeAll();
+        //         handlePrint();
+        //       }, 5000);
+        //     }
+        //     setOpenRemitoModal(false);
+        //     setBlockButton(false);
+        //   } catch (err) {
+        //     console.error(err);
+        //   }
+        // }}
+        // onCancel={() => setOpenRemitoModal(false)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar creacion de Remito</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            Seguro que desea crear un Remito?
+          </DialogDescription>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button onClick={() => setOpenRemitoModal(false)}>
+                Cancelar
+              </Button>
+            </DialogClose>
+            <DialogClose asChild>
+              <Button
+                onClick={async () => {
+                  setBlockButton(true);
+                  try {
+                    await createSale(false);
+                    if (!openErrorModal && BillState.total > 0) {
+                      handlePrint();
+                      setTimeout(() => {
+                        removeAll();
+                        handlePrint();
+                      }, 5000);
+                    }
+                    setOpenRemitoModal(false);
+                    setBlockButton(false);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+              >
+                Aceptar
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Modal
         visible={openErrorModal}
         onClose={() => setOpenErrorModal(false)}

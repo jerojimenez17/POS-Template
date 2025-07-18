@@ -7,8 +7,14 @@ interface props {
 }
 const DeleteButton = ({ onClick, id, disable }: props) => {
   return (
-    <button id={id} onClick={onClick} disabled={disable}>
+    <button
+      className="cursor-pointer my-auto"
+      id={id}
+      onClick={onClick}
+      disabled={disable}
+    >
       <svg
+        className="hover:shadow-xl"
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 100 100"
         width="30px"

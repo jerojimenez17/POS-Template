@@ -6,17 +6,19 @@ import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
 interface props {
   onScan: (result: IDetectedBarcode[]) => void;
   errorMessage: string;
+  className?: string;
 }
 
-const CodeScanner = ({ onScan, errorMessage }: props) => {
+const CodeScanner = ({ onScan, errorMessage, className }: props) => {
   const [scanerOpen, setScanerOpen] = useState(false);
   return (
-    <div>
+    <div
+      onFocus={(e) => e.target.focus()}
+      onClick={() => focus()}
+      className={className || ""}
+    >
       <div className="flex w-28 my-auto">
-        <Button
-          className="bg-transparent hover:fill-white font-bold print:hidden text-2xl p-2"
-          onClick={() => setScanerOpen(true)}
-        >
+        <Button className="bg-transparent hover:fill-white font-bold print:hidden text-2xl p-2">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="70px"

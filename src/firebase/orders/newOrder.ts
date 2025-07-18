@@ -141,7 +141,7 @@ export async function discountStock(
   productId: string,
   discountValue: number
 ): Promise<void> {
-  const productRef = doc(db, "stock", productId.split("id")[1]);
+  const productRef = doc(db, "stock", productId);
 
   try {
     await runTransaction(db, async (transaction) => {

@@ -60,8 +60,8 @@ const BillParametersForm = () => {
       <form className="size-full" onSubmit={form.handleSubmit(onSubmit)}>
         <div className="size-full flex gap-2 flex-col">
           <div className=" text-gray-700 container items-center flex-col md:flex-row size-full justify-evenly mx-auto gap-1 flex">
-            <div className=" mx-auto w-full md:w-1/3 h-1/2 md:h-full my-auto gap-0 flex flex-col">
-              <div className="h-full w-full text-center my-auto flex items-center">
+            <div className=" mx-auto  w-full md:w-1/3 h-1/2 md:h-full my-auto gap-0 flex flex-col">
+              <div className="h-full shadow rounded-2xl w-full text-center my-auto flex items-center">
                 <FormField
                   control={form.control}
                   name={"billType"}
@@ -88,7 +88,7 @@ const BillParametersForm = () => {
                   )}
                 />
               </div>
-              <div className="h-full w-full text-center my-auto flex items-center">
+              <div className="h-full shadow rounded-2xl w-full text-center my-auto flex items-center">
                 <FormField
                   control={form.control}
                   name={"clientCondition"}
@@ -149,7 +149,7 @@ const BillParametersForm = () => {
                 </div>
               )}
             </div>
-            <div className="w-full md:w-1/3 flex mx-auto my-auto">
+            <div className="w-full shadow rounded-2xl md:w-1/3 flex mx-auto my-auto">
               <FormField
                 control={form.control}
                 name={"paidMethod"}
@@ -177,7 +177,7 @@ const BillParametersForm = () => {
               />
             </div>
 
-            <div className="w-1/3 md:w-1/3 h-full my-auto flex flex-col align-middle">
+            <div className="w-1/3 md:w-1/3 space-y-2 h-full my-auto flex flex-col align-middle">
               <div className="my-auto">
                 <FormField
                   control={form.control}
