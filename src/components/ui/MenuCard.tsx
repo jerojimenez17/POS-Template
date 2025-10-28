@@ -11,11 +11,11 @@ const MenuCard = ({ url, title, children }: props) => {
   const router = useRouter();
   return (
     <div
-      className="w-42 h-1/3 justify-center rounded-xl flex flex-col items-center bg-slate-100 bg-opacity-87 shadow-gray-400 hover:bg-slate-200 focus:bg-white hover:ring-3 hover:ring-gray-200 hover:text-pink-30 hover:shadow-gray-700 overflow-hidden shadow-lg p-2"
+      className="w-42 h-1/3 justify-center rounded-xl dark:bg-inherit flex flex-col items-center bg-slate-100 bg-opacity-87 shadow-gray-400 hover:bg-slate-200 focus:bg-white hover:ring-3 hover:ring-gray-200 hover:text-pink-30 hover:shadow-gray-700 overflow-hidden shadow-lg p-2"
       onClick={() => router.push(url)}
     >
-      <span className="fill-black">{children}</span>
-      <h2 className="w-full text-center text-black hover:text-white text-opacity-80 font-semibold text-lg">
+      <span className="fill-black dark:fill-white">{children}</span>
+      <h2 className="w-full text-center text-black hover:text-white dark:text-slate-100 text-opacity-80 font-semibold text-lg">
         {title}
       </h2>
     </div>

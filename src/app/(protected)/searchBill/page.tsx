@@ -7,7 +7,7 @@ const page = async () => {
   return (
     <div className="h-full">
       {" "}
-      <div className="h-screen text-center align-middle justify-center sm:w-screen-sm mb-10 overflow-auto">
+      <div className=" text-center align-middle justify-center sm:w-screen-sm mb-10 overflow-auto">
         <FilterBillPanel
           session={session}
           // sellers={Array.from(new Set(sales.map((sale) => sale.seller)))}

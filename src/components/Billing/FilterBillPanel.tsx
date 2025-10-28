@@ -95,14 +95,14 @@ const FilterBillPanel = ({ session }: props) => {
         </div>
         <div className="col p-2 m-2 flex flex-col gap-2 items-center justify-center">
           <label
-            className="text-gray-800 font-semibold"
+            className="text-gray-800 dark:text-gray-200 font-semibold"
             htmlFor="dateStartPicker"
           >
             Fecha Desde
           </label>
           <div
             id="dateStartPicker"
-            className="bg-transparent flex gap-2 items-center rounded relative text-black"
+            className="bg-transparent flex gap-2 dark:text-gray-200 items-center rounded relative text-black"
             // data-bs-toggle="modal"
             // data-bs-target="#staticBackdrop"
           >
@@ -119,14 +119,14 @@ const FilterBillPanel = ({ session }: props) => {
             <CalendarIcon />
           </div>
           <label
-            className="text-gray-800 font-semibold"
+            className="text-gray-800 dark:text-gray-200 font-semibold"
             htmlFor="dateEndPicker"
           >
             Fecha Hasta
           </label>
           <div
             id="dateEndPicker"
-            className="bg-transparent flex gap-2 items-center rounded relative text-black"
+            className="bg-transparent flex gap-2 items-center rounded relative text-black dark:text-gray-200"
             // data-bs-toggle="modal"
             // data-bs-target="#staticBackdrop"
           >

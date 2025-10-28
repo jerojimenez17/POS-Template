@@ -142,7 +142,10 @@ const PrintableTable = ({
     return 0;
   };
   const renderProductRow = (product: Product) => (
-    <tr key={product.id} className="even:bg-slate-100 text-black">
+    <tr
+      key={product.id}
+      className="even:bg-slate-100 dark:even:bg-gray-900 dark:text-white text-black"
+    >
       <td className="p-1 print:p-1 print:text-sm">{product.description}</td>
       <td className="p-1 flex justify-center items-center gap-1">
         {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
@@ -267,11 +270,11 @@ const PrintableTable = ({
               }}
             />
             {suggestions.length > 0 && searchCode.length > 0 && (
-              <div className="absolute z-10 w-full bg-white border border-gray-300 rounded mt-1 shadow-lg">
+              <div className="absolute z-10 w-full bg-inherit border border-gray-300 rounded mt-1 shadow-lg">
                 {suggestions.map((product) => (
                   <div
                     key={product.id}
-                    className="p-2 hover:bg-gray-100 even:bg-gray-200 cursor-pointer"
+                    className="p-2 hover:bg-gray-100 dark:even:bg-gray-700 bg-gray-100 even:bg-gray-300 dark:bg-gray-900 cursor-pointer"
                     onClick={() => handleAddProduct(product.code)}
                   >
                     {product.code} - {product.description} - $
@@ -404,7 +407,7 @@ const PrintableTable = ({
       </div>
 
       {/* Totals Section */}
-      <div className="mt-4 p-4 bg-gray-100 rounded-lg print:mt-8 print:bg-transparent">
+      <div className="mt-4 p-4 dark:bg-gray-700 bg-gray-100 rounded-lg print:mt-8 print:bg-transparent">
         <div className="grid grid-cols-2 gap-2 text-right">
           <div className="font-bold">Subtotal:</div>
           <div>

@@ -105,9 +105,9 @@ const SalesTable = ({ session }: props) => {
   }, [filteredSales]);
 
   return (
-    <div className="text-center text-black flex flex-col w-full mb-20">
+    <div className="text-center text-black flex flex-col w-full h-full overflow-auto">
       <div className="h-20 my-8 sm:my-2 md:my-6 lg:my-4">
-        <p className="p-3 text-2xl text-gray-800 font-bold">
+        <p className="p-3 text-2xl text-gray-800 font-bold dark:text-gray-200">
           Total: $
           {total.toLocaleString("es-AR", {
             minimumFractionDigits: 2,
@@ -116,7 +116,7 @@ const SalesTable = ({ session }: props) => {
         </p>
       </div>
 
-      <div className="h-full mb-5 overflow-auto">
+      <div className="h-full pb-12 mb-8 overflow-auto">
         {filteredSales.map((sale) => (
           <div key={sale.id}>
             <SaleAccordion

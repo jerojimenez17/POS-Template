@@ -24,6 +24,7 @@ import { NavigationMenuLink } from "@/components/ui/navigation-menu";
 import { Poppins } from "next/font/google";
 import React from "react";
 import Link from "next/link";
+import ThemeToggle from "./ThemeToggle";
 
 const components: { title: string; href: string; description: string }[] = [
   // {
@@ -69,7 +70,7 @@ export function NavigationMenuHeader() {
           )}
         >
           <Link href="/">
-            <h1 className="mx-auto">Nombre</h1>
+            <h1 className="mx-auto dark:text-gray-50">Nombre</h1>
           </Link>
           {/* <Image
             className={`w-32 h-12 antialiased`}
@@ -127,8 +128,8 @@ export function NavigationMenuHeader() {
           </NavigationMenuItem>
         </NavigationMenuList>
       </NavigationMenu> */}
-      <div className="flex grow text-center align-middle justify-end">
-        <span></span>
+      <div className="mr-4 my-auto">
+        <ThemeToggle />
       </div>
     </div>
   );
