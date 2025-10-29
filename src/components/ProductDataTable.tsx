@@ -17,6 +17,7 @@ import ProductForm from "./stock/product-form";
 import { Button } from "./ui/button";
 import DeleteButton from "./DeleteButton";
 import CodeBarModal from "./stock/code-bar-modal";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 
 // Supongamos que recibes products y descriptionFilter como props:
 interface ProductDataTableProps {
@@ -344,16 +345,18 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
 
       {/* Modal para editar */}
       {productToEdit && openEditModal && (
-        <Modal
-          onClose={() => setOpenEditModal(false)}
-          visible={openEditModal}
-          blockButton={false}
-        >
-          <ProductForm
-            onClose={() => setOpenEditModal(false)}
-            product={productToEdit}
-          />
-        </Modal>
+        <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
+          <DialogContent className="sm:max-w-md overflow-auto h-full">
+            <DialogHeader>
+              <DialogTitle>Editar producto</DialogTitle>
+            </DialogHeader>
+
+            <ProductForm
+              onClose={() => setOpenEditModal(false)}
+              product={productToEdit}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

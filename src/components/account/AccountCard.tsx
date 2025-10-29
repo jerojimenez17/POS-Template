@@ -9,7 +9,7 @@ const AccountCard = ({ account, onClick }: Props) => {
   return (
     <div
       onClick={onClick}
-      className="border p-4 rounded-lg shadow hover:bg-muted cursor-pointer"
+      className="border p-4 rounded-lg dark:bg-gray-700 dark:text-gray-100 shadow hover:bg-muted cursor-pointer"
     >
       <h2 className="font-semibold text-lg">{account.clientName}</h2>
       <p className="text-sm text-muted-foreground">{account.clientEmail}</p>

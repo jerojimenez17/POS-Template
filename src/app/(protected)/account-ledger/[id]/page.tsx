@@ -159,8 +159,10 @@ const Page = () => {
     <>
       {loading && <Spinner />}
       <div className="p-4 h-full flex flex-col overflow-auto py-14 space-y-4">
-        <h1 className="text-xl text-center text-gray-800 font-bold">Cuenta</h1>
-        <div className="border rounded-lg p-4 bg-white shadow-sm space-y-2">
+        <h1 className="text-xl text-center dark:text-gray-100 font-bold">
+          Cuenta
+        </h1>
+        <div className="border rounded-lg p-4 dark:bg-gray-700 dark:text-gray-100 shadow">
           <p>
             <strong>Cliente:</strong> {account.clientName}
           </p>
@@ -193,8 +195,10 @@ const Page = () => {
           </Button>
         </div>
 
-        <h2 className="text-lg font-semibold text-gray-700">Productos</h2>
-        <div className="flex flex-col gap-2">
+        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-100">
+          Productos
+        </h2>
+        <div className="flex flex-col mb-12 gap-2">
           {account.productsAccount.map((product, index) => (
             <div
               key={product.id + index}

@@ -52,13 +52,13 @@ const page = () => {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const router = useRouter();
   return (
-    <div className="p-4 h-full flex flex-col overflow-auto py-14 space-y-4">
+    <div className="p-4 h-full dark:bg-gray-700 dark:text-gray-100 shadow">
       <h1
         className={`text-xl text-center text-gray-800 font-bold ${poppins.className}`}
       >
         Fichero de Cuentas
       </h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3  gap-4">
+      <div className="grid grid-cols-1 dark:bg-gray-700 dark:text-gray-100 shadow">
         {accounts.map((account) => (
           <AccountCard
             key={account.id}

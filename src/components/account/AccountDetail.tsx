@@ -21,7 +21,7 @@ const AccountDetail = ({ account, onClose }: Props) => {
           <DialogTitle>Detalle de Cuenta – {account.clientName}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-2">
+        <div className="dark:bg-gray-700 dark:text-gray-100 shadow">
           <p>Email: {account.clientEmail || "No especificado"}</p>
           <p>Teléfono: {account.clientPhone || "No especificado"}</p>
           <p>Productos: {account.productsAccount.length}</p>

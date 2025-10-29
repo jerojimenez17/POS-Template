@@ -11,6 +11,8 @@ import Product from "@/models/Product";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/firebase/config";
 import { ProductFirebaseAdapter } from "@/models/ProductFirebaseAdapter";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Button } from "../ui/button";
 
 interface props {
   session: Session | null;
@@ -32,18 +34,17 @@ const ProductDashboad = ({ session }: props) => {
     });
   }, []);
 
-
   return (
     <div className="flex flex-col h-full w-full items-center">
-      <Modal
-        visible={openModal}
-        onClose={() => setOpenModal(false)}
-        blockButton={false}
-        message={""}
-        className="z-10 items-center my-auto"
-      >
-        <ProductForm onClose={() => setOpenModal(false)} />
-      </Modal>
+      <Dialog open={openModal} onOpenChange={setOpenModal}>
+        <DialogContent className="sm:max-w-md overflow-auto h-full">
+          <DialogHeader>
+            <DialogTitle>Agregar producto</DialogTitle>
+          </DialogHeader>
+
+          <ProductForm onClose={() => setOpenModal(false)} />
+        </DialogContent>
+      </Dialog>
       <StockFilterPanel
         handleDescriptionFilter={(filter: string) =>
           setDescriptionFilter(filter)
