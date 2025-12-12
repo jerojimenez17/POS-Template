@@ -1,10 +1,14 @@
 import FilterBillPanel from "@/components/Billing/FilterBillPanel";
 import SalesTable from "@/components/Billing/SalesTable";
 import { auth } from "../../../../auth";
+import { Suspense } from "react";
+import Spinner from "@/components/ui/Spinner";
 
 const page = async () => {
   const session = await auth();
   return (
+     <Suspense fallback={<Spinner/>}>
+
     <div className="h-full">
       {" "}
       <div className=" text-center align-middle justify-center sm:w-screen-sm mb-10 overflow-auto">
@@ -15,6 +19,7 @@ const page = async () => {
         <SalesTable session={session} />
       </div>
     </div>
+          </Suspense>
   );
 };
 

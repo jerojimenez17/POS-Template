@@ -8,8 +8,8 @@ export const Header = ({ label }: HeaderProps) => {
       {label === "Stock" ? (
         <h1 className="text-3xl font-semibold">🛍️ Nuevo Producto</h1>
       ) : (
-        <h1 className={cn("text-3xl font-semibold text-blue-300")}>
-          🔐Nombre app
+        <h1 className={cn("text-3xl font-semibold")}>
+          🔐POS Demo
         </h1>
       )}
       {label !== "Stock" && (
