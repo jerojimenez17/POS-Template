@@ -1,117 +1,107 @@
 "use client";
-import { useState } from "react";
-import { Button } from "./ui/button";
-import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
 
-interface props {
-  onScan: (result: IDetectedBarcode[]) => void;
-  errorMessage: string;
+import { useEffect, useRef, useState } from "react";
+import { Button } from "./ui/button";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+export interface ScanResult {
+  rawValue: string;
+  format: string;
+}
+
+export interface CodeScannerProps {
+  onScan: (results: ScanResult[]) => void;
+  errorMessage?: string;
   className?: string;
 }
 
-const CodeScanner = ({ onScan, errorMessage, className }: props) => {
-  const [scanerOpen, setScanerOpen] = useState(false);
+export default function CodeScanner({
+  onScan,
+  errorMessage,
+  className,
+}: CodeScannerProps) {
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+
+  useEffect(() => {
+    if (!scannerOpen) {
+      return;
+    }
+
+    const reader = new BrowserMultiFormatReader();
+    readerRef.current = reader;
+
+    reader.decodeFromVideoDevice(
+      undefined, // cámara por defecto
+      videoRef.current!,
+      (result) => {
+        if (result) {
+          // adaptamos al formato de tu función actual
+          onScan([
+            {
+              rawValue: result.getText(),
+              format: result.getBarcodeFormat().toString(),
+            },
+          ]);
+
+          // Evita dobles lecturas
+          setScannerOpen(false);
+        }
+      }
+    );
+  }, [scannerOpen]);
+
   return (
-    <div
-      onFocus={(e) => e.target.focus()}
-      onClick={() => focus()}
-      className={className || ""}
-    >
+    <div className={className || ""}>
+      {/* BOTÓN ABRIR */}
       <div className="flex w-28 my-auto">
-        <Button className="bg-transparent hover:fill-white font-bold print:hidden text-2xl p-2">
+        <Button
+          onClick={() => setScannerOpen(true)}
+          className="bg-transparent hover:fill-white font-bold print:hidden text-2xl p-2"
+        >
+          {/* Tu mismo ícono */}
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="70px"
             height="70px"
             viewBox="0 0 32 32"
-            id="svg5"
-            version="1.1"
           >
-            <defs id="defs2" />
-
-            <g id="layer1" transform="translate(-108,-100)">
-              <path
-                d="m 111,106 a 1.0001,1.0001 0 0 0 -1,1 v 3 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -2 h 2 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 z"
-                id="path11698"
-              />
-
-              <path
-                d="m 134,106 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 2 v 2 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -3 a 1.0001,1.0001 0 0 0 -1,-1 z"
-                id="path11700"
-              />
-
-              <path
-                d="m 137,121 a 1,1 0 0 0 -1,1 v 2 h -2 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 3 a 1.0001,1.0001 0 0 0 1,-1 v -3 a 1,1 0 0 0 -1,-1 z"
-                id="path11702"
-              />
-
-              <path
-                d="m 111,121 a 1,1 0 0 0 -1,1 v 3 a 1.0001,1.0001 0 0 0 1,1 h 3 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 h -2 v -2 a 1,1 0 0 0 -1,-1 z"
-                id="path11704"
-              />
-
-              <path
-                d="m 115,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                id="path11706"
-              />
-
-              <path
-                d="m 118,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                id="path11708"
-              />
-
-              <path
-                d="m 121,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                id="path11710"
-              />
-
-              <path
-                d="m 124,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                id="path11712"
-              />
-
-              <path
-                d="m 127,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                id="path11714"
-              />
-
-              <path
-                d="m 130,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                id="path11716"
-              />
-
-              <path
-                d="m 133,110 a 1,1 0 0 0 -1,1 v 5.20703 1.31445 V 121 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 V 117.52148 116.20703 111 a 1,1 0 0 0 -1,-1 z"
-                id="path11720"
-              />
+            <g transform="translate(-108,-100)">
+              <path d="m 111,106 a 1.0001,1.0001 0 0 0 -1,1 v 3 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -2 h 2 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 z" />
+              <path d="m 134,106 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 2 v 2 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -3 a 1.0001,1.0001 0 0 0 -1,-1 z" />
+              <path d="m 137,121 a 1,1 0 0 0 -1,1 v 2 h -2 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 3 a 1.0001,1.0001 0 0 0 1,-1 v -3 a 1,1 0 0 0 -1,-1 z" />
+              <path d="m 111,121 a 1,1 0 0 0 -1,1 v 3 a 1.0001,1.0001 0 0 0 1,1 h 3 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 h -2 v -2 a 1,1 0 0 0 -1,-1 z" />
             </g>
           </svg>
         </Button>
       </div>
 
-      {scanerOpen && (
-        <div className="h-full w-full items-center flex  z-10">
+      {/* SCANNER OVERLAY */}
+      {scannerOpen && (
+        <div className="h-full w-full items-center flex z-10">
           <Button
-            className=" absolute top-24 z-30 right-4 text-white font-bold"
-            onClick={() => setScanerOpen(false)}
+            className="absolute top-24 z-30 right-4 text-white font-bold"
+            onClick={() => setScannerOpen(false)}
           >
-            Cerrar Scaner
+            Cerrar Scanner
           </Button>
-          <div className=" md:mx-auto">
-            <Scanner
-              formats={["code_128", "codabar", "qr_code", "ean_13", "ean_8"]}
-              onScan={onScan}
+
+          <div className="md:mx-auto">
+            <video
+              ref={videoRef}
+              className="rounded-xl shadow-xl"
+              style={{ width: "100%", height: "auto" }}
             />
           </div>
         </div>
       )}
-      {errorMessage !== "" && (
-        <div className=" w-full mx-auto text-red-600 text-lg">
+
+      {/* ERROR */}
+      {errorMessage && (
+        <div className="w-full mx-auto text-red-600 text-lg">
           {errorMessage}
         </div>
       )}
     </div>
   );
-};
-
-export default CodeScanner;
+}
