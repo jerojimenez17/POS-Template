@@ -6,35 +6,49 @@ import { z } from "zod";
 import { signIn } from "../../../auth";
 import { DEFAULT_LOGIN_REDIRECT } from "../../../routes";
 import { getUserByEmail } from "@/data/user";
-// import { getVerificationTokenByEmail } from "../../../data/verification-token";
+import { AuthError } from "next-auth";
 
-export const login = async (values: z.infer<typeof LoginSchema>) => {
+export const login = async (
+  values: z.infer<typeof LoginSchema>,
+  callbackUrl?: string | null
+) => {
   const validateFields = LoginSchema.safeParse(values);
+
   if (!validateFields.success) {
-    return { error: "Campos invalidos" };
+    return { error: "Campos inválidos" };
   }
+
   const { email, password } = validateFields.data;
+
   const existingUser = await getUserByEmail(email);
+
   if (!existingUser || !existingUser.password || !existingUser.email) {
-    return { error: "Email no existe" };
+    return { error: "Email o contraseña incorrectos" };
   }
+
   if (!existingUser.emailVerified) {
-    // const verificationToken = await getVerificationTokenByEmail(email);
+    return {
+      error: "Por favor, verifica tu email antes de iniciar sesión",
+    };
   }
-  let resp = false;
+
   try {
     await signIn("credentials", {
       email,
       password,
       redirect: false,
-    }).then(() => {
-      resp = true;
     });
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  } catch (err) {
-    return { error: "Contraseña incorrecta" };
+  } catch (error) {
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case "CredentialsSignin":
+          return { error: "Email o contraseña incorrectos" };
+        default:
+          return { error: "Ocurrió un error al iniciar sesión" };
+      }
+    }
+    throw error; // Re-lanzar errores inesperados
   }
-  if (resp) {
-    redirect(DEFAULT_LOGIN_REDIRECT);
-  }
+
+  redirect(callbackUrl || DEFAULT_LOGIN_REDIRECT);
 };

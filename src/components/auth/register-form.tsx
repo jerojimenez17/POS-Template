@@ -19,6 +19,7 @@ import { register } from "../actions/register";
 import { useRouter } from "next/navigation";
 import { FormError } from "../ui/form-error";
 import { FormSuccess } from "../ui/form-success";
+import { motion, AnimatePresence } from "framer-motion";
 
 export const RegisterForm = () => {
   const router = useRouter();
@@ -56,66 +57,128 @@ export const RegisterForm = () => {
           <div className="space-y-4">
             <FormField
               control={form.control}
-              name="email"
+              name="name"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      placeholder="example@example.com"
-                      type="email"
-                      autoComplete="username"
-                      disabled={isPending}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <FormItem>
+                    <FormLabel>Nombre</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Juan Perez"
+                        autoComplete="name"
+                        disabled={isPending}
+                        className="transition-all duration-200 focus:scale-[1.02]"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                </motion.div>
               )}
             />
             <FormField
               control={form.control}
-              name="name"
+              name="email"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nombre</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      placeholder="Juan Perez"
-                      autoComplete="name"
-                      disabled={isPending}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="example@example.com"
+                        type="email"
+                        autoComplete="username"
+                        disabled={isPending}
+                        className="transition-all duration-200 focus:scale-[1.02]"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                </motion.div>
               )}
             />
             <FormField
               control={form.control}
               name="password"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contraseña</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      autoComplete="current-password"
-                      placeholder=""
-                      type="password"
-                      disabled={isPending}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  <FormItem>
+                    <FormLabel>Contraseña</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        autoComplete="new-password"
+                        placeholder="Mínimo 8 caracteres"
+                        type="password"
+                        disabled={isPending}
+                        className="transition-all duration-200 focus:scale-[1.02]"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                </motion.div>
               )}
             />
           </div>
-          {error && <FormError message={error} />}
-          {success && <FormSuccess message={success} />}
-          <Button type="submit" disabled={isPending} className="w-full">
-            Registrarse
-          </Button>
+          <AnimatePresence mode="wait">
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: "auto" }}
+                exit={{ opacity: 0, y: -10, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <FormError message={error} />
+              </motion.div>
+            )}
+            {success && (
+              <motion.div
+                initial={{ opacity: 0, y: -10, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: "auto" }}
+                exit={{ opacity: 0, y: -10, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <FormSuccess message={success} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Button
+              type="submit"
+              disabled={isPending}
+              className="w-full transition-all duration-200"
+            >
+              {isPending ? (
+                <motion.span
+                  animate={{ opacity: [1, 0.5, 1] }}
+                  transition={{ repeat: Infinity, duration: 1.5 }}
+                >
+                  Creando cuenta...
+                </motion.span>
+              ) : (
+                "Crear cuenta"
+              )}
+            </Button>
+          </motion.div>
         </form>
       </Form>
     </CardWrapper>
