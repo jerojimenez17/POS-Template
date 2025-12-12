@@ -3,10 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { BrowserMultiFormatReader } from "@zxing/browser";
+export interface ScanResult {
+  rawValue: string;
+  format: string;
+}
 
-interface Props {
-  onScan: (result: unknown[]) => void;
-  errorMessage: string;
+export interface CodeScannerProps {
+  onScan: (results: ScanResult[]) => void;
+  errorMessage?: string;
   className?: string;
 }
 
@@ -14,7 +18,7 @@ export default function CodeScanner({
   onScan,
   errorMessage,
   className,
-}: Props) {
+}: CodeScannerProps) {
   const [scannerOpen, setScannerOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
@@ -36,7 +40,7 @@ export default function CodeScanner({
           onScan([
             {
               rawValue: result.getText(),
-              format: result.getBarcodeFormat(),
+              format: result.getBarcodeFormat().toString(),
             },
           ]);
 
