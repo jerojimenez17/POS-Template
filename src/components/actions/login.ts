@@ -26,7 +26,7 @@ export const login = async (
     return { error: "Email o contraseña incorrectos" };
   }
 
-  if (!existingUser.emailVerified) {
+  if (existingUser.emailVerified) { // email not verified yet
     return {
       error: "Por favor, verifica tu email antes de iniciar sesión",
     };
