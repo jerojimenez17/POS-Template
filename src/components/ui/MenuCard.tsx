@@ -1,25 +1,41 @@
 "use client";
-
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 
-interface props {
-  url: string;
-  children: React.ReactNode;
-  title: string;
-}
-const MenuCard = ({ url, title, children }: props) => {
+export default function MenuCard({ url, title, children }: { url: string; title: string; children: React.ReactNode }) {
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
-  return (
-    <div
-      className="w-42 h-1/3 justify-center rounded-xl dark:bg-inherit flex flex-col items-center bg-slate-100 bg-opacity-87 shadow-gray-400 hover:bg-slate-200 focus:bg-white hover:ring-3 hover:ring-gray-200 hover:text-pink-30 hover:shadow-gray-700 overflow-hidden shadow-lg p-2"
-      onClick={() => router.push(url)}
-    >
-      <span className="fill-black dark:fill-white">{children}</span>
-      <h2 className="w-full text-center text-black hover:text-white dark:text-slate-100 text-opacity-80 font-semibold text-lg">
-        {title}
-      </h2>
-    </div>
-  );
-};
 
-export default MenuCard;
+  const handleClick = () => {
+    if (loading) return;
+
+    setLoading(true);
+    router.push(url);
+  };
+
+  return (
+    <motion.button
+      onClick={handleClick}
+      disabled={loading}  whileHover={{ scale: 1.1, y: -2, boxShadow: "0px 4px 10px rgba(0,0,0,0.35)" }}
+  whileTap={{ scale: 1.5}}
+  transition={{ duration: 0.08 }}
+      className={`
+        bg-slate-300 dark:bg-gray-800
+       rounded-xl p-4 flex flex-col items-center shadow-md
+        transition-all select-none 
+        ${loading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+      `}
+    >
+      <div className="w-full flex justify-center mb-2">
+        {children}
+      </div>
+
+      <p className="text-center font-semibold text-gray-800 dark:text-gray-200">{title}</p>
+
+      {loading && (
+        <p className="text-xs mt-2 animate-pulse">Cargando...</p>
+      )}
+    </motion.button>
+  );
+}

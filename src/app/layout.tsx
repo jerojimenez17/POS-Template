@@ -32,16 +32,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <ThemeProvider>
-        <FiltersProvider>
           <body
             className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased h-screen w-screen overflow-auto`}
-          >
+            >
+            <ThemeProvider>
+              <FiltersProvider>
+                <div className="h-full w-full  bg-slate-100 dark:bg-gray-800">
             <NavigationMenuHeader />
             {children}
-          </body>
+                </div>
         </FiltersProvider>
       </ThemeProvider>
+          </body>
     </html>
   );
 }
