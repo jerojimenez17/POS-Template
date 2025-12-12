@@ -378,8 +378,7 @@ const PrintableTable = ({
                 ✕
               </button>
             </div>
-            <Scanner
-              formats={["code_128", "qr_code", "ean_13"]}
+            <Scanner formats={["code_128", "codabar", "qr_code", "ean_13", "ean_8"]}
               onScan={handleScannerResult}
             />
           </div>
