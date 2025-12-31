@@ -2,6 +2,7 @@ import { db } from "@/firebase/config";
 import BillState from "@/models/BillState";
 import { FirebaseAdapter } from "@/models/FirebaseAdapter";
 import {
+  addDoc,
   collection,
   doc,
   getDoc,
@@ -42,7 +43,6 @@ export const fetchSalesOnce = async () => {
       limit(PAGE_SIZE)
     );
     const querySnapshot = await getDocs(q);
-    console.log(FirebaseAdapter.fromDocumentDataArray(querySnapshot.docs));
     return FirebaseAdapter.fromDocumentDataArray(querySnapshot.docs);
   } catch (err) {
     console.error("Error fetching sales:", err);
@@ -60,7 +60,6 @@ export const fetchSalesByDate = async (startDate: Date, endDate: Date) => {
       limit(PAGE_SIZE)
     );
     const querySnapshot = await getDocs(q);
-    console.log(FirebaseAdapter.fromDocumentDataArray(querySnapshot.docs));
     return FirebaseAdapter.fromDocumentDataArray(querySnapshot.docs);
   } catch (err) {
     console.error("Error fetching sales:", err);
@@ -134,9 +133,26 @@ export const addToTotal = async (amount: number) => {
 
 export const writeMovement = async () => {
   try {
+    const documentData = await addDoc(collection(db, "cashMovements"), {});
   } catch (err) {
     console.error(err);
   }
 };
 
 export const getVoucher = async () => {};
+
+export const updateSale = async (saleId: string, data: Partial<BillState>) => {
+  try {
+    const saleRef = doc(db, "sales", saleId);
+    await runTransaction(db, async (transaction) => {
+      const sfDoc = await transaction.get(saleRef);
+      if (!sfDoc.exists()) {
+        throw "Document doesn't exist";
+      }
+      transaction.update(saleRef, data);
+    });
+  } catch (err) {
+    console.error("Error updating sale:", err);
+    throw err;
+  }
+};
