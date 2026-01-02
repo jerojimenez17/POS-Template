@@ -93,9 +93,13 @@ const BillingModal = ({
       } else {
         toast.error("Error al crear factura: " + (resp || "Respuesta inválida"));
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      toast.error("Error al facturar: " + error.message);
+      if (error instanceof Error) {
+        toast.error("Error al facturar: " + error.message);
+      } else {
+        toast.error("Error al facturar: Error desconocido");
+      }
     } finally {
       setLoading(false);
     }
