@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
-import { DocumentData, Timestamp } from "firebase/firestore";
+import { DocumentData } from "firebase/firestore";
 import Product from "./Product";
-import { Suplier } from "./Suplier";
 
 export class ProductFirebaseAdapter {
   public static fromDocumentDataArray(data: DocumentData[]): Product[] {
@@ -13,7 +12,7 @@ export class ProductFirebaseAdapter {
     });
     return state;
   }
-  private static toPlainDate(val: any): Date {
+  private static toPlainDate(val: Date | { seconds: number; nanoseconds?: number } | null | undefined): Date {
     if (!val) return new Date();
     if (val instanceof Date) return val;
     if (typeof val === "object" && "seconds" in val) {
@@ -25,9 +24,9 @@ export class ProductFirebaseAdapter {
     return new Date();
   }
 
-  public static forBill = (products: any[]) => {
+  public static forBill = (products: Product[]) => {
     if (!products) return [];
-    return products.map((product: any) => {
+    return products.map((product: Product) => {
       // Create a plain object with only the necessary serializable fields
       return {
         id: String(product.id || ""),

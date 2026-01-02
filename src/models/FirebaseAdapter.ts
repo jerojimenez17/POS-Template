@@ -12,7 +12,7 @@ export class FirebaseAdapter {
     return state;
   }
 
-  private static toPlainDate(val: any): Date {
+  private static toPlainDate(val: Date | { seconds: number; nanoseconds?: number } | null | undefined): Date {
     if (!val) return new Date();
     if (val instanceof Date) return val;
     if (typeof val === "object" && "seconds" in val) {

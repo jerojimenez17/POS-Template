@@ -133,7 +133,7 @@ export const addToTotal = async (amount: number) => {
 
 export const writeMovement = async () => {
   try {
-    const documentData = await addDoc(collection(db, "cashMovements"), {});
+    await addDoc(collection(db, "cashMovements"), {});
   } catch (err) {
     console.error(err);
   }
