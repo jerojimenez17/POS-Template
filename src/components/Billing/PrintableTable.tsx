@@ -32,6 +32,20 @@ const greatVibes = Great_Vibes({
   weight: "400",
   variable: "--font-great-vibes",
 });
+
+const defaultBillState: BillState = {
+  id: "",
+  products: [],
+  total: 0,
+  totalWithDiscount: 0,
+  seller: "",
+  discount: 0,
+  date: new Date(),
+  typeDocument: "DNI",
+  documentNumber: 0,
+  IVACondition: "Consumidor Final",
+  twoMethods: false,
+};
 const PrintableTable = ({
   print,
   session,
@@ -43,7 +57,7 @@ const PrintableTable = ({
   const [searchCode, setSearchCode] = useState("");
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [state, setState] = useState<BillState>(externalState || BillState);
+  const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
   const [isClient, setIsClient] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -54,7 +68,7 @@ const PrintableTable = ({
 
   const handlePrint = useReactToPrint({
     contentRef: contentRef || undefined,
-    documentTitle: `Factura_${state.date?.toISOString().split("T")[0]}`,
+    documentTitle: `Factura_${(state?.date || new Date()).toISOString().split("T")[0]}`,
     pageStyle: `
       @page { size: auto; margin: 5mm; }
       @media print {
@@ -77,7 +91,7 @@ const PrintableTable = ({
   }, [errorMessage]);
 
   useEffect(() => {
-    setState(externalState || BillState);
+    setState(externalState || BillState || defaultBillState);
   }, [externalState, BillState]);
 
   useEffect(() => {
@@ -240,7 +254,7 @@ const PrintableTable = ({
               greatVibes.className
             )}
           >
-            Amelia
+           Nombre de App
           </h2>
           <div className="mt-2 text-sm">
             <p>

@@ -5,7 +5,7 @@ interface props {
 }
 const PrintButton = ({ onClick }: props) => {
   return (
-    <button onClick={() => onClick}>
+    <button className="cursor-pointer" onClick={onClick}>
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="30px"

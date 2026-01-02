@@ -7,50 +7,57 @@ export class FirebaseAdapter {
   public static fromDocumentDataArray(data: DocumentData[]): BillState[] {
     const state: BillState[] = [];
     data.forEach((d) => {
-      console.log(d);
       state.push(FirebaseAdapter.fromDocumentData(d.data(), d.id));
     });
     return state;
+  }
+
+  private static toPlainDate(val: Date | { seconds: number; nanoseconds?: number } | null | undefined): Date {
+    if (!val) return new Date();
+    if (val instanceof Date) return val;
+    if (typeof val === "object" && "seconds" in val) {
+      return new Date(val.seconds * 1000 + (val.nanoseconds || 0) / 1000000);
+    }
+    return new Date();
   }
 
   public static fromDocumentData(
     data: DocumentData,
     dataId: string
   ): BillState {
+    const adaptedProducts = ProductFirebaseAdapter.forBill(data.products || []);
+    const totalCalc = adaptedProducts.reduce(
+      (acc: number, p: Product) => acc + (p.salePrice || p.price || 0) * (p.amount || 0),
+      0
+    );
+
     return {
-      id: dataId,
-      twoMethods: data.twoMethods,
-      products: ProductFirebaseAdapter.forBill(data.products),
-      total: data.total,
+      id: String(dataId),
+      twoMethods: !!data.twoMethods,
+      products: adaptedProducts,
+      total: Number(data.total || totalCalc),
       totalWithDiscount:
         data.discount && data.discount !== 0 && data.discount !== null
-          ? ProductFirebaseAdapter.forBill(data.products).reduce(
-              (acc: number, p: Product) => acc + p.salePrice * p.amount,
-              0
-            ) -
-            ProductFirebaseAdapter.forBill(data.products).reduce(
-              (acc: number, p: Product) => acc + p.salePrice * p.amount,
-              0
-            ) *
-              Number(data.discount) *
-              0.01
-          : ProductFirebaseAdapter.forBill(data.products).reduce(
-              (acc: number, p: Product) => acc + p.salePrice * p.amount,
-              0
-            ),
-      client: data.client,
-      entrega: data.entrega,
-      paidMethod: data.paidMethod,
-      IVACondition: data.IVACondition,
-      tipoFactura: data.tipoFactura,
-      documentNumber: data.documentNumber,
-      typeDocument: data.typeDocument,
-      seller: data.seller,
-      discount: data.discount,
-      CAE: data.CAE,
-      date:
-        data.date &&
-        new Date(data.date.seconds * 1000 + data.date.nanoseconds / 1000000),
+          ? totalCalc - (totalCalc * Number(data.discount) * 0.01)
+          : totalCalc,
+      client: data.client ? String(data.client) : undefined,
+      entrega: data.entrega !== undefined ? Number(data.entrega) : undefined,
+      paidMethod: data.paidMethod ? String(data.paidMethod) : undefined,
+      IVACondition: data.IVACondition ? String(data.IVACondition) : "Consumidor Final",
+      tipoFactura: data.tipoFactura ? String(data.tipoFactura) : undefined,
+      documentNumber: data.documentNumber !== undefined ? Number(data.documentNumber) : 0,
+      typeDocument: data.typeDocument ? String(data.typeDocument) : "DNI",
+      seller: data.seller ? String(data.seller) : "",
+      discount: data.discount !== undefined ? Number(data.discount) : 0,
+      CAE: data.CAE ? {
+        CAE: String(data.CAE.CAE || ""),
+        vencimiento: String(data.CAE.vencimiento || ""),
+        nroComprobante: Number(data.CAE.nroComprobante || 0),
+        qrData: String(data.CAE.qrData || "")
+      } : undefined,
+      date: FirebaseAdapter.toPlainDate(data.date),
+      billType: data.billType ? String(data.billType) : undefined,
+      nroAsociado: data.nroAsociado !== undefined ? Number(data.nroAsociado) : undefined,
     } as BillState;
   }
 }
