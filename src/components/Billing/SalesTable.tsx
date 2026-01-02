@@ -33,10 +33,6 @@ const SalesTable = ({ sales = [], session }: props) => {
 
 
 
-  const printRef = useRef(null);
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-  });
   useEffect(() => {
     if (user?.email !== process.env.ADMIN_EMAIL && user && user.email) {
       seller(user?.email);
