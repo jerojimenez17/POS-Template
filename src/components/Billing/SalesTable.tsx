@@ -1,10 +1,9 @@
 "use client";
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import BillState from "@/models/BillState";
 import SaleAccordion from "./SaleAccordion";
 import { FiltersContext } from "@/context/FiltersContext/FiltersContext";
 import PrintableTable from "./PrintableTable";
-import { useReactToPrint } from "react-to-print";
 import { useAuthContext } from "@/context/AuthContext";
 import {
   Select,
