@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useTransition } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -7,62 +7,51 @@ import {
   getPaginationRowModel,
 } from "@tanstack/react-table";
 import Image from "next/image";
-import Product from "@/models/Product";
 import noImgPhoto from "../../public/no-image.svg";
 import Modal from "./Modal";
-import { deleteObject, ref } from "firebase/storage";
-import { db, storage } from "@/firebase/config";
-import { deleteDoc, doc } from "firebase/firestore";
 import ProductForm from "./stock/product-form";
 import { Button } from "./ui/button";
 import DeleteButton from "./DeleteButton";
 import CodeBarModal from "./stock/code-bar-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { deleteProduct } from "@/actions/stock";
+import { toast } from "sonner";
 
-// Supongamos que recibes products y descriptionFilter como props:
 interface ProductDataTableProps {
-  products: Product[];
+  products: any[];
   descriptionFilter: string;
-  // Puedes incluir otros props, por ejemplo, para la sesión
+  onRefresh?: () => void;
 }
 
 const ProductDataTable: React.FC<ProductDataTableProps> = ({
   products,
   descriptionFilter,
+  onRefresh,
 }) => {
-  // Estados para controlar modales y el producto a editar/borrar
   const [openDeleteModal, setOpenDeleteModal] = React.useState(false);
   const [openEditModal, setOpenEditModal] = React.useState(false);
-  const [productToEdit, setProductToEdit] = React.useState<Product | null>(
-    null
-  );
+  const [productToEdit, setProductToEdit] = React.useState<any>(null);
+  const [isPending, startTransition] = useTransition();
 
-  // Filtrado y ordenamiento de los productos
   const filteredProducts = React.useMemo(() => {
     if (!products) return [];
     return products
       .filter(
-        (product) =>
-          product.description
-            .toLowerCase()
-            .includes(descriptionFilter.toLowerCase()) ||
-          product.code.toLowerCase().includes(descriptionFilter.toLowerCase())
+        (product) => {
+          const desc = product.description || "";
+          const code = product.code || "";
+          return desc.toLowerCase().includes(descriptionFilter.toLowerCase()) ||
+                 code.toLowerCase().includes(descriptionFilter.toLowerCase());
+        }
       )
       .sort((a, b) => {
         const timeA = new Date(a.creation_date).getTime();
         const timeB = new Date(b.creation_date).getTime();
-        return timeB - timeA; // Más reciente primero
-      })
-      .sort((a, b) => {
-        //sort first with units equal to zero
-        if (a.amount <= 0 && b.amount !== 0) return -1;
-        if (a.amount !== 0 && b.amount <= 0) return 1;
-        return 0;
+        return timeB - timeA;
       });
   }, [products, descriptionFilter]);
 
-  // Definición de columnas usando tanstack/react-table
-  const columns = React.useMemo<ColumnDef<Product>[]>(
+  const columns = React.useMemo<ColumnDef<any>[]>(
     () => [
       {
         accessorKey: "code",
@@ -73,7 +62,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         ),
         cell: (info) => (
           <div className="font-medium text-center">
-            {info.getValue() as string}
+            {info.getValue() as string || "-"}
           </div>
         ),
       },
@@ -93,9 +82,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
       {
         accessorKey: "amount",
         header: () => (
-          <div
-            className={`text-center font-extrabold text-white text-lg p-2 $`}
-          >
+          <div className="text-center font-extrabold text-white text-lg p-2">
             Cantidad
           </div>
         ),
@@ -128,45 +115,6 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
           </div>
         ),
       },
-      // {
-      //   accessorKey: "color",
-      //   header: () => (
-      //     <div className="text-center font-extrabold text-white text-lg p-2">
-      //       Color
-      //     </div>
-      //   ),
-      //   cell: (info) => (
-      //     <div className="font-medium text-center">
-      //       {info.getValue() as string}
-      //     </div>
-      //   ),
-      // },
-      // {
-      //   accessorKey: "peso",
-      //   header: () => (
-      //     <div className="text-center font-extrabold text-white text-lg p-2">
-      //       Peso
-      //     </div>
-      //   ),
-      //   cell: (info) => (
-      //     <div className="font-medium text-center">
-      //       {info.getValue() as string}
-      //     </div>
-      //   ),
-      // },
-      // {
-      //   accessorKey: "medidas",
-      //   header: () => (
-      //     <div className="text-center font-extrabold text-white text-lg p-2">
-      //       Medidas
-      //     </div>
-      //   ),
-      //   cell: (info) => (
-      //     <div className="font-medium text-center">
-      //       {info.getValue() as string}
-      //     </div>
-      //   ),
-      // },
       {
         accessorKey: "image",
         header: () => (
@@ -178,19 +126,19 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
           const imageUrl = info.getValue() as string;
           return (
             <div className="flex justify-center items-center">
-              {imageUrl.includes("https") ? (
+              {imageUrl && imageUrl.includes("https") ? (
                 <Image
                   className="rounded-lg mx-auto"
                   src={imageUrl}
-                  alt="Image Not Found"
+                  alt="Product"
                   height={145}
                   width={85}
                 />
               ) : (
                 <Image
                   className="rounded-lg mx-auto"
-                  src={noImgPhoto} // ruta o import de imagen por defecto
-                  alt="Image Not Found"
+                  src={noImgPhoto}
+                  alt="No image"
                   height={70}
                   width={75}
                 />
@@ -250,7 +198,6 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
     []
   );
 
-  // Configuración de la tabla con tanstack/react-table
   const table = useReactTable({
     data: filteredProducts,
     columns,
@@ -258,11 +205,25 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const handleDelete = async () => {
+    if (!productToEdit) return;
+    startTransition(async () => {
+        const result = await deleteProduct(productToEdit.id);
+        if (result.success) {
+            toast.success(result.success);
+            setOpenDeleteModal(false);
+            if (onRefresh) onRefresh();
+        } else {
+            toast.error(result.error);
+        }
+    });
+  };
+
   return (
-    <div className="z-0 p-0 mx-auto mb-28 md:mb-20 w-full h-full rounded-xl shadow-sm overflow-hidden">
+    <div className="z-0 p-0 mx-auto mb-28 md:mb-20 w-full h-full rounded-xl shadow-sm overflow-hidden border border-black/10">
       <div className=" h-[90%] overflow-auto">
-        <table className="text-gray-800 max-h-full border-separate border-spacing-0 bg-white bg-opacity-20 backdrop-filter w-full z-0">
-          <thead className="bg-black h-20 mt-0">
+        <table className="text-gray-800 max-h-full border-separate border-spacing-0 bg-white dark:hover:bg-gray-800 dark:hover:backdrop-filter dark:bg-gray-900 dark:text-white bg-opacity-20 backdrop-filter w-full z-0">
+          <thead className="bg-black h-20 mt-0 sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr
                 key={headerGroup.id}
@@ -271,7 +232,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="hover:text-gray-800 text-center font-extrabold text-white text-lg"
+                    className="hover:text-gray-800 text-center font-extrabold text-white dark:hover:text-gray-200 text-lg"
                   >
                     {header.isPlaceholder
                       ? null
@@ -288,7 +249,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="text-center hover:text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-lg items-center"
+                className="text-center hover:text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-lg items-center border-b dark:hover:bg-gray-800 dark:hover:backdrop-filter dark:bg-gray-900 dark:text-white bg-opacity-20 backdrop-filter"
               >
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="p-2">
@@ -300,50 +261,38 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
           </tbody>
         </table>
       </div>
-      <div className="w-full flex justify-end mb-4 ">
+      <div className="w-full flex justify-end gap-x-2 p-4 bg-black/5">
         <Button
-          className="font-bold text-xl rounded-xl"
-          onClick={() => {
-            table.previousPage();
-          }}
+          variant="outline"
+          className="font-bold text-xl rounded-xl border-black"
+          onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
           {"<"}
         </Button>
         <Button
-          className="font-bold text-xl rounded-xl"
-          onClick={() => {
-            table.nextPage();
-          }}
+          variant="outline"
+          className="font-bold text-xl rounded-xl border-black"
+          onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
         >
           {">"}
         </Button>
-        {/* Modal para borrar */}
       </div>
+
       {productToEdit && openDeleteModal && (
         <Modal
           className="z-50 absolute"
-          blockButton={false}
+          blockButton={isPending}
           onCancel={() => setOpenDeleteModal(false)}
           visible={openDeleteModal}
           key={productToEdit.id}
           onClose={() => setOpenDeleteModal(false)}
-          onAcept={async () => {
-            console.log(productToEdit);
-            if (productToEdit.image !== "") {
-              // Ejemplo: borra la imagen en storage (asegúrate de tener importadas las funciones necesarias)
-              const fileRef = ref(storage, `${productToEdit.image}`);
-              await deleteObject(fileRef);
-            }
-            await deleteDoc(doc(db, "stock", productToEdit.id));
-            setOpenDeleteModal(false);
-          }}
+          onAcept={handleDelete}
           message="¿Seguro que desea eliminar este producto?"
         />
       )}
 
-      {/* Modal para editar */}
       {productToEdit && openEditModal && (
         <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
           <DialogContent className="sm:max-w-md overflow-auto h-full">
@@ -352,7 +301,10 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
             </DialogHeader>
 
             <ProductForm
-              onClose={() => setOpenEditModal(false)}
+              onClose={() => {
+                  setOpenEditModal(false);
+                  if (onRefresh) onRefresh();
+              }}
               product={productToEdit}
             />
           </DialogContent>

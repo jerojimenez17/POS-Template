@@ -48,7 +48,7 @@ const CodeBarModal = ({ value }: props) => {
     <Dialog>
       <DialogTrigger
         asChild
-        className="h-10 bg-transparent font-semibold hover:text-white"
+        className="h-10 bg-transparent font-semibold hover:text-white dark:text-white"
       >
         <Button
           onClick={(e) => e.stopPropagation()}

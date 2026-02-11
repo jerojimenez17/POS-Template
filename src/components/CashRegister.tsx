@@ -1,8 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { db } from "@/firebase/config";
-import { MovementAdapter } from "@/models/MovementAdapter";
+import { getMovements } from "@/actions/movements";
+import { pusherClient } from "@/lib/pusher-client";
 import Movement from "@/models/Movement";
 import {
   Table,
@@ -24,22 +23,41 @@ interface props {
 const CashRegister = ({ session }: props) => {
   const [movements, setMovements] = useState<Movement[]>([]);
   useEffect(() => {
-    try {
-      const q = query(
-        collection(db, "movements"),
-        where("paidMethod", "in", ["Deposito", "Retiro", "Efectivo"])
-      );
+    const fetchMovements = async () => {
+      const data = await getMovements();
+      // Ensure data conforms to Movement type. Prisma dates might be strings or Date objects depending on serialization.
+      // Assuming getMovements returns objects compatible with Movement but check dates.
+      // We might need to map them to ensure proper Date objects if passed from server component.
+      // Server actions return JSON, so Dates are strings.
+      const mappedMovements = data.map(m => ({
+        ...m,
+        date: new Date(m.date),
+        paidMethod: m.paidMethod || "",
+        seller: m.seller || ""
+      }));
+       setMovements(mappedMovements);
+    };
 
-      onSnapshot(q, (snapshot) => {
-        const adaptedMoves = MovementAdapter.fromDocumentDataArray(
-          snapshot.docs
-        );
-        setMovements(adaptedMoves);
+    fetchMovements();
+
+    if (session?.user?.businessId) {
+      const channel = pusherClient.subscribe(`movements-${session.user.businessId}`);
+      
+      channel.bind("new-movement", (data: any) => {
+             const newMovement = {
+                 ...data,
+                 date: new Date(data.date),
+                 paidMethod: data.paidMethod || "",
+                 seller: data.seller || ""
+             };
+             setMovements((prev) => [newMovement, ...prev]);
       });
-    } catch (err) {
-      console.error(err);
+
+      return () => {
+        pusherClient.unsubscribe(`movements-${session.user.businessId}`);
+      };
     }
-  }, []);
+  }, [session?.user?.businessId]);
 
   return (
     <div className="my-auto h-full flex flex-col bg-white text-center items-center justify-center w-full">

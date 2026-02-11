@@ -1,8 +1,12 @@
+import { useTheme } from "next-themes";
+
 const CodeBarButton = () => {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      fill="#000000"
+      fill={isDark ? "#ffffff" : "#000000"}
       version="1.1"
       id="Capa_1"
       width="30px"

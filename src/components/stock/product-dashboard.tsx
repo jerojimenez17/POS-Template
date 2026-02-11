@@ -1,48 +1,53 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import ProductForm from "./product-form";
 import StockFilterPanel from "./stock-filter-panel";
-import Modal from "../Modal";
 import { Session } from "next-auth";
 import ProductDataTable from "../ProductDataTable";
-import Product from "@/models/Product";
-import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "@/firebase/config";
-import { ProductFirebaseAdapter } from "@/models/ProductFirebaseAdapter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
-import { Button } from "../ui/button";
+import { getProducts } from "@/actions/stock";
 
 interface props {
   session: Session | null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ProductDashboad = ({ session }: props) => {
+const ProductDashboard = ({ session }: props) => {
   const [openModal, setOpenModal] = useState(false);
   const [descriptionFilter, setDescriptionFilter] = useState("");
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [products, setProducts] = useState<Product[]>();
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getProducts();
+      setProducts(data);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    onSnapshot(collection(db, "stock"), (querySnapshot) => {
-      const products = ProductFirebaseAdapter.fromDocumentDataArray(
-        querySnapshot.docs
-      );
-      setProducts(products);
-    });
-  }, []);
+    fetchProducts();
+  }, [fetchProducts]);
 
   return (
     <div className="flex flex-col h-full w-full items-center">
       <Dialog open={openModal} onOpenChange={setOpenModal}>
-        <DialogContent className="sm:max-w-md overflow-auto h-full">
+        <DialogContent className="overflow-hidden flex flex-col max-h-[90vh] sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Agregar producto</DialogTitle>
           </DialogHeader>
 
-          <ProductForm onClose={() => setOpenModal(false)} />
+          <ProductForm 
+            onClose={() => {
+              setOpenModal(false);
+              fetchProducts();
+            }} 
+          />
         </DialogContent>
       </Dialog>
       <StockFilterPanel
@@ -51,13 +56,20 @@ const ProductDashboad = ({ session }: props) => {
         }
         handleOpenModal={() => setOpenModal(!openModal)}
       />
-      {/* <StockTable session={session} descriptionFilter={descriptionFilter} /> */}
-      <ProductDataTable
-        descriptionFilter={descriptionFilter}
-        products={products || []}
-      />
+      
+      {loading ? (
+        <div className="flex items-center justify-center p-10">
+          <p className="text-lg font-semibold animate-pulse">Cargando productos...</p>
+        </div>
+      ) : (
+        <ProductDataTable
+          descriptionFilter={descriptionFilter}
+          products={products}
+          onRefresh={fetchProducts}
+        />
+      )}
     </div>
   );
 };
 
-export default ProductDashboad;
+export default ProductDashboard;

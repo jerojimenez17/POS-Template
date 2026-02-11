@@ -12,11 +12,34 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { useState } from "react";
 import { FormSuccess } from "../ui/form-success";
-import { addBrand } from "@/firebase/stock/newBrand";
+import { createBrand } from "@/actions/brands";
+import { toast } from "sonner";
 
-const NewCategoryModal = () => {
+const NewBrandModal = () => {
   const [brand, setBrand] = useState("");
   const [success, setSuccess] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  const handleAdd = async () => {
+    if (brand === "") return;
+    setIsPending(true);
+    setSuccess(false);
+    try {
+      const response = await createBrand(brand);
+      if (response.success) {
+        setSuccess(true);
+        setBrand("");
+        toast.success("Marca creada");
+      } else {
+        toast.error(response.error || "Error al crear marca");
+      }
+    } catch (error) {
+      toast.error("Error inesperado");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
   return (
     <Dialog>
       <DialogTrigger
@@ -31,31 +54,25 @@ const NewCategoryModal = () => {
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
-              Categoria
+            <Label htmlFor="brand" className="text-right">
+              Marca
             </Label>
             <Input
               id="brand"
               value={brand}
               placeholder="Marca"
               onChange={(e) => {
-                if (e.currentTarget.value !== "") {
-                  setBrand(e.currentTarget.value);
-                }
+                setBrand(e.currentTarget.value);
               }}
               className="col-span-3 border-black text-gray-800"
+              disabled={isPending}
             />
           </div>
         </div>
         <DialogFooter>
           <Button
-            onClick={async () => {
-              if (brand !== "") {
-                await addBrand(brand);
-                setSuccess(true);
-              }
-              setBrand("");
-            }}
+            onClick={handleAdd}
+            disabled={isPending}
             type="submit"
           >
             Agregar
@@ -67,4 +84,4 @@ const NewCategoryModal = () => {
   );
 };
 
-export default NewCategoryModal;
+export default NewBrandModal;

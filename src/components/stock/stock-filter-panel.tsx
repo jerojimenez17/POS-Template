@@ -17,9 +17,9 @@ const StockFilterPanel = ({
   const [descriptionFilterInput, setDescriptionFilterInput] = useState("");
   const router = useRouter();
   return (
-    <div className="h-28 w-full flex items-center justify-center bg-white bg-opacity-25 shadow-sm rounded-lg mx-auto my-2">
+    <div className="h-28 w-full flex items-center justify-center dark:bg-gray-800 bg-white bg-opacity-25 shadow-sm rounded-lg mx-auto my-2">
       <Input
-        className="w-1/2 h-10 font-bold rounded-full appearance-none border border-gray-800 text-gray-800"
+        className="w-1/2 h-10 font-bold rounded-full appearance-none border border-gray-800 text-gray-800 dark:text-white"
         type="search"
         placeholder="Buscar..."
         value={descriptionFilterInput}
@@ -37,13 +37,13 @@ const StockFilterPanel = ({
       />
       <Button
         variant="outline"
-        className="rounded-full hover:shadow-md shadow-xs h-10 p-1 m-2 text-gray-800 ring-2 ring-gray-800 font-bold hover:font-bold target:bg-blue-400"
+        className="rounded-full hover:shadow-md shadow-xs h-10 p-1 m-2 dark:text-white text-gray-800 ring-2 ring-gray-800 font-bold hover:font-bold target:bg-blue-400"
         onClick={handleOpenModal}
       >
         ➕Nuevo Producto
       </Button>
       <Button
-        className="text-gray-400 font-bold bg-white text-5xlg"
+        className="text-gray-400 font-bold bg-white text-5xlg dark:text-white"
         onClick={() => setScanerOpen(true)}
       >
         <svg
@@ -118,7 +118,7 @@ const StockFilterPanel = ({
         onClick={() => {
           router.push("productDashboard/products-ranking");
         }}
-        className="text-gray-400 font-bold bg-white text-5xlg"
+        className="text-gray-400 font-bold bg-white text-5xlg dark:text-white dark:bg-gray-900"
       >
         Ranking
       </Button>

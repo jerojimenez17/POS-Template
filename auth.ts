@@ -44,6 +44,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.role && session.user) {
         session.user.role = token.role as UserRole;
       }
+      if (session.user) {
+        session.user.businessId = token.businessId as string | null;
+      }
       return session;
     },
     async jwt({ token }) {
@@ -51,6 +54,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const existingUser = await getUserById(token.sub);
       if (!existingUser) return token;
       token.role = existingUser.role;
+      token.businessId = existingUser.businessId;
       console.log({ token });
       return token;
     },

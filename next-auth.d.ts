@@ -3,6 +3,7 @@ import { type DefaultSession } from "next-auth";
 
 export type ExtendedUser = DefaultSession["user"] & {
   role: UserRole;
+  businessId: string | null;
 };
 
 declare module "next-auth" {

@@ -10,7 +10,7 @@ import CAE from "@/models/CAE";
 import postBill from "@/services/AFIPService";
 import { updateTotal } from "@/services/firebaseService";
 import Movement from "@/models/Movement";
-import newMovement from "@/firebase/cashMovements/newMovement";
+import { createMovement } from "@/actions/movements";
 import { addDoc, collection } from "firebase/firestore";
 import { db } from "@/firebase/config";
 import { updateAmount } from "@/firebase/stock/updateAmount";
@@ -201,40 +201,44 @@ const BillButtons = ({ session, handlePrint }: props) => {
             primaryMove.seller = session?.user?.email || "";
             primaryMove.paidMethod = BillState.paidMethod || "Efectivo";
             primaryMove.total = remainingAmount;
-            await newMovement(primaryMove);
-
-            if (BillState.secondPaidMethod === "Efectivo") {
-              await updateTotal(BillState.totalSecondMethod); // Actualizar el total para el segundo método de pago si es efectivo
-            }
+            primaryMove.total = remainingAmount;
 
             const secondaryMove = new Movement();
             secondaryMove.seller = session?.user?.email || "";
             secondaryMove.paidMethod = BillState.secondPaidMethod || "";
             secondaryMove.total = BillState.totalSecondMethod;
-            await newMovement(secondaryMove);
+
+            // Optimizing: Create both movements in parallel
+            await Promise.all([
+              createMovement(primaryMove),
+              createMovement(secondaryMove)
+            ]);
 
             // Guardar ambas listas de productos en la base de datos (ajusta según tu lógica de negocio)
             console.log(respAfip);
             console.log(BillState.CAE);
-            await handleSaveSale({
-              ...BillState,
-              products: primaryProducts,
-              discount: 0,
-              total: primaryMove.total,
-              CAE: latestCAE.current,
-              totalWithDiscount: primaryMove.total,
-            });
-            toast.success("Factura 1 guardada correctamente");
-            await handleSaveSale({
-              ...BillState,
-              CAE: latestCAE.current,
-              discount: 0,
-              total: secondaryMove.total,
-              totalWithDiscount: secondaryMove.total,
-              paidMethod: BillState.secondPaidMethod,
-              products: secondaryProducts,
-            });
-            toast.success("Factura 2 guardada correctamente");
+            // Optimizing: Save both sales in parallel
+            await Promise.all([
+              handleSaveSale({
+                ...BillState,
+                products: primaryProducts,
+                discount: 0,
+                total: primaryMove.total,
+                CAE: latestCAE.current,
+                totalWithDiscount: primaryMove.total,
+              }),
+              handleSaveSale({
+                ...BillState,
+                CAE: latestCAE.current,
+                discount: 0,
+                total: secondaryMove.total,
+                totalWithDiscount: secondaryMove.total,
+                paidMethod: BillState.secondPaidMethod,
+                products: secondaryProducts,
+              })
+            ]);
+
+            toast.success("Facturas guardadas correctamente");
           } else {
             // Lógica original para una sola venta
 
@@ -246,7 +250,8 @@ const BillButtons = ({ session, handlePrint }: props) => {
             move.seller = session?.user?.email || "";
             move.paidMethod = BillState.paidMethod || "Efectivo";
             move.total = totalAmount;
-            await newMovement(move);
+            move.total = totalAmount;
+            await createMovement(move);
             await handleSaveSale({
               ...BillState,
               CAE: latestCAE.current,

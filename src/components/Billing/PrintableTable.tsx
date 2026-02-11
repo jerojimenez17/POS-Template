@@ -2,9 +2,8 @@
 import React, { useContext, useRef, useState, useEffect } from "react";
 import { useReactToPrint } from "react-to-print";
 import { BillContext } from "@/context/BillContext";
-import { ProductFirebaseAdapter } from "@/models/ProductFirebaseAdapter";
-import getProductByCode from "@/firebase/stock/getProduct";
-import getProductsBySearch from "@/firebase/stock/getProductBySearch";
+import { getProductByCode, getProductsBySearch } from "@/actions/stock";
+import { ProductPrismaAdapter } from "@/models/ProductPrismaAdapter";
 import Product from "@/models/Product";
 import BillState from "@/models/BillState";
 import DecimalInput from "./DecimalInput";
@@ -116,15 +115,12 @@ const PrintableTable = ({
       return;
     }
 
-    if (product[0].amount <= 0) {
+    if (product.amount <= 0) {
       setErrorMessage("Producto sin Stock");
       return;
     }
 
-    const adaptedProduct = ProductFirebaseAdapter.fromDocumentData(
-      product[0],
-      product[0].id
-    );
+    const adaptedProduct = ProductPrismaAdapter.toDomain(product);
     addItem({ ...adaptedProduct, amount: 1 });
     setSearchCode("");
   };
@@ -133,7 +129,7 @@ const PrintableTable = ({
     setSearchCode(value);
     if (value.length >= 2) {
       const results = await getProductsBySearch(value);
-      setSuggestions(results);
+      setSuggestions(results.map(ProductPrismaAdapter.toDomain));
     } else {
       setSuggestions([]);
     }

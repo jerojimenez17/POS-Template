@@ -16,7 +16,8 @@ const ProductsTable = ({ session }: props) => {
         print={print}
         className="h-3/5 print:h-3/4 w-full overflow-auto"
         handleClose={function (): void {
-          throw new Error("Function not implemented.");
+          // handleClose currently not implemented or needed here
+          console.warn("handleClose not implemented");
         }}
       />
 

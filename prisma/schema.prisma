@@ -29,9 +29,35 @@ model Account {
   @@unique([provider, providerAccountId])
 }
 
+// Fixed Business Model and Relations
 enum UserRole {
+  SUPER_ADMIN
   ADMIN
   USER
+}
+
+model Business {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  logo          String?
+  
+  // Owner link
+  userId        String?  @unique
+  
+  users         User[]   @relation("BusinessUsers")
+  
+  products      Product[]
+  suppliers     Supplier[]
+  categories    Category[]
+  subcategories Subcategory[]
+  brands        Brand[]
+  clients       Client[]
+  orders        Order[]
+  cashMovements CashMovement[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model User {
@@ -43,18 +69,183 @@ model User {
   emailVerified DateTime?
   image         String?
   accounts      Account[]
+  
+  businessId    String?
+  business      Business? @relation("BusinessUsers", fields: [businessId], references: [id])
+}
+
+// Enums
+enum OrderStatus {
+  pendiente
+  confirmado
+  entregado
+  consignacion
+}
+
+enum PaidStatus {
+  pago
+  inpago
+}
+
+model Supplier {
+  id            String    @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  bonus         Float     @default(0)
+  creation_date DateTime  @default(now())
+  
+  // Make optional for migration
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  products      Product[]
 }
 
 model Product {
+  id            String    @id @default(cuid())
+  code          String?
+  description   String?
+  
+  brandId       String?
+  brand         Brand?    @relation(fields: [brandId], references: [id])
+  
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id])
+  
+  subCategoryId String?
+  subCategory   Subcategory? @relation(fields: [subCategoryId], references: [id])
+
+  price         Float     @default(0) // Cost price
+  salePrice     Float     @default(0)
+  gain          Float     @default(0)
+  amount        Float     @default(0)
+  unit          String?
+  image         String?
+  imageName     String?
+  client_bonus  Float     @default(0)
+  
+  supplierId    String?
+  supplier      Supplier? @relation(fields: [supplierId], references: [id])
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  last_update   DateTime  @default(now())
+  creation_date DateTime  @default(now())
+
+  // Relations
+  orderItems    OrderItem[]
+}
+
+model Category {
+  id            String    @id @default(cuid())
+  name          String
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  products      Product[]
+  subcategories Subcategory[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([name, businessId])
+}
+
+model Subcategory {
+  id            String    @id @default(cuid())
+  name          String
+  
+  categoryId    String
+  category      Category  @relation(fields: [categoryId], references: [id])
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  products      Product[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([name, categoryId, businessId])
+}
+
+model Brand {
+  id            String    @id @default(cuid())
+  name          String
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  products      Product[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([name, businessId])
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  address       String?
+  cellPhone     String?   // Storing as string for flexibility
+  balance       Float     @default(0)
+  
+  date          DateTime  @default(now()) // Creation date
+  last_update   DateTime  @default(now())
+
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+
+  orders        Order[]
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  date          DateTime    @default(now())
+  total         Float       @default(0)
+  status        OrderStatus @default(confirmado)
+  paidStatus    PaidStatus  @default(inpago)
+  seller        String?
+  
+  clientId      String
+  client        Client      @relation(fields: [clientId], references: [id])
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  items         OrderItem[]
+}
+
+model OrderItem {
   id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+
+  // Snapshot fields (in case product changes or is deleted)
+  code        String?
   description String?
-  internCode  String?
-  codeBar     String?
-  cod         String?
-  price       Float?
-  unit        String?
-  amount      Float?
-  category    String?
+  price       Float   @default(0) // Price at the moment of sale
+  quantity    Float   @default(0) 
+  subTotal    Float   @default(0) 
+  // Added basic snapshot fields as per standard practice, keeping existing ones
+}
+
+model CashMovement {
+  id          String   @id @default(cuid())
+  total       Float    @default(0)
+  seller      String?
+  paidMethod  String?
+  date        DateTime @default(now())
+
+  businessId  String?
+  business    Business? @relation(fields: [businessId], references: [id])
 }
 
 model VerificationToken {

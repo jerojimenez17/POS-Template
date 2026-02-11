@@ -12,8 +12,8 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { useState } from "react";
 import { FormSuccess } from "../ui/form-success";
-import { Suplier } from "@/models/Suplier";
-import { addSuplier } from "@/firebase/stock/newSuplier";
+import { createSupplier } from "@/actions/stock";
+import { toast } from "sonner";
 
 const NewSuplierModal = () => {
   const [suplier, setSuplier] = useState("");
@@ -21,6 +21,36 @@ const NewSuplierModal = () => {
   const [suplierPhone, setSuplierPhone] = useState("");
   const [suplierBonus, setSuplierBonus] = useState(0);
   const [success, setSuccess] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  const handleAdd = async () => {
+    if (suplier === "") return;
+    setIsPending(true);
+    setSuccess(false);
+    try {
+      const response = await createSupplier({
+        name: suplier,
+        email: suplierEmail,
+        phone: suplierPhone,
+        bonus: suplierBonus,
+      });
+      if (response.success) {
+        setSuccess(true);
+        setSuplier("");
+        setSuplierEmail("");
+        setSuplierPhone("");
+        setSuplierBonus(0);
+        toast.success("Proveedor agregado");
+      } else {
+        toast.error(response.error || "Error al agregar proveedor");
+      }
+    } catch (error) {
+      toast.error("Error inesperado");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
   return (
     <Dialog>
       <DialogTrigger
@@ -41,12 +71,12 @@ const NewSuplierModal = () => {
             <Input
               id="suplier-name"
               placeholder="Ej: Proveedor-1"
+              value={suplier}
               onChange={(e) => {
-                if (e.currentTarget.value !== "") {
-                  setSuplier(e.currentTarget.value);
-                }
+                setSuplier(e.currentTarget.value);
               }}
               className="col-span-3 text-gray-800"
+              disabled={isPending}
             />
             <Label htmlFor="suplier-email" className="text-right">
               Email
@@ -56,24 +86,23 @@ const NewSuplierModal = () => {
               value={suplierEmail}
               placeholder="ejemplo@ejemplo.com"
               onChange={(e) => {
-                if (e.currentTarget.value !== "") {
-                  setSuplierEmail(e.currentTarget.value);
-                }
+                setSuplierEmail(e.currentTarget.value);
               }}
               className="col-span-3 text-gray-800"
+              disabled={isPending}
             />
             <Label htmlFor="suplier-phone" className="text-right">
               Telefono
             </Label>
             <Input
               id="suplier-phone"
+              value={suplierPhone}
               placeholder="EJ:223418113"
               onChange={(e) => {
-                if (e.currentTarget.value !== "") {
-                  setSuplierPhone(e.currentTarget.value);
-                }
+                setSuplierPhone(e.currentTarget.value);
               }}
               className="col-span-3 text-gray-800"
+              disabled={isPending}
             />
             <Label htmlFor="suplier-bonus" className="text-right">
               Bonificacion
@@ -81,30 +110,19 @@ const NewSuplierModal = () => {
             <Input
               id="suplier-bonus"
               type="number"
-              defaultValue={suplierBonus !== 0 ? suplierBonus : ""}
+              value={suplierBonus !== 0 ? suplierBonus : ""}
               onChange={(e) => {
-                if (e.currentTarget.value !== "") {
-                  setSuplierBonus(Number(e.currentTarget.value));
-                }
+                setSuplierBonus(Number(e.currentTarget.value));
               }}
               className="col-span-3 text-gray-800"
+              disabled={isPending}
             />
           </div>
         </div>
         <DialogFooter>
           <Button
-            onClick={async () => {
-              const newSuplier = new Suplier();
-              newSuplier.name = suplier;
-              newSuplier.bonus = suplierBonus;
-              newSuplier.phone = suplierPhone;
-              newSuplier.email = suplierEmail;
-              if (suplier !== "") {
-                await addSuplier(newSuplier);
-                setSuccess(true);
-              }
-              setSuplier("");
-            }}
+            onClick={handleAdd}
+            disabled={isPending}
             type="submit"
           >
             Agregar
