@@ -220,61 +220,153 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
   };
 
   return (
-    <div className="z-0 p-0 mx-auto mb-28 md:mb-20 w-full h-full rounded-xl shadow-sm overflow-hidden border border-black/10">
-      <div className=" h-[90%] overflow-auto">
-        <table className="text-gray-800 max-h-full border-separate border-spacing-0 bg-white dark:hover:bg-gray-800 dark:hover:backdrop-filter dark:bg-gray-900 dark:text-white bg-opacity-20 backdrop-filter w-full z-0">
-          <thead className="bg-black h-20 mt-0 sticky top-0 z-10">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr
-                key={headerGroup.id}
-                className="hover:bg-gray hover:backdrop-filter"
-              >
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className="hover:text-gray-800 text-center font-extrabold text-white dark:hover:text-gray-200 text-lg"
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                className="text-center hover:text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-lg items-center border-b dark:hover:bg-gray-800 dark:hover:backdrop-filter dark:bg-gray-900 dark:text-white bg-opacity-20 backdrop-filter"
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="p-2">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="w-full h-full flex flex-col">
+      {/* Desktop Table View */}
+      <div className="hidden md:block rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden bg-white dark:bg-gray-900">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-gray-50 dark:bg-gray-800 text-xs uppercase text-gray-500 dark:text-gray-400 font-semibold">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th key={header.id} className="px-6 py-4 whitespace-nowrap">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {table.getRowModel().rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="px-6 py-4">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div className="w-full flex justify-end gap-x-2 p-4 bg-black/5">
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-4 pb-24">
+        {table.getRowModel().rows.map((row) => {
+          const product = row.original;
+          return (
+            <div
+              key={row.id}
+              className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex gap-4"
+            >
+              {/* Product Image */}
+              <div className="w-24 h-24 flex-shrink-0 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
+                 {product.image && product.image.includes("https") ? (
+                  <Image
+                    className="w-full h-full object-cover"
+                    src={product.image}
+                    alt={product.description || "Product"}
+                    height={96}
+                    width={96}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-300">
+                    <Image
+                      src={noImgPhoto}
+                      alt="No image"
+                      className="w-12 h-12 opacity-50"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Product Details */}
+              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start mb-1">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white truncate pr-2">
+                       {product.description || "Sin descripción"}
+                    </h3>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                      {product.code || "-"}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-baseline gap-2 mb-2">
+                     <span className="text-lg font-bold text-black dark:text-white">
+                      ${Number(product.salePrice).toLocaleString("es-AR")}
+                     </span>
+                     <span className={`text-sm ${product.amount <= 0 ? "text-red-500 font-bold" : "text-gray-500"}`}>
+                        {product.amount} unid.
+                     </span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2 mt-2">
+                   <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProductToEdit(product);
+                      setOpenEditModal(true);
+                    }}
+                    className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 rounded-lg transition-colors"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                      <path d="m15 5 4 4" />
+                    </svg>
+                  </button>
+                  <DeleteButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProductToEdit(product);
+                      setOpenDeleteModal(true);
+                    }}
+                    disable={false}
+                  />
+                  <CodeBarModal value={product.code} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Pagination */}
+      <div className="w-full flex justify-end gap-x-2 p-4 mt-4">
         <Button
           variant="outline"
-          className="font-bold text-xl rounded-xl border-black"
+          className="h-10 w-10 p-0 rounded-lg"
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
           {"<"}
         </Button>
         <Button
-          variant="outline"
-          className="font-bold text-xl rounded-xl border-black"
-          onClick={() => table.nextPage()}
-          disabled={!table.getCanNextPage()}
+           variant="outline"
+           className="h-10 w-10 p-0 rounded-lg"
+           onClick={() => table.nextPage()}
+           disabled={!table.getCanNextPage()}
         >
           {">"}
         </Button>
@@ -295,7 +387,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
 
       {productToEdit && openEditModal && (
         <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
-          <DialogContent className="sm:max-w-md overflow-auto h-full">
+          <DialogContent className="sm:max-w-md overflow-auto h-full max-h-[90vh]">
             <DialogHeader>
               <DialogTitle>Editar producto</DialogTitle>
             </DialogHeader>

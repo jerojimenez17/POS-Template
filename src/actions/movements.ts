@@ -48,7 +48,6 @@ export const getMovements = async () => {
         const movements = await db.cashMovement.findMany({
             where: {
                 businessId: session.user.businessId,
-                paidMethod: { in: ["Deposito", "Retiro", "Efectivo"] }
             },
             orderBy: { date: 'desc' }
         });

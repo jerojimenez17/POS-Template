@@ -128,20 +128,20 @@ export const updateOrderPaidStatus = async (orderId: string, newStatus: PaidStat
            // If changing to 'pago', we might need to restore balance?
            // Firebase 'paidOrder': updateBalance(client, total) -> adds total back to balance.
            if (newStatus === "pago" && order.paidStatus !== "pago") {
-               await tx.client.update({
-                   where: { id: order.clientId },
-                   data: { balance: { increment: order.total } } 
-               });
+               if (order.clientId) {
+                   await tx.client.update({
+                       where: { id: order.clientId },
+                       data: { balance: { increment: order.total } } 
+                   });
+               }
            }
-           // What if changing from 'pago' to 'inpago'? Firebase didn't seem to handle this reverse logic explicitly in snippet 
-           // but `changePaidStatus` calls `paidOrder` only if newStatus === 'pago'.
-           // If newStatus is 'inpago', just update status?
-           // If we revert payment, we should probably revert balance too.
            if (newStatus === "inpago" && order.paidStatus === "pago") {
-                await tx.client.update({
-                   where: { id: order.clientId },
-                   data: { balance: { decrement: order.total } } 
-               });
+                if (order.clientId) {
+                   await tx.client.update({
+                       where: { id: order.clientId },
+                       data: { balance: { decrement: order.total } } 
+                   });
+                }
            }
 
            await tx.order.update({

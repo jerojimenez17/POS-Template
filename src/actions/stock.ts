@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { auth } from "../../auth";
 import { pusherServer } from "@/lib/pusher-server";
+import { Product } from "@prisma/client";
 
 // Supplier Actions
 
@@ -53,7 +54,7 @@ export const getSuppliers = async () => {
 
 // Product Actions
 
-export const createProduct = async (data: any) => {
+export const createProduct = async (data: Product) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
@@ -66,7 +67,7 @@ export const createProduct = async (data: any) => {
         category: data.categoryId ? { connect: { id: data.categoryId } } : undefined,
         subCategory: data.subCategoryId ? { connect: { id: data.subCategoryId } } : undefined,
         price: data.price ? parseFloat(data.price.toString()) : 0,
-        salePrice: data.salePrice ? parseFloat(data.salePrice.toString()) : 0,
+        salePrice: data.salePrice ? parseFloat(data.price.toString())*(1+data.gain*0.01) : 0,
         gain: data.gain ? parseFloat(data.gain.toString()) : 0,
         amount: data.amount ? parseFloat(data.amount.toString()) : 0,
         unit: data.unit,
@@ -106,7 +107,7 @@ export const updateProduct = async (id: string, data: any) => {
         category: data.categoryId ? { connect: { id: data.categoryId } } : { disconnect: true },
         subCategory: data.subCategoryId ? { connect: { id: data.subCategoryId } } : { disconnect: true },
         price: data.price !== undefined ? parseFloat(data.price.toString()) : undefined,
-        salePrice: data.salePrice !== undefined ? parseFloat(data.salePrice.toString()) : undefined,
+        salePrice: data.price !== undefined && data.gain !== undefined ? parseFloat(data.price.toString())*(1+parseFloat(data.gain.toString())*0.01) : undefined,
         gain: data.gain !== undefined ? parseFloat(data.gain.toString()) : undefined,
         amount: data.amount !== undefined ? parseFloat(data.amount.toString()) : undefined,
         unit: data.unit,

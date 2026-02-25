@@ -3,25 +3,33 @@ import SalesTable from "@/components/Billing/SalesTable";
 import { auth } from "../../../../auth";
 import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
-import { fetchSalesOnce } from "@/services/firebaseService";
+import { getSalesAction } from "@/actions/sales";
 
-const page = async () => {
+const SearchBillContent = async () => {
   const session = await auth();
-  const sales = await fetchSalesOnce();
-  
-  return (
-     <Suspense fallback={<Spinner/>}>
+  const sales = await getSalesAction();
 
-    <div className="h-full">
-      {" "}
-      <div className=" text-center align-middle justify-center sm:w-screen-sm mb-10 overflow-auto">
-        <FilterBillPanel
-          session={session}
-        />
+  return (
+    <div className="flex flex-col items-center w-full max-w-7xl mx-auto px-4 py-8 space-y-6 overflow-auto mb-10">
+      <FilterBillPanel session={session} />
+      <div className="w-full">
         <SalesTable sales={sales} session={session} />
       </div>
     </div>
-          </Suspense>
+  );
+};
+
+const page = () => {
+  return (
+    <div className="h-full">
+      <Suspense fallback={
+        <div className="flex justify-center items-center h-[50vh]">
+          <Spinner />
+        </div>
+      }>
+        <SearchBillContent />
+      </Suspense>
+    </div>
   );
 };
 

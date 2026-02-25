@@ -5,8 +5,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import Facebook from "next-auth/providers/facebook";
 import Github from "next-auth/providers/github";
-import AuthError from "next-auth";
-import type { NextAuthConfig } from "next-auth";
+import { AuthError, type NextAuthConfig } from "next-auth";
 
 export default {
   providers: [

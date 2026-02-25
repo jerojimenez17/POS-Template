@@ -161,19 +161,21 @@ const PrintableTable = ({
         {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
           <div className="flex items-center">
             <button
-              className="px-1 font-bold text-lg bg-red-600/40  rounded hover:bg-gray-300 print:hidden"
+              className="px-1 font-bold text-lg bg-red-600/40 rounded hover:bg-gray-300 focus-visible:ring-2 focus-visible:ring-gray-400 print:hidden transition-colors"
               onClick={() =>
                 updateProductAmount(product.id, product.amount - 1)
               }
+              aria-label="Disminuir cantidad"
             >
               −
             </button>
-            <span className="mx-1 print:mx-0">{product.amount}</span>
+            <span className="mx-1 print:mx-0 tabular-nums">{product.amount}</span>
             <button
-              className="px-1 font-bold text-lg bg-green-700/40 rounded hover:bg-gray-300 print:hidden"
+              className="px-1 font-bold text-lg bg-green-700/40 rounded hover:bg-gray-300 focus-visible:ring-2 focus-visible:ring-gray-400 print:hidden transition-colors"
               onClick={() =>
                 updateProductAmount(product.id, product.amount + 1)
               }
+              aria-label="Aumentar cantidad"
             >
               +
             </button>
@@ -186,14 +188,14 @@ const PrintableTable = ({
           />
         )}
       </td>
-      <td className="p-1 print:p-1 print:text-sm">
+      <td className="p-1 print:p-1 print:text-sm tabular-nums">
         $
         {product.salePrice.toLocaleString("es-AR", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })}
       </td>
-      <td className="p-1 print:p-1 print:text-sm">
+      <td className="p-1 print:p-1 print:text-sm tabular-nums">
         $
         {(product.salePrice * product.amount).toLocaleString("es-AR", {
           minimumFractionDigits: 2,
@@ -201,13 +203,18 @@ const PrintableTable = ({
         })}
       </td>
       <td className="p-1 print:hidden">
-        <button onClick={() => removeItem(product)}>
+        <button 
+          onClick={() => removeItem(product)}
+          className="hover:opacity-80 transition-opacity focus-visible:ring-2 focus-visible:ring-red-400 rounded-md"
+          aria-label={`Eliminar ${product.description}`}
+        >
           {/* SVG paths remain the same */}
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 100 100"
             width="30px"
             height="30px"
+            aria-hidden="true"
           >
             <path
               fill="#f37e98"
@@ -240,7 +247,7 @@ const PrintableTable = ({
   );
 
   return (
-    <div ref={contentRef} className={`${className} print:block print:bg-white`}>
+    <div ref={contentRef} className={`${className} print:block print:bg-white overflow-visible`}>
       {/* Header - Print only */}
       {isClient && (
         <div className="print-visible print:mb-4 mt-4 print:text-center hidden">
@@ -254,12 +261,11 @@ const PrintableTable = ({
           </h2>
           <div className="mt-2 text-sm">
             <p>
-              Fecha: {state.date?.toLocaleDateString()}{" "}
-              {state.date?.toLocaleTimeString()}
+              Fecha: {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}
             </p>
             <p>Factura: {state.billType}</p>
             <p>Cuit: 27374057893</p>
-            <p>Condicion IVA: Monotributo</p>
+            <p>Condición IVA: Monotributo</p>
             <p>Vendedor: {state.seller || session?.user?.email}</p>
             <p>Medio de Pago: {state.paidMethod}</p>
           </div>
@@ -271,37 +277,76 @@ const PrintableTable = ({
         <div className="flex mx-auto gap-2">
           <div className="md:w-1/2 flex-1 relative">
             <input
-              className="w-full p-2 border border-gray-300 rounded shadow"
-              placeholder="Buscar producto"
+              name="productSearch"
+              className="w-full p-2 border border-gray-300 rounded shadow focus-visible:ring-2 focus-visible:ring-blue-500 outline-none transition-shadow"
+              placeholder="Buscar producto…"
               value={searchCode}
               onChange={(e) => handleSearch(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleAddProduct(searchCode);
               }}
+              autoComplete="off"
+              spellCheck={false}
             />
             {suggestions.length > 0 && searchCode.length > 0 && (
-              <div className="absolute z-10 w-full bg-inherit border border-gray-300 rounded mt-1 shadow-lg">
+              <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded mt-1 shadow-2xl max-h-60 overflow-y-auto overflow-x-hidden transition-all duration-200 animate-in fade-in slide-in-from-top-2 overscroll-contain custom-scrollbar">
+                <style jsx>{`
+                  .custom-scrollbar::-webkit-scrollbar {
+                    width: 6px;
+                  }
+                  .custom-scrollbar::-webkit-scrollbar-track {
+                    background: transparent;
+                  }
+                  .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background: #cbd5e1;
+                    border-radius: 10px;
+                  }
+                  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background: #94a3b8;
+                  }
+                  :global(.dark) .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background: #475569;
+                  }
+                  :global(.dark) .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background: #64748b;
+                  }
+                `}</style>
                 {suggestions.map((product) => (
                   <div
                     key={product.id}
-                    className="p-2 hover:bg-gray-100 dark:even:bg-gray-700 bg-gray-100 even:bg-gray-300 dark:bg-gray-900 cursor-pointer"
+                    className="p-3 border-b last:border-b-0 border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
                     onClick={() => handleAddProduct(product.code)}
                   >
-                    {product.code} - {product.description} - $
-                    {product.salePrice.toLocaleString("es-AR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                    <span className="font-semibold"> Restan: </span>
-                    {product.amount}
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-bold text-blue-600 dark:text-blue-400">{product.code}</span>
+                      <span className="font-mono text-xs text-gray-400">STOCK</span>
+                    </div>
+                    <div className="text-gray-900 dark:text-gray-100 font-medium mb-1">
+                      {product.description}
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="font-bold tabular-nums">
+                        ${product.salePrice.toLocaleString("es-AR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                      <span className={cn(
+                        "font-semibold px-2 py-0.5 rounded-full text-xs",
+                        product.amount <= 5 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      )}>
+                        Restan: {product.amount}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
           <button
-            className="p-2 bg-gray-200 rounded hover:bg-gray-300"
+            className="p-2 bg-gray-200 rounded hover:bg-gray-300 focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
             onClick={() => setScannerOpen(true)}
+            aria-label="Abrir escáner de productos"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -382,8 +427,9 @@ const PrintableTable = ({
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Escanear producto</h3>
               <button
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-gray-400 rounded p-1 transition-colors"
                 onClick={() => setScannerOpen(false)}
+                aria-label="Cerrar escáner"
               >
                 ✕
               </button>
@@ -419,7 +465,7 @@ const PrintableTable = ({
       <div className="mt-4 p-4 dark:bg-gray-700 bg-gray-100 rounded-lg print:mt-8 print:bg-transparent">
         <div className="grid grid-cols-2 gap-2 text-right">
           <div className="font-bold">Subtotal:</div>
-          <div>
+          <div className="tabular-nums">
             $
             {state.products
               .reduce((sum, p) => sum + p.salePrice * p.amount, 0)
@@ -432,7 +478,7 @@ const PrintableTable = ({
           {state.discount > 0 && (
             <>
               <div className="font-bold">Descuento ({state.discount}%):</div>
-              <div>
+              <div className="tabular-nums">
                 -$
                 {(
                   state.products.reduce(
@@ -451,7 +497,7 @@ const PrintableTable = ({
           <div className="font-bold text-lg border-t border-gray-300 pt-2 mt-2">
             Total:
           </div>
-          <div className="text-lg border-t border-gray-300 pt-2 mt-2">
+          <div className="text-lg border-t border-gray-300 pt-2 mt-2 tabular-nums">
             $
             {(
               state.products.reduce(

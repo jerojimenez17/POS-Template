@@ -25,6 +25,8 @@ export const metadata: Metadata = {
   description: "A template for Point of Sales Apps",
 };
 
+import { Toaster } from "react-hot-toast";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -40,6 +42,7 @@ export default function RootLayout({
                 <div className="h-full w-full  bg-slate-100 dark:bg-gray-800">
             <NavigationMenuHeader />
             {children}
+            <Toaster position="bottom-right" />
                 </div>
         </FiltersProvider>
       </ThemeProvider>

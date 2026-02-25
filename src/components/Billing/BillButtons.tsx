@@ -8,13 +8,8 @@ import Modal from "../Modal";
 import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
 import postBill from "@/services/AFIPService";
-import { updateTotal } from "@/services/firebaseService";
+import { processSaleAction } from "@/actions/sales";
 import Movement from "@/models/Movement";
-import { createMovement } from "@/actions/movements";
-import { addDoc, collection } from "firebase/firestore";
-import { db } from "@/firebase/config";
-import { updateAmount } from "@/firebase/stock/updateAmount";
-import { updateMonthlyRanking } from "@/firebase/stock/updateRanking";
 import { toast, Toaster } from "sonner";
 import Spinner from "../ui/Spinner";
 import AccountLedgerModal from "../ledger/AccountLedgerModal";
@@ -102,15 +97,16 @@ const BillButtons = ({ session, handlePrint }: props) => {
   };
 
   const handleSaveSale = async (billState: typeBillState) => {
-    if (!checkConnection()) return; // Verificar conexión
+    if (!checkConnection()) return;
     try {
-      const collectionRef = collection(db, "sales");
-      console.log(billState);
-      await addDoc(collectionRef, billState);
+      const result = await processSaleAction(billState);
+      if (result.error) {
+        toast.error(result.error);
+        setSaveError(true);
+      } else {
+        setSaveError(false);
+      }
       setBlockButton(false);
-      // setDiscountState(0);
-
-      setSaveError(false);
     } catch (err) {
       console.error(err);
       setBlockButton(false);
@@ -119,157 +115,49 @@ const BillButtons = ({ session, handlePrint }: props) => {
   };
 
   const createSale = async (afip: boolean) => {
-    if (!checkConnection()) return; // Verificar conexión
+    if (!checkConnection()) return;
     try {
-      const productTotal = BillState.products.reduce(
-        (acc, p) => acc + p.price * p.amount,
-        0
-      );
       setBlockButton(true);
       setOpenRemitoModal(false);
+
       const totalAmount =
         BillState.products.reduce(
           (acc, act) => acc + act.price * act.amount,
           0
-        ) -
-        BillState.discount *
-          0.01 *
-          BillState.products.reduce(
-            (acc, act) => acc + act.price * act.amount,
-            0
-          );
-      const remainingAmount = totalAmount - (BillState.totalSecondMethod || 0);
+        ) * (1 - BillState.discount * 0.01);
 
-      console.log(totalAmount, productTotal);
       if (totalAmount <= 0) {
         setErrorMessage("El monto debe ser mayor a 0");
         setOpenErrorModal(true);
-      } else {
-        if (
-          BillState.totalSecondMethod &&
-          totalAmount < BillState.totalSecondMethod
-        ) {
-          setErrorMessage(
-            "El monto del segundo medio de pago debe ser menor al total"
-          );
-          setOpenErrorModal(true);
-        } else {
-          if (afip) {
-            await handleCreateVoucher();
-          }
-          if (
-            BillState.twoMethods &&
-            BillState.totalSecondMethod &&
-            BillState.totalSecondMethod > 0
-          ) {
-            // Crear dos listas de productos, ajustando las unidades y precios para cada método de pago
-            console.log(respAfip);
-            const primaryProducts = BillState.products.map((product, index) => {
-              const newProduct = { ...product };
-              if (index === 0) {
-                newProduct.salePrice = remainingAmount;
-                newProduct.gain = 1;
-                newProduct.amount = 1;
-                newProduct.price = remainingAmount;
-              } else {
-                newProduct.amount = 0;
-              }
-              return newProduct;
-            });
-
-            const secondaryProducts = BillState.products.map(
-              (product, index) => {
-                const newProduct = { ...product };
-                if (index === 0) {
-                  newProduct.price = BillState.totalSecondMethod || 0;
-                  newProduct.amount = 1;
-                  newProduct.gain = 1;
-                  newProduct.salePrice = BillState.totalSecondMethod || 0;
-                } else {
-                  newProduct.amount = 0;
-                }
-                return newProduct;
-              }
-            );
-
-            // Crear y registrar movimientos separados para cada método de pago
-            if (BillState.paidMethod === "Efectivo") {
-              await updateTotal(remainingAmount); // Actualizar el total para el primer método de pago si es efectivo
-            }
-
-            const primaryMove = new Movement();
-            primaryMove.seller = session?.user?.email || "";
-            primaryMove.paidMethod = BillState.paidMethod || "Efectivo";
-            primaryMove.total = remainingAmount;
-            primaryMove.total = remainingAmount;
-
-            const secondaryMove = new Movement();
-            secondaryMove.seller = session?.user?.email || "";
-            secondaryMove.paidMethod = BillState.secondPaidMethod || "";
-            secondaryMove.total = BillState.totalSecondMethod;
-
-            // Optimizing: Create both movements in parallel
-            await Promise.all([
-              createMovement(primaryMove),
-              createMovement(secondaryMove)
-            ]);
-
-            // Guardar ambas listas de productos en la base de datos (ajusta según tu lógica de negocio)
-            console.log(respAfip);
-            console.log(BillState.CAE);
-            // Optimizing: Save both sales in parallel
-            await Promise.all([
-              handleSaveSale({
-                ...BillState,
-                products: primaryProducts,
-                discount: 0,
-                total: primaryMove.total,
-                CAE: latestCAE.current,
-                totalWithDiscount: primaryMove.total,
-              }),
-              handleSaveSale({
-                ...BillState,
-                CAE: latestCAE.current,
-                discount: 0,
-                total: secondaryMove.total,
-                totalWithDiscount: secondaryMove.total,
-                paidMethod: BillState.secondPaidMethod,
-                products: secondaryProducts,
-              })
-            ]);
-
-            toast.success("Facturas guardadas correctamente");
-          } else {
-            // Lógica original para una sola venta
-
-            if (BillState.paidMethod === "Efectivo") {
-              await updateTotal(totalAmount); // Actualizar total si el único método de pago es efectivo
-            }
-
-            const move = new Movement();
-            move.seller = session?.user?.email || "";
-            move.paidMethod = BillState.paidMethod || "Efectivo";
-            move.total = totalAmount;
-            move.total = totalAmount;
-            await createMovement(move);
-            await handleSaveSale({
-              ...BillState,
-              CAE: latestCAE.current,
-              totalWithDiscount:
-                BillState.total - BillState.total * BillState.discount * 0.01,
-            });
-          }
-          toast.success("Factura guardada correctamente");
-
-          await updateAmount(BillState.products);
-
-          await updateMonthlyRanking(BillState.products);
-        }
-        // setTimeout(() => {
-        // }, 5000);
+        setBlockButton(false);
+        return;
       }
+
+      if (
+        BillState.totalSecondMethod &&
+        totalAmount < BillState.totalSecondMethod
+      ) {
+        setErrorMessage(
+          "El monto del segundo medio de pago debe ser menor al total"
+        );
+        setOpenErrorModal(true);
+        setBlockButton(false);
+        return;
+      }
+
+      if (afip) {
+        await handleCreateVoucher();
+      }
+
+      // Now we use the atomic action which handles everything (stock, movements, ranking, balance)
+      await handleSaveSale({
+        ...BillState,
+        CAE: latestCAE.current,
+        totalWithDiscount: totalAmount,
+      });
+
+      toast.success("Factura guardada correctamente");
     } catch (err) {
-      // Agregar manejo de error de conexión en el catch general
       if (!isOnline) {
         toast.error("Operación cancelada: Sin conexión a internet");
       } else {

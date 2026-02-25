@@ -126,22 +126,43 @@ const SalesTable = ({ sales = [], session }: props) => {
           })}
         </p>
       </div>
-      <div className="h-full mb-5 pb-4">
-        {currentSales.map((sale) => (
-          <div key={sale.id} className="">
-            <SaleAccordion
-              user={user}
-              key={sale.id}
-              sale={sale}
-              onClick={() => {
-                setExternalState(sale);
-                setTimeout(() => {
-                  setPrint(!print);
-                }, 100);
-              }}
-            />
+      <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-5">
+        <div className="overflow-x-auto">
+          <div className="min-w-max p-1">
+            {/* Table Header */}
+            <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px] gap-4 px-5 py-3 border-b border-gray-100 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[700px] sm:w-full">
+              <div>Fecha</div>
+              <div>Comprobante</div>
+              <div>Medio Pago</div>
+              <div>Vendedor</div>
+              <div className="text-right pr-2">Total</div>
+              <div className="text-center">Imp.</div>
+              <div className="text-center">Del.</div>
+            </div>
+
+            {/* Table Body (Accordions) */}
+            <div className="flex flex-col">
+              {currentSales.map((sale) => (
+                <SaleAccordion
+                  user={user}
+                  key={sale.id}
+                  sale={sale}
+                  onClick={() => {
+                    setExternalState(sale);
+                    setTimeout(() => {
+                      setPrint(!print);
+                    }, 100);
+                  }}
+                />
+              ))}
+              {currentSales.length === 0 && (
+                <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                  No se encontraron ventas con los filtros actuales.
+                </div>
+              )}
+            </div>
           </div>
-        ))}
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-4 bg-white bg-opacity-50 gap-4 mt-auto rounded-lg shadow-sm">
