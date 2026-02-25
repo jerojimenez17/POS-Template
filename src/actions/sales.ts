@@ -6,11 +6,36 @@ import { revalidatePath } from "next/cache";
 import BillState from "@/models/BillState";
 
 /**
+ * Interface representing the expected input for processSaleAction
+ */
+interface SaleProduct {
+  id: string;
+  code: string;
+  description: string;
+  price?: number;
+  salePrice?: number;
+  amount: number;
+}
+
+interface ProcessSaleInput {
+  total: number;
+  totalWithDiscount?: number;
+  seller: string;
+  paidMethod?: string;
+  secondPaidMethod?: string;
+  totalSecondMethod?: number;
+  discount?: number;
+  clientId?: string;
+  twoMethods?: boolean;
+  products: SaleProduct[];
+}
+
+/**
  * Atomic transaction to process a sale.
  * Includes Order creation, StockMovement logging, Product stock update, 
  * CashBox update, CashMovement recording, and Ranking update.
  */
-export const processSaleAction = async (billState: any) => {
+export const processSaleAction = async (billState: ProcessSaleInput) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
@@ -39,14 +64,14 @@ export const processSaleAction = async (billState: any) => {
           businessId: businessId,
           clientId: billState.clientId, // Assuming clientId is in billState if available
           items: {
-            create: billState.products.map((p: any) => ({
+            create: billState.products.map((p) => ({
               productId: p.id,
               code: p.code,
               description: p.description,
               costPrice: p.price || 0, // Assuming p.price is cost if costPrice not explicit
-              price: p.salePrice || p.price, // Using salePrice if available
+              price: p.salePrice || p.price || 0, // Using salePrice if available
               quantity: p.amount,
-              subTotal: (p.salePrice || p.price) * p.amount,
+              subTotal: (p.salePrice || p.price || 0) * p.amount,
             })),
           },
         },
@@ -85,7 +110,7 @@ export const processSaleAction = async (billState: any) => {
           },
           update: {
             totalSold: { increment: item.amount },
-            totalIncome: { increment: item.amount * (item.salePrice || item.price) },
+            totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
           },
           create: {
             productId: item.id,
@@ -93,7 +118,7 @@ export const processSaleAction = async (billState: any) => {
             year,
             businessId,
             totalSold: item.amount,
-            totalIncome: item.amount * (item.salePrice || item.price),
+            totalIncome: item.amount * (item.salePrice || item.price || 0),
           },
         });
       }
@@ -122,7 +147,7 @@ export const processSaleAction = async (billState: any) => {
           seller: billState.seller,
           paidMethod: billState.twoMethods 
             ? `${billState.paidMethod} + ${billState.secondPaidMethod}`
-            : billState.paidMethod,
+            : (billState.paidMethod || "Efectivo"),
           businessId: businessId,
           date: now,
         },
@@ -231,6 +256,21 @@ await tx.saleReturnItem.create({
 };
 
 /**
+ * Interface representing a query result order for getDailyReportAction
+ */
+interface ReportOrder {
+  total: number;
+  discountAmount: number;
+  paymentMethod: string | null;
+  paymentMethod2: string | null;
+  totalMethod2: number | null;
+}
+
+interface ReportReturn {
+  total: number;
+}
+
+/**
  * Fetches a report for a specific date range.
  */
 export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
@@ -261,12 +301,12 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
     ]);
 
     // Aggregate data
-    const totalSales = orders.reduce((acc: number, o: any) => acc + o.total, 0);
-    const totalDiscounts = orders.reduce((acc: number, o: any) => acc + o.discountAmount, 0);
-    const totalReturns = returns.reduce((acc: number, r: any) => acc + r.total, 0);
+    const totalSales = orders.reduce((acc: number, o: ReportOrder) => acc + o.total, 0);
+    const totalDiscounts = orders.reduce((acc: number, o: ReportOrder) => acc + o.discountAmount, 0);
+    const totalReturns = returns.reduce((acc: number, r: ReportReturn) => acc + r.total, 0);
     
     const paymentMethods: Record<string, number> = {};
-    orders.forEach((o: any) => {
+    orders.forEach((o: ReportOrder) => {
       if (o.paymentMethod) {
         const amount1 = o.total - (o.totalMethod2 || 0);
         paymentMethods[o.paymentMethod] = (paymentMethods[o.paymentMethod] || 0) + amount1;

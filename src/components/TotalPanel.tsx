@@ -2,7 +2,11 @@
 import React, { useEffect, useState } from "react";
 import { getBusinessBalanceAction } from "@/actions/billing";
 
-const TotalPanel = () => {
+interface TotalPanelProps {
+  refreshCount?: number;
+}
+
+const TotalPanel = ({ refreshCount = 0 }: TotalPanelProps) => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -17,12 +21,11 @@ const TotalPanel = () => {
         setLoading(false);
       }
     };
+    
+    // Fetch immediately when mounted and whenever refreshCount changes
     fetchBalance();
     
-    // Set an interval to refresh balance periodically since we dropped Firebase onSnapshot
-    const interval = setInterval(fetchBalance, 10000); 
-    return () => clearInterval(interval);
-  }, []);
+  }, [refreshCount]); // Dependency on refreshCount for instant updates
 
   return (
     <div className="w-full max-w-sm my-6 mx-auto bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900 border border-blue-100 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-col items-center justify-center transition-all hover:shadow-md">

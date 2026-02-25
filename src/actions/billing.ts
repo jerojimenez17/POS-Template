@@ -99,9 +99,28 @@ export const updateMonthlyRankingAction = async (items: { id: string; amount: nu
 };
 
 /**
+ * Interface representing the expected input for saveOrderAction
+ */
+interface SavedProduct {
+  id: string;
+  code: string;
+  description: string;
+  price: number;
+  amount: number;
+}
+
+interface BillStateInput {
+  total: number;
+  totalWithDiscount?: number;
+  seller: string;
+  paidMethod: string;
+  products: SavedProduct[];
+}
+
+/**
  * Saves a sale as an Order and OrderItems in Prisma.
  */
-export const saveOrderAction = async (billState: any) => {
+export const saveOrderAction = async (billState: BillStateInput) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
@@ -115,7 +134,7 @@ export const saveOrderAction = async (billState: any) => {
         business: { connect: { id: session.user.businessId } },
         client: undefined, // client is optional now in schema
         items: {
-          create: billState.products.map((p: any) => ({
+          create: billState.products.map((p) => ({
             productId: p.id,
             code: p.code,
             description: p.description,

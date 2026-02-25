@@ -8,8 +8,9 @@ import { toast } from "react-hot-toast";
 
 interface props {
   session: Session | null;
+  onSuccess?: () => void;
 }
-const AddButton = ({ session }: props) => {
+const AddButton = ({ session, onSuccess }: props) => {
   const [openTotalInput, setOpenTotalInput] = useState(false);
   const [totalInput, setTotalInput] = useState<number | "">("");
   const [loading, setLoading] = useState(false);
@@ -52,6 +53,7 @@ const AddButton = ({ session }: props) => {
                     toast.success("Ingreso registrado");
                     setTotalInput("");
                     setOpenTotalInput(false);
+                    onSuccess?.(); // Trigger parent refresh
                   }
                 } catch (err) {
                   toast.error("Ocurrió un error inesperado");

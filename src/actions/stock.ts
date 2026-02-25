@@ -93,7 +93,23 @@ export const createProduct = async (data: Product) => {
   }
 };
 
-export const updateProduct = async (id: string, data: any) => {
+interface UpdateProductInput {
+  code?: string;
+  description?: string;
+  brandId?: string | null;
+  categoryId?: string | null;
+  subCategoryId?: string | null;
+  price?: number | string;
+  gain?: number | string;
+  amount?: number | string;
+  unit?: string;
+  image?: string | null;
+  imageName?: string | null;
+  client_bonus?: number | string;
+  supplierId?: string | null;
+}
+
+export const updateProduct = async (id: string, data: UpdateProductInput) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
