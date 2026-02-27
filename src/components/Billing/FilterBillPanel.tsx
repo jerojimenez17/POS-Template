@@ -8,13 +8,9 @@ import DatePicker from "react-datetime";
 import "react-datetime/css/react-datetime.css";
 import CalendarIcon from "./CalendarIcon";
 import Select from "./Select";
-import { fetchSalesOnce } from "@/services/firebaseService";
-import { Session } from "next-auth";
+import { getUniqueSellersAction } from "@/actions/sales";
 
-interface props {
-  session: Session | null;
-}
-const FilterBillPanel = ({ session }: props) => {
+const FilterBillPanel = () => {
   const {
     filtersState,
     switchAhora3,
@@ -32,55 +28,48 @@ const FilterBillPanel = ({ session }: props) => {
     endDate,
   } = useContext(FiltersContext);
 
-  const [sellerArray, setSellerArray] = useState<string[]>([]);
   const [sellers, setSellers] = useState<string[]>([]);
+  
+  // // Compute default seller synchronously during render (derived from props)
+  // const defaultSeller = session?.user?.email && session.user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL 
+  //   ? session.user.email 
+  //   : undefined;
 
   useEffect(() => {
-    fetchSalesOnce().then((sales) => {
-      setSellers(Array.from(new Set(sales.map((sale) => sale.seller))));
+    // Vercel Best Practice (client-side data fetching bottleneck fixed):
+    // Only fetch unique sellers, not all sales.
+    getUniqueSellersAction().then((uniqueSellers) => {
+      setSellers(uniqueSellers);
     });
   }, []);
-  useEffect(() => {
-    if (
-      session?.user?.email !== process.env.ADMIN_EMAIL &&
-      session?.user &&
-      session.user.email
-    ) {
-      const newArray = [];
-      newArray.push(session.user.email);
-      setSellerArray(newArray);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
   return (
-    <>
-      <div className="row max-w-xl mx-auto h-20">
-        <div className="col">
-          {/* <FilterSwitch text="Filtrar por vendedor" active={filtersState.Seller.active} handleClick={()=> }/> */}
-        </div>
-        <div className="col mt-4">
-          <Select
-            active={filtersState.Seller.active}
-            value={filtersState.Seller.filter}
-            options={sellers}
-            handleChange={(e) => {
-              if (e.target.value === "Seleccionar Vendedor") {
-                disableSeller();
-              } else {
-                seller(e.target.value);
-              }
-            }}
-            id="SellersSelector"
-            defaultValue={
-              sellerArray.length > 0 ? "Seleccionar Vendedor" : undefined
+    <div className="flex flex-col gap-6 w-full max-w-5xl mx-auto mb-6">
+      {/* Sellers Row */}
+      <div className="flex justify-start w-full md:w-1/3">
+        <Select
+          active={true}
+          value={filtersState.Seller.filter}
+          options={sellers}
+          handleChange={(e) => {
+            if (e.target.value === "Seleccionar Vendedor") {
+              disableSeller();
+            } else {
+              seller(e.target.value);
             }
-          />
-        </div>
+          }}
+          id="SellersSelector"
+          defaultValue="Seleccionar Vendedor"
+        />
       </div>
-      <div className="row mt-3 p-2">
-        <div className="col p-2">
-          <p className="font-semibold">Tipos Factura</p>
-          <div className="col">
+
+      {/* Filters Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+        
+        {/* Document Types */}
+        <div className="flex flex-col gap-3">
+          <p className="font-semibold text-gray-800 dark:text-gray-200">Tipos Factura</p>
+          <div className="flex flex-col gap-2">
             <FilterSwitch
               text="Facturas"
               handleClick={() => switchFacturaC()}
@@ -93,58 +82,62 @@ const FilterBillPanel = ({ session }: props) => {
             />
           </div>
         </div>
-        <div className="col p-2 m-2 flex flex-col gap-2 items-center justify-center">
-          <label
-            className="text-gray-800 dark:text-gray-200 font-semibold"
-            htmlFor="dateStartPicker"
-          >
-            Fecha Desde
-          </label>
-          <div
-            id="dateStartPicker"
-            className="bg-transparent flex gap-2 dark:text-gray-200 items-center rounded relative text-black"
-            // data-bs-toggle="modal"
-            // data-bs-target="#staticBackdrop"
-          >
-            <DatePicker
-              value={filtersState.startDate.date}
-              locale="es"
-              onChange={(e) => {
-                startDate(new Date(e.toString()));
-                console.log(filtersState.startDate.date);
-              }}
-              input={true}
-              className="appearance-none shadow-sm border rounded py-2 px-3 text-gray-darker "
-            ></DatePicker>
-            <CalendarIcon />
+
+        {/* Date Filters */}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <label
+              className="text-sm font-semibold text-gray-800 dark:text-gray-200"
+              htmlFor="dateStartPicker"
+            >
+              Fecha Desde
+            </label>
+            <div
+              id="dateStartPicker"
+              className="flex items-center gap-2 bg-white dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 focus-within:ring-2 focus-within:ring-blue-500 transition-shadow w-full"
+            >
+              <DatePicker
+                value={filtersState.startDate.date}
+                locale="es"
+                onChange={(e) => {
+                  startDate(new Date(e.toString()));
+                }}
+                input={true}
+                className="w-full bg-transparent outline-none grow"
+              />
+              <CalendarIcon className="text-gray-500 dark:text-gray-400 shrink-0" />
+            </div>
           </div>
-          <label
-            className="text-gray-800 dark:text-gray-200 font-semibold"
-            htmlFor="dateEndPicker"
-          >
-            Fecha Hasta
-          </label>
-          <div
-            id="dateEndPicker"
-            className="bg-transparent flex gap-2 items-center rounded relative text-black dark:text-gray-200"
-            // data-bs-toggle="modal"
-            // data-bs-target="#staticBackdrop"
-          >
-            <DatePicker
-              locale="es"
-              onChange={(e) => {
-                endDate(new Date(e.toString()));
-              }}
-              value={moment(filtersState.endDate.date)}
-              input={true}
-              className="appearance-none shadow-sm border rounded py-2 px-3 text-gray-darker "
-            ></DatePicker>
-            <CalendarIcon />
+
+          <div className="flex flex-col gap-1">
+            <label
+              className="text-sm font-semibold text-gray-800 dark:text-gray-200"
+              htmlFor="dateEndPicker"
+            >
+              Fecha Hasta
+            </label>
+            <div
+              id="dateEndPicker"
+              className="flex items-center gap-2 bg-white dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 focus-within:ring-2 focus-within:ring-blue-500 transition-shadow w-full"
+            >
+              <DatePicker
+                locale="es"
+                onChange={(e) => {
+                  endDate(new Date(e.toString()));
+                }}
+                value={moment(filtersState.endDate.date)}
+                input={true}
+                className="w-full bg-transparent outline-none grow"
+              />
+              <CalendarIcon className="text-gray-500 dark:text-gray-400 shrink-0" />
+            </div>
           </div>
         </div>
-        <div className="col p-2">
-          <p className="font-semibold">Medios de Pago</p>
-          <div className="col mt-4 p-2">
+
+        {/* Payment Methods */}
+        <div className="flex flex-col gap-3">
+          <p className="font-semibold text-gray-800 dark:text-gray-200">Medios de Pago</p>
+          <div className="flex flex-wrap gap-2">
             <FilterSwitch
               text="Efectivo"
               handleClick={() => switchEfectivo()}
@@ -183,7 +176,7 @@ const FilterBillPanel = ({ session }: props) => {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

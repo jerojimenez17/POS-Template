@@ -3,12 +3,12 @@ import { auth } from "../../../../../auth";
 import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
 
-const page = async () => {
-  const session = await auth();
+const ProductDashboardPage = async () => {
+  await auth();
 
   return <Suspense fallback={<Spinner/>}> 
-   <ProductDashboad session={session} />;
+   <ProductDashboad />;
    </Suspense>
 };
 
-export default page;
+export default ProductDashboardPage;

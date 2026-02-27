@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 // const NavBar = () => {
 //   return (
@@ -26,29 +25,12 @@ import React from "react";
 import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
 
-const components: { title: string; href: string; description: string }[] = [
-  // {
-  //   title: "Cargar Productos",
-  //   href: "/stock/newproduct",
-  //   description: "Agrega nuevos productos a tu stock",
-  // },
-  {
-    title: "Tabla de Productos",
-    href: "/stock/productsDashboard",
-    description: "Administra los productos de tu stock",
-  },
-];
-const componentsPedidos: {
-  title: string;
-  href: string;
-  description: string;
-}[] = [
-  {
-    title: "Pedidos",
-    href: "/orders",
-    description: "Chequea y administra tus pedidos",
-  },
-];
+//   {
+//     title: "Pedidos",
+//     href: "/orders",
+//     description: "Chequea y administra tus pedidos",
+//   },
+// ];
 
 const font = Poppins({
   subsets: ["latin"],

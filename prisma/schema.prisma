@@ -29,9 +29,47 @@ model Account {
   @@unique([provider, providerAccountId])
 }
 
+// Fixed Business Model and Relations
 enum UserRole {
+  SUPER_ADMIN
   ADMIN
   USER
+}
+
+model Business {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  logo          String?
+  
+  // Owner link
+  userId        String?  @unique
+  
+  users         User[]   @relation("BusinessUsers")
+  
+  products      Product[]
+  suppliers     Supplier[]
+  categories    Category[]
+  subcategories Subcategory[]
+  brands        Brand[]
+  clients       Client[]
+  cashBox       CashBox?
+  rankings      ProductRanking[]
+  orders        Order[]
+  cashMovements CashMovement[]
+  saleReturns   SaleReturn[]
+  stockMovements StockMovement[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model CashBox {
+  id         String   @id @default(cuid())
+  total      Float    @default(0)
+  businessId String   @unique
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  updatedAt  DateTime @updatedAt
 }
 
 model User {
@@ -43,18 +81,269 @@ model User {
   emailVerified DateTime?
   image         String?
   accounts      Account[]
+  
+  businessId    String?
+  business      Business? @relation("BusinessUsers", fields: [businessId], references: [id])
+}
+
+// Enums
+enum OrderStatus {
+  pendiente
+  confirmado
+  entregado
+  consignacion
+}
+
+enum PaidStatus {
+  pago
+  inpago
+}
+
+model Supplier {
+  id            String    @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  bonus         Float     @default(0)
+  creation_date DateTime  @default(now())
+  
+  // Make optional for migration
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  products      Product[]
 }
 
 model Product {
+  id            String    @id @default(cuid())
+  code          String?
+  description   String?
+  
+  brandId       String?
+  brand         Brand?    @relation(fields: [brandId], references: [id])
+  
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id])
+  
+  subCategoryId String?
+  subCategory   Subcategory? @relation(fields: [subCategoryId], references: [id])
+
+  price         Float     @default(0) // Cost price
+  salePrice     Float     @default(0)
+  gain          Float     @default(0)
+  amount        Float     @default(0)
+  unit          String?
+  image         String?
+  imageName     String?
+  client_bonus  Float     @default(0)
+  
+  supplierId    String?
+  supplier      Supplier? @relation(fields: [supplierId], references: [id])
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  last_update   DateTime  @default(now())
+  creation_date DateTime  @default(now())
+
+  // Relations
+  orderItems      OrderItem[]
+  rankings        ProductRanking[]
+  stockMovements  StockMovement[]
+  saleReturnItems SaleReturnItem[]
+}
+
+model ProductRanking {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  month       Int
+  year        Int
+  totalSold   Float    @default(0)
+  totalIncome Float    @default(0)
+
+  @@unique([productId, month, year, businessId])
+}
+
+model Category {
+  id            String    @id @default(cuid())
+  name          String
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  products      Product[]
+  subcategories Subcategory[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([name, businessId])
+}
+
+model Subcategory {
+  id            String    @id @default(cuid())
+  name          String
+  
+  categoryId    String
+  category      Category  @relation(fields: [categoryId], references: [id])
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  products      Product[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([name, categoryId, businessId])
+}
+
+model Brand {
+  id            String    @id @default(cuid())
+  name          String
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  products      Product[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([name, businessId])
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  address       String?
+  cellPhone     String?   // Storing as string for flexibility
+  balance       Float     @default(0)
+  
+  date          DateTime  @default(now()) // Creation date
+  last_update   DateTime  @default(now())
+
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+
+  orders        Order[]
+}
+
+model Order {
+  id                String      @id @default(cuid())
+  date              DateTime    @default(now())
+  total             Float       @default(0)
+  status            OrderStatus @default(confirmado)
+  paidStatus        PaidStatus  @default(inpago)
+  seller            String?
+  
+  // Payment methods
+  paymentMethod     String?     @default("Efectivo")
+  paymentMethod2    String?
+  totalMethod2      Float?      @default(0)
+  
+  // Discounts
+  discountPercentage Float      @default(0)
+  discountAmount     Float      @default(0)
+
+  clientId      String?
+  client        Client?      @relation(fields: [clientId], references: [id])
+  
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  
+  items         OrderItem[]
+  returns       SaleReturn[]
+  stockMovements StockMovement[]
+}
+
+model OrderItem {
   id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+
+  // Snapshot fields (in case product changes or is deleted)
+  code        String?
   description String?
-  internCode  String?
-  codeBar     String?
-  cod         String?
-  price       Float?
-  unit        String?
-  amount      Float?
-  category    String?
+  costPrice   Float   @default(0) // Cost price at the moment of sale
+  price       Float   @default(0) // Sale price at the moment of sale
+  quantity    Float   @default(0) 
+  subTotal    Float   @default(0) 
+
+  returnItems SaleReturnItem[]
+}
+
+enum MovementType {
+  SALE
+  RETURN
+  ADJUSTMENT
+  PURCHASE
+}
+
+model StockMovement {
+  id          String       @id @default(cuid())
+  type        MovementType
+  quantity    Float
+  date        DateTime     @default(now())
+  
+  productId   String
+  product     Product      @relation(fields: [productId], references: [id])
+  
+  orderId     String?
+  order       Order?       @relation(fields: [orderId], references: [id])
+  
+  businessId  String
+  business    Business     @relation(fields: [businessId], references: [id])
+
+  // Reference for returns or adjustments
+  reason      String?
+}
+
+model SaleReturn {
+  id          String       @id @default(cuid())
+  date        DateTime     @default(now())
+  total       Float        @default(0)
+  reason      String?
+  
+  orderId     String
+  order       Order        @relation(fields: [orderId], references: [id])
+  
+  businessId  String
+  business    Business     @relation(fields: [businessId], references: [id])
+  
+  items       SaleReturnItem[]
+}
+
+model SaleReturnItem {
+  id            String      @id @default(cuid())
+  returnId      String
+  saleReturn    SaleReturn  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  
+  orderItemId   String
+  orderItem     OrderItem   @relation(fields: [orderItemId], references: [id])
+  
+  productId     String?
+  product       Product?    @relation(fields: [productId], references: [id])
+  
+  quantity      Float
+  refundAmount  Float       @default(0)
+}
+
+model CashMovement {
+  id          String   @id @default(cuid())
+  total       Float    @default(0)
+  seller      String?
+  paidMethod  String?
+  date        DateTime @default(now())
+
+  businessId  String?
+  business    Business? @relation(fields: [businessId], references: [id])
 }
 
 model VerificationToken {

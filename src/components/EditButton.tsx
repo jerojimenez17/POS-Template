@@ -1,51 +1,70 @@
 "use client";
 import React, { useState } from "react";
-import { addToTotal } from "../services/firebaseService";
+import { updateBusinessBalance } from "@/actions/billing";
+import { createMovement } from "@/actions/movements";
 import { Input } from "./ui/input";
-import Movement from "@/models/Movement";
-import newMovement from "@/firebase/cashMovements/newMovement";
 import { Session } from "next-auth";
+import { toast } from "react-hot-toast";
 
 interface props {
   session: Session | null;
+  onSuccess?: () => void;
 }
-const EditButton = ({ session }: props) => {
+const EditButton = ({ session, onSuccess }: props) => {
   const [openTotalInput, setOpenTotalInput] = useState(false);
-
-  const [totalInput, setTotalInput] = useState(0);
+  const [totalInput, setTotalInput] = useState<number | "">("");
   const [loading, setLoading] = useState(false);
+
   return (
-    <div className="flex flex-col h-20 max-h-54 w-1/4">
-      <div
-        className="backdrop-blur-sm text-lg h-full w-full my-2 mx-auto font-semibold shadow-sm shadow-gray-300 text-gray-800 hover:shadow-lg hover:shadow-gray-500"
+    <div className="flex flex-col w-full sm:w-1/3 max-w-[200px] relative">
+      <button
+        className="w-full py-3 px-4 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-lg shadow-sm border border-red-200 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400"
         onClick={() => setOpenTotalInput(!openTotalInput)}
       >
         Retiro
-      </div>
+      </button>
+      
       {openTotalInput && (
-        <Input
-          disabled={loading}
-          type="number"
-          className="text-gray-900"
-          value={totalInput !== 0 ? totalInput : ""}
-          placeholder="Retiro"
-          onChange={(e) => {
-            setTotalInput(Number(e.currentTarget.value));
-          }}
-          onKeyDown={async (e) => {
-            if (e.key === "Enter") {
-              setLoading(true);
-              const move: Movement = new Movement();
-              move.seller = session?.user?.email ? session?.user.email : "";
-              move.paidMethod = "Retiro";
-              move.total = -1 * totalInput;
-              await newMovement(move);
-              await addToTotal(-1 * totalInput);
-              setTotalInput(0);
-              setLoading(false);
-            }
-          }}
-        />
+        <div className="absolute top-full mt-2 w-full z-10 bg-white p-2 rounded-lg shadow-lg border border-gray-100 dark:border-gray-800 dark:bg-gray-900">
+          <Input
+            disabled={loading}
+            type="number"
+            className="text-gray-900 dark:text-gray-100 focus-visible:ring-red-500"
+            value={totalInput}
+            placeholder="Monto ($)"
+            autoFocus
+            onChange={(e) => {
+              setTotalInput(e.target.value === "" ? "" : Number(e.target.value));
+            }}
+            onKeyDown={async (e) => {
+              if (e.key === "Enter" && typeof totalInput === "number" && totalInput > 0) {
+                setLoading(true);
+                try {
+                  const moveRes = await createMovement({
+                    total: -1 * totalInput,
+                    seller: session?.user?.email || "",
+                    paidMethod: "Retiro",
+                  });
+
+                  if (moveRes.error) {
+                    toast.error(moveRes.error);
+                  } else {
+                    await updateBusinessBalance(-1 * totalInput);
+                    toast.success("Retiro registrado");
+                    setTotalInput("");
+                    setOpenTotalInput(false);
+                    onSuccess?.(); // Trigger parent refresh
+                  }
+                } catch {
+                  toast.error("Ocurrió un error inesperado");
+                } finally {
+                  setLoading(false);
+                }
+              }
+            }}
+          />
+          <p className="text-[10px] text-gray-400 mt-1 text-center">Presiona Enter para confirmar</p>
+        </div>
       )}
     </div>
   );

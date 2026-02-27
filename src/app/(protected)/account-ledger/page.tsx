@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/rules-of-hooks */
 "use client";
 import { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
@@ -15,7 +14,7 @@ const poppins = Poppins({
   subsets: ["latin"],
   weight: "600",
 });
-const page = () => {
+const AccountLedgerPage = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
 
@@ -49,7 +48,6 @@ const page = () => {
     fetchAccounts();
   }, []);
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   const router = useRouter();
   return (
     <div className="p-4 h-full dark:bg-gray-700 dark:text-gray-100 shadow">
@@ -79,4 +77,4 @@ const page = () => {
   );
 };
 
-export default page;
+export default AccountLedgerPage;

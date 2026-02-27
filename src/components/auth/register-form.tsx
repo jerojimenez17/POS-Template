@@ -29,7 +29,7 @@ export const RegisterForm = () => {
 
   const form = useForm<z.infer<typeof RegisterSchema>>({
     resolver: zodResolver(RegisterSchema),
-    defaultValues: { email: "", password: "", name: "" },
+    defaultValues: { email: "", password: "", registerName: "", businessName: "" },
   });
   const onSubmit = (values: z.infer<typeof RegisterSchema>) => {
     setError("");
@@ -57,7 +57,7 @@ export const RegisterForm = () => {
           <div className="space-y-4">
             <FormField
               control={form.control}
-              name="name"
+              name="registerName"
               render={({ field }) => (
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
@@ -71,6 +71,30 @@ export const RegisterForm = () => {
                         {...field}
                         placeholder="Juan Perez"
                         autoComplete="name"
+                        disabled={isPending}
+                        className="transition-all duration-200 focus:scale-[1.02]"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                </motion.div>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="businessName"
+              render={({ field }) => (
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.15 }}
+                >
+                  <FormItem>
+                    <FormLabel>Nombre del Negocio</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Mi Negocio S.A."
                         disabled={isPending}
                         className="transition-all duration-200 focus:scale-[1.02]"
                       />

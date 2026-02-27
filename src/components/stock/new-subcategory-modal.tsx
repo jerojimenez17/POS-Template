@@ -12,26 +12,58 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { useState } from "react";
 import { FormSuccess } from "../ui/form-success";
-import { addSubcategory } from "@/firebase/stock/newSubCategory";
+import { createSubcategory } from "@/actions/subcategories";
+import { toast } from "sonner";
 
-const NewSubcategoryModal = () => {
+interface Props {
+  categoryId?: string;
+}
+
+const NewSubcategoryModal = ({ categoryId }: Props) => {
   const [subcategory, setSubcategory] = useState("");
   const [success, setSuccess] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  const handleAdd = async () => {
+    if (!categoryId) {
+      toast.error("Seleccione una categoría primero");
+      return;
+    }
+    if (subcategory === "") return;
+
+    setIsPending(true);
+    setSuccess(false);
+    try {
+      const response = await createSubcategory(subcategory, categoryId);
+      if (response.success) {
+        setSuccess(true);
+        setSubcategory("");
+        toast.success("Subcategoría creada");
+      } else {
+        toast.error(response.error || "Error al crear subcategoría");
+      }
+    } catch {
+      toast.error("Error inesperado");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
   return (
     <Dialog>
       <DialogTrigger
         asChild
         className="h-9 ml-1 bg-black text-white font-semibold hover:text-gray-800"
       >
-        <Button variant="outline">+ Nueva</Button>
+        <Button variant="outline" disabled={!categoryId}>+ Nueva</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Nueva Categoria</DialogTitle>
+          <DialogTitle>Nueva Sub-Categoria</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
+            <Label htmlFor="subcategory" className="text-right">
               Sub-Categoria
             </Label>
             <Input
@@ -42,18 +74,14 @@ const NewSubcategoryModal = () => {
                 setSubcategory(e.currentTarget.value);
               }}
               className="col-span-3 text-gray-800"
+              disabled={isPending}
             />
           </div>
         </div>
         <DialogFooter>
           <Button
-            onClick={async () => {
-              if (subcategory !== "") {
-                await addSubcategory(subcategory);
-                setSuccess(true);
-              }
-              setSubcategory("");
-            }}
+            onClick={handleAdd}
+            disabled={isPending}
             type="submit"
           >
             Agregar

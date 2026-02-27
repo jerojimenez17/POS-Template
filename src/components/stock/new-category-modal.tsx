@@ -10,13 +10,36 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { addCategoy } from "@/firebase/stock/newCategory";
+import { createCategory } from "@/actions/categories";
 import { useState } from "react";
 import { FormSuccess } from "../ui/form-success";
+import { toast } from "sonner";
 
 const NewCategoryModal = () => {
   const [category, setCategory] = useState("");
   const [success, setSuccess] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  const handleAdd = async () => {
+    if (category === "") return;
+    setIsPending(true);
+    setSuccess(false);
+    try {
+      const response = await createCategory(category);
+      if (response.success) {
+        setSuccess(true);
+        setCategory("");
+        toast.success("Categoría creada");
+      } else {
+        toast.error(response.error || "Error al crear categoría");
+      }
+    } catch {
+      toast.error("Error inesperado");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
   return (
     <Dialog>
       <DialogTrigger
@@ -42,18 +65,14 @@ const NewCategoryModal = () => {
                 setCategory(e.currentTarget.value);
               }}
               className="col-span-3 text-gray-800"
+              disabled={isPending}
             />
           </div>
         </div>
         <DialogFooter>
           <Button
-            onClick={async () => {
-              if (category !== "") {
-                await addCategoy(category);
-                setSuccess(true);
-              }
-              setCategory("");
-            }}
+            onClick={handleAdd}
+            disabled={isPending}
             type="submit"
           >
             Agregar

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-expressions */
 import { DocumentData } from "firebase/firestore";
 import Product from "./Product";
 

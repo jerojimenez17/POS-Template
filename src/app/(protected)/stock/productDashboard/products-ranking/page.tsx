@@ -3,7 +3,7 @@ import ProductRanking from "@/components/stock/product-ranking";
 import Spinner from "@/components/ui/Spinner";
 import { Suspense } from "react";
 
-const page = () => {
+const ProductsRankingPage = () => {
   return (
     <div className="h-full w-full overflow-auto">
       <Suspense fallback={<Spinner />}>
@@ -14,4 +14,4 @@ const page = () => {
     </div>
   );
 };
-export default page;
+export default ProductsRankingPage;

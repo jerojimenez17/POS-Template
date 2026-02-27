@@ -49,7 +49,7 @@ export default function CodeScanner({
         }
       }
     );
-  }, [scannerOpen]);
+  }, [scannerOpen, onScan]);
 
   return (
     <div className={className || ""}>

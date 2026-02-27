@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useTransition } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -7,62 +7,52 @@ import {
   getPaginationRowModel,
 } from "@tanstack/react-table";
 import Image from "next/image";
-import Product from "@/models/Product";
 import noImgPhoto from "../../public/no-image.svg";
 import Modal from "./Modal";
-import { deleteObject, ref } from "firebase/storage";
-import { db, storage } from "@/firebase/config";
-import { deleteDoc, doc } from "firebase/firestore";
 import ProductForm from "./stock/product-form";
 import { Button } from "./ui/button";
 import DeleteButton from "./DeleteButton";
 import CodeBarModal from "./stock/code-bar-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { deleteProduct } from "@/actions/stock";
+import { toast } from "sonner";
+import { ProductExtended } from "./stock/product-form";
 
-// Supongamos que recibes products y descriptionFilter como props:
 interface ProductDataTableProps {
-  products: Product[];
+  products: ProductExtended[];
   descriptionFilter: string;
-  // Puedes incluir otros props, por ejemplo, para la sesión
+  onRefresh?: () => void;
 }
 
 const ProductDataTable: React.FC<ProductDataTableProps> = ({
   products,
   descriptionFilter,
+  onRefresh,
 }) => {
-  // Estados para controlar modales y el producto a editar/borrar
   const [openDeleteModal, setOpenDeleteModal] = React.useState(false);
   const [openEditModal, setOpenEditModal] = React.useState(false);
-  const [productToEdit, setProductToEdit] = React.useState<Product | null>(
-    null
-  );
+  const [productToEdit, setProductToEdit] = React.useState<ProductExtended | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  // Filtrado y ordenamiento de los productos
   const filteredProducts = React.useMemo(() => {
     if (!products) return [];
     return products
       .filter(
-        (product) =>
-          product.description
-            .toLowerCase()
-            .includes(descriptionFilter.toLowerCase()) ||
-          product.code.toLowerCase().includes(descriptionFilter.toLowerCase())
+        (product) => {
+          const desc = product.description || "";
+          const code = product.code || "";
+          return desc.toLowerCase().includes(descriptionFilter.toLowerCase()) ||
+                 code.toLowerCase().includes(descriptionFilter.toLowerCase());
+        }
       )
       .sort((a, b) => {
         const timeA = new Date(a.creation_date).getTime();
         const timeB = new Date(b.creation_date).getTime();
-        return timeB - timeA; // Más reciente primero
-      })
-      .sort((a, b) => {
-        //sort first with units equal to zero
-        if (a.amount <= 0 && b.amount !== 0) return -1;
-        if (a.amount !== 0 && b.amount <= 0) return 1;
-        return 0;
+        return timeB - timeA;
       });
   }, [products, descriptionFilter]);
 
-  // Definición de columnas usando tanstack/react-table
-  const columns = React.useMemo<ColumnDef<Product>[]>(
+  const columns = React.useMemo<ColumnDef<ProductExtended>[]>(
     () => [
       {
         accessorKey: "code",
@@ -73,7 +63,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         ),
         cell: (info) => (
           <div className="font-medium text-center">
-            {info.getValue() as string}
+            {info.getValue() as string || "-"}
           </div>
         ),
       },
@@ -93,9 +83,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
       {
         accessorKey: "amount",
         header: () => (
-          <div
-            className={`text-center font-extrabold text-white text-lg p-2 $`}
-          >
+          <div className="text-center font-extrabold text-white text-lg p-2">
             Cantidad
           </div>
         ),
@@ -128,45 +116,6 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
           </div>
         ),
       },
-      // {
-      //   accessorKey: "color",
-      //   header: () => (
-      //     <div className="text-center font-extrabold text-white text-lg p-2">
-      //       Color
-      //     </div>
-      //   ),
-      //   cell: (info) => (
-      //     <div className="font-medium text-center">
-      //       {info.getValue() as string}
-      //     </div>
-      //   ),
-      // },
-      // {
-      //   accessorKey: "peso",
-      //   header: () => (
-      //     <div className="text-center font-extrabold text-white text-lg p-2">
-      //       Peso
-      //     </div>
-      //   ),
-      //   cell: (info) => (
-      //     <div className="font-medium text-center">
-      //       {info.getValue() as string}
-      //     </div>
-      //   ),
-      // },
-      // {
-      //   accessorKey: "medidas",
-      //   header: () => (
-      //     <div className="text-center font-extrabold text-white text-lg p-2">
-      //       Medidas
-      //     </div>
-      //   ),
-      //   cell: (info) => (
-      //     <div className="font-medium text-center">
-      //       {info.getValue() as string}
-      //     </div>
-      //   ),
-      // },
       {
         accessorKey: "image",
         header: () => (
@@ -178,19 +127,19 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
           const imageUrl = info.getValue() as string;
           return (
             <div className="flex justify-center items-center">
-              {imageUrl.includes("https") ? (
+              {imageUrl && imageUrl.includes("https") ? (
                 <Image
                   className="rounded-lg mx-auto"
                   src={imageUrl}
-                  alt="Image Not Found"
+                  alt="Product"
                   height={145}
                   width={85}
                 />
               ) : (
                 <Image
                   className="rounded-lg mx-auto"
-                  src={noImgPhoto} // ruta o import de imagen por defecto
-                  alt="Image Not Found"
+                  src={noImgPhoto}
+                  alt="No image"
                   height={70}
                   width={75}
                 />
@@ -241,7 +190,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                 }}
                 disable={false}
               />
-              <CodeBarModal value={product.code} />
+                  <CodeBarModal value={product.code || ""} />
             </div>
           );
         },
@@ -250,7 +199,6 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
     []
   );
 
-  // Configuración de la tabla con tanstack/react-table
   const table = useReactTable({
     data: filteredProducts,
     columns,
@@ -258,101 +206,198 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const handleDelete = async () => {
+    if (!productToEdit) return;
+    startTransition(async () => {
+        const result = await deleteProduct(productToEdit.id);
+        if (result.success) {
+            toast.success(result.success);
+            setOpenDeleteModal(false);
+            if (onRefresh) onRefresh();
+        } else {
+            toast.error(result.error);
+        }
+    });
+  };
+
   return (
-    <div className="z-0 p-0 mx-auto mb-28 md:mb-20 w-full h-full rounded-xl shadow-sm overflow-hidden">
-      <div className=" h-[90%] overflow-auto">
-        <table className="text-gray-800 max-h-full border-separate border-spacing-0 bg-white bg-opacity-20 backdrop-filter w-full z-0">
-          <thead className="bg-black h-20 mt-0">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr
-                key={headerGroup.id}
-                className="hover:bg-gray hover:backdrop-filter"
-              >
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className="hover:text-gray-800 text-center font-extrabold text-white text-lg"
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                className="text-center hover:text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-lg items-center"
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="p-2">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="w-full h-full flex flex-col">
+      {/* Desktop Table View */}
+      <div className="hidden md:block rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden bg-white dark:bg-gray-900">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-gray-50 dark:bg-gray-800 text-xs uppercase text-gray-500 dark:text-gray-400 font-semibold">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th key={header.id} className="px-6 py-4 whitespace-nowrap">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {table.getRowModel().rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="px-6 py-4">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div className="w-full flex justify-end mb-4 ">
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-4 pb-24">
+        {table.getRowModel().rows.map((row) => {
+          const product = row.original;
+          return (
+            <div
+              key={row.id}
+              className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex gap-4"
+            >
+              {/* Product Image */}
+              <div className="w-24 h-24 shrink-0 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
+                 {product.image && product.image.includes("https") ? (
+                  <Image
+                    className="w-full h-full object-cover"
+                    src={product.image}
+                    alt={product.description || "Product"}
+                    height={96}
+                    width={96}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-300">
+                    <Image
+                      src={noImgPhoto}
+                      alt="No image"
+                      className="w-12 h-12 opacity-50"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Product Details */}
+              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start mb-1">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white truncate pr-2">
+                       {product.description || "Sin descripción"}
+                    </h3>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                      {product.code || "-"}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-baseline gap-2 mb-2">
+                     <span className="text-lg font-bold text-black dark:text-white">
+                      ${Number(product.salePrice).toLocaleString("es-AR")}
+                     </span>
+                     <span className={`text-sm ${product.amount <= 0 ? "text-red-500 font-bold" : "text-gray-500"}`}>
+                        {product.amount} unid.
+                     </span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2 mt-2">
+                   <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProductToEdit(product);
+                      setOpenEditModal(true);
+                    }}
+                    className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 rounded-lg transition-colors"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                      <path d="m15 5 4 4" />
+                    </svg>
+                  </button>
+                  <DeleteButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProductToEdit(product);
+                      setOpenDeleteModal(true);
+                    }}
+                    disable={false}
+                  />
+                  <CodeBarModal value={product.code || ""} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Pagination */}
+      <div className="w-full flex justify-end gap-x-2 p-4 mt-4">
         <Button
-          className="font-bold text-xl rounded-xl"
-          onClick={() => {
-            table.previousPage();
-          }}
+          variant="outline"
+          className="h-10 w-10 p-0 rounded-lg"
+          onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
           {"<"}
         </Button>
         <Button
-          className="font-bold text-xl rounded-xl"
-          onClick={() => {
-            table.nextPage();
-          }}
-          disabled={!table.getCanNextPage()}
+           variant="outline"
+           className="h-10 w-10 p-0 rounded-lg"
+           onClick={() => table.nextPage()}
+           disabled={!table.getCanNextPage()}
         >
           {">"}
         </Button>
-        {/* Modal para borrar */}
       </div>
+
       {productToEdit && openDeleteModal && (
         <Modal
           className="z-50 absolute"
-          blockButton={false}
+          blockButton={isPending}
           onCancel={() => setOpenDeleteModal(false)}
           visible={openDeleteModal}
           key={productToEdit.id}
           onClose={() => setOpenDeleteModal(false)}
-          onAcept={async () => {
-            console.log(productToEdit);
-            if (productToEdit.image !== "") {
-              // Ejemplo: borra la imagen en storage (asegúrate de tener importadas las funciones necesarias)
-              const fileRef = ref(storage, `${productToEdit.image}`);
-              await deleteObject(fileRef);
-            }
-            await deleteDoc(doc(db, "stock", productToEdit.id));
-            setOpenDeleteModal(false);
-          }}
+          onAcept={handleDelete}
           message="¿Seguro que desea eliminar este producto?"
         />
       )}
 
-      {/* Modal para editar */}
       {productToEdit && openEditModal && (
         <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
-          <DialogContent className="sm:max-w-md overflow-auto h-full">
+          <DialogContent className="sm:max-w-md overflow-auto h-full max-h-[90vh]">
             <DialogHeader>
               <DialogTitle>Editar producto</DialogTitle>
             </DialogHeader>
 
             <ProductForm
-              onClose={() => setOpenEditModal(false)}
+              onClose={() => {
+                  setOpenEditModal(false);
+                  if (onRefresh) onRefresh();
+              }}
               product={productToEdit}
             />
           </DialogContent>

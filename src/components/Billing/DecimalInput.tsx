@@ -34,15 +34,19 @@ const DecimalInput = ({ initial, product, updateAmount }: Props) => {
   return (
     <div className="flex flex-col items-center">
       <input
-        className="w-20 border border-gray-400 rounded px-1 text-center"
+        name="productAmount"
+        className="w-20 border border-gray-400 rounded px-1 text-center focus-visible:ring-2 focus-visible:ring-blue-500 outline-none transition-shadow"
         type="text"
         inputMode="decimal"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
+        aria-label="Cantidad"
+        autoComplete="off"
+        spellCheck={false}
       />
-      {error && <span className="text-red-500 text-sm">{error}</span>}
+      {error && <span className="text-red-500 text-sm mt-1">{error}</span>}
     </div>
   );
 };

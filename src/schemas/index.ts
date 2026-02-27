@@ -15,8 +15,11 @@ export const RegisterSchema = z.object({
   password: z.string().min(6, {
     message: "6 caracteres minimo",
   }),
-  name: z.string().min(1, {
+  registerName: z.string().min(1, {
     message: "Nombre es obligatorio",
+  }),
+  businessName: z.string().min(1, {
+    message: "Nombre del negocio es obligatorio",
   }),
 });
 export const UnitsSchema = z.object({
@@ -44,7 +47,7 @@ export const ProductSchema = z.object({
     invalid_type_error: "Debe ser un numero",
   }),
   salePrice: z.coerce.number(),
-  suplier: z.string().optional(),
+  supplier: z.string().optional(),
   client_bonus: z.coerce.number(),
   brand: z.string(),
   imageName: z.string(),

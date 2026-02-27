@@ -57,28 +57,153 @@ const BillParametersForm = () => {
   };
   return editParamters ? (
     <Form {...form}>
-      <form className="size-full" onSubmit={form.handleSubmit(onSubmit)}>
-        <div className="size-full flex gap-2 flex-col">
-          <div className=" text-gray-700 container items-center flex-col md:flex-row size-full justify-evenly mx-auto gap-1 flex">
-            <div className=" mx-auto  w-full md:w-1/3 h-1/2 md:h-full my-auto gap-0 flex flex-col">
-              <div className="h-full shadow rounded-2xl w-full text-center my-auto flex items-center">
-                <FormField
+      <form className="w-full h-full p-4" onSubmit={form.handleSubmit(onSubmit)}>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full">
+          {/* Section 1: Bill Type & Client Info */}
+          <div className="md:col-span-4 flex flex-col gap-4 p-4 border rounded-xl shadow-sm bg-white">
+            <h3 className="font-bold text-lg text-gray-700 mb-2">Datos del Comprobante</h3>
+            
+            <FormField
+              control={form.control}
+              name={"billType"}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-semibold">Tipo Factura</FormLabel>
+                  <FormControl>
+                    <Select {...field} onValueChange={field.onChange}>
+                      <SelectTrigger className="w-full rounded-xl shadow-sm">
+                        <SelectValue placeholder={field.value} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(BillTypes).map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name={"clientCondition"}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-semibold">Condición IVA</FormLabel>
+                  <FormControl>
+                    <Select {...field} onValueChange={field.onChange}>
+                      <SelectTrigger className="w-full rounded-xl shadow-sm">
+                        <SelectValue placeholder={field.value} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(ClientConditions).map((condition) => (
+                          <SelectItem key={condition} value={condition}>
+                            {condition}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {form.watch("clientCondition") !== ClientConditions.CONSUMIDOR_FINAL && (
+              <FormField
+                control={form.control}
+                name={
+                  form.watch("clientCondition") === ClientConditions.CUIT
+                    ? ClientConditions.CUIT
+                    : ClientConditions.DNI
+                }
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="font-semibold">
+                      {form.watch("clientCondition") === ClientConditions.CUIT
+                        ? ClientConditions.CUIT
+                        : ClientConditions.DNI}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        className="rounded-xl shadow-sm"
+                        {...field}
+                        placeholder={field.value?.toString() || "0"}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            )}
+          </div>
+
+          {/* Section 2: Payment Methods */}
+          <div className="md:col-span-4 flex flex-col gap-4 p-4 border rounded-xl shadow-sm bg-white">
+            <h3 className="font-bold text-lg text-gray-700 mb-2">Forma de Pago</h3>
+            
+            <FormField
+              control={form.control}
+              name={"paidMethod"}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-semibold">Medio de Pago Principal</FormLabel>
+                  <FormControl>
+                    <Select {...field} onValueChange={field.onChange}>
+                      <SelectTrigger className="w-full rounded-xl shadow-sm">
+                        <SelectValue placeholder={field.value} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(PaidMethods).map((method) => (
+                          <SelectItem key={method} value={method}>
+                            {method}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name={"twoMethods"}
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>
+                      Dividir pago en dos medios
+                    </FormLabel>
+                  </div>
+                </FormItem>
+              )}
+            />
+
+            {form.watch("twoMethods") && (
+              <div className="flex flex-col gap-4 pl-4 border-l-2 border-slate-200">
+                 <FormField
                   control={form.control}
-                  name={"billType"}
+                  name={"secondPaidMethod"}
                   render={({ field }) => (
-                    <FormItem className="w-1/2 md:w-1/3 mx-auto">
-                      <FormLabel className=" font-semibold">
-                        Tipo Factura
-                      </FormLabel>
+                    <FormItem>
+                      <FormLabel className="font-semibold">Segundo Medio</FormLabel>
                       <FormControl>
                         <Select {...field} onValueChange={field.onChange}>
-                          <SelectTrigger className="rounded-xl shadow-md w-full mx-auto">
+                          <SelectTrigger className="w-full rounded-xl shadow-sm">
                             <SelectValue placeholder={field.value} />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.values(BillTypes).map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {type}
+                            {Object.values(PaidMethods).map((method) => (
+                              <SelectItem key={method} value={method}>
+                                {method}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -87,179 +212,40 @@ const BillParametersForm = () => {
                     </FormItem>
                   )}
                 />
-              </div>
-              <div className="h-full shadow rounded-2xl w-full text-center my-auto flex items-center">
                 <FormField
                   control={form.control}
-                  name={"clientCondition"}
+                  name="totalSecondMethod"
                   render={({ field }) => (
-                    <FormItem className="w-1/2 md:w-1/3 mx-auto">
-                      <FormLabel className=" font-semibold">
-                        Condicion de Cliente
-                      </FormLabel>
+                    <FormItem>
+                      <FormLabel className="font-semibold">Monto Segundo Medio</FormLabel>
                       <FormControl>
-                        <Select {...field} onValueChange={field.onChange}>
-                          <SelectTrigger className="rounded-xl shadow-md w-full mx-auto">
-                            <SelectValue placeholder={field.value} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.values(ClientConditions).map(
-                              (condition) => (
-                                <SelectItem key={condition} value={condition}>
-                                  {condition}
-                                </SelectItem>
-                              )
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-              {/* Nuevo campo de texto */}
-              {form.watch("clientCondition") !==
-                ClientConditions.CONSUMIDOR_FINAL && (
-                <div className=" w-full mb-2 mx-auto">
-                  <FormField
-                    control={form.control}
-                    name={
-                      form.watch("clientCondition") === ClientConditions.CUIT
-                        ? ClientConditions.CUIT
-                        : ClientConditions.DNI
-                    }
-                    render={({ field }) => (
-                      <FormItem className="h-1/2 w-1/2 md:w-1/3 text-center mx-auto">
-                        <FormLabel className=" font-semibold">
-                          {form.watch("clientCondition") ===
-                          ClientConditions.CUIT
-                            ? ClientConditions.CUIT
-                            : ClientConditions.DNI}
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            className="rounded-xl shadow-md"
-                            {...field}
-                            placeholder={field.value?.toString() || "0"}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
-            </div>
-            <div className="w-full shadow rounded-2xl md:w-1/3 flex mx-auto my-auto">
-              <FormField
-                control={form.control}
-                name={"paidMethod"}
-                render={({ field }) => (
-                  <FormItem className="w-full items-center text-center mx-auto">
-                    <FormLabel className="font-semibold">
-                      Medio de Pago
-                    </FormLabel>
-                    <FormControl>
-                      <Select {...field} onValueChange={field.onChange}>
-                        <SelectTrigger className="md:w-1/3 shadow-md w-1/2 mx-auto rounded-xl">
-                          <SelectValue placeholder={field.value} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.values(PaidMethods).map((method) => (
-                            <SelectItem key={method} value={method}>
-                              {method}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="w-1/3 md:w-1/3 space-y-2 h-full my-auto flex flex-col align-middle">
-              <div className="my-auto">
-                <FormField
-                  control={form.control}
-                  name={"twoMethods"}
-                  render={({ field }) => (
-                    <FormItem className="space-x-1 text-center">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
+                        <Input
+                          className="rounded-xl shadow-sm"
+                          placeholder={field.value?.toString()}
+                          {...field}
+                          onChange={field.onChange}
                         />
                       </FormControl>
-                      <FormLabel className=" font-semibold text-sm">
-                        Dos medios de pago
-                      </FormLabel>
                     </FormItem>
                   )}
                 />
               </div>
-              {form.watch("twoMethods") && (
-                <div className="flex size-full">
-                  <div className=" text-center items-center mx-auto ">
-                    <FormField
-                      control={form.control}
-                      name={"secondPaidMethod"}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="font-semibold">
-                            Segundo Medio
-                          </FormLabel>
-                          <FormControl>
-                            <Select {...field} onValueChange={field.onChange}>
-                              <SelectTrigger className="rounded-xl shadow-md">
-                                <SelectValue placeholder={field.value} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {Object.values(PaidMethods).map((method) => (
-                                  <SelectItem key={method} value={method}>
-                                    {method}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <div className="mx-auto ">
-                    <FormField
-                      control={form.control}
-                      name="totalSecondMethod"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="font-semibold">
-                            Total Segundo Metodo
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              className="rounded-xl shadow-md"
-                              placeholder={field.value?.toString()}
-                              {...field}
-                              onChange={field.onChange}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="mx-auto text-center w-1/5 ">
+            )}
+          </div>
+
+          {/* Section 3: Actions & Discounts */}
+          <div className="md:col-span-4 flex flex-col justify-between p-4 border rounded-xl shadow-sm bg-white">
+            <div className="flex flex-col gap-4">
+              <h3 className="font-bold text-lg text-gray-700 mb-2">Descuentos y Acciones</h3>
               <FormField
                 control={form.control}
                 name="discount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className=" font-semibold">Descuento</FormLabel>
+                    <FormLabel className="font-semibold">Descuento Global (%)</FormLabel>
                     <FormControl>
                       <Input
-                        className="rounded-xl mx-auto w-3/4 shadow-md"
+                        className="rounded-xl shadow-sm"
                         placeholder={field.value?.toString()}
                         {...field}
                         onChange={field.onChange}
@@ -269,24 +255,28 @@ const BillParametersForm = () => {
                 )}
               />
             </div>
-          </div>
-          <div className="flex w-full gap-1 justify-center">
-            <Button
-              className="w-12 rounded-xl pb-3 px-4 font-bold"
-              type="submit"
-              variant="default"
-            >
-              <span className="text-lg">✔️</span>
-            </Button>
-            <Button
-              className="w-12 rounded-xl px-4 font-bold"
-              onClick={() => {
-                form.reset();
-              }}
-              variant="default"
-            >
-              ❌
-            </Button>
+
+            <div className="flex gap-4 justify-end mt-8">
+              <Button
+                className="flex-1 h-12 rounded-xl font-bold bg-green-600 hover:bg-green-700 text-white"
+                type="submit"
+                variant="default"
+              >
+                <span className="mr-2">Confirmar</span>
+                <span>✔️</span>
+              </Button>
+              <Button
+                className="flex-1 h-12 rounded-xl font-bold bg-red-500 hover:bg-red-600 text-white"
+                onClick={(e) => {
+                  e.preventDefault(); // Prevent form submission
+                  form.reset();
+                }}
+                variant="default"
+              >
+                <span className="mr-2">Cancelar</span>
+                <span>❌</span>
+              </Button>
+            </div>
           </div>
         </div>
       </form>
