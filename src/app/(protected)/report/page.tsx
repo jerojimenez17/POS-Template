@@ -1,8 +1,8 @@
 import DailyReport from "@/components/DailyReport";
 import { auth } from "../../../../auth";
 
-const page = async () => {
-  const session = await auth();
-  return <DailyReport session={session} />;
+const DailyReportPage = async () => {
+  await auth();
+  return <DailyReport />;
 };
-export default page;
+export default DailyReportPage;

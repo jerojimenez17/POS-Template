@@ -5,7 +5,7 @@ import { auth } from "../../../../auth";
 import Spinner from "@/components/ui/Spinner";
 import { Suspense } from "react";
 
-const page = async () => {
+const NewBillPage = async () => {
   const session = await auth();
   return (
      <Suspense fallback={<Spinner/>}>
@@ -22,4 +22,4 @@ const page = async () => {
   );
 };
 
-export default page;
+export default NewBillPage;

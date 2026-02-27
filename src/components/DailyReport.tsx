@@ -36,7 +36,6 @@ export interface DailyReportData {
 }
 
 interface props {
-  session: Session | null;
 }
 
 const DailyReport = ({ }: props) => {

@@ -11,7 +11,7 @@ const SearchBillContent = async () => {
 
   return (
     <div className="flex flex-col items-center w-full max-w-7xl mx-auto px-4 py-8 space-y-6 overflow-auto mb-10">
-      <FilterBillPanel session={session} />
+      <FilterBillPanel />
       <div className="w-full">
         <SalesTable sales={sales} session={session} />
       </div>
@@ -19,7 +19,7 @@ const SearchBillContent = async () => {
   );
 };
 
-const page = () => {
+const SearchBillPage = () => {
   return (
     <div className="h-full">
       <Suspense fallback={
@@ -33,4 +33,4 @@ const page = () => {
   );
 };
 
-export default page;
+export default SearchBillPage;
