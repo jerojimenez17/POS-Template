@@ -9,12 +9,8 @@ import "react-datetime/css/react-datetime.css";
 import CalendarIcon from "./CalendarIcon";
 import Select from "./Select";
 import { getUniqueSellersAction } from "@/actions/sales";
-import { Session } from "next-auth";
 
-interface props {
-  session: Session | null;
-}
-const FilterBillPanel = ({ session }: props) => {
+const FilterBillPanel = () => {
   const {
     filtersState,
     switchAhora3,
