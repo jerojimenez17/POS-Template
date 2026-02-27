@@ -1,4 +1,4 @@
-import { auth } from "../auth";
+import { auth } from "./auth.edge";
 import { apiAuthPrefix, authRoutes, publicRoutes } from "../routes";
 
 export default auth((req) => {
