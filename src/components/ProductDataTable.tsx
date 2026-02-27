@@ -16,9 +16,10 @@ import CodeBarModal from "./stock/code-bar-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { deleteProduct } from "@/actions/stock";
 import { toast } from "sonner";
+import { ProductExtended } from "./stock/product-form";
 
 interface ProductDataTableProps {
-  products: any[];
+  products: ProductExtended[];
   descriptionFilter: string;
   onRefresh?: () => void;
 }
@@ -30,7 +31,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
 }) => {
   const [openDeleteModal, setOpenDeleteModal] = React.useState(false);
   const [openEditModal, setOpenEditModal] = React.useState(false);
-  const [productToEdit, setProductToEdit] = React.useState<any>(null);
+  const [productToEdit, setProductToEdit] = React.useState<ProductExtended | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const filteredProducts = React.useMemo(() => {
@@ -51,7 +52,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
       });
   }, [products, descriptionFilter]);
 
-  const columns = React.useMemo<ColumnDef<any>[]>(
+  const columns = React.useMemo<ColumnDef<ProductExtended>[]>(
     () => [
       {
         accessorKey: "code",
@@ -189,7 +190,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                 }}
                 disable={false}
               />
-              <CodeBarModal value={product.code} />
+                  <CodeBarModal value={product.code || ""} />
             </div>
           );
         },
@@ -269,7 +270,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
               className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex gap-4"
             >
               {/* Product Image */}
-              <div className="w-24 h-24 flex-shrink-0 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
+              <div className="w-24 h-24 shrink-0 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
                  {product.image && product.image.includes("https") ? (
                   <Image
                     className="w-full h-full object-cover"
@@ -344,7 +345,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                     }}
                     disable={false}
                   />
-                  <CodeBarModal value={product.code} />
+                  <CodeBarModal value={product.code || ""} />
                 </div>
               </div>
             </div>

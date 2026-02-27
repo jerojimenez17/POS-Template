@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { auth } from "../../../../auth";
 
 export default async function BusinessesPage() {
-  const session = await auth();
+  await auth();
 
   const businesses = await db.business.findMany({
     include: {

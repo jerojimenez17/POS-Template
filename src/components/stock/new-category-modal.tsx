@@ -33,7 +33,7 @@ const NewCategoryModal = () => {
       } else {
         toast.error(response.error || "Error al crear categoría");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error inesperado");
     } finally {
       setIsPending(false);

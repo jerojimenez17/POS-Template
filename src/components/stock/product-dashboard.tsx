@@ -7,22 +7,22 @@ import { Session } from "next-auth";
 import ProductDataTable from "../ProductDataTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { getProducts } from "@/actions/stock";
+import { ProductExtended } from "./product-form";
 
 interface props {
-  session: Session | null;
 }
 
-const ProductDashboard = ({ session }: props) => {
+const ProductDashboard = ({ }: props) => {
   const [openModal, setOpenModal] = useState(false);
   const [descriptionFilter, setDescriptionFilter] = useState("");
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<ProductExtended[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getProducts();
-      setProducts(data);
+      setProducts(data as ProductExtended[]);
     } catch (error) {
       console.error("Error fetching products:", error);
     } finally {

@@ -55,7 +55,7 @@ const EditButton = ({ session, onSuccess }: props) => {
                     setOpenTotalInput(false);
                     onSuccess?.(); // Trigger parent refresh
                   }
-                } catch (err) {
+                } catch {
                   toast.error("Ocurrió un error inesperado");
                 } finally {
                   setLoading(false);

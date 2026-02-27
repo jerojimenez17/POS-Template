@@ -42,7 +42,7 @@ const NewSubcategoryModal = ({ categoryId }: Props) => {
       } else {
         toast.error(response.error || "Error al crear subcategoría");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error inesperado");
     } finally {
       setIsPending(false);

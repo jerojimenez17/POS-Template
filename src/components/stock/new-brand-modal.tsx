@@ -33,7 +33,7 @@ const NewBrandModal = () => {
       } else {
         toast.error(response.error || "Error al crear marca");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error inesperado");
     } finally {
       setIsPending(false);

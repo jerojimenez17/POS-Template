@@ -24,20 +24,31 @@ import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 
+export interface DailyReportData {
+  totalSales: number;
+  orderCount: number;
+  totalDiscounts: number;
+  totalReturns: number;
+  returnCount: number;
+  netTotal: number;
+  paymentMethods: Record<string, number>;
+  stockMovementCount: number;
+}
+
 interface props {
   session: Session | null;
 }
 
-const DailyReport = ({ session }: props) => {
+const DailyReport = ({ }: props) => {
   const [date, setDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  const [report, setReport] = useState<any>(null);
+  const [report, setReport] = useState<DailyReportData | null>(null);
 
   const fetchReport = async (selectedDate: Date) => {
     setLoading(true);
     const res = await getDailyReportAction(selectedDate);
     if (res.success) {
-      setReport(res.data);
+      setReport(res.data as DailyReportData);
     }
     setLoading(false);
   };
@@ -143,7 +154,7 @@ const DailyReport = ({ session }: props) => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {Object.entries(report.paymentMethods).map(([method, amount]: [string, any]) => (
+                    {Object.entries(report.paymentMethods).map(([method, amount]: [string, number]) => (
                       <TableRow key={method}>
                         <TableCell className="font-medium">{method}</TableCell>
                         <TableCell className="text-right">

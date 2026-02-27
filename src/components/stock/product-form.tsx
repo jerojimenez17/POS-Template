@@ -44,8 +44,17 @@ import { getBrands } from "@/actions/brands";
 import { getSubcategories } from "@/actions/subcategories";
 import { getSuppliers, updateProduct } from "@/actions/stock";
 
+import { Product, Supplier, Brand, Category, Subcategory } from "@prisma/client";
+
+export type ProductExtended = Product & {
+  supplier?: Supplier | null;
+  brand?: Brand | null;
+  category?: Category | null;
+  subCategory?: Subcategory | null;
+};
+
 interface Props {
-  product?: any; // Using any for now to handle Prisma include types
+  product?: ProductExtended;
   onClose: () => void;
 }
 
@@ -60,7 +69,7 @@ const ProductForm = ({ product, onClose }: Props) => {
   const [brands, setBrands] = useState<{id: string, name: string}[]>([]);
   const [image, setImage] = useState<File | null>(null);
 
-  const getInitialValues = (prod?: any) => ({
+  const getInitialValues = (prod?: ProductExtended) => ({
     supplier: prod?.supplierId || prod?.supplier?.id || "",
     code: prod?.code || "",
     description: prod?.description || "",
@@ -75,7 +84,7 @@ const ProductForm = ({ product, onClose }: Props) => {
     client_bonus: prod?.client_bonus || 0,
     subCategory: prod?.subCategoryId || prod?.subCategory?.id || "",
     gain: prod?.gain || 0.0,
-    last_update: prod ? new Date(prod.updatedAt || prod.last_update) : new Date(),
+    last_update: prod ? new Date(prod.last_update) : new Date(),
     salePrice: prod?.salePrice || 0,
   });
 
@@ -92,13 +101,13 @@ const ProductForm = ({ product, onClose }: Props) => {
 
   const fetchData = async () => {
     const fetchedCategories = await getCategories();
-    setCategories(fetchedCategories.map((c: { id: any; name: any; }) => ({ id: c.id, name: c.name })));
+    setCategories(fetchedCategories.map((c: { id: string; name: string; }) => ({ id: c.id, name: c.name })));
 
     const fetchedBrands = await getBrands();
-    setBrands(fetchedBrands.map((b: { id: any; name: any; }) => ({ id: b.id, name: b.name })));
+    setBrands(fetchedBrands.map((b: { id: string; name: string; }) => ({ id: b.id, name: b.name })));
 
     const fetchedSuppliers = await getSuppliers();
-    setSuppliers(fetchedSuppliers.map((s: { id: any; name: any; }) => ({ id: s.id, name: s.name })));
+    setSuppliers(fetchedSuppliers.map((s: { id: string; name: string; }) => ({ id: s.id, name: s.name })));
   };
 
   useEffect(() => {
@@ -110,7 +119,7 @@ const ProductForm = ({ product, onClose }: Props) => {
     const fetchSubs = async () => {
       if (selectedCategoryId) {
         const fetchedSubs = await getSubcategories(selectedCategoryId);
-        setSubcategories(fetchedSubs.map((s: { id: any; name: any; }) => ({ id: s.id, name: s.name })));
+        setSubcategories(fetchedSubs.map((s: { id: string; name: string; }) => ({ id: s.id, name: s.name })));
       } else {
         setSubcategories([]);
       }

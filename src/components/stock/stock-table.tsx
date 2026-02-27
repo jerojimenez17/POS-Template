@@ -16,6 +16,8 @@ import ProductForm from "./product-form";
 import CodeBarModal from "./code-bar-modal";
 import { Session } from "next-auth";
 import { getProducts, deleteProduct } from "@/actions/stock";
+import { Product } from "@prisma/client";
+import { ProductExtended } from "./product-form";
 import { toast } from "sonner";
 
 interface props {
@@ -23,16 +25,16 @@ interface props {
   session: Session;
 }
 
-const StockTable = ({ session, descriptionFilter }: props) => {
-  const [products, setProducts] = useState<any[]>([]);
-  const [productToEdit, setProductToEdit] = useState<any>();
+const StockTable = ({ descriptionFilter }: props) => {
+  const [products, setProducts] = useState<ProductExtended[]>([]);
+  const [productToEdit, setProductToEdit] = useState<ProductExtended>();
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   const fetchProducts = async () => {
     const data = await getProducts();
-    setProducts(data);
+    setProducts(data as ProductExtended[]);
   };
 
   useEffect(() => {
@@ -96,9 +98,9 @@ const StockTable = ({ session, descriptionFilter }: props) => {
                 );
               })
               .sort((a, b) => {
-                // Modified sorting to use createdAt
-                const timeA = new Date(a.createdAt).getTime();
-                const timeB = new Date(b.createdAt).getTime();
+                // Modified sorting to use creation_date
+                const timeA = new Date(a.creation_date).getTime();
+                const timeB = new Date(b.creation_date).getTime();
                 return timeB - timeA;
               })
               .map((product) => {
@@ -162,7 +164,7 @@ const StockTable = ({ session, descriptionFilter }: props) => {
                           setProductToEdit(product);
                           setOpenDeleteModal(true);
                         } } disable={false}                      />
-                      <CodeBarModal value={product.code}></CodeBarModal>
+                      <CodeBarModal value={product.code || ""}></CodeBarModal>
                     </TableCell>
                   </TableRow>
                 );

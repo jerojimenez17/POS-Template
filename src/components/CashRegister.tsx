@@ -45,7 +45,7 @@ const CashRegister = ({ session }: props) => {
     if (session?.user?.businessId) {
       const channel = pusherClient.subscribe(`movements-${session.user.businessId}`);
       
-      channel.bind("new-movement", (data: any) => {
+      channel.bind("new-movement", (data: Movement) => {
              const newMovement = {
                  ...data,
                  date: new Date(data.date),

@@ -1,6 +1,5 @@
 
 import { db } from "@/lib/db";
-import { UserRole } from "@prisma/client";
 import {
   Table,
   TableBody,
@@ -9,13 +8,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PromoteUserButton } from "@/components/Superadmin/promote-button";
 import { auth } from "../../../../auth";
 
 export default async function SuperAdminDashboard() {
-  const session = await auth();
+  await auth();
 
   // Fetch all users
   const users = await db.user.findMany({

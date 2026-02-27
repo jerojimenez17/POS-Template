@@ -14,7 +14,7 @@ const poppins = Poppins({
   subsets: ["latin"],
   weight: "600",
 });
-const page = () => {
+const AccountLedgerPage = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
 
@@ -77,4 +77,4 @@ const page = () => {
   );
 };
 
-export default page;
+export default AccountLedgerPage;

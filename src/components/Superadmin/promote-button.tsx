@@ -15,8 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { promoteToAdmin } from "@/actions/superadmin";
 import { useTransition } from "react";
-import { toast } from "sonner"; // Assuming sonner is used, or use generic toast
-import { UserRole } from "@prisma/client";
 
 interface PromoteProps {
   userId: string;
