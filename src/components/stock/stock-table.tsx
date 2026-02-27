@@ -16,7 +16,6 @@ import ProductForm from "./product-form";
 import CodeBarModal from "./code-bar-modal";
 import { Session } from "next-auth";
 import { getProducts, deleteProduct } from "@/actions/stock";
-import { Product } from "@prisma/client";
 import { ProductExtended } from "./product-form";
 import { toast } from "sonner";
 

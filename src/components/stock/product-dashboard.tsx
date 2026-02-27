@@ -3,16 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import ProductForm from "./product-form";
 import StockFilterPanel from "./stock-filter-panel";
-import { Session } from "next-auth";
 import ProductDataTable from "../ProductDataTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { getProducts } from "@/actions/stock";
 import { ProductExtended } from "./product-form";
 
-interface props {
-}
 
-const ProductDashboard = ({ }: props) => {
+const ProductDashboard = () => {
   const [openModal, setOpenModal] = useState(false);
   const [descriptionFilter, setDescriptionFilter] = useState("");
   const [products, setProducts] = useState<ProductExtended[]>([]);
