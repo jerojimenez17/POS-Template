@@ -17,7 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Session } from "next-auth";
 import Spinner from "./ui/Spinner";
 import { Button } from "./ui/button";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
@@ -35,10 +34,8 @@ export interface DailyReportData {
   stockMovementCount: number;
 }
 
-interface props {
-}
 
-const DailyReport = ({ }: props) => {
+const DailyReport = () => {
   const [date, setDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<DailyReportData | null>(null);
