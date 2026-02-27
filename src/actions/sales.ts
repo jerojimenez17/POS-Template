@@ -23,7 +23,7 @@ interface ProcessSaleInput {
   seller: string;
   paidMethod?: string;
   secondPaidMethod?: string;
-  totalSecondMethod?: number;
+  totalSecondMethod?: number | null;
   discount?: number;
   clientId?: string;
   twoMethods?: boolean;

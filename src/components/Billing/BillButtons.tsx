@@ -9,7 +9,6 @@ import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
 import postBill from "@/services/AFIPService";
 import { processSaleAction } from "@/actions/sales";
-import Movement from "@/models/Movement";
 import { toast, Toaster } from "sonner";
 import Spinner from "../ui/Spinner";
 import AccountLedgerModal from "../ledger/AccountLedgerModal";
