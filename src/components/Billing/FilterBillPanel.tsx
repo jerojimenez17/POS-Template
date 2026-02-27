@@ -34,10 +34,10 @@ const FilterBillPanel = ({ session }: props) => {
 
   const [sellers, setSellers] = useState<string[]>([]);
   
-  // Compute default seller synchronously during render (derived from props)
-  const defaultSeller = session?.user?.email && session.user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL 
-    ? session.user.email 
-    : undefined;
+  // // Compute default seller synchronously during render (derived from props)
+  // const defaultSeller = session?.user?.email && session.user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL 
+  //   ? session.user.email 
+  //   : undefined;
 
   useEffect(() => {
     // Vercel Best Practice (client-side data fetching bottleneck fixed):
