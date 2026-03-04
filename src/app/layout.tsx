@@ -27,6 +27,8 @@ export const metadata: Metadata = {
 
 import { Toaster } from "react-hot-toast";
 
+import { AuthProvider } from "@/components/auth/SessionProvider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -37,6 +39,7 @@ export default function RootLayout({
           <body
             className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased h-screen w-screen overflow-auto`}
             >
+            <AuthProvider>
             <ThemeProvider>
               <FiltersProvider>
                 <div className="h-full w-full  bg-slate-100 dark:bg-gray-800">
@@ -46,6 +49,7 @@ export default function RootLayout({
                 </div>
         </FiltersProvider>
       </ThemeProvider>
+            </AuthProvider>
           </body>
     </html>
   );

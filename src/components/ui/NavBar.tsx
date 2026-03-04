@@ -24,6 +24,7 @@ import { Poppins } from "next/font/google";
 import React from "react";
 import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
+import { UserButton } from "../auth/user-button";
 
 //   {
 //     title: "Pedidos",
@@ -110,8 +111,9 @@ export function NavigationMenuHeader() {
           </NavigationMenuItem>
         </NavigationMenuList>
       </NavigationMenu> */}
-      <div className="mr-4 my-auto">
+      <div className="mr-4 my-auto flex items-center gap-x-4">
         <ThemeToggle />
+        <UserButton />
       </div>
     </div>
   );
