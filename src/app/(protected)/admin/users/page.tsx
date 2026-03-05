@@ -15,7 +15,7 @@ export default async function AdminUsersPage() {
     redirect("/");
   }
 
-  const { success, error, data } = await getBusinessUsers();
+  const { error, data } = await getBusinessUsers();
 
   if (error || !data) {
     return (
