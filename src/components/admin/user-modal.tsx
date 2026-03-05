@@ -34,11 +34,12 @@ import {
 import { createBusinessUser, updateBusinessUser } from "@/components/actions/users";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { UserType } from "@/components/admin/users-table";
 
 interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user?: any | null;
+  user?: UserType | null;
 }
 
 export const UserModal = ({ isOpen, onClose, user }: UserModalProps) => {

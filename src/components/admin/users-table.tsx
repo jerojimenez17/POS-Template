@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import {
   Table,
   TableBody,
@@ -28,12 +26,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { UserRole } from "@prisma/client";
 
-interface UserType {
+export interface UserType {
   id: string;
   name: string | null;
   email: string | null;
-  role: string | null;
+  role: UserRole | null;
 }
 
 interface UsersTableProps {
