@@ -22,6 +22,13 @@ export const RegisterSchema = z.object({
     message: "Nombre del negocio es obligatorio",
   }),
 });
+
+export const BusinessUserSchema = z.object({
+  name: z.string().min(1, { message: "El nombre es obligatorio" }),
+  email: z.string().email({ message: "El email es obligatorio" }),
+  password: z.string().min(6, { message: "La contraseña de 6 caracteres mínimo" }).optional().or(z.literal("")),
+  role: z.enum(["ADMIN", "USER"]).default("USER"),
+});
 export const UnitsSchema = z.object({
   amount: z.number().min(1, { message: "La cantidad es obligatoria" }),
 });
