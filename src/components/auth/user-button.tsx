@@ -19,6 +19,8 @@ export const UserButton = () => {
   const { data: session } = useSession();
   const user = session?.user;
 
+  if (!user) return null;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="outline-none">
