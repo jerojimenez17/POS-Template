@@ -68,9 +68,17 @@ const PrintableTable = ({
   const handlePrint = useReactToPrint({
     contentRef: contentRef || undefined,
     documentTitle: `Factura_${(state?.date || new Date()).toISOString().split("T")[0]}`,
+    onBeforePrint: () => Promise.resolve(), // Sometimes helps Safari rendering lifecycle
     pageStyle: `
       @page { size: auto; margin: 5mm; }
       @media print {
+        html, body {
+          height: auto !important; /* Fix for iOS safari cutting off or printing screen */
+          min-height: 100vh;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
         body { -webkit-print-color-adjust: exact; }
         .print-header { display: block !important; }
         .print-table { width: 100% !important; }

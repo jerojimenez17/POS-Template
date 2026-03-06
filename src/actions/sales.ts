@@ -369,6 +369,7 @@ export const getSalesAction = async (): Promise<BillState[]> => {
           price: item.costPrice,
           salePrice: item.price,
           amount: item.quantity,
+          unit: "unidades", // Fallback unit to prevent crash in PrintableTable
         })),
         total: order.total + order.discountAmount, // Base total before discount
         totalWithDiscount: order.total, // Final total after discount
