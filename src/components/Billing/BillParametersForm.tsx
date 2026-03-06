@@ -246,9 +246,10 @@ const BillParametersForm = () => {
                     <FormControl>
                       <Input
                         className="rounded-xl shadow-sm"
-                        placeholder={field.value?.toString()}
                         {...field}
-                        onChange={field.onChange}
+                        //if the discount is 0 set the value to ""
+                        value={field.value === 0 ? "" : field.value}  
+                        placeholder={field.value?.toString()}
                       />
                     </FormControl>
                   </FormItem>

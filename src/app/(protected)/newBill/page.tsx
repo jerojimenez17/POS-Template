@@ -12,7 +12,7 @@ const NewBillPage = async () => {
       
     <BillProvider>
       <div className="flex flex-col h-full mb-5 pb-16 overflow-y-auto overflow-x-hidden scrollbar-gutter-stable">
-        <div className="h-fit py-4 md:h-1/4 container my-3 mx-auto w-full border-b border-gray-100 dark:border-gray-800">
+        <div className="h-fit py-4 container my-3 mx-auto w-full border-b border-gray-100 dark:border-gray-800">
           <BillParametersForm />
         </div>
         <ProductsTable session={session} />

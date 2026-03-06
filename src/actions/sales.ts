@@ -45,8 +45,11 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
+    const discountPercent = Number(billState.discount) || 0;
+    const totalSecondMethodParsed = Number(billState.totalSecondMethod) || 0;
+
     const total = billState.totalWithDiscount || billState.total;
-    const discountAmount = billState.total * (billState.discount || 0) * 0.01;
+    const discountAmount = billState.total * discountPercent * 0.01;
     
     const result = await db.$transaction(async (tx) => {
       // 1. Create Order
@@ -58,8 +61,8 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           paidStatus: "pago", // Defaulting as confirmed/paid for this flow
           paymentMethod: billState.paidMethod || "Efectivo",
           paymentMethod2: billState.secondPaidMethod,
-          totalMethod2: billState.totalSecondMethod || 0,
-          discountPercentage: billState.discount || 0,
+          totalMethod2: totalSecondMethodParsed,
+          discountPercentage: discountPercent,
           discountAmount: discountAmount,
           businessId: businessId,
           clientId: billState.clientId, // Assuming clientId is in billState if available
@@ -126,10 +129,10 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       // 4. Update CashBox (only for Cash payments)
       let cashToIncrement = 0;
       if (billState.paidMethod === "Efectivo") {
-        cashToIncrement += (total - (billState.totalSecondMethod || 0));
+        cashToIncrement += (total - totalSecondMethodParsed);
       }
       if (billState.secondPaidMethod === "Efectivo") {
-        cashToIncrement += (billState.totalSecondMethod || 0);
+        cashToIncrement += totalSecondMethodParsed;
       }
 
       if (cashToIncrement > 0) {
