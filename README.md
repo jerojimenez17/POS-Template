@@ -1,6 +1,6 @@
-# Genesis POS: Modern Point of Sale System 🚀
+# MPOS: Modern Point of Sale System 🚀
 
-Genesis POS is a robust, full-stack Point of Sale and Inventory Management system built to showcase modern web development practices. It demonstrates how to build a scalable, real-time, multi-tenant B2B application handling complex business logic, transactions, and role-based access control.
+This POS is a robust, full-stack Point of Sale and Inventory Management system built to showcase modern web development practices. It demonstrates how to build a scalable, real-time, multi-tenant B2B application handling complex business logic, transactions, and role-based access control.
 
 This project serves as a comprehensive example of my ability to architect and deliver production-ready full-stack applications using the latest React and Node.js ecosystems.
 
