@@ -69,7 +69,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
       
       console.log("Leyendo hoja:", sheetName);
       
-      const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][];
+      const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as unknown[][];
       console.log("Filas encontradas en el archivo:", jsonData.length);
       
       if (jsonData.length === 0) {
