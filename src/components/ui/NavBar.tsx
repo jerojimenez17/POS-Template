@@ -25,6 +25,7 @@ import React from "react";
 import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
 import { UserButton } from "../auth/user-button";
+import { useSession } from "next-auth/react";
 
 //   {
 //     title: "Pedidos",
@@ -38,6 +39,9 @@ const font = Poppins({
   weight: ["600"],
 });
 export function NavigationMenuHeader() {
+  const { data: session } = useSession();
+  const businessName = session?.user?.businessName || "Nombre";
+
   return (
     <div
       className={cn(
@@ -53,7 +57,7 @@ export function NavigationMenuHeader() {
           )}
         >
           <Link href="/">
-            <h1 className="mx-auto dark:text-gray-50">Nombre</h1>
+            <h1 className="mx-auto dark:text-gray-50">{businessName}</h1>
           </Link>
           {/* <Image
             className={`w-32 h-12 antialiased`}

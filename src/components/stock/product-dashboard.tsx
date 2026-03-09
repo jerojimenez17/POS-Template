@@ -7,10 +7,12 @@ import ProductDataTable from "../ProductDataTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { getProducts } from "@/actions/stock";
 import { ProductExtended } from "./product-form";
+import ExcelUploadModal from "./excel-upload-modal";
 
 
 const ProductDashboard = () => {
   const [openModal, setOpenModal] = useState(false);
+  const [openExcelModal, setOpenExcelModal] = useState(false);
   const [descriptionFilter, setDescriptionFilter] = useState("");
   const [products, setProducts] = useState<ProductExtended[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +54,13 @@ const ProductDashboard = () => {
           setDescriptionFilter(filter)
         }
         handleOpenModal={() => setOpenModal(!openModal)}
+        handleOpenExcelModal={() => setOpenExcelModal(true)}
+      />
+
+      <ExcelUploadModal 
+        open={openExcelModal} 
+        onOpenChange={setOpenExcelModal} 
+        onSuccess={fetchProducts} 
       />
       
       {loading ? (

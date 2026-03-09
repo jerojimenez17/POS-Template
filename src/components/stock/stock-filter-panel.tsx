@@ -4,16 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { useRouter } from "next/navigation";
-import { Plus, ScanBarcode, BarChart3, Search, X } from "lucide-react";
+import { Plus, ScanBarcode, BarChart3, Search, X, FileSpreadsheet } from "lucide-react";
 
 interface Props {
   handleOpenModal: () => void;
   handleDescriptionFilter: (filter: string) => void;
+  handleOpenExcelModal?: () => void;
 }
 
 const StockFilterPanel = ({
   handleOpenModal,
   handleDescriptionFilter,
+  handleOpenExcelModal,
 }: Props) => {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [descriptionFilterInput, setDescriptionFilterInput] = useState("");
@@ -58,6 +60,17 @@ const StockFilterPanel = ({
           <Plus className="h-4 w-4" />
           <span>Nuevo Producto</span>
         </Button>
+
+        {handleOpenExcelModal && (
+          <Button
+            onClick={handleOpenExcelModal}
+            variant="outline"
+            className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 h-10 px-4 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap text-green-700 dark:text-green-400"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            <span>Carga Masiva</span>
+          </Button>
+        )}
 
         <Button
           variant="outline"

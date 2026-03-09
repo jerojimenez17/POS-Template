@@ -93,6 +93,118 @@ export const createProduct = async (data: Product) => {
   }
 };
 
+export interface BulkProductInput {
+  code: string;
+  description: string;
+  price: number;
+  amount?: number;
+  brandName?: string;
+  categoryName?: string;
+  subCategoryName?: string;
+  unit?: string;
+}
+
+export const createProductsBulk = async (productsData: BulkProductInput[]) => {
+  const session = await auth();
+  if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  try {
+    let createdCount = 0;
+    
+    // Process sequentially to handle dependent creations safely
+    for (const item of productsData) {
+      // Lookup or create brand
+      let brandId = null;
+      if (item.brandName && item.brandName.trim() !== "") {
+        let brand = await db.brand.findFirst({
+          where: { name: { equals: item.brandName.trim(), mode: "insensitive" }, businessId: session.user.businessId }
+        });
+        if (!brand) {
+          brand = await db.brand.create({
+            data: { name: item.brandName.trim(), businessId: session.user.businessId }
+          });
+        }
+        brandId = brand.id;
+      }
+
+      // Lookup or create category
+      let categoryId = null;
+      if (item.categoryName && item.categoryName.trim() !== "") {
+        let category = await db.category.findFirst({
+          where: { name: { equals: item.categoryName.trim(), mode: "insensitive" }, businessId: session.user.businessId }
+        });
+        if (!category) {
+          category = await db.category.create({
+            data: { name: item.categoryName.trim(), businessId: session.user.businessId }
+          });
+        }
+        categoryId = category.id;
+      }
+
+      // Lookup or create subcategory (needs categoryId)
+      let subCategoryId = null;
+      if (item.subCategoryName && item.subCategoryName.trim() !== "" && categoryId) {
+        let subCategory = await db.subcategory.findFirst({
+          where: { 
+            name: { equals: item.subCategoryName.trim(), mode: "insensitive" }, 
+            categoryId: categoryId,
+            businessId: session.user.businessId 
+          }
+        });
+        if (!subCategory) {
+          subCategory = await db.subcategory.create({
+            data: { 
+              name: item.subCategoryName.trim(), 
+              categoryId: categoryId,
+              businessId: session.user.businessId 
+            }
+          });
+        }
+        subCategoryId = subCategory.id;
+      }
+
+      const priceStr = item.price.toString().replace(',','.');
+      const parsedPrice = parseFloat(priceStr);
+      const isPriceValid = !isNaN(parsedPrice);
+
+      const amountStr = item.amount?.toString().replace(',','.');
+      const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
+      
+      // Upsert or Create product
+      await db.product.create({
+        data: {
+          code: item.code.toString(),
+          description: item.description.toString(),
+          price: isPriceValid ? parsedPrice : 0,
+          salePrice: isPriceValid ? parsedPrice : 0, // Set salePrice same as price by default if gain is 0
+          gain: 0,
+          amount: isNaN(parsedAmount) ? 0 : parsedAmount,
+          unit: item.unit || "unidades",
+          brand: brandId ? { connect: { id: brandId } } : undefined,
+          category: categoryId ? { connect: { id: categoryId } } : undefined,
+          subCategory: subCategoryId ? { connect: { id: subCategoryId } } : undefined,
+          business: { connect: { id: session.user.businessId } },
+        }
+      });
+      createdCount++;
+    }
+
+    if (createdCount > 0) {
+      await pusherServer.trigger(
+        `movements-${session.user.businessId}`, 
+        "refresh", 
+        { type: "product-created" }
+      );
+    }
+
+    revalidatePath("/stock");
+    return { success: `Se cargaron ${createdCount} productos exitosamente` };
+  } catch (error) {
+    console.error("Bulk create error:", error);
+    return { error: "Error al cargar productos masivamente" };
+  }
+};
+
 interface UpdateProductInput {
   code?: string;
   description?: string;
