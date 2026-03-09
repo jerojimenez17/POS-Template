@@ -62,6 +62,19 @@ model Business {
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // ARCA Billing fields
+  cuit             String?
+  razonSocial      String?
+  inicioActividades DateTime?
+  condicionIva     IvaCondition @default(MONOTRIBUTO)
+  cert             String?      @db.Text
+  key              String?      @db.Text
+}
+
+enum IvaCondition {
+  RESPONSABLE_INSCRIPTO
+  MONOTRIBUTO
 }
 
 model CashBox {
