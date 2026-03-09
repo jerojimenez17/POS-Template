@@ -49,6 +49,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       if (session.user) {
         session.user.businessId = token.businessId as string | null;
+        session.user.businessName = token.businessName as string | null;
       }
       return session;
     },
@@ -58,6 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!existingUser) return token;
       token.role = existingUser.role;
       token.businessId = existingUser.businessId;
+      token.businessName = existingUser.business?.name || null;
       console.log({ token });
       return token;
     },

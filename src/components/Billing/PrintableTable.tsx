@@ -265,7 +265,7 @@ const PrintableTable = ({
               greatVibes.className
             )}
           >
-           Nombre de App
+           {session?.user?.businessName || "Nombre de App"}
           </h2>
           <div className="mt-2 text-sm">
             <p>
