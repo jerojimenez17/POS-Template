@@ -7,11 +7,12 @@ import { revalidatePath } from "next/cache";
 import { encrypt } from "@/lib/encryption";
 import * as z from "zod";
 import { ArcaFieldsSchema } from "@/schemas";
+import { ArcaUpdateInput, ArcaData } from "@/models/Arca";
 
 export const updateBusinessArcaData = async (
   businessId: string,
   values: z.infer<typeof ArcaFieldsSchema>
-) => {
+): Promise<{ success?: string; error?: string }> => {
   const session = await auth();
 
   if (session?.user.role !== UserRole.SUPER_ADMIN) {
@@ -27,7 +28,7 @@ export const updateBusinessArcaData = async (
   const { cuit, razonSocial, inicioActividades, condicionIva, cert, key } = validatedFields.data;
 
   try {
-    const updateData: any = {
+    const updateData: ArcaUpdateInput = {
       cuit,
       razonSocial,
       inicioActividades,
@@ -57,7 +58,9 @@ export const updateBusinessArcaData = async (
   }
 };
 
-export const getBusinessArcaData = async (businessId: string) => {
+export const getBusinessArcaData = async (
+  businessId: string
+): Promise<{ success?: ArcaData; error?: string }> => {
     const session = await auth();
 
     if (session?.user.role !== UserRole.SUPER_ADMIN) {
