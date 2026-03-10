@@ -61,6 +61,8 @@ interface Props {
 
 const ProductForm = ({ product, onClose }: Props) => {
   const [isPending, startTransition] = useTransition();
+  const [uploadMessages, setUploadMessages] = useState<string[]>([]);
+  const [errorMessages, setErrorMessages] = useState<string[]>([]);
   const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<{id: string, name: string}[]>([]);
@@ -186,7 +188,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             toast.error(result.error);
             setErrorMessages([result.error]);
           } else {
-            setUploadMessage(["Producto cargado con éxito"]);
+            setUploadMessages(["Producto cargado con éxito"]);
             toast.success("Producto cargado con éxito");
             form.reset();
             setTimeout(() => onClose(), 800);
@@ -326,13 +328,13 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
-        <FormField
-          control={form.control}
-          name="category"
-          render={({ field }) => (
-            <FormItem className="w-full">
-              <FormLabel>Categoria</FormLabel>
-              <div className="flex items-center gap-2">
+        <div className="space-y-2 flex items-end gap-2">
+          <FormField
+            control={form.control}
+            name="category"
+            render={({ field }) => (
+              <FormItem className="w-full">
+                <FormLabel>Categoria <span className="text-red-500">*</span></FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
@@ -350,19 +352,21 @@ const ProductForm = ({ product, onClose }: Props) => {
                     ))}
                   </SelectContent>
                 </Select>
-                <NewCategoryModal />
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="subCategory"
-          render={({ field }) => (
-            <FormItem className="w-full">
-              <FormLabel>Sub-Categoria</FormLabel>
-              <div className="flex items-center gap-2">
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="pb-1">
+            <NewCategoryModal />
+          </div>
+        </div>
+        <div className="space-y-2 flex items-end gap-2">
+          <FormField
+            control={form.control}
+            name="subCategory"
+            render={({ field }) => (
+              <FormItem className="w-full">
+                <FormLabel>Sub-Categoria <span className="text-red-500">*</span></FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
@@ -381,19 +385,21 @@ const ProductForm = ({ product, onClose }: Props) => {
                     ))}
                   </SelectContent>
                 </Select>
-                <NewSubcategoryModal categoryId={selectedCategoryId} />
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="brand"
-          render={({ field }) => (
-            <FormItem className="w-full">
-              <FormLabel>Marca</FormLabel>
-              <div className="flex items-center gap-2">
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="pb-1">
+            <NewSubcategoryModal categoryId={selectedCategoryId} />
+          </div>
+        </div>
+        <div className="space-y-2 flex items-end gap-2">
+          <FormField
+            control={form.control}
+            name="brand"
+            render={({ field }) => (
+              <FormItem className="w-full">
+                <FormLabel>Marca <span className="text-red-500">*</span></FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
@@ -411,19 +417,21 @@ const ProductForm = ({ product, onClose }: Props) => {
                     ))}
                   </SelectContent>
                 </Select>
-                <NewBrandModal />
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="supplier"
-          render={({ field }) => (
-            <FormItem className="w-full">
-              <FormLabel>Proveedor</FormLabel>
-              <div className="flex items-center gap-2">
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="pb-1">
+            <NewBrandModal />
+          </div>
+        </div>
+        <div className="space-y-2 flex items-end gap-2">
+          <FormField
+            control={form.control}
+            name="supplier"
+            render={({ field }) => (
+              <FormItem className="w-full">
+                <FormLabel>Proveedor</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
@@ -441,12 +449,14 @@ const ProductForm = ({ product, onClose }: Props) => {
                     ))}
                   </SelectContent>
                 </Select>
-                <NewSuplierModal />
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="pb-1">
+            <NewSuplierModal />
+          </div>
+        </div>
 
         <div className="space-y-2">
           <FormField
