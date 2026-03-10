@@ -321,13 +321,13 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
-        <div className="space-y-2 flex items-end gap-2">
-          <FormField
-            control={form.control}
-            name="category"
-            render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Categoria</FormLabel>
+        <FormField
+          control={form.control}
+          name="category"
+          render={({ field }) => (
+            <FormItem className="w-full">
+              <FormLabel>Categoria</FormLabel>
+              <div className="flex items-center gap-2">
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
@@ -345,21 +345,19 @@ const ProductForm = ({ product, onClose }: Props) => {
                     ))}
                   </SelectContent>
                 </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="pb-1">
-            <NewCategoryModal />
-          </div>
-        </div>
-        <div className="space-y-2 flex items-end gap-2">
-          <FormField
-            control={form.control}
-            name="subCategory"
-            render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Sub-Categoria</FormLabel>
+                <NewCategoryModal />
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="subCategory"
+          render={({ field }) => (
+            <FormItem className="w-full">
+              <FormLabel>Sub-Categoria</FormLabel>
+              <div className="flex items-center gap-2">
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
@@ -378,21 +376,19 @@ const ProductForm = ({ product, onClose }: Props) => {
                     ))}
                   </SelectContent>
                 </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="pb-1">
-            <NewSubcategoryModal categoryId={selectedCategoryId} />
-          </div>
-        </div>
-        <div className="space-y-2 flex items-end gap-2">
-          <FormField
-            control={form.control}
-            name="brand"
-            render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Marca</FormLabel>
+                <NewSubcategoryModal categoryId={selectedCategoryId} />
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="brand"
+          render={({ field }) => (
+            <FormItem className="w-full">
+              <FormLabel>Marca</FormLabel>
+              <div className="flex items-center gap-2">
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
@@ -410,21 +406,19 @@ const ProductForm = ({ product, onClose }: Props) => {
                     ))}
                   </SelectContent>
                 </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="pb-1">
-            <NewBrandModal />
-          </div>
-        </div>
-        <div className="space-y-2 flex items-end gap-2">
-          <FormField
-            control={form.control}
-            name="supplier"
-            render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Proveedor</FormLabel>
+                <NewBrandModal />
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="supplier"
+          render={({ field }) => (
+            <FormItem className="w-full">
+              <FormLabel>Proveedor</FormLabel>
+              <div className="flex items-center gap-2">
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
@@ -442,14 +436,12 @@ const ProductForm = ({ product, onClose }: Props) => {
                     ))}
                   </SelectContent>
                 </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="pb-1">
-            <NewSuplierModal />
-          </div>
-        </div>
+                <NewSuplierModal />
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <div className="space-y-2">
           <FormField
