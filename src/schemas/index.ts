@@ -137,3 +137,14 @@ export const AccountSchema = z
     message: "Debe ingresar al menos un email o un teléfono.",
     path: ["clientEmail"],
   });
+
+export const ArcaFieldsSchema = z.object({
+  cuit: z.string().min(1, { message: "CUIT es obligatorio" }),
+  razonSocial: z.string().min(1, { message: "Razón Social es obligatoria" }),
+  inicioActividades: z.date({
+    required_error: "Inicio de actividades es obligatorio",
+  }),
+  condicionIva: z.enum(["RESPONSABLE_INSCRIPTO", "MONOTRIBUTO"]),
+  cert: z.string().optional(),
+  key: z.string().optional(),
+});

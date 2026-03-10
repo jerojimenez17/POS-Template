@@ -61,6 +61,8 @@ interface Props {
 
 const ProductForm = ({ product, onClose }: Props) => {
   const [isPending, startTransition] = useTransition();
+  const [uploadMessages, setUploadMessages] = useState<string[]>([]);
+  const [errorMessages, setErrorMessages] = useState<string[]>([]);
   const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<{id: string, name: string}[]>([]);
@@ -186,7 +188,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             toast.error(result.error);
             setErrorMessages([result.error]);
           } else {
-            setUploadMessage(["Producto cargado con éxito"]);
+            setUploadMessages(["Producto cargado con éxito"]);
             toast.success("Producto cargado con éxito");
             form.reset();
             setTimeout(() => onClose(), 800);
