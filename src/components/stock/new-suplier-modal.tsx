@@ -14,6 +14,7 @@ import { useState } from "react";
 import { FormSuccess } from "../ui/form-success";
 import { createSupplier } from "@/actions/stock";
 import { toast } from "sonner";
+import { Plus } from "lucide-react";
 
 const NewSuplierModal = () => {
   const [suplier, setSuplier] = useState("");
@@ -53,11 +54,11 @@ const NewSuplierModal = () => {
 
   return (
     <Dialog>
-      <DialogTrigger
-        asChild
-        className="h-9 ml-1 bg-black text-white font-semibold hover:text-gray-800"
-      >
-        <Button variant="outline">+ Nuevo</Button>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="icon" className="shrink-0">
+          <Plus className="h-4 w-4" />
+          <span className="sr-only">Nuevo Proveedor</span>
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>

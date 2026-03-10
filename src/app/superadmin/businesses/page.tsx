@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { auth } from "../../../../auth";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default async function BusinessesPage() {
   await auth();
@@ -41,6 +43,7 @@ export default async function BusinessesPage() {
                     <TableHead>Products</TableHead>
                     <TableHead>Orders</TableHead>
                     <TableHead>Created At</TableHead>
+                    <TableHead>Actions</TableHead>
                 </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -52,6 +55,15 @@ export default async function BusinessesPage() {
                     <TableCell>{business._count.products}</TableCell>
                     <TableCell>{business._count.orders}</TableCell>
                     <TableCell>{business.createdAt.toLocaleDateString()}</TableCell>
+                    <TableCell>
+                        <div className="flex space-x-2">
+                             <Button asChild variant="outline" size="sm">
+                                <Link href={`/superadmin/businesses/${business.id}/arca`}>
+                                    ARCA
+                                </Link>
+                             </Button>
+                        </div>
+                    </TableCell>
                     </TableRow>
                 ))}
                 </TableBody>

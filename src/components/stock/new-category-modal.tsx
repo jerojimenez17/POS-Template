@@ -14,6 +14,7 @@ import { createCategory } from "@/actions/categories";
 import { useState } from "react";
 import { FormSuccess } from "../ui/form-success";
 import { toast } from "sonner";
+import { Plus } from "lucide-react";
 
 const NewCategoryModal = () => {
   const [category, setCategory] = useState("");
@@ -42,11 +43,11 @@ const NewCategoryModal = () => {
 
   return (
     <Dialog>
-      <DialogTrigger
-        asChild
-        className="h-10 bg-black text-white font-semibold hover:text-gray-800"
-      >
-        <Button variant="outline">+ Nueva</Button>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="icon" className="shrink-0">
+          <Plus className="h-4 w-4" />
+          <span className="sr-only">Nueva Categoría</span>
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
