@@ -37,8 +37,9 @@ import NewCategoryModal from "./new-category-modal";
 import NewSubcategoryModal from "./new-subcategory-modal";
 import NewBrandModal from "./new-brand-modal";
 import NewSuplierModal from "./new-suplier-modal";
-import CodeScanner from "../CodeScanner";
+import { Scanner } from "@yudiel/react-qr-scanner";
 import { toast, Toaster } from "sonner";
+import { ScanBarcode, X } from "lucide-react";
 import { getCategories } from "@/actions/categories";
 import { getBrands } from "@/actions/brands";
 import { getSubcategories } from "@/actions/subcategories";
@@ -60,10 +61,8 @@ interface Props {
 
 const ProductForm = ({ product, onClose }: Props) => {
   const [isPending, startTransition] = useTransition();
-  const [uploadMessages, setUploadMessage] = useState<string[]>([]);
-  const [errorMessages, setErrorMessages] = useState<string[]>([]);
-  
   const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<{id: string, name: string}[]>([]);
   const [subcategories, setSubcategories] = useState<{id: string, name: string}[]>([]);
   const [brands, setBrands] = useState<{id: string, name: string}[]>([]);
@@ -242,7 +241,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="code"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Codigo</FormLabel>
+                <FormLabel>Codigo <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Input
                     {...field}
@@ -253,12 +252,18 @@ const ProductForm = ({ product, onClose }: Props) => {
                     disabled={isPending}
                   />
                 </FormControl>
-                <CodeScanner
-                  onScan={(result) => {
-                    field.onChange(result[0].rawValue);
-                  }}
-                  errorMessage=""
-                />
+                <div className="absolute right-2 top-8 flex items-center">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setScannerOpen(true)}
+                    className="h-8 w-8 text-gray-500 hover:text-black"
+                    title="Escanear código de barras"
+                  >
+                    <ScanBarcode className="h-5 w-5" />
+                  </Button>
+                </div>
                 <FormMessage />
               </FormItem>
             )}
@@ -270,7 +275,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Descripcion</FormLabel>
+                <FormLabel>Descripcion <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Input
                     {...field}
@@ -292,7 +297,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="price"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Precio</FormLabel>
+                <FormLabel>Precio <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Input {...field} disabled={isPending} type="number" step="0.01" />
                 </FormControl>
@@ -307,7 +312,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="gain"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Margen de utilidad</FormLabel>
+                <FormLabel>Margen de utilidad <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Input
                     className="border border-black"
@@ -469,7 +474,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="unit"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Unidad</FormLabel>
+                <FormLabel>Unidad <span className="text-red-500">*</span></FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
@@ -497,7 +502,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Cantidad</FormLabel>
+                <FormLabel>Cantidad <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Input
                     className="border border-black"
@@ -515,6 +520,38 @@ const ProductForm = ({ product, onClose }: Props) => {
           {product ? "Guardar Cambios" : "+Agregar Producto"}
         </Button>
       </form>
+
+      {/* Scanner Modal Overlay */}
+      {scannerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">
+          <Button
+            variant="ghost"
+            className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full h-10 w-10 p-0"
+            onClick={() => setScannerOpen(false)}
+          >
+            <X className="h-6 w-6" />
+          </Button>
+          
+          <div className="w-full max-w-md aspect-square bg-black rounded-2xl overflow-hidden relative border border-white/20 shadow-2xl">
+            <Scanner
+              formats={["code_128", "codabar", "qr_code", "ean_13", "ean_8"]}
+              onScan={(result) => {
+                if (result && result.length > 0) {
+                  const rawValue = result[0].rawValue;
+                  form.setValue("code", rawValue);
+                  setScannerOpen(false);
+                  toast.success(`Código escaneado: ${rawValue}`);
+                }
+              }}
+            />
+            <div className="absolute inset-0 border-2 border-white/30 pointer-events-none rounded-2xl">
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 border-2 border-white/50 rounded-lg"></div>
+            </div>
+          </div>
+          <p className="text-white mt-4 text-center font-medium">Apunta la cámara al código de barras</p>
+        </div>
+      )}
+
       {uploadMessages.map((message) => (
         <FormSuccess key={message} message={message} />
       ))}
