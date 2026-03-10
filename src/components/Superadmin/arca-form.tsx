@@ -199,9 +199,8 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
                 </FormItem>
               )}
             />
-
-            <FormError message={error} />
-            <FormSuccess message={success} />
+            {error && <FormError message={error} />}
+            {success && <FormSuccess message={success} />}
 
             <Button disabled={isPending} type="submit" className="w-full">
               {isPending ? "Guardando..." : "Guardar Configuración"}
