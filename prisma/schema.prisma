@@ -68,8 +68,18 @@ model Business {
   razonSocial      String?
   inicioActividades DateTime?
   condicionIva     IvaCondition @default(MONOTRIBUTO)
+  address          String?
   cert             String?      @db.Text
   key              String?      @db.Text
+  accountStatus    BusinessStatus @default(ACTIVO)
+  lastPaymentDate  DateTime?
+  orderUpdates OrderUpdate[]
+}
+
+enum BusinessStatus {
+  ACTIVO
+  MOROSO
+  DESACTIVADO
 }
 
 enum IvaCondition {
@@ -95,8 +105,9 @@ model User {
   image         String?
   accounts      Account[]
   
-  businessId    String?
-  business      Business? @relation("BusinessUsers", fields: [businessId], references: [id])
+  businessId    String
+  business      Business @relation("BusinessUsers", fields: [businessId], references: [id])
+  orderUpdates  OrderUpdate[]
 }
 
 // Enums
@@ -121,8 +132,8 @@ model Supplier {
   creation_date DateTime  @default(now())
   
   // Make optional for migration
-  businessId    String?
-  business      Business? @relation(fields: [businessId], references: [id])
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
   
   products      Product[]
 }
@@ -153,8 +164,8 @@ model Product {
   supplierId    String?
   supplier      Supplier? @relation(fields: [supplierId], references: [id])
   
-  businessId    String?
-  business      Business? @relation(fields: [businessId], references: [id])
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
   
   last_update   DateTime  @default(now())
   creation_date DateTime  @default(now())
@@ -184,8 +195,8 @@ model Category {
   id            String    @id @default(cuid())
   name          String
   
-  businessId    String?
-  business      Business? @relation(fields: [businessId], references: [id])
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
   
   products      Product[]
   subcategories Subcategory[]
@@ -203,8 +214,8 @@ model Subcategory {
   categoryId    String
   category      Category  @relation(fields: [categoryId], references: [id])
   
-  businessId    String?
-  business      Business? @relation(fields: [businessId], references: [id])
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
   
   products      Product[]
 
@@ -218,8 +229,8 @@ model Brand {
   id            String    @id @default(cuid())
   name          String
   
-  businessId    String?
-  business      Business? @relation(fields: [businessId], references: [id])
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
   
   products      Product[]
 
@@ -239,8 +250,8 @@ model Client {
   date          DateTime  @default(now()) // Creation date
   last_update   DateTime  @default(now())
 
-  businessId    String?
-  business      Business? @relation(fields: [businessId], references: [id])
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
 
   orders        Order[]
 }
@@ -265,12 +276,57 @@ model Order {
   clientId      String?
   client        Client?      @relation(fields: [clientId], references: [id])
   
-  businessId    String?
-  business      Business? @relation(fields: [businessId], references: [id])
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
   
   items         OrderItem[]
   returns       SaleReturn[]
   stockMovements StockMovement[]
+  updates       OrderUpdate[]
+  @@index([businessId, date])
+}
+
+enum OrderUpdateType {
+  ORDER_CREATED
+  ITEMS_ADDED
+  ITEMS_REMOVED
+  ITEMS_UPDATED
+  STATUS_CHANGED
+  PAYMENT_UPDATED
+  DISCOUNT_CHANGED
+  CLIENT_CHANGED
+}
+
+model OrderUpdate {
+  id          String   @id @default(cuid())
+
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id])
+
+  updatedById String
+  updatedBy   User     @relation(fields: [updatedById], references: [id])
+
+  type        OrderUpdateType
+
+  // mensaje opcional para mostrar en UI
+  message     String?
+
+  // cambios específicos (diff)
+  changes     Json?
+
+  // snapshot completo cada N cambios
+  snapshot    Json?
+
+  // posición en la historia
+  version     Int
+
+  date        DateTime @default(now())
+
+  @@unique([orderId, version])
+  @@index([businessId, date])
 }
 
 model OrderItem {
@@ -290,6 +346,7 @@ model OrderItem {
   subTotal    Float   @default(0) 
 
   returnItems SaleReturnItem[]
+  @@index([orderId])
 }
 
 enum MovementType {
@@ -316,6 +373,8 @@ model StockMovement {
 
   // Reference for returns or adjustments
   reason      String?
+  @@index([businessId, date])
+  @@index([productId, date])
 }
 
 model SaleReturn {
@@ -331,6 +390,7 @@ model SaleReturn {
   business    Business     @relation(fields: [businessId], references: [id])
   
   items       SaleReturnItem[]
+  @@index([businessId, date])
 }
 
 model SaleReturnItem {
@@ -355,8 +415,8 @@ model CashMovement {
   paidMethod  String?
   date        DateTime @default(now())
 
-  businessId  String?
-  business    Business? @relation(fields: [businessId], references: [id])
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id])
 }
 
 model VerificationToken {
