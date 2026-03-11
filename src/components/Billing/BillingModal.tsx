@@ -118,7 +118,7 @@ const BillingModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px] bg-white text-black">
         <DialogHeader>
-          <DialogTitle className="text-pink-400">Facturar Venta</DialogTitle>
+          <DialogTitle className="text-indigo-600">Facturar Venta</DialogTitle>
           <DialogDescription>
             Genere una Factura C para esta venta existente.
           </DialogDescription>
@@ -192,7 +192,7 @@ const BillingModal = ({
 
           {/* Totales */}
           <div className="flex justify-end pt-4">
-            <div className="text-lg font-bold text-pink-400">
+            <div className="text-lg font-bold text-indigo-600">
               Total: ${totalToDisplay.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
             </div>
           </div>
@@ -202,7 +202,7 @@ const BillingModal = ({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
                 Cancelar
             </Button>
-            <Button onClick={handleBilling} disabled={loading} className="bg-pink-400 hover:bg-pink-500 text-white">
+            <Button onClick={handleBilling} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white">
                 {loading ? "Facturando..." : "Facturar"}
             </Button>
         </DialogFooter>

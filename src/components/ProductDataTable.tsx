@@ -41,8 +41,10 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         (product) => {
           const desc = product.description || "";
           const code = product.code || "";
+          const brand = product.brand?.name || "";
           return desc.toLowerCase().includes(descriptionFilter.toLowerCase()) ||
-                 code.toLowerCase().includes(descriptionFilter.toLowerCase());
+                 code.toLowerCase().includes(descriptionFilter.toLowerCase()) ||
+                 brand.toLowerCase().includes(descriptionFilter.toLowerCase());
         }
       )
       .sort((a, b) => {
@@ -77,6 +79,19 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         cell: (info) => (
           <div className="font-medium text-center">
             {info.getValue() as string}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "brand.name",
+        header: () => (
+          <div className="text-center font-extrabold text-white text-lg p-2">
+            Marca
+          </div>
+        ),
+        cell: (info) => (
+          <div className="font-medium text-center">
+            {info.getValue() as string || "-"}
           </div>
         ),
       },
@@ -301,6 +316,11 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                       {product.code || "-"}
                     </span>
                   </div>
+                  {product.brand && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">
+                      {product.brand.name}
+                    </p>
+                  )}
                   
                   <div className="flex items-baseline gap-2 mb-2">
                      <span className="text-lg font-bold text-black dark:text-white">
