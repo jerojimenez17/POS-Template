@@ -36,32 +36,37 @@ const SaleHistory = ({ saleId }: Props) => {
               <RefreshCw className="h-4 w-4" />
               <span>Productos Actualizados</span>
             </div>
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead>
                   <tr className="border-b dark:border-slate-700 text-slate-500">
-                    <th className="pb-2 font-medium">ID Producto</th>
-                    <th className="pb-2 font-medium text-center">Cambio</th>
+                    <th className="pb-2 font-medium">Producto</th>
+                    <th className="pb-2 font-medium text-center">Cambios</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {changes.items.map((item, i) => (
                     <tr key={i} className="text-slate-600 dark:text-slate-400">
-                      <td className="py-2 font-mono text-xs">{item.productId}</td>
+                      <td className="py-2 pr-4">
+                        <div className="font-mono text-xs truncate max-w-[150px]" title={item.productId}>
+                          {item.productId}
+                        </div>
+                      </td>
                       <td className="py-2">
                         <div className="flex flex-col gap-1">
                           {item.quantity && (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded">Cant:</span>
-                              <span className="text-red-500 line-through">{item.quantity.from}</span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded uppercase text-slate-500">Cant:</span>
+                              <span className="text-red-500 line-through text-xs font-semibold">{item.quantity.from}</span>
                               <span className="text-slate-400">→</span>
                               <span className="text-green-600 font-bold">{item.quantity.to}</span>
                             </div>
                           )}
                           {item.price && (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded">Precio:</span>
-                              <span className="text-red-500 line-through">${item.price.from.toLocaleString("es-AR")}</span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded uppercase text-slate-500">Precio:</span>
+                              <span className="text-red-500 line-through text-xs font-semibold">${item.price.from.toLocaleString("es-AR")}</span>
                               <span className="text-slate-400">→</span>
                               <span className="text-green-600 font-bold">${item.price.to.toLocaleString("es-AR")}</span>
                             </div>
@@ -72,6 +77,35 @@ const SaleHistory = ({ saleId }: Props) => {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="sm:hidden space-y-2">
+              {changes.items.map((item, i) => (
+                <div key={i} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-800 space-y-2">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">ID: {item.productId}</div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {item.quantity && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-500">Cantidad</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-red-400 line-through text-[10px]">{item.quantity.from}</span>
+                          <span className="text-green-500 font-bold text-xs">{item.quantity.to}</span>
+                        </div>
+                      </div>
+                    )}
+                    {item.price && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-500">Precio</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-red-400 line-through text-[10px]">${item.price.from.toLocaleString("es-AR")}</span>
+                          <span className="text-green-500 font-bold text-xs">${item.price.to.toLocaleString("es-AR")}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         );

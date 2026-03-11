@@ -6,8 +6,10 @@ import { useState } from "react";
 
 interface props {
   session: Session | null;
+  isEditing?: boolean;
+  orderId?: string;
 }
-const ProductsTable = ({ session }: props) => {
+const ProductsTable = ({ session, isEditing, orderId }: props) => {
   const [print, setPrint] = useState(false);
   return (
     <div className="h-full w-full">
@@ -22,7 +24,12 @@ const ProductsTable = ({ session }: props) => {
       />
 
       <div className="flex flex-col relative">
-        <BillButtons session={session} handlePrint={() => setPrint(!print)} />
+        <BillButtons 
+           session={session} 
+           handlePrint={() => setPrint(!print)} 
+           isEditing={isEditing}
+           orderId={orderId}
+        />
       </div>
     </div>
   );

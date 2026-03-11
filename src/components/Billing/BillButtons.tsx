@@ -8,10 +8,11 @@ import Modal from "../Modal";
 import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
 import postBill from "@/services/AFIPService";
-import { processSaleAction } from "@/actions/sales";
+import { processSaleAction, updateOrderAction } from "@/actions/sales";
 import { toast, Toaster } from "sonner";
 import Spinner from "../ui/Spinner";
 import AccountLedgerModal from "../ledger/AccountLedgerModal";
+import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogClose,
@@ -26,8 +27,11 @@ import {
 interface props {
   session: Session | null;
   handlePrint: () => void;
+  isEditing?: boolean;
+  orderId?: string;
 }
-const BillButtons = ({ session, handlePrint }: props) => {
+const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
+  const router = useRouter();
   const [createVoucherError, setCreateVoucherError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [response, setResponse] = useState("");
@@ -113,11 +117,12 @@ const BillButtons = ({ session, handlePrint }: props) => {
     }
   };
 
-  const createSale = async (afip: boolean) => {
+  const createSale = async (afip: boolean, isUpdate: boolean = false) => {
     if (!checkConnection()) return;
     try {
       setBlockButton(true);
       setOpenRemitoModal(false);
+      setOpenEditModal(false);
 
       const totalAmount =
         BillState.products.reduce(
@@ -144,18 +149,30 @@ const BillButtons = ({ session, handlePrint }: props) => {
         return;
       }
 
-      if (afip) {
+      if (afip && !isUpdate) {
         await handleCreateVoucher();
       }
 
-      // Now we use the atomic action which handles everything (stock, movements, ranking, balance)
-      await handleSaveSale({
-        ...BillState,
-        CAE: latestCAE.current,
-        totalWithDiscount: totalAmount,
-      });
-
-      toast.success("Factura guardada correctamente");
+      if (isUpdate && orderId) {
+        const updateResult = await updateOrderAction(orderId, {
+          ...BillState,
+          totalWithDiscount: totalAmount,
+        });
+        
+        if ("error" in updateResult && updateResult.error) {
+          throw new Error(String(updateResult.error));
+        }
+        
+        toast.success("Venta actualizada correctamente");
+        router.push(`/sales/${orderId}`);
+      } else {
+        await handleSaveSale({
+          ...BillState,
+          CAE: latestCAE.current,
+          totalWithDiscount: totalAmount,
+        });
+        toast.success("Factura guardada correctamente");
+      }
     } catch (err) {
       if (!isOnline) {
         toast.error("Operación cancelada: Sin conexión a internet");
@@ -168,69 +185,77 @@ const BillButtons = ({ session, handlePrint }: props) => {
     }
   };
   const [openFacturaModal, setOpenFacturaModal] = useState(false);
+  const [openEditModal, setOpenEditModal] = useState(false);
   const [blockButton, setBlockButton] = useState(false);
   return (
     <div className="w-full flex h-14 gap-1 justify-center">
       <Toaster position="top-right" richColors />
-      <div className="flex">
-        <Button
-          onClick={() => {
-            if (session?.user.email) {
-              sellerName(session.user.email || "");
-            }
-            setOpenFacturaModal(true);
-          }}
-          className="rounded-xl w-24"
-        >
-          Facturar
-        </Button>
-      </div>
-      <div className="flex">
-        <Button
-          variant="outline"
-          onClick={() => {
-            if (session?.user.email) {
-              sellerName(session.user.email || "");
-            }
-            setOpenRemitoModal(true);
-          }}
-          className="rounded-xl w-24"
-        >
-          Remito
-        </Button>
-      </div>
-      {/* <Button
-          variant="outline"
-          onClick={() => {
-            if (session?.user.email) {
-              sellerName(session.user.email || "");
-            }
-            setOpenLedgerModal(true);
-          }}
-          className="rounded-xl w-24"
-        >
-          A cuenta
-        </Button> */}
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button variant="outline" className="rounded-xl w-24">
-            A cuenta
+      
+      {isEditing ? (
+        <div className="flex">
+          <Button
+            onClick={() => {
+              if (session?.user.email) {
+                sellerName(session.user.email || "");
+              }
+              setOpenEditModal(true);
+            }}
+            className="rounded-xl w-48 text-white bg-blue-600 hover:bg-blue-700"
+          >
+            Actualizar Venta
           </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              <p>Buscar Cuenta</p>
-            </DialogTitle>
-          </DialogHeader>
-          <AccountLedgerModal billState={BillState} />
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button>Cerrar</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      ) : (
+        <>
+          <div className="flex">
+            <Button
+              onClick={() => {
+                if (session?.user.email) {
+                  sellerName(session.user.email || "");
+                }
+                setOpenFacturaModal(true);
+              }}
+              className="rounded-xl w-24"
+            >
+              Facturar
+            </Button>
+          </div>
+          <div className="flex">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (session?.user.email) {
+                  sellerName(session.user.email || "");
+                }
+                setOpenRemitoModal(true);
+              }}
+              className="rounded-xl w-24"
+            >
+              Remito
+            </Button>
+          </div>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="rounded-xl w-24">
+                A cuenta
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  <p>Buscar Cuenta</p>
+                </DialogTitle>
+              </DialogHeader>
+              <AccountLedgerModal billState={BillState} />
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button>Cerrar</Button>
+                </DialogClose>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
 
       {blockButton && <Spinner />}
       <Dialog
@@ -255,7 +280,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
                 onClick={async () => {
                   setBlockButton(true);
                   try {
-                    await createSale(true);
+                    await createSale(true, false);
                     if (!openErrorModal && BillState.total > 0) {
                       handlePrint();
                       setTimeout(() => {
@@ -271,6 +296,47 @@ const BillButtons = ({ session, handlePrint }: props) => {
                 }}
               >
                 Aceptar
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* UPDATE DIALOG */}
+      <Dialog
+        open={openEditModal}
+        onOpenChange={setOpenEditModal}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar actualización</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            ¿Estás seguro que deseas sobreescribir esta venta? Se registrará un historial detallado de los cambios.
+          </DialogDescription>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button onClick={() => setOpenEditModal(false)}>
+                Cancelar
+              </Button>
+            </DialogClose>
+            <DialogClose asChild>
+              <Button
+                variant="default"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={async () => {
+                  setBlockButton(true);
+                  try {
+                    await createSale(false, true);
+                    setOpenEditModal(false);
+                    setBlockButton(false);
+                  } catch (err) {
+                    console.error(err);
+                    setBlockButton(false);
+                  }
+                }}
+              >
+                Confirmar Actualización
               </Button>
             </DialogClose>
           </DialogFooter>
@@ -298,7 +364,7 @@ const BillButtons = ({ session, handlePrint }: props) => {
                 onClick={async () => {
                   setBlockButton(true);
                   try {
-                    await createSale(false);
+                    await createSale(false, false);
                     if (!openErrorModal && BillState.total > 0) {
                       handlePrint();
                       setTimeout(() => {

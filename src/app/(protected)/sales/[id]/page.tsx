@@ -28,14 +28,14 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-8 pb-20">
-      <div className="flex items-center justify-between">
-        <Link href="/searchBill" className="text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors">
-          <ArrowLeft className="h-4 w-4" /> Volver
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <Link href="/searchBill" className="text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors text-sm font-medium">
+          <ArrowLeft className="h-4 w-4" /> Volver a ventas
         </Link>
         {isAdmin && (
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-sm font-medium">
+          <Link href={`/sales/${sale.id}/edit`} className="w-full sm:w-auto bg-blue-600 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-lg active:scale-[0.98] font-semibold text-sm">
             <Edit2 className="h-4 w-4" /> Editar Venta
-          </button>
+          </Link>
         )}
       </div>
 
@@ -46,8 +46,8 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
             <CardTitle className="text-xl font-bold">Venta #{sale.id.slice(-6).toUpperCase()}</CardTitle>
             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 px-3 py-1">Confirmada</Badge>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+          <CardContent className="space-y-6 p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-4">
               <div className="space-y-1">
                 <span className="text-xs text-slate-500 uppercase font-semibold">Fecha</span>
                 <div className="flex items-center gap-2 text-slate-700 font-medium">
@@ -81,8 +81,18 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
             <Separator />
 
             <div className="space-y-4">
-              <h3 className="font-semibold text-slate-900">Productos</h3>
-              <div className="bg-slate-50 dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Package className="h-5 w-5 text-blue-500" />
+                  Productos
+                </h3>
+                <Badge variant="secondary" className="font-mono text-xs">
+                  {sale.products.length} items
+                </Badge>
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block bg-slate-50 dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800">
                 <table className="w-full text-sm text-left">
                   <thead className="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
                     <tr>
@@ -111,47 +121,80 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {sale.products.map((product, idx) => (
+                  <div key={idx} className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="space-y-1">
+                        <div className="font-bold text-slate-900 dark:text-white leading-tight">{product.description}</div>
+                        <div className="text-[10px] text-slate-400 font-mono tracking-wider uppercase">{product.code}</div>
+                      </div>
+                      <Badge variant="outline" className="shrink-0 bg-white dark:bg-slate-800">
+                        x{product.amount}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-end pt-2 border-t border-slate-200/50 dark:border-slate-800/50">
+                      <div className="text-xs text-slate-500">
+                        P. Unit: ${product.salePrice?.toLocaleString("es-AR")}
+                      </div>
+                      <div className="font-black text-slate-900 dark:text-white">
+                        ${((product.salePrice || 0) * product.amount).toLocaleString("es-AR")}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Totals Summary Card */}
-        <Card className="shadow-sm h-fit">
-          <CardHeader>
-            <CardTitle className="text-lg">Resumen de Totales</CardTitle>
+        <Card className="shadow-sm h-fit overflow-hidden border-slate-200/60 dark:border-slate-800/60">
+          <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800 p-4 sm:p-6">
+            <CardTitle className="text-lg font-bold text-slate-800 dark:text-slate-100 uppercase tracking-tight">Resumen</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between text-slate-600">
-              <span>Subtotal</span>
-              <span className="font-medium">${sale.total.toLocaleString("es-AR")}</span>
-            </div>
-            {sale.discount > 0 && (
-              <div className="flex justify-between text-green-600">
-                <span>Descuento ({sale.discount}%)</span>
-                <span className="font-medium">-${(sale.total - sale.totalWithDiscount!).toLocaleString("es-AR")}</span>
+          <CardContent className="p-4 sm:p-6 space-y-4">
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm text-slate-600 dark:text-slate-400">
+                <span>Subtotal</span>
+                <span className="font-semibold text-slate-900 dark:text-white">${sale.total.toLocaleString("es-AR")}</span>
               </div>
-            )}
-            <Separator />
-            <div className="flex justify-between items-end">
-              <span className="text-lg font-bold">Total</span>
-              <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
+              {sale.discount > 0 && (
+                <div className="flex justify-between text-sm text-green-600 dark:text-green-500 font-medium">
+                  <span>Descuento ({sale.discount}%)</span>
+                  <span>-${(sale.total - sale.totalWithDiscount!).toLocaleString("es-AR")}</span>
+                </div>
+              )}
+            </div>
+            
+            <Separator className="bg-slate-100 dark:bg-slate-800" />
+            
+            <div className="flex justify-between items-end py-2">
+              <span className="text-sm font-bold text-slate-500 uppercase">Total Venta</span>
+              <span className="text-3xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">
                 ${sale.totalWithDiscount?.toLocaleString("es-AR")}
               </span>
             </div>
             
-            <Separator />
-            
             {sale.twoMethods && (
-                <div className="space-y-2 text-xs text-slate-500">
-                    <div className="flex justify-between">
-                        <span>{sale.paidMethod}</span>
-                        <span>${((sale.totalWithDiscount || 0) - (sale.totalSecondMethod || 0)).toLocaleString("es-AR")}</span>
+              <>
+                <Separator className="bg-slate-100 dark:bg-slate-800" />
+                <div className="space-y-2 pt-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Desglose de Pago</span>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between items-center text-slate-600 dark:text-slate-400 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
+                      <span className="font-medium">{sale.paidMethod}</span>
+                      <span className="font-bold text-slate-900 dark:text-white">${((sale.totalWithDiscount || 0) - (sale.totalSecondMethod || 0)).toLocaleString("es-AR")}</span>
                     </div>
-                    <div className="flex justify-between">
-                        <span>{sale.secondPaidMethod}</span>
-                        <span>${(sale.totalSecondMethod || 0).toLocaleString("es-AR")}</span>
+                    <div className="flex justify-between items-center text-slate-600 dark:text-slate-400 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
+                      <span className="font-medium">{sale.secondPaidMethod}</span>
+                      <span className="font-bold text-slate-900 dark:text-white">${(sale.totalSecondMethod || 0).toLocaleString("es-AR")}</span>
                     </div>
+                  </div>
                 </div>
+              </>
             )}
           </CardContent>
         </Card>
