@@ -234,29 +234,8 @@ const BillButtons = ({ session, handlePrint }: props) => {
 
       {blockButton && <Spinner />}
       <Dialog
-        // blockButton={blockButton}
         open={openFacturaModal}
-        // onClose={() => setOpenFacturaModal(false)}
-        // onCancel={() => setOpenFacturaModal(false)}
-        // message={"Confirmar creacion de Factura C"}
-        // onAcept={async () => {
-        //   setBlockButton(true);
-        //   try {
-        //     await createSale(true);
-        //     if (!openErrorModal && BillState.total > 0) {
-        //       handlePrint();
-        //       setTimeout(() => {
-        //         removeAll();
-        //         handlePrint();
-        //       }, 5000);
-        //     }
-        //     setOpenFacturaModal(false);
-
-        //     setBlockButton(false);
-        //   } catch (err) {
-        //     console.error(err);
-        //   }
-        // }}
+        onOpenChange={setOpenFacturaModal}
       >
         <DialogContent>
           <DialogHeader>
@@ -298,28 +277,8 @@ const BillButtons = ({ session, handlePrint }: props) => {
         </DialogContent>
       </Dialog>
       <Dialog
-        // blockButton={blockButton}
         open={openRemitoModal}
-        // onClose={() => setOpenRemitoModal(false)}
-        // message={"Confirmar creacion de Remito"}
-        // onAcept={async () => {
-        //   setBlockButton(true);
-        //   try {
-        //     await createSale(false);
-        //     if (!openErrorModal && BillState.total > 0) {
-        //       handlePrint();
-        //       setTimeout(() => {
-        //         removeAll();
-        //         handlePrint();
-        //       }, 5000);
-        //     }
-        //     setOpenRemitoModal(false);
-        //     setBlockButton(false);
-        //   } catch (err) {
-        //     console.error(err);
-        //   }
-        // }}
-        // onCancel={() => setOpenRemitoModal(false)}
+        onOpenChange={setOpenRemitoModal}
       >
         <DialogContent>
           <DialogHeader>
