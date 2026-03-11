@@ -4,6 +4,7 @@ import "./globals.css";
 import { NavigationMenuHeader } from "@/components/ui/NavBar";
 import FiltersProvider from "@/context/FiltersContext/FiltersProivder";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
+import { PaymentStatusGuard } from "@/components/PaymentStatusGuard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,6 +45,7 @@ export default function RootLayout({
               <FiltersProvider>
                 <div className="h-full w-full  bg-slate-100 dark:bg-gray-800">
             <NavigationMenuHeader />
+            <PaymentStatusGuard />
             {children}
             <Toaster position="bottom-right" />
                 </div>
