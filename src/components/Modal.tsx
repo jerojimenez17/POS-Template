@@ -22,19 +22,33 @@ const Modal = ({
   onCancel,
   blockButton,
 }: props) => {
+  React.useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    if (visible) {
+      window.addEventListener("keydown", handleEscape);
+    }
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [visible, onClose]);
+
   if (!visible) return null;
   return (
     <div
-      className={`fixed h-full  w-full inset-0 bg-black/25 backdrop-blur-xs flex flex-col items-center ${className}`}
+      onClick={onClose}
+      className={`fixed h-full w-full inset-0 bg-black/25 backdrop-blur-xs flex flex-col items-center ${className}`}
     >
-      <div className=" flex flex-col w-3/4 md:w-1/2 items-center mt-24 h-full">
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className=" flex flex-col w-3/4 md:w-1/2 items-center mt-24 h-full"
+      >
         <button
           className="text-white text-2xl font-bold place-self-end md:mr-28 hover:text-black"
           onClick={onClose}
         >
           X
         </button>
-        <div className="bg-white px-12 py-2 bg-opacity-70 rounded-lg w-lg h-[65vh] md:h-[75vh] flex flex-col overflow-auto">
+        <div className="bg-white px-12 py-2 bg-opacity-70 rounded-lg w-lg h-[65vh] md:h-[75vh] flex flex-col overflow-auto ring-1 ring-black/5 shadow-2xl">
           <div className="m-3 flex grow mx-auto text-center flex-col justify-center text-black">
             {message}
           </div>
