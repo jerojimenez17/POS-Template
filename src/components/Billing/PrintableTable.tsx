@@ -260,6 +260,7 @@ const PrintableTable = ({
       {isClient && (
         <div className="print-visible print:mb-4 mt-4 print:text-center hidden">
           <h2
+          
             className={cn(
               "text-5xl font-bold text-gray-800",
               greatVibes.className
@@ -272,8 +273,8 @@ const PrintableTable = ({
               Fecha: {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}
             </p>
             <p>Factura: {state.billType}</p>
-            <p>Cuit: 27374057893</p>
-            <p>Condición IVA: Monotributo</p>
+            {/* <p>Cuit: 27374057893</p>
+            <p>Condición IVA: Monotributo</p> */}
             <p>Vendedor: {state.seller || session?.user?.email}</p>
             <p>Medio de Pago: {state.paidMethod}</p>
           </div>
