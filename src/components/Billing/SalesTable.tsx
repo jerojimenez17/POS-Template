@@ -32,13 +32,12 @@ const SalesTable = ({ sales = [], session }: props) => {
 
 
 
+  const { filtersState, seller } = useContext(FiltersContext);
   useEffect(() => {
     if (user?.email !== process.env.ADMIN_EMAIL && user && user.email) {
       seller(user?.email);
     }
-  }, []);
-
-  const { filtersState, seller } = useContext(FiltersContext);
+  }, [user, seller]);
 
   const filteredSales = React.useMemo(() => {
     return sales

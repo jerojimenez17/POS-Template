@@ -1,3 +1,5 @@
+import { Eye } from "lucide-react";
+import Link from "next/link";
 import BillState from "@/models/BillState";
 import BillingModal from "./BillingModal";
 import React, { useState } from "react";
@@ -20,7 +22,7 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
 
   return (
     <div className="rounded p-4 bg-white shadow-sm hover:shadow-md transition-shadow m-1 border border-gray-100 dark:border-gray-800 text-xs sm:text-sm md:text-base w-[700px] sm:w-full min-w-max">
-      <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px] items-center gap-4 text-gray-700 dark:text-gray-300">
+      <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px_40px] items-center gap-4 text-gray-700 dark:text-gray-300">
         
         {/* Date */}
         <div className="font-medium text-gray-900 dark:text-gray-100">
@@ -61,6 +63,15 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
               })
             : sale.total}
         </div>
+
+        {/* Action: Detail */}
+        <Link
+          href={`/sales/${sale.id}`}
+          className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+          title="Ver Detalle"
+        >
+          <Eye className="h-4 w-4 text-gray-500" />
+        </Link>
 
         {/* Action: Print */}
         <div 

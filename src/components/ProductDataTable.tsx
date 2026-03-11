@@ -81,6 +81,23 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         ),
       },
       {
+        accessorKey: "brand",
+        header: () => (
+          <div className="text-center font-extrabold text-white text-lg p-2">
+            Marca
+          </div>
+        ),
+        cell: (info) => {
+          const brandData = info.row.original.brand;
+          const brandName = typeof brandData === 'object' && brandData !== null ? (brandData as { name: string }).name : brandData;
+          return (
+            <div className="font-medium text-center">
+              {brandName || "-"}
+            </div>
+          );
+        },
+      },
+      {
         accessorKey: "amount",
         header: () => (
           <div className="text-center font-extrabold text-white text-lg p-2">
@@ -297,9 +314,16 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                     <h3 className="text-base font-bold text-gray-900 dark:text-white truncate pr-2">
                        {product.description || "Sin descripción"}
                     </h3>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-                      {product.code || "-"}
-                    </span>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                        {product.code || "-"}
+                      </span>
+                      {product.brand && (
+                        <span className="text-[10px] uppercase font-bold tracking-wide text-gray-500 dark:text-gray-400">
+                          {typeof product.brand === 'object' && product.brand !== null ? (product.brand as { name: string }).name : product.brand}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="flex items-baseline gap-2 mb-2">

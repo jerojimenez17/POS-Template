@@ -176,9 +176,8 @@ const AccountLedgerModal = ({ billState }: props) => {
       console.error(error);
 
       toast.error("Error al crear cuenta");
-      return null;
     }
-  }, []);
+  }, [billState.products]);
   useEffect(() => {
     const fetchAccounts = async () => {
       try {

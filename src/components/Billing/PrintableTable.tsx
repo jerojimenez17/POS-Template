@@ -11,7 +11,9 @@ import dynamic from "next/dynamic";
 import { Session } from "next-auth";
 import { IDetectedBarcode } from "@yudiel/react-qr-scanner";
 import { cn } from "@/lib/utils";
-import { Great_Vibes } from "next/font/google";
+import { Inter } from "next/font/google";
+import { getBusinessBillingInfoAction } from "@/actions/business";
+import moment from "moment";
 
 // Dynamically import scanner to avoid SSR issues
 const Scanner = dynamic(
@@ -26,10 +28,11 @@ interface Props {
   session: Session | null;
   externalState?: BillState;
 }
-const greatVibes = Great_Vibes({
+
+const inter = Inter({
   subsets: ["latin"],
-  weight: "400",
-  variable: "--font-great-vibes",
+  weight: ["400", "600", "700"],
+  variable: "--font-inter",
 });
 
 const defaultBillState: BillState = {
@@ -45,6 +48,7 @@ const defaultBillState: BillState = {
   IVACondition: "Consumidor Final",
   twoMethods: false,
 };
+
 const PrintableTable = ({
   print,
   session,
@@ -58,11 +62,25 @@ const PrintableTable = ({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
   const [isClient, setIsClient] = useState(false);
+  const [billingInfo, setBillingInfo] = useState<{
+    razonSocial?: string | null;
+    cuit?: string | null;
+    condicionIva?: string | null;
+    inicioActividades?: Date | string | null;
+    address?: string | null;
+  } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Fix hydration: Only run on client
   useEffect(() => {
     setIsClient(true);
+    
+    // Fetch billing info
+    const fetchBillingInfo = async () => {
+      const info = await getBusinessBillingInfoAction();
+      if (info) setBillingInfo(info);
+    };
+    fetchBillingInfo();
   }, []);
 
   const handlePrint = useReactToPrint({
@@ -70,22 +88,21 @@ const PrintableTable = ({
     documentTitle: `Factura_${(state?.date || new Date()).toISOString().split("T")[0]}`,
     onBeforePrint: () => Promise.resolve(), // Sometimes helps Safari rendering lifecycle
     pageStyle: `
-      @page { size: auto; margin: 5mm; }
+      @page { size: auto; margin: 0; }
       @media print {
         html, body {
-          height: auto !important; /* Fix for iOS safari cutting off or printing screen */
-          min-height: 100vh;
+          width: 100% !important;
+          height: auto !important;
           margin: 0 !important;
-          padding: 0 !important;
-          overflow: visible !important;
+          padding: 5mm !important;
+          max-width: 100% !important;
         }
         body { -webkit-print-color-adjust: exact; }
         .print-header { display: block !important; }
-        .print-table { width: 100% !important; }
+        table { width: 100% !important; max-width: 100% !important; table-layout: fixed; }
+        th, td { word-wrap: break-word; }
         .print-hidden { display: none !important; }
         .print-visible { display: block !important; }
-        .print-text { font-size: 12pt !important; }
-        .print-total { font-size: 14pt !important; }
       }
     `,
   });
@@ -102,10 +119,10 @@ const PrintableTable = ({
   }, [externalState, BillState]);
 
   useEffect(() => {
-    if (print && isClient) {
+    if (print && isClient && !scannerOpen) {
       handlePrint();
     }
-  }, [print, isClient]);
+  }, [print, isClient, scannerOpen, handlePrint]);
 
   const updateProductAmount = (productId: string, newAmount: number) => {
     const product = state.products.find((p) => p.id === productId);
@@ -259,24 +276,38 @@ const PrintableTable = ({
       {/* Header - Print only */}
       {isClient && (
         <div className="print-visible print:mb-4 mt-4 print:text-center hidden">
-          <h2
-          
-            className={cn(
-              "text-5xl font-bold text-gray-800",
-              greatVibes.className
+          <div className="flex flex-col items-center border-b pb-4 mb-4 border-gray-300">
+            <h2
+              className={cn(
+                "text-3xl font-bold text-gray-800 tracking-tight uppercase",
+                inter.className
+              )}
+            >
+             {session?.user?.businessName || "Nombre de App"}
+            </h2>
+            {billingInfo?.razonSocial && (
+              <p className="text-sm text-gray-600 font-medium">
+                {billingInfo.razonSocial}
+              </p>
             )}
-          >
-           {session?.user?.businessName || "Nombre de App"}
-          </h2>
-          <div className="mt-2 text-sm">
-            <p>
-              Fecha: {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}
-            </p>
-            <p>Factura: {state.billType}</p>
-            {/* <p>Cuit: 27374057893</p>
-            <p>Condición IVA: Monotributo</p> */}
-            <p>Vendedor: {state.seller || session?.user?.email}</p>
-            <p>Medio de Pago: {state.paidMethod}</p>
+          </div>
+          
+          <div className="mt-2 text-sm grid grid-cols-2 gap-4 text-left">
+            <div>
+              <p><span className="font-semibold">Fecha:</span> {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}</p>
+              <p><span className="font-semibold">Factura:</span> {state.billType || "B"}</p>
+              <p><span className="font-semibold">Vendedor:</span> {state.seller || session?.user?.email}</p>
+              <p><span className="font-semibold">Medio de Pago:</span> {state.paidMethod}</p>
+            </div>
+            
+            {billingInfo && (
+              <div>
+                {billingInfo.cuit && <p><span className="font-semibold">CUIT:</span> {billingInfo.cuit}</p>}
+                {billingInfo.condicionIva && <p><span className="font-semibold">Condición IVA:</span> {billingInfo.condicionIva.replace("_", " ")}</p>}
+                {billingInfo.inicioActividades && <p><span className="font-semibold">Inicio Actividades:</span> {moment(billingInfo.inicioActividades).format("DD/MM/YYYY")}</p>}
+                {billingInfo.address && <p><span className="font-semibold">Dirección:</span> {billingInfo.address}</p>}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -328,7 +359,14 @@ const PrintableTable = ({
                   >
                     <div className="flex justify-between items-start mb-1">
                       <span className="font-bold text-blue-600 dark:text-blue-400">{product.code}</span>
-                      <span className="font-mono text-xs text-gray-400">STOCK</span>
+                      <div className="flex flex-col items-end gap-1">
+                         <span className="font-mono text-xs text-gray-400">STOCK</span>
+                         {product.brand && (
+                           <span className="text-[10px] font-semibold bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                             {product.brand}
+                           </span>
+                         )}
+                      </div>
                     </div>
                     <div className="text-gray-900 dark:text-gray-100 font-medium mb-1">
                       {product.description}
