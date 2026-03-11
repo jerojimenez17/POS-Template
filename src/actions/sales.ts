@@ -463,6 +463,8 @@ export const updateOrderAction = async (
         type: "ITEMS_UPDATED",
         items: updatedData.products.map((p) => ({
           productId: p.id,
+          description: p.description,
+          code: p.code,
           quantity: {
             from:
               existingOrder.items.find((i) => i.productId === p.id)?.quantity ??

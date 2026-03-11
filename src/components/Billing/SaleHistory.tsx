@@ -49,8 +49,13 @@ const SaleHistory = ({ saleId }: Props) => {
                   {changes.items.map((item, i) => (
                     <tr key={i} className="text-slate-600 dark:text-slate-400">
                       <td className="py-2 pr-4">
-                        <div className="font-mono text-xs truncate max-w-[150px]" title={item.productId}>
-                          {item.productId}
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-900 dark:text-white line-clamp-1">
+                            {item.description || "Producto sin descripción"}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            CODE: {item.code || item.productId}
+                          </span>
                         </div>
                       </td>
                       <td className="py-2">
@@ -83,7 +88,14 @@ const SaleHistory = ({ saleId }: Props) => {
             <div className="sm:hidden space-y-2">
               {changes.items.map((item, i) => (
                 <div key={i} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-800 space-y-2">
-                  <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">ID: {item.productId}</div>
+                  <div className="flex flex-col mb-1">
+                    <span className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
+                      {item.description || "Producto"}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
+                      CODE: {item.code || item.productId}
+                    </span>
+                  </div>
                   <div className="grid grid-cols-1 gap-2">
                     {item.quantity && (
                       <div className="flex items-center justify-between">
@@ -142,10 +154,17 @@ const SaleHistory = ({ saleId }: Props) => {
               <span>Productos Eliminados</span>
             </div>
             <ul className="space-y-1">
-              {changes.productIds.map((id, i) => (
-                <li key={i} className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-100 dark:border-red-800 text-sm">
-                  <Package className="h-4 w-4 text-red-400" />
-                  <span className="font-mono text-xs">{id}</span>
+              {changes.items.map((item, i) => (
+                <li key={i} className="flex flex-col p-2 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-100 dark:border-red-800">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-red-400" />
+                    <span className="font-medium text-sm text-slate-700 dark:text-slate-300">
+                      {item.description}
+                    </span>
+                  </div>
+                  <span className="ml-6 font-mono text-[10px] text-red-400">
+                    CODE: {item.code || item.productId}
+                  </span>
                 </li>
               ))}
             </ul>

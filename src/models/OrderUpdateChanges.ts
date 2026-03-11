@@ -12,13 +12,19 @@ export type OrderUpdateChanges =
       type: "ITEMS_UPDATED"
       items: {
         productId: string
+        description?: string | null
+        code?: string | null
         quantity?: { from: number; to: number }
         price?: { from: number; to: number }
       }[]
     }
   | {
       type: "ITEMS_REMOVED"
-      productIds: string[]
+      items: {
+        productId: string
+        description: string | null
+        code: string | null
+      }[]
     }
   | {
       type: "STATUS_CHANGED"
