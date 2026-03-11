@@ -329,9 +329,14 @@ const PrintableTable = ({
                       <span className="font-bold text-blue-600 dark:text-blue-400">{product.code}</span>
                       <span className="font-mono text-xs text-gray-400">STOCK</span>
                     </div>
-                    <div className="text-gray-900 dark:text-gray-100 font-medium mb-1">
+                    <div className="text-gray-900 dark:text-gray-100 font-medium mb-0.5">
                       {product.description}
                     </div>
+                    {product.brand && (
+                      <div className="text-gray-500 dark:text-gray-400 text-xs italic mb-1">
+                        {product.brand}
+                      </div>
+                    )}
                     <div className="flex justify-between items-center text-sm">
                       <span className="font-bold tabular-nums">
                         ${product.salePrice.toLocaleString("es-AR", {

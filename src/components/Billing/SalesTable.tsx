@@ -130,14 +130,14 @@ const SalesTable = ({ sales = [], session }: props) => {
         <div className="overflow-x-auto">
           <div className="min-w-max p-1">
             {/* Table Header */}
-            <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px] gap-4 px-5 py-3 border-b border-gray-100 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[700px] sm:w-full">
+            <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_80px_40px] gap-4 px-5 py-3 border-b border-gray-100 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[700px] sm:w-full">
               <div>Fecha</div>
               <div>Comprobante</div>
               <div>Medio Pago</div>
               <div>Vendedor</div>
               <div className="text-right pr-2">Total</div>
-              <div className="text-center">Imp.</div>
-              <div className="text-center">Del.</div>
+              <div className="text-center">Acciones</div>
+              <div className="text-center">Borrar</div>
             </div>
 
             {/* Table Body (Accordions) */}

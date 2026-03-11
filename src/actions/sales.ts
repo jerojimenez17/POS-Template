@@ -385,6 +385,7 @@ export const getSalesAction = async (): Promise<BillState[]> => {
         IVACondition: "Consumidor Final",
         twoMethods: !!order.paymentMethod2,
         paidMethod: order.paymentMethod || "Efectivo",
+        updatedAt: order.updatedAt,
       };
     });
 
@@ -420,5 +421,107 @@ export const getUniqueSellersAction = async (): Promise<string[]> => {
   } catch (error) {
     console.error("Error fetching unique sellers:", error);
     return [];
+  }
+};
+
+/**
+ * Fetches a single sale (order) by ID.
+ */
+export const getSaleByIdAction = async (id: string): Promise<BillState | null> => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId) return null;
+
+  try {
+    const order = await db.order.findUnique({
+      where: { id, businessId },
+      include: {
+        items: true,
+        client: true,
+      },
+    });
+
+    if (!order) return null;
+
+    return {
+      id: order.id,
+      products: order.items.map((item) => ({
+        id: item.productId || item.id,
+        code: item.code || "",
+        description: item.description || "",
+        price: item.costPrice,
+        salePrice: item.price,
+        amount: item.quantity,
+        unit: "unidades",
+      })),
+      total: order.total + order.discountAmount,
+      totalWithDiscount: order.total,
+      client: order.client?.name || undefined,
+      clientId: order.clientId || undefined,
+      seller: order.seller || "",
+      discount: order.discountPercentage,
+      date: order.date,
+      typeDocument: "DNI",
+      documentNumber: 0,
+      secondPaidMethod: order.paymentMethod2 || undefined,
+      totalSecondMethod: order.totalMethod2 || undefined,
+      IVACondition: "Consumidor Final",
+      twoMethods: !!order.paymentMethod2,
+      paidMethod: order.paymentMethod || "Efectivo",
+      updatedAt: order.updatedAt,
+    } as unknown as BillState;
+  } catch (error) {
+    console.error("Error fetching sale:", error);
+    return null;
+  }
+};
+
+/**
+ * Updates a sale (order).
+ */
+export const updateSaleAction = async (id: string, data: any) => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId) return { error: "No autorizado" };
+
+  try {
+    const updateData: any = {};
+    if (data.paidMethod) updateData.paymentMethod = data.paidMethod;
+    if (data.seller) updateData.seller = data.seller;
+    if (data.totalWithDiscount !== undefined) updateData.total = data.totalWithDiscount;
+    if (data.clientId) updateData.clientId = data.clientId;
+
+    await db.order.update({
+      where: { id, businessId },
+      data: updateData,
+    });
+
+    revalidatePath("/searchBill");
+    revalidatePath(`/searchBill/${id}`);
+    return { success: "Venta actualizada" };
+  } catch (error) {
+    console.error("Error updating sale:", error);
+    return { error: "Error al actualizar la venta" };
+  }
+};
+
+/**
+ * Deletes a sale (order).
+ */
+export const deleteSaleAction = async (id: string) => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId) return { error: "No autorizado" };
+
+  try {
+    await db.order.delete({
+      where: { id, businessId },
+    });
+
+    revalidatePath("/searchBill");
+    return { success: "Venta eliminada" };
+  } catch (error) {
+    console.error("Error deleting sale:", error);
+    return { error: "Error al eliminar la venta" };
   }
 };

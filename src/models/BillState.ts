@@ -21,4 +21,5 @@ export default interface BillState {
   billType?: string;
   nroAsociado?: number;
   paidMethod?: string;
+  updatedAt?: Date;
 }

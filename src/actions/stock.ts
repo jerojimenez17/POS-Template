@@ -359,6 +359,7 @@ export const getProductsBySearch = async (query: string) => {
         OR: [
           { code: { contains: query, mode: "insensitive" } },
           { description: { contains: query, mode: "insensitive" } },
+          { brand: { name: { contains: query, mode: "insensitive" } } },
         ],
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },

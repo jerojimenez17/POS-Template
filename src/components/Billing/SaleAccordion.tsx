@@ -2,25 +2,40 @@ import BillState from "@/models/BillState";
 import BillingModal from "./BillingModal";
 import React, { useState } from "react";
 import PrintButton from "./PrintButton";
-import { deleteDoc, doc } from "firebase/firestore";
-import { User } from "firebase/auth";
+import { db } from "@/firebase/config";
+import { deleteSaleAction } from "@/actions/sales";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { Pencil } from "lucide-react";
 import DeleteButton from "../DeleteButton";
 import Modal from "../Modal";
-import { db } from "@/firebase/config";
 
+// Assuming User and other types are needed or using any for now if not sure about the exact firebase User type
 interface props {
   sale: BillState;
   onClick: () => void;
-  user: User | null;
+  user: any;
 }
 const SaleAccordion = ({ sale, onClick, user }: props) => {
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteSale, setDeleteSale] = useState<BillState>();
   const [openBilling, setOpenBilling] = useState(false);
+  const router = useRouter();
+
+  const handleDelete = async () => {
+    if (!deleteSale) return;
+    const res = await deleteSaleAction(deleteSale.id);
+    if (res.success) {
+      toast.success(res.success);
+      setOpenDelete(false);
+    } else {
+      toast.error(res.error || "Error al eliminar la venta");
+    }
+  };
 
   return (
     <div className="rounded p-4 bg-white shadow-sm hover:shadow-md transition-shadow m-1 border border-gray-100 dark:border-gray-800 text-xs sm:text-sm md:text-base w-[700px] sm:w-full min-w-max">
-      <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px] items-center gap-4 text-gray-700 dark:text-gray-300">
+      <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_80px_40px] items-center gap-4 text-gray-700 dark:text-gray-300">
         
         {/* Date */}
         <div className="font-medium text-gray-900 dark:text-gray-100">
@@ -34,7 +49,7 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
           ) : (
             <button
               onClick={() => setOpenBilling(true)}
-              className="px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors text-xs font-semibold whitespace-nowrap"
+              className="px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-colors text-xs font-semibold whitespace-nowrap"
             >
               Facturar
             </button>
@@ -63,11 +78,28 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
         </div>
 
         {/* Action: Print */}
-        <div 
-          className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors" 
-          onClick={onClick}
-        >
-          <PrintButton onClick={onClick} />
+        <div className="flex justify-center items-center gap-1">
+          <div 
+            className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+            }}
+            title="Imprimir"
+          >
+            <PrintButton onClick={onClick} />
+          </div>
+
+          <div 
+            className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors text-blue-600" 
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/searchBill/${sale.id}`);
+            }}
+            title="Ver detalle / Editar"
+          >
+            <Pencil size={18} />
+          </div>
         </div>
 
         {/* Action: Delete */}
@@ -89,12 +121,7 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
         onCancel={() => {
           setOpenDelete(false);
         }}
-        onAcept={async () => {
-          if (deleteSale) {
-            await deleteDoc(doc(db, "sales", deleteSale?.id));
-            setOpenDelete(false);
-          }
-        }}
+        onAcept={handleDelete}
         blockButton={false}
         onClose={() => {
           setOpenDelete(false);
