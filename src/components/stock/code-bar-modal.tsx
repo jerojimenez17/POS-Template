@@ -30,7 +30,7 @@ const CodeBarModal = ({ value }: props) => {
     if (print === true) {
       handlePrint();
     }
-  }, [print]);
+  }, [print, handlePrint]);
   useEffect(() => {
     if (barcodeRef.current) {
       JsBarcode(barcodeRef.current, value, {
@@ -42,7 +42,7 @@ const CodeBarModal = ({ value }: props) => {
         fontSize: 80,
       });
     }
-  }, [generate]);
+  }, [generate, value]);
 
   return (
     <Dialog>
