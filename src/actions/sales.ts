@@ -5,9 +5,6 @@ import { auth } from "../../auth";
 import { revalidatePath } from "next/cache";
 import BillState from "@/models/BillState";
 
-/**
- * Interface representing the expected input for processSaleAction
- */
 interface SaleProduct {
   id: string;
   code: string;
@@ -30,11 +27,6 @@ interface ProcessSaleInput {
   products: SaleProduct[];
 }
 
-/**
- * Atomic transaction to process a sale.
- * Includes Order creation, StockMovement logging, Product stock update, 
- * CashBox update, CashMovement recording, and Ranking update.
- */
 export const processSaleAction = async (billState: ProcessSaleInput) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
@@ -52,27 +44,26 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
     const discountAmount = billState.total * discountPercent * 0.01;
     
     const result = await db.$transaction(async (tx) => {
-      // 1. Create Order
       const order = await tx.order.create({
         data: {
           total: total,
           seller: billState.seller,
           status: "confirmado",
-          paidStatus: "pago", // Defaulting as confirmed/paid for this flow
+          paidStatus: "pago",
           paymentMethod: billState.paidMethod || "Efectivo",
           paymentMethod2: billState.secondPaidMethod,
           totalMethod2: totalSecondMethodParsed,
           discountPercentage: discountPercent,
           discountAmount: discountAmount,
           businessId: businessId,
-          clientId: billState.clientId, // Assuming clientId is in billState if available
+          clientId: billState.clientId,
           items: {
             create: billState.products.map((p) => ({
               productId: p.id,
               code: p.code,
               description: p.description,
-              costPrice: p.price || 0, // Assuming p.price is cost if costPrice not explicit
-              price: p.salePrice || p.price || 0, // Using salePrice if available
+              costPrice: p.price || 0,
+              price: p.salePrice || p.price || 0,
               quantity: p.amount,
               subTotal: (p.salePrice || p.price || 0) * p.amount,
             })),
@@ -81,15 +72,12 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         include: { items: true },
       });
 
-      // 2. Update Stock and Log Movements
       for (const item of billState.products) {
-        // Decrement product stock
         await tx.product.update({
           where: { id: item.id },
           data: { amount: { decrement: item.amount } },
         });
 
-        // Log Stock Movement
         await tx.stockMovement.create({
           data: {
             type: "SALE",
@@ -101,7 +89,6 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           },
         });
 
-        // 3. Update Monthly Ranking
         await tx.productRanking.upsert({
           where: {
             productId_month_year_businessId: {
@@ -126,7 +113,6 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         });
       }
 
-      // 4. Update CashBox (only for Cash payments)
       let cashToIncrement = 0;
       if (billState.paidMethod === "Efectivo") {
         cashToIncrement += (total - totalSecondMethodParsed);
@@ -143,7 +129,6 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         });
       }
 
-      // 5. Create Cash Movement record
       await tx.cashMovement.create({
         data: {
           total: total,
@@ -168,9 +153,6 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
   }
 };
 
-/**
- * Atomic transaction to process a return.
- */
 export const processReturnAction = async (data: { orderId: string; items: { productId: string; quantity: number; refundAmount: number }[]; reason: string }) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
@@ -178,7 +160,6 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
 
   try {
     const result = await db.$transaction(async (tx) => {
-      // 1. Create SaleReturn record
       const returnRecord = await tx.saleReturn.create({
         data: {
           orderId: data.orderId,
@@ -189,13 +170,11 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
       });
 
       for (const item of data.items) {
-        // 2. Increment product stock
         await tx.product.update({
           where: { id: item.productId },
           data: { amount: { increment: item.quantity } },
         });
 
-        // 3. Log Stock Movement
         await tx.stockMovement.create({
           data: {
             type: "RETURN",
@@ -206,36 +185,32 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
           },
         });
 
-     const orderItem = await tx.orderItem.findFirst({
-  where: { 
-    orderId: data.orderId, 
-    productId: item.productId 
-  }
-})
+        const orderItem = await tx.orderItem.findFirst({
+          where: { 
+            orderId: data.orderId, 
+            productId: item.productId 
+          }
+        });
 
-if (!orderItem) {
-  throw new Error("OrderItem not found")
-}
+        if (!orderItem) throw new Error("OrderItem not found");
 
-await tx.saleReturnItem.create({
-  data: {
-    returnId: returnRecord.id,
-    orderItemId: orderItem.id, // 👈 SET DIRECTAMENTE EL FK
-    productId: item.productId,
-    quantity: item.quantity,
-    refundAmount: item.refundAmount,
-  }
-})
+        await tx.saleReturnItem.create({
+          data: {
+            returnId: returnRecord.id,
+            orderItemId: orderItem.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            refundAmount: item.refundAmount,
+          }
+        });
       }
 
-      // 5. Update CashBox (Decrement)
       const totalRefund = data.items.reduce((acc, item) => acc + item.refundAmount, 0);
       await tx.cashBox.update({
         where: { businessId },
         data: { total: { decrement: totalRefund } },
       });
 
-      // 6. Create Cash Movement for refund
       await tx.cashMovement.create({
         data: {
           total: -totalRefund,
@@ -258,9 +233,6 @@ await tx.saleReturnItem.create({
   }
 };
 
-/**
- * Interface representing a query result order for getDailyReportAction
- */
 interface ReportOrder {
   total: number;
   discountAmount: number;
@@ -273,9 +245,6 @@ interface ReportReturn {
   total: number;
 }
 
-/**
- * Fetches a report for a specific date range.
- */
 export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
@@ -283,7 +252,6 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
 
   const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
-  
   const end = endDate ? new Date(endDate) : new Date(startDate);
   end.setHours(23, 59, 59, 999);
 
@@ -303,7 +271,6 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
       }),
     ]);
 
-    // Aggregate data
     const totalSales = orders.reduce((acc: number, o: ReportOrder) => acc + o.total, 0);
     const totalDiscounts = orders.reduce((acc: number, o: ReportOrder) => acc + o.discountAmount, 0);
     const totalReturns = returns.reduce((acc: number, r: ReportReturn) => acc + r.total, 0);
@@ -338,9 +305,6 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
   }
 };
 
-/**
- * Fetches sales (orders) for the current business.
- */
 export const getSalesAction = async (): Promise<BillState[]> => {
   const session = await auth();
   const businessId = session?.user?.businessId;
@@ -353,10 +317,8 @@ export const getSalesAction = async (): Promise<BillState[]> => {
         items: true,
         client: true,
       },
-      orderBy: {
-        date: "desc",
-      },
-      take: 1100, // Matching PAGE_SIZE from firebaseService
+      orderBy: { date: "desc" },
+      take: 1100,
     });
 
     const parsedSales = orders.map((order) => {
@@ -369,10 +331,10 @@ export const getSalesAction = async (): Promise<BillState[]> => {
           price: item.costPrice,
           salePrice: item.price,
           amount: item.quantity,
-          unit: "unidades", // Fallback unit to prevent crash in PrintableTable
+          unit: "unidades",
         })),
-        total: order.total + order.discountAmount, // Base total before discount
-        totalWithDiscount: order.total, // Final total after discount
+        total: order.total + order.discountAmount,
+        totalWithDiscount: order.total,
         client: order.client?.name || undefined,
         clientId: order.clientId || undefined,
         seller: order.seller || "",
@@ -395,10 +357,54 @@ export const getSalesAction = async (): Promise<BillState[]> => {
   }
 };
 
-/**
- * Fetches unique sellers from the user's business sales.
- * Optimization: Avoids downloading all sales just to extract seller names.
- */
+export const getSaleByIdAction = async (id: string): Promise<BillState | null> => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId) return null;
+
+  try {
+    const order = await db.order.findUnique({
+      where: { id, businessId },
+      include: {
+        items: true,
+        client: true,
+      },
+    });
+
+    if (!order) return null;
+
+    return {
+      id: order.id,
+      products: order.items.map((item) => ({
+        id: item.productId || item.id,
+        code: item.code || "",
+        description: item.description || "",
+        price: item.costPrice,
+        salePrice: item.price,
+        amount: item.quantity,
+        unit: "unidades",
+      })),
+      total: order.total + order.discountAmount,
+      totalWithDiscount: order.total,
+      client: order.client?.name || undefined,
+      clientId: order.clientId || undefined,
+      seller: order.seller || "",
+      discount: order.discountPercentage,
+      date: order.date,
+      typeDocument: "DNI",
+      documentNumber: 0,
+      secondPaidMethod: order.paymentMethod2 || undefined,
+      totalSecondMethod: order.totalMethod2 || undefined,
+      IVACondition: "Consumidor Final",
+      twoMethods: !!order.paymentMethod2,
+      paidMethod: order.paymentMethod || "Efectivo",
+    } as unknown as BillState;
+  } catch (error) {
+    console.error("Error fetching sale:", error);
+    return null;
+  }
+};
+
 export const getUniqueSellersAction = async (): Promise<string[]> => {
   const session = await auth();
   const businessId = session?.user?.businessId;
@@ -422,3 +428,205 @@ export const getUniqueSellersAction = async (): Promise<string[]> => {
     return [];
   }
 };
+export const updateOrderAction = async (
+  orderId: string,
+  updatedData: ProcessSaleInput
+) => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  const userId = session?.user?.id;
+  const userRole = session?.user?.role;
+
+  if (!businessId || !userId) return { error: "No autorizado" };
+  if (userRole !== "ADMIN")
+    return { error: "Solo los administradores pueden editar ventas" };
+
+  try {
+    const result = await db.$transaction(async (tx) => {
+      const existingOrder = await tx.order.findFirst({
+        where: { id: orderId, businessId },
+        include: { items: true },
+      });
+
+      if (!existingOrder) throw new Error("Orden no encontrada");
+
+      // 🔹 calcular versión
+      const lastUpdate = await tx.orderUpdate.findFirst({
+        where: { orderId },
+        orderBy: { version: "desc" },
+      });
+
+      const version = (lastUpdate?.version ?? 0) + 1;
+
+      // 🔹 calcular cambios
+      const changes: OrderUpdateChanges = {
+        type: "ITEMS_UPDATED",
+        items: updatedData.products.map((p) => ({
+          productId: p.id,
+          quantity: {
+            from:
+              existingOrder.items.find((i) => i.productId === p.id)?.quantity ??
+              0,
+            to: p.amount,
+          },
+        })),
+      };
+
+      // 🔹 snapshot cada 10 versiones
+      let snapshot: OrderSnapshot | null = null;
+
+      if (version % 10 === 0) {
+        snapshot = {
+          id: existingOrder.id,
+          total: existingOrder.total,
+          status: existingOrder.status,
+          paidStatus: existingOrder.paidStatus,
+          discountAmount: existingOrder.discountAmount,
+          discountPercentage: existingOrder.discountPercentage,
+          clientId: existingOrder.clientId,
+          items: existingOrder.items.map((item) => ({
+            productId: item.productId,
+            code: item.code,
+            description: item.description,
+            quantity: item.quantity,
+            price: item.price,
+            subTotal: item.subTotal,
+          })),
+        };
+      }
+
+      // 🔹 guardar update
+      await tx.orderUpdate.create({
+        data: {
+          orderId,
+          businessId,
+          updatedById: userId,
+          version,
+          type: changes.type,
+          changes: changes as OrderUpdateChanges,
+          snapshot: snapshot as OrderSnapshot,
+        },
+      });
+
+      // 🔹 revertir stock anterior
+      for (const item of existingOrder.items) {
+        if (item.productId) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { amount: { increment: item.quantity } },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              type: "ADJUSTMENT",
+              quantity: item.quantity,
+              productId: item.productId,
+              orderId,
+              businessId,
+              reason: `Reversión por edición de Venta #${orderId}`,
+            },
+          });
+        }
+      }
+
+      // 🔹 recalcular totales
+      const discountPercent = Number(updatedData.discount) || 0;
+      const total = updatedData.totalWithDiscount || updatedData.total;
+      const discountAmount = updatedData.total * discountPercent * 0.01;
+
+      // 🔹 actualizar orden
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          total,
+          seller: updatedData.seller,
+          paymentMethod: updatedData.paidMethod || "Efectivo",
+          paymentMethod2: updatedData.secondPaidMethod,
+          totalMethod2: Number(updatedData.totalSecondMethod) || 0,
+          discountPercentage: discountPercent,
+          discountAmount,
+          clientId: updatedData.clientId,
+          items: {
+            deleteMany: {},
+            create: updatedData.products.map((p) => ({
+              productId: p.id,
+              code: p.code,
+              description: p.description,
+              costPrice: p.price || 0,
+              price: p.salePrice || p.price || 0,
+              quantity: p.amount,
+              subTotal: (p.salePrice || p.price || 0) * p.amount,
+            })),
+          },
+        },
+      });
+
+      // 🔹 descontar stock nuevo
+      for (const item of updatedData.products) {
+        await tx.product.update({
+          where: { id: item.id },
+          data: { amount: { decrement: item.amount } },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            type: "SALE",
+            quantity: -item.amount,
+            productId: item.id,
+            orderId,
+            businessId,
+            reason: `Actualización por edición de Venta #${orderId}`,
+          },
+        });
+      }
+
+      return { success: true };
+    });
+
+    revalidatePath("/stock");
+    revalidatePath("/cashRegister");
+    revalidatePath(`/sales/${orderId}`);
+
+    return result;
+  } catch (error) {
+    console.error("Error updating sale:", error);
+    return { error: "Error al actualizar la venta" };
+  }
+};
+
+export const getSaleHistoryAction = async (orderId: string) => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId) return [];
+
+  try {
+    const updates = await db.orderUpdate.findMany({
+      where: { orderId, order: { businessId } },
+      include: {
+        updatedBy: {
+          select: { name: true, email: true }
+        }
+      },
+      orderBy: { date: "desc" },
+    });
+
+    return updates;
+  } catch (error) {
+    console.error("Error fetching sale history:", error);
+    return [];
+  }
+};
+import { Prisma } from "@prisma/client";
+import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
+import { OrderSnapshot } from "@/models/OrderSnapshot";
+
+export type OrderUpdateWithUser = Prisma.OrderUpdateGetPayload<{
+  include: {
+    updatedBy: {
+      select: {
+        name: true;
+        email: true;
+      };
+    };
+  };
+}>;

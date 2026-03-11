@@ -1,5 +1,6 @@
 "use server";
 
+import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
@@ -9,6 +10,8 @@ export const createClient = async (data: {
   cellPhone?: string;
   balance?: number;
 }) => {
+  const session = await auth();
+  if (!session?.user?.businessId) return { error: "No autorizado" };
   try {
     const client = await db.client.create({
       data: {
@@ -16,6 +19,7 @@ export const createClient = async (data: {
         address: data.address,
         cellPhone: data.cellPhone,
         balance: data.balance || 0,
+        businessId: session.user.businessId,
       },
     });
     revalidatePath("/clients"); // Assuming /clients is the path

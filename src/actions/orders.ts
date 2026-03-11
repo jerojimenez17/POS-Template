@@ -1,4 +1,4 @@
-"use server";
+ "use server";
 
 import { db } from "@/lib/db";
 import { OrderStatus, PaidStatus } from "@prisma/client";
@@ -19,13 +19,14 @@ interface OrderProductInput {
 }
 
 interface OrderInput {
-  client: { id: string };
-  products: OrderProductInput[];
-  date?: Date | string;
-  total: number;
-  status?: OrderStatus;
-  paidStatus?: PaidStatus;
-  seller?: string;
+  businessId: string
+  client: { id: string }
+  products: OrderProductInput[]
+  date?: Date | string
+  total: number
+  status?: OrderStatus
+  paidStatus?: PaidStatus
+  seller?: string
 }
 
 export const createOrder = async (order: OrderInput) => {
@@ -59,27 +60,27 @@ export const createOrder = async (order: OrderInput) => {
       }
 
       // 2. Create Order and Items
-      const newOrder = await tx.order.create({
-        data: {
-          clientId: order.client.id,
-          date: order.date ? new Date(order.date) : new Date(),
-          total: order.total,
-          status: order.status || "confirmado",
-          paidStatus: order.paidStatus || "inpago",
-          seller: order.seller,
-          items: {
-            create: order.products.map((p) => ({
-              productId: p.id || undefined, // Link if ID exists
-              quantity: p.amount,
-              price: p.price,
-              subTotal: p.price * p.amount,
-              description: p.description,
-              code: p.code,
-              // Other snapshot fields can be added here if OrderItem model supports them
-            })),
-          },
-        },
-      });
+const newOrder = await tx.order.create({
+  data: {
+    businessId: order.businessId, // 👈 esto falta
+    clientId: order.client.id,
+    date: order.date ? new Date(order.date) : new Date(),
+    total: order.total,
+    status: order.status || "confirmado",
+    paidStatus: order.paidStatus || "inpago",
+    seller: order.seller,
+    items: {
+      create: order.products.map((p) => ({
+        productId: p.id || undefined,
+        quantity: p.amount,
+        price: p.price,
+        subTotal: p.price * p.amount,
+        description: p.description,
+        code: p.code,
+      })),
+    },
+  },
+});
 
       // 3. Update Client Balance
       // Logic from firebase: balance = balance + (-1 * total) (Buying reduces balance/increases debt)
@@ -106,7 +107,7 @@ export const createOrder = async (order: OrderInput) => {
 export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
         await db.order.update({
-            where: { id: orderId },
+            where: { id: orderId},
             data: { status: newStatus }
         });
         revalidatePath("/orders");
