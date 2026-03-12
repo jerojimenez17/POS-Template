@@ -36,14 +36,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="dark">
+      <head>
+        <meta name="color-scheme" content="dark light" />
+      </head>
           <body
-            className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased h-screen w-screen overflow-auto`}
+            className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased min-h-screen overflow-x-hidden`}
             >
             <AuthProvider>
             <ThemeProvider>
               <FiltersProvider>
-                <div className="h-full w-full  bg-slate-100 dark:bg-gray-800">
+                <div className="min-h-screen bg-slate-100 dark:bg-gray-800">
             <NavigationMenuHeader />
             <PaymentStatusGuard />
             {children}

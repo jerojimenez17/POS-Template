@@ -128,19 +128,19 @@ const AccountLedgerModal = ({ billState }: props) => {
         prev.map((acc) =>
           acc.id === account.id
             ? new Account(
-                acc.id,
-                acc.clientName,
-                acc.clientEmail,
-                acc.clientPhone,
-                [
-                  ...acc.productsAccount,
-                  ...billState.products.map(
-                    (p) => new ProductAccount(p, p.amount, moment())
-                  ),
-                ],
-                acc.date,
-                moment()
-              )
+              acc.id,
+              acc.clientName,
+              acc.clientEmail,
+              acc.clientPhone,
+              [
+                ...acc.productsAccount,
+                ...billState.products.map(
+                  (p) => new ProductAccount(p, p.amount, moment())
+                ),
+              ],
+              acc.date,
+              moment()
+            )
             : acc
         )
       );
@@ -247,33 +247,44 @@ const AccountLedgerModal = ({ billState }: props) => {
   }, [search, accounts]);
 
   return (
-    <div className="flex flex-col gap-4 h-full w-full">
-      {/* <Toaster position="top-left" duration={3000} richColors /> */}
-      <div className="flex w-full gap-2">
-        <Input
-          className="rounded-lg"
-          type="text"
-          placeholder="Buscar cliente..."
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              setSearch(e.currentTarget.value);
-              if (filteredAccounts.length < 1 && e.currentTarget.value !== "") {
-                setOpenConfirmModal(true);
+    <div className="flex flex-col gap-4 w-full">
+      {/* Buscador */}
+      <div className="flex gap-2">
+        <div className="flex-1 relative">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          </div>
+          <Input
+            className="rounded-lg pl-10 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
+            type="text"
+            placeholder="Buscar cliente..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setSearch(e.currentTarget.value);
+                if (filteredAccounts.length < 1 && e.currentTarget.value !== "") {
+                  setOpenConfirmModal(true);
+                }
               }
-            }
-          }}
-        />
+            }}
+          />
+        </div>
         <Button
-          className="bg-green-600/80 hover:bg-green-400 rounded-lg"
+          className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
           onClick={() => setOpenConfirmModal(true)}
         >
-          Nueva cuenta
+          Nueva
         </Button>
       </div>
+
+      {/* Lista de cuentas */}
       <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
         {filteredAccounts.length === 0 && search !== "" && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground py-4 text-center">
             No se encontraron cuentas.
           </p>
         )}
@@ -284,34 +295,32 @@ const AccountLedgerModal = ({ billState }: props) => {
               setAccount(account);
             }}
             key={account.id}
-            className="p-3 border rounded-lg shadow-sm hover:bg-muted transition-colors"
+            className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
           >
-            <p className="font-medium">{account.clientName}</p>
-            <p className="text-sm text-muted-foreground">
+            <p className="font-medium text-gray-900 dark:text-gray-100">{account.clientName}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Creado: {account.date.format("DD/MM/YYYY HH:mm")} – Última
               edición: {account.last_update.format("DD/MM/YYYY HH:mm")}
-            </p>
+             </p>
           </div>
         ))}
       </div>
+
+      {/* Modal: Crear nueva cuenta */}
       <Dialog
         open={openConfirmModal}
         onOpenChange={(open) => setOpenConfirmModal(open)}
-        modal={true}
       >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirmar añadir cuenta a {search}</DialogTitle>
+            <DialogDescription>
+              Añadir información de contacto (uno es obligatorio)
+            </DialogDescription>
           </DialogHeader>
-
-          <DialogDescription>
-            Añadir informacion de contacto (Uno es obligatorio)
-          </DialogDescription>
           <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="space-y-2 p-8 sm:p-2 bg-opacity-10"
-            >
+            <form onSubmit={form.handleSubmit(onSubmit)} 
+            className="space-y-4">
               <FormField
                 control={form.control}
                 name="clientName"
@@ -324,7 +333,7 @@ const AccountLedgerModal = ({ billState }: props) => {
                         value={search || ""}
                         placeholder="Juan Perez"
                         type="text"
-                        className="border-black"
+                        className="rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
                         autoComplete="clientName"
                         disabled={isPending}
                       />
@@ -344,7 +353,7 @@ const AccountLedgerModal = ({ billState }: props) => {
                         {...field}
                         placeholder="Juan Perez"
                         type="text"
-                        className="border-black"
+                        className="rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
                         autoComplete="deliveryName"
                         disabled={isPending}
                       />
@@ -362,9 +371,9 @@ const AccountLedgerModal = ({ billState }: props) => {
                     <FormControl>
                       <Input
                         {...field}
-                        placeholder="EJ: 223485565"
+                        placeholder="223485565"
                         type="text"
-                        className="border-black"
+                        className="rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
                         autoComplete="clientPhone"
                         disabled={isPending}
                       />
@@ -382,9 +391,9 @@ const AccountLedgerModal = ({ billState }: props) => {
                     <FormControl>
                       <Input
                         {...field}
-                        placeholder=""
+                        placeholder="email@ejemplo.com"
                         type="text"
-                        className="border-black"
+                        className="rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
                         autoComplete="clientEmail"
                         disabled={isPending}
                       />
@@ -393,65 +402,46 @@ const AccountLedgerModal = ({ billState }: props) => {
                   </FormItem>
                 )}
               />
-              <Button type="submit" disabled={isPending}>
-                Confirmar
-              </Button>
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="submit"
+                  disabled={isPending}
+                  className="flex-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900"
+                >
+                  {isPending ? "Guardando..." : "Confirmar"}
+                </Button>
+              </div>
             </form>
           </Form>
-          <DialogFooter>
-            <DialogClose onClick={() => setOpenConfirmModal(false)} asChild>
-              <Button>Cancelar</Button>
-            </DialogClose>
-            <DialogClose asChild></DialogClose>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal: Confirmar añadir productos */}
       <Dialog
         open={openCofirmAddProductModal}
         onOpenChange={(open) => setOpenCofirmAddProductModal(open)}
-        modal={true}
       >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Confirmar añadir producto a {account.clientName}
+              Añadir a {account.clientName}
             </DialogTitle>
           </DialogHeader>
           <DialogDescription>
-            Seguro que desea añadir a esta cuenta?
-            {/* <div className="flex flex-col gap-2 w-full">
-              <div className="flex flex-col gap-2 w-full">
-                <div className="flex flex-col gap-2 w-full">
-                  {account.productsAccount.map((productAccount) => (
-                    <div
-                      key={productAccount.id}
-                      className="flex flex-col gap-2 w-full"
-                    >
-                      <p className="text-sm text-muted-foreground">
-                        {productAccount.code}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {productAccount.description}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {productAccount.price}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div> */}
+            ¿Está seguro que desea añadir los productos a esta cuenta?
           </DialogDescription>
           <DialogFooter>
-            <DialogClose
-              onClick={() => setOpenCofirmAddProductModal(false)}
-              asChild
-            >
-              <Button>Cancelar</Button>
+            <DialogClose asChild>
+              <Button variant="outline" className="rounded-lg">
+                Cancelar
+              </Button>
             </DialogClose>
             <DialogClose asChild>
-              <Button onClick={async () => await addProductToAccount()}>
-                Aceptar
+              <Button
+                onClick={async () => await addProductToAccount()}
+                className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900"
+              >
+                Confirmar
               </Button>
             </DialogClose>
           </DialogFooter>

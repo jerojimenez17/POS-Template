@@ -27,7 +27,7 @@ const INITIAL_STATE: BillState = {
 };
 
 interface props {
-  children: ReactElement;
+  children: ReactElement | ReactElement[];
 }
 
 const BillProvider = ({ children }: props) => {

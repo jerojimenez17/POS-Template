@@ -2,18 +2,15 @@ import MenuCard from "./MenuCard";
 
 const RootMenu = () => {
   return (
-    <div className="h-full w-full flex bg-slate-200 dark:bg-gray-900 flex-col">
-      <main className="flex items-center my-auto">
-        <section className="w-full mx-auto flex-wrap p-4 flex justify-between md:justify-center sm:gap-y-6 gap-y-2 md:gap-5 my-auto">
-   
+    <div className="min-h-screen bg-slate-100 dark:bg-gray-900 flex items-center justify-center">
+      <div className="w-full max-w-6xl px-4 py-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <MenuCard url="/newBill" title="Facturar">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="icon hover:fill-white opacity-70"
-              width="80px"
-              height="120px"
+              className="w-16 h-16"
               viewBox="0 0 1920 1920"
-              >
+            >
               <path
                 d="M1706.235 1807.059H350.941V112.94h903.53v451.765h451.764v1242.353Zm-338.823-1670.74 315.443 315.447h-315.443V136.32Zm402.182 242.487L1440.372 49.58C1408.296 17.62 1365.717 0 1320.542 0H238v1920h1581.175V498.635c0-45.176-17.618-87.755-49.58-119.83ZM576.823 1242.353h790.589v-112.94H576.823v112.94Zm0-451.765h903.53V677.647h-903.53v112.941Zm0 677.647h451.765v-112.941H576.823v112.941Zm0-451.764h677.648V903.53H576.823v112.941Zm0-451.765h451.765V451.765H576.823v112.941Z"
                 fillRule="evenodd"
@@ -24,10 +21,8 @@ const RootMenu = () => {
           <MenuCard url="/searchBill" title="Consultar">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="80px"
-              height="120px"
+              className="w-16 h-16"
               viewBox="0 0 24 24"
-              className="icon hover:fill-white opacity-70"
             >
               <path
                 d="M5 4H17M5 8H13M5 12H9M5 16H8M5 20H11M16.4729 17.4525C17.046 16.8743 17.4 16.0785 17.4 15.2C17.4 13.4327 15.9673 12 14.2 12C12.4327 12 11 13.4327 11 15.2C11 16.9673 12.4327 18.4 14.2 18.4C15.0888 18.4 15.893 18.0376 16.4729 17.4525ZM16.4729 17.4525L19 20"
@@ -37,13 +32,11 @@ const RootMenu = () => {
               />
             </svg>
           </MenuCard>
+          
           <MenuCard url="/stock/productDashboard" title="Stock">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              version="1.1"
-              id="Layer_1"
-              width="80px"
-              height="120px"
+              className="w-16 h-16"
               viewBox="0 0 484.185 484.185"
             >
               <g>
@@ -58,45 +51,37 @@ const RootMenu = () => {
                 </g>
               </g>
             </svg>
-          </MenuCard>{" "}
+          </MenuCard>
+          
           <MenuCard url="/account-ledger" title="Fichero">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              xmlnsXlink="http://www.w3.org/1999/xlink"
-              version="1.0"
-              id="Layer_1"
-              width="80px"
-              height="120px"
+              className="w-16 h-16"
               viewBox="0 0 64 64"
-              enableBackground="new 0 0 64 64"
               xmlSpace="preserve"
             >
               <path
                 fill="#464455"
-                className="hover:fill-white"
                 d="M60,8H36V4c0-2.209-1.789-4-4-4H4C1.789,0,0,1.791,0,4v56c0,1.009,0.385,1.919,1,2.622V63h0.378  C2.081,63.615,2.991,64,4,64h56c1.009,0,1.919-0.385,2.622-1H63v-0.378c0.615-0.703,1-1.613,1-2.622V12C64,9.789,62.211,8,60,8z   M49,46H15c-0.553,0-1-0.447-1-1s0.447-1,1-1h34c0.553,0,1,0.447,1,1S49.553,46,49,46z M49,40H15c-0.553,0-1-0.447-1-1s0.447-1,1-1  h34c0.553,0,1,0.447,1,1S49.553,40,49,40z M14,33c0-0.553,0.447-1,1-1h16c0.553,0,1,0.447,1,1s-0.447,1-1,1H15  C14.447,34,14,33.553,14,33z M62,14H2V4c0-1.104,0.896-2,2-2h28c1.104,0,2,0.896,2,2v6h26c1.104,0,2,0.896,2,2V14z"
               />
             </svg>
           </MenuCard>
+          
           <MenuCard url="/cashRegister" title="Caja">
             <svg
-              xmlnsXlink="http://www.w3.org/1999/xlink"
               xmlns="http://www.w3.org/2000/svg"
+              className="w-16 h-16"
               viewBox="0 0 32 32"
-              width="80px"
-              height="120px"
-              className="icon hover:fill-white opacity-60"
             >
               <path d="M 22 3 L 22 7 C 20.152344 7 18.386719 7.332031 16.734375 7.910156 L 16.207031 6.761719 L 17.109375 6.359375 L 16.296875 4.53125 L 12.644531 6.15625 L 13.457031 7.984375 L 14.378906 7.574219 L 14.890625 8.679688 C 13.796875 9.226563 12.78125 9.898438 11.847656 10.667969 L 11.0625 9.832031 L 11.789063 9.164063 L 10.4375 7.6875 L 7.492188 10.394531 L 8.84375 11.871094 L 9.585938 11.1875 L 10.390625 12.035156 C 9.433594 13.050781 8.609375 14.191406 7.945313 15.429688 L 6.863281 14.894531 L 7.3125 14.011719 L 5.53125 13.105469 L 3.71875 16.671875 L 5.5 17.578125 L 5.957031 16.675781 L 7.101563 17.246094 C 6.523438 18.738281 6.15625 20.332031 6.050781 22 L 4 22 L 4 28 L 28 28 L 28 3 Z M 24 5 L 26 5 L 26 22 L 8.050781 22 C 8.5625 14.726563 14.59375 9 22 9 L 24 9 Z M 18 11.953125 C 16.894531 11.953125 16 12.851563 16 13.953125 C 16 14.667969 16.382813 15.328125 17 15.6875 L 17 20 L 22 20 L 22 18 L 19 18 L 19 15.683594 C 19.617188 15.328125 20 14.667969 20 13.953125 C 20 12.851563 19.105469 11.953125 18 11.953125 Z M 6 24 L 26 24 L 26 26 L 6 26 Z" />
             </svg>
           </MenuCard>
+          
           <MenuCard url="/report" title="Reportes">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="80px"
-              height="120px"
+              className="w-16 h-16"
               viewBox="0 0 24 24"
-              className="icon hover:fill-white opacity-70"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
@@ -108,8 +93,8 @@ const RootMenu = () => {
               <line x1="6" y1="20" x2="6" y2="14" />
             </svg>
           </MenuCard>
-        </section>
-      </main>
+        </div>
+      </div>
     </div>
   );
 };

@@ -40,12 +40,12 @@ const font = Poppins({
 });
 export function NavigationMenuHeader() {
   const { data: session } = useSession();
-  const businessName = session?.user?.businessName || "Nombre";
+  const businessName = session?.user?.businessName || "Mi Negocio";
 
   return (
     <div
       className={cn(
-        `w-screen items-center h-12 shadow-md shadow-gray-400 relative flex justify-center  align-middle`,
+        `w-full items-center h-12 shadow-md shadow-gray-400 relative flex justify-center align-middle`,
         font.className
       )}
     >
