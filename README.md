@@ -103,5 +103,6 @@ The core entities include:
 ## 🤝 Let's Connect
 
 I built this project to demonstrate my capability to handle complex, data-intensive architectures and deliver polished user interfaces. If you're a recruiter or engineering manager looking for a full-stack developer who understands both product needs and technical execution, I'd love to chat.
-
-[Link to Portfolio / LinkedIn / Email]
+ Email: jerojimenez98@gmail.com
+ Portfolio: https://portfolio-jeronimo-jimenez.vercel.app/
+ 
