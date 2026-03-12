@@ -52,26 +52,26 @@ const BillParametersForm = () => {
       documentNumber: form.getValues().DNI ?? 0,
       IVACondition: form.getValues().clientCondition,
     });
-    console.log(BillState);
+    
     setEditParameters(false);
   };
   return editParamters ? (
     <Form {...form}>
-      <form className="w-full h-full p-4" onSubmit={form.handleSubmit(onSubmit)}>
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full">
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Section 1: Bill Type & Client Info */}
-          <div className="md:col-span-4 flex flex-col gap-4 p-4 border rounded-xl shadow-sm bg-white">
-            <h3 className="font-bold text-lg text-gray-700 mb-2">Datos del Comprobante</h3>
+          <div className="flex flex-col gap-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+            <h3 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Comprobante</h3>
             
             <FormField
               control={form.control}
               name={"billType"}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-semibold">Tipo Factura</FormLabel>
+                  <FormLabel className="text-sm font-medium">Tipo Factura</FormLabel>
                   <FormControl>
                     <Select {...field} onValueChange={field.onChange}>
-                      <SelectTrigger className="w-full rounded-xl shadow-sm">
+                      <SelectTrigger className="w-full rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
                         <SelectValue placeholder={field.value} />
                       </SelectTrigger>
                       <SelectContent>
@@ -92,10 +92,10 @@ const BillParametersForm = () => {
               name={"clientCondition"}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-semibold">Condición IVA</FormLabel>
+                  <FormLabel className="text-sm font-medium">Condición IVA</FormLabel>
                   <FormControl>
                     <Select {...field} onValueChange={field.onChange}>
-                      <SelectTrigger className="w-full rounded-xl shadow-sm">
+                      <SelectTrigger className="w-full rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
                         <SelectValue placeholder={field.value} />
                       </SelectTrigger>
                       <SelectContent>
@@ -121,14 +121,14 @@ const BillParametersForm = () => {
                 }
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="font-semibold">
+                    <FormLabel className="text-sm font-medium">
                       {form.watch("clientCondition") === ClientConditions.CUIT
                         ? ClientConditions.CUIT
                         : ClientConditions.DNI}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        className="rounded-xl shadow-sm"
+                        className="rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
                         {...field}
                         placeholder={field.value?.toString() || "0"}
                       />
@@ -140,18 +140,18 @@ const BillParametersForm = () => {
           </div>
 
           {/* Section 2: Payment Methods */}
-          <div className="md:col-span-4 flex flex-col gap-4 p-4 border rounded-xl shadow-sm bg-white">
-            <h3 className="font-bold text-lg text-gray-700 mb-2">Forma de Pago</h3>
+          <div className="flex flex-col gap-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+            <h3 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pago</h3>
             
             <FormField
               control={form.control}
               name={"paidMethod"}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-semibold">Medio de Pago Principal</FormLabel>
+                  <FormLabel className="text-sm font-medium">Medio Principal</FormLabel>
                   <FormControl>
                     <Select {...field} onValueChange={field.onChange}>
-                      <SelectTrigger className="w-full rounded-xl shadow-sm">
+                      <SelectTrigger className="w-full rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
                         <SelectValue placeholder={field.value} />
                       </SelectTrigger>
                       <SelectContent>
@@ -171,33 +171,31 @@ const BillParametersForm = () => {
               control={form.control}
               name={"twoMethods"}
               render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                <FormItem className="flex flex-row items-center gap-3 rounded-lg border p-3 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
                   <FormControl>
                     <Checkbox
                       checked={field.value}
                       onCheckedChange={field.onChange}
                     />
                   </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>
-                      Dividir pago en dos medios
-                    </FormLabel>
-                  </div>
+                  <FormLabel className="text-sm cursor-pointer">
+                    Dividir pago
+                  </FormLabel>
                 </FormItem>
               )}
             />
 
             {form.watch("twoMethods") && (
-              <div className="flex flex-col gap-4 pl-4 border-l-2 border-slate-200">
+              <div className="flex flex-col gap-3 pl-4 border-l-2 border-gray-300 dark:border-gray-500">
                  <FormField
                   control={form.control}
                   name={"secondPaidMethod"}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-semibold">Segundo Medio</FormLabel>
+                      <FormLabel className="text-sm font-medium">Segundo Medio</FormLabel>
                       <FormControl>
                         <Select {...field} onValueChange={field.onChange}>
-                          <SelectTrigger className="w-full rounded-xl shadow-sm">
+                          <SelectTrigger className="w-full rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
                             <SelectValue placeholder={field.value} />
                           </SelectTrigger>
                           <SelectContent>
@@ -217,10 +215,10 @@ const BillParametersForm = () => {
                   name="totalSecondMethod"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-semibold">Monto Segundo Medio</FormLabel>
+                      <FormLabel className="text-sm font-medium">Monto</FormLabel>
                       <FormControl>
                         <Input
-                          className="rounded-xl shadow-sm"
+                          className="rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
                           placeholder={field.value?.toString()}
                           {...field}
                           onChange={field.onChange}
@@ -234,48 +232,42 @@ const BillParametersForm = () => {
           </div>
 
           {/* Section 3: Actions & Discounts */}
-          <div className="md:col-span-4 flex flex-col justify-between p-4 border rounded-xl shadow-sm bg-white">
-            <div className="flex flex-col gap-4">
-              <h3 className="font-bold text-lg text-gray-700 mb-2">Descuentos y Acciones</h3>
-              <FormField
-                control={form.control}
-                name="discount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="font-semibold">Descuento Global (%)</FormLabel>
-                    <FormControl>
-                      <Input
-                        className="rounded-xl shadow-sm"
-                        {...field}
-                        //if the discount is 0 set the value to ""
-                        value={field.value === 0 ? "" : field.value}  
-                        placeholder={field.value?.toString()}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
+          <div className="flex flex-col gap-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+            <h3 className="font-semibold text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Descuento</h3>
+            
+            <FormField
+              control={form.control}
+              name="discount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">Descuento (%)</FormLabel>
+                  <FormControl>
+                    <Input
+                      className="rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
+                      {...field}
+                      value={field.value === 0 ? "" : field.value}  
+                      placeholder="0"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
 
-            <div className="flex gap-4 justify-end mt-8">
+            <div className="flex gap-3 mt-auto pt-4">
               <Button
-                className="flex-1 h-12 rounded-xl font-bold bg-green-600 hover:bg-green-700 text-white"
+                className="flex-1 h-10 rounded-lg font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
                 type="submit"
-                variant="default"
               >
-                <span className="mr-2">Confirmar</span>
-                <span>✔️</span>
+                Confirmar
               </Button>
               <Button
-                className="flex-1 h-12 rounded-xl font-bold bg-red-500 hover:bg-red-600 text-white"
+                className="flex-1 h-10 rounded-lg font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-gray-100 dark:border-gray-600"
                 onClick={(e) => {
-                  e.preventDefault(); // Prevent form submission
+                  e.preventDefault();
                   form.reset();
                 }}
-                variant="default"
               >
-                <span className="mr-2">Cancelar</span>
-                <span>❌</span>
+                Cancelar
               </Button>
             </div>
           </div>
@@ -283,36 +275,38 @@ const BillParametersForm = () => {
       </form>
     </Form>
   ) : (
-    <div
-      className={`items-center flex justify-center gap-2 flex-col font-medium`}
-    >
-      <div>
-        <p>Tipo Factura: {form.getValues().billType}</p>
+    <div className="flex flex-wrap items-center gap-4 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="text-gray-500 dark:text-gray-400">Factura:</span>
+        <span className="font-medium bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{form.getValues().billType}</span>
       </div>
-      <div>
-        <p>Condicion de Cliente: {form.getValues().clientCondition}</p>
+      <div className="flex items-center gap-2">
+        <span className="text-gray-500 dark:text-gray-400">IVA:</span>
+        <span className="font-medium">{form.getValues().clientCondition}</span>
       </div>
       {form.getValues().CUIT && (
-        <div>
-          <p>CUIT: {form.getValues().CUIT}</p>
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 dark:text-gray-400">CUIT:</span>
+          <span className="font-medium">{form.getValues().CUIT}</span>
         </div>
       )}
-      <div>
-        <p>Medio de Pago: {form.getValues().paidMethod}</p>
+      <div className="flex items-center gap-2">
+        <span className="text-gray-500 dark:text-gray-400">Pago:</span>
+        <span className="font-medium">{form.getValues().paidMethod}</span>
       </div>
       {form.getValues().twoMethods && (
-        <div>
-          <p>Segundo Medio: {form.getValues().secondPaidMethod}</p>
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 dark:text-gray-400">+</span>
+          <span className="font-medium">{form.getValues().secondPaidMethod}</span>
         </div>
       )}
-
-      <div>
-        <p>
-          Descuento: <span className="font-bold">% </span>
-          {form.getValues().discount}
-        </p>
-      </div>
-      <Button variant="ghost" onClick={() => setEditParameters(true)}>
+      {form.getValues().discount > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 dark:text-gray-400">Desc:</span>
+          <span className="font-medium text-green-600 dark:text-green-400">-{form.getValues().discount}%</span>
+        </div>
+      )}
+      <Button variant="outline" size="sm" onClick={() => setEditParameters(true)} className="ml-2 rounded-lg">
         Editar
       </Button>
     </div>

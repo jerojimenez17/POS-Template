@@ -8,17 +8,23 @@ import { Suspense } from "react";
 const NewBillPage = async () => {
   const session = await auth();
   return (
-     <Suspense fallback={<Spinner/>}>
-      
-    <BillProvider>
-      <div className="flex flex-col h-full mb-5 pb-16 overflow-y-auto overflow-x-hidden scrollbar-gutter-stable">
-        <div className="h-fit py-4 container my-3 mx-auto w-full border-b border-gray-100 dark:border-gray-800">
-          <BillParametersForm />
-        </div>
-        <ProductsTable session={session} />
+    <Suspense fallback={<Spinner />}>
+      <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
+        <BillProvider>
+          {/* Header Section */}
+          <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+            <div className="max-w-7xl mx-auto">
+              <BillParametersForm />
+            </div>
+          </div>
+          
+          {/* Products Table */}
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            <ProductsTable session={session} />
+          </div>
+        </BillProvider>
       </div>
-    </BillProvider>
-     </Suspense>
+    </Suspense>
   );
 };
 

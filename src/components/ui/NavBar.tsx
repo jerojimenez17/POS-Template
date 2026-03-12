@@ -45,7 +45,7 @@ export function NavigationMenuHeader() {
   return (
     <div
       className={cn(
-        `w-screen items-center h-12 shadow-md shadow-gray-400 relative flex justify-center  align-middle`,
+        `w-full items-center h-12 shadow-md shadow-gray-400 relative flex justify-center align-middle`,
         font.className
       )}
     >

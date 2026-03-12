@@ -179,92 +179,63 @@ const PrintableTable = ({
   const renderProductRow = (product: Product) => (
     <tr
       key={product.id}
-      className="even:bg-slate-100 dark:even:bg-gray-900 dark:text-white text-black"
+      className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
     >
-      <td className="p-1 print:p-1 print:text-sm">{product.description}</td>
-      <td className="p-1 flex justify-center items-center gap-1">
-        {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
-          <div className="flex items-center">
-            <button
-              className="px-1 font-bold text-lg bg-red-600/40 rounded hover:bg-gray-300 focus-visible:ring-2 focus-visible:ring-gray-400 print:hidden transition-colors"
-              onClick={() =>
-                updateProductAmount(product.id, product.amount - 1)
-              }
-              aria-label="Disminuir cantidad"
-            >
-              −
-            </button>
-            <span className="mx-1 print:mx-0 tabular-nums">{product.amount}</span>
-            <button
-              className="px-1 font-bold text-lg bg-green-700/40 rounded hover:bg-gray-300 focus-visible:ring-2 focus-visible:ring-gray-400 print:hidden transition-colors"
-              onClick={() =>
-                updateProductAmount(product.id, product.amount + 1)
-              }
-              aria-label="Aumentar cantidad"
-            >
-              +
-            </button>
-          </div>
-        ) : (
-          <DecimalInput
-            initial={product.amount}
-            product={product}
-            updateAmount={updateProductAmount}
-          />
-        )}
+      <td className="px-4 py-3">
+        <div className="font-medium text-gray-900 dark:text-gray-100">{product.description}</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">{product.code}</div>
       </td>
-      <td className="p-1 print:p-1 print:text-sm tabular-nums">
-        $
-        {product.salePrice.toLocaleString("es-AR", {
+      <td className="px-4 py-3">
+        <div className="flex items-center justify-center gap-2">
+          {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
+            <>
+              <button
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
+                onClick={() => updateProductAmount(product.id, product.amount - 1)}
+                aria-label="Disminuir cantidad"
+              >
+                −
+              </button>
+              <span className="w-12 text-center font-medium tabular-nums">{product.amount}</span>
+              <button
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
+                onClick={() => updateProductAmount(product.id, product.amount + 1)}
+                aria-label="Aumentar cantidad"
+              >
+                +
+              </button>
+            </>
+          ) : (
+            <DecimalInput
+              initial={product.amount}
+              product={product}
+              updateAmount={updateProductAmount}
+            />
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-3 text-right font-medium tabular-nums">
+        ${product.salePrice.toLocaleString("es-AR", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })}
       </td>
-      <td className="p-1 print:p-1 print:text-sm tabular-nums">
-        $
-        {(product.salePrice * product.amount).toLocaleString("es-AR", {
+      <td className="px-4 py-3 text-right font-semibold tabular-nums">
+        ${(product.salePrice * product.amount).toLocaleString("es-AR", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })}
       </td>
-      <td className="p-1 print:hidden">
+      <td className="px-4 py-3">
         <button 
           onClick={() => removeItem(product)}
-          className="hover:opacity-80 transition-opacity focus-visible:ring-2 focus-visible:ring-red-400 rounded-md"
+          className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
           aria-label={`Eliminar ${product.description}`}
         >
-          {/* SVG paths remain the same */}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 100 100"
-            width="30px"
-            height="30px"
-            aria-hidden="true"
-          >
-            <path
-              fill="#f37e98"
-              d="M25,30l3.645,47.383C28.845,79.988,31.017,82,33.63,82h32.74c2.613,0,4.785-2.012,4.985-4.617L75,30"
-            />
-            <path
-              fill="#f15b6c"
-              d="M65 38v35c0 1.65-1.35 3-3 3s-3-1.35-3-3V38c0-1.65 1.35-3 3-3S65 36.35 65 38zM53 38v35c0 1.65-1.35 3-3 3s-3-1.35-3-3V38c0-1.65 1.35-3 3-3S53 36.35 53 38zM41 38v35c0 1.65-1.35 3-3 3s-3-1.35-3-3V38c0-1.65 1.35-3 3-3S41 36.35 41 38zM77 24h-4l-1.835-3.058C70.442 19.737 69.14 19 67.735 19h-35.47c-1.405 0-2.707.737-3.43 1.942L27 24h-4c-1.657 0-3 1.343-3 3s1.343 3 3 3h54c1.657 0 3-1.343 3-3S78.657 24 77 24z"
-            />
-            <path
-              fill="#1f212b"
-              d="M66.37 83H33.63c-3.116 0-5.744-2.434-5.982-5.54l-3.645-47.383 1.994-.154 3.645 47.384C29.801 79.378 31.553 81 33.63 81H66.37c2.077 0 3.829-1.622 3.988-3.692l3.645-47.385 1.994.154-3.645 47.384C72.113 80.566 69.485 83 66.37 83zM56 20c-.552 0-1-.447-1-1v-3c0-.552-.449-1-1-1h-8c-.551 0-1 .448-1 1v3c0 .553-.448 1-1 1s-1-.447-1-1v-3c0-1.654 1.346-3 3-3h8c1.654 0 3 1.346 3 3v3C57 19.553 56.552 20 56 20z"
-            />
-            <path
-              fill="#1f212b"
-              d="M77,31H23c-2.206,0-4-1.794-4-4s1.794-4,4-4h3.434l1.543-2.572C28.875,18.931,30.518,18,32.265,18h35.471c1.747,0,3.389,0.931,4.287,2.428L73.566,23H77c2.206,0,4,1.794,4,4S79.206,31,77,31z M23,25c-1.103,0-2,0.897-2,2s0.897,2,2,2h54c1.103,0,2-0.897,2-2s-0.897-2-2-2h-4c-0.351,0-0.677-0.185-0.857-0.485l-1.835-3.058C69.769,20.559,68.783,20,67.735,20H32.265c-1.048,0-2.033,0.559-2.572,1.457l-1.835,3.058C27.677,24.815,27.351,25,27,25H23z"
-            />
-            <path
-              fill="#1f212b"
-              d="M61.5 25h-36c-.276 0-.5-.224-.5-.5s.224-.5.5-.5h36c.276 0 .5.224.5.5S61.776 25 61.5 25zM73.5 25h-5c-.276 0-.5-.224-.5-.5s.224-.5.5-.5h5c.276 0 .5.224.5.5S73.776 25 73.5 25zM66.5 25h-2c-.276 0-.5-.224-.5-.5s.224-.5.5-.5h2c.276 0 .5.224.5.5S66.776 25 66.5 25zM50 76c-1.654 0-3-1.346-3-3V38c0-1.654 1.346-3 3-3s3 1.346 3 3v25.5c0 .276-.224.5-.5.5S52 63.776 52 63.5V38c0-1.103-.897-2-2-2s-2 .897-2 2v35c0 1.103.897 2 2 2s2-.897 2-2v-3.5c0-.276.224-.5.5-.5s.5.224.5.5V73C53 74.654 51.654 76 50 76zM62 76c-1.654 0-3-1.346-3-3V47.5c0-.276.224-.5.5-.5s.5.224.5.5V73c0 1.103.897 2 2 2s2-.897 2-2V38c0-1.103-.897-2-2-2s-2 .897-2 2v1.5c0 .276-.224.5-.5.5S59 39.776 59 39.5V38c0-1.654 1.346-3 3-3s3 1.346 3 3v35C65 74.654 63.654 76 62 76z"
-            />
-            <path
-              fill="#1f212b"
-              d="M59.5 45c-.276 0-.5-.224-.5-.5v-2c0-.276.224-.5.5-.5s.5.224.5.5v2C60 44.776 59.776 45 59.5 45zM38 76c-1.654 0-3-1.346-3-3V38c0-1.654 1.346-3 3-3s3 1.346 3 3v35C41 74.654 39.654 76 38 76zM38 36c-1.103 0-2 .897-2 2v35c0 1.103.897 2 2 2s2-.897 2-2V38C40 36.897 39.103 36 38 36z"
-            />
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18"/>
+            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
           </svg>
         </button>
       </td>
@@ -313,13 +284,19 @@ const PrintableTable = ({
       )}
 
       {/* Product Search - Screen only */}
-      <div className="print-hidden mb-4 mx-2">
-        <div className="flex mx-auto gap-2">
-          <div className="md:w-1/2 flex-1 relative">
+      <div className="mb-6 max-w-7xl mx-auto">
+        <div className="flex gap-3">
+          <div className="flex-1 relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.3-4.3"/>
+              </svg>
+            </div>
             <input
               name="productSearch"
-              className="w-full p-2 border border-gray-300 rounded shadow focus-visible:ring-2 focus-visible:ring-blue-500 outline-none transition-shadow"
-              placeholder="Buscar producto…"
+              className="flex w-full rounded-lg border border-input bg-white dark:bg-gray-800 px-3 py-3 pl-10 text-base shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm text-gray-900 dark:text-gray-100"
+              placeholder="Buscar producto por codigo o nombre..."
               value={searchCode}
               onChange={(e) => handleSearch(e.target.value)}
               onKeyDown={(e) => {
@@ -329,61 +306,37 @@ const PrintableTable = ({
               spellCheck={false}
             />
             {suggestions.length > 0 && searchCode.length > 0 && (
-              <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded mt-1 shadow-2xl max-h-60 overflow-y-auto overflow-x-hidden transition-all duration-200 animate-in fade-in slide-in-from-top-2 overscroll-contain custom-scrollbar">
-                <style jsx>{`
-                  .custom-scrollbar::-webkit-scrollbar {
-                    width: 6px;
-                  }
-                  .custom-scrollbar::-webkit-scrollbar-track {
-                    background: transparent;
-                  }
-                  .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #cbd5e1;
-                    border-radius: 10px;
-                  }
-                  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                    background: #94a3b8;
-                  }
-                  :global(.dark) .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #475569;
-                  }
-                  :global(.dark) .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                    background: #64748b;
-                  }
-                `}</style>
+              <div className="absolute z-20 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl max-h-72 overflow-y-auto">
                 {suggestions.map((product) => (
                   <div
                     key={product.id}
-                    className="p-3 border-b last:border-b-0 border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                    className="p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
                     onClick={() => handleAddProduct(product.code)}
                   >
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="font-bold text-blue-600 dark:text-blue-400">{product.code}</span>
-                      <div className="flex flex-col items-end gap-1">
-                         <span className="font-mono text-xs text-gray-400">STOCK</span>
-                         {product.brand && (
-                           <span className="text-[10px] font-semibold bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-300 uppercase tracking-wide">
-                             {product.brand}
-                           </span>
-                         )}
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="font-mono text-sm text-blue-600 dark:text-blue-400">{product.code}</span>
+                        {product.brand && (
+                          <span className="ml-2 text-xs font-medium bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-600 dark:text-gray-300">
+                            {product.brand}
+                          </span>
+                        )}
                       </div>
-                    </div>
-                    <div className="text-gray-900 dark:text-gray-100 font-medium mb-1">
-                      {product.description}
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="font-bold tabular-nums">
-                        ${product.salePrice.toLocaleString("es-AR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
                       <span className={cn(
-                        "font-semibold px-2 py-0.5 rounded-full text-xs",
+                        "font-semibold text-xs px-2 py-1 rounded-full",
                         product.amount <= 5 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                       )}>
-                        Restan: {product.amount}
+                        Stock: {product.amount}
                       </span>
+                    </div>
+                    <div className="mt-1 font-medium text-gray-900 dark:text-gray-100">
+                      {product.description}
+                    </div>
+                    <div className="mt-1 font-bold text-lg text-gray-700 dark:text-gray-300">
+                      ${product.salePrice.toLocaleString("es-AR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </div>
                   </div>
                 ))}
@@ -391,79 +344,21 @@ const PrintableTable = ({
             )}
           </div>
           <button
-            className="p-2 bg-gray-200 rounded hover:bg-gray-300 focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
+            className="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus-visible:ring-1 focus-visible:ring-ring"
             onClick={() => setScannerOpen(true)}
-            aria-label="Abrir escáner de productos"
+            aria-label="Escanear codigo"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24px"
-              height="24px"
-              viewBox="0 0 32 32"
-            >
-              {" "}
-              <defs id="defs2" />
-              <g id="layer1" transform="translate(-108,-100)">
-                <path
-                  d="m 111,106 a 1.0001,1.0001 0 0 0 -1,1 v 3 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -2 h 2 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 z"
-                  id="path11698"
-                />
-
-                <path
-                  d="m 134,106 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 2 v 2 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -3 a 1.0001,1.0001 0 0 0 -1,-1 z"
-                  id="path11700"
-                />
-
-                <path
-                  d="m 137,121 a 1,1 0 0 0 -1,1 v 2 h -2 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 3 a 1.0001,1.0001 0 0 0 1,-1 v -3 a 1,1 0 0 0 -1,-1 z"
-                  id="path11702"
-                />
-
-                <path
-                  d="m 111,121 a 1,1 0 0 0 -1,1 v 3 a 1.0001,1.0001 0 0 0 1,1 h 3 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 h -2 v -2 a 1,1 0 0 0 -1,-1 z"
-                  id="path11704"
-                />
-
-                <path
-                  d="m 115,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                  id="path11706"
-                />
-
-                <path
-                  d="m 118,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                  id="path11708"
-                />
-
-                <path
-                  d="m 121,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                  id="path11710"
-                />
-
-                <path
-                  d="m 124,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                  id="path11712"
-                />
-
-                <path
-                  d="m 127,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                  id="path11714"
-                />
-
-                <path
-                  d="m 130,110 a 1,1 0 0 0 -1,1 v 10 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -10 a 1,1 0 0 0 -1,-1 z"
-                  id="path11716"
-                />
-
-                <path
-                  d="m 133,110 a 1,1 0 0 0 -1,1 v 5.20703 1.31445 V 121 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 V 117.52148 116.20703 111 a 1,1 0 0 0 -1,-1 z"
-                  id="path11720"
-                />
-              </g>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+              <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+              <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+              <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+              <line x1="7" y1="12" x2="17" y2="12"/>
             </svg>
           </button>
         </div>
         {errorMessage && (
-          <div className="text-red-600 mt-1 text-center">{errorMessage}</div>
+          <div className="text-red-500 mt-2 text-sm font-medium">{errorMessage}</div>
         )}
       </div>
 
@@ -489,73 +384,81 @@ const PrintableTable = ({
       )}
 
       {/* Products Table */}
-      <div className="overflow-x-auto print:overflow-visible">
-        <table className="w-[98%] mx-auto border-collapse text-center print-table ">
-          <thead>
-            <tr className="bg-gray-800 text-white">
-              <th className="p-2 text-left print:p-1 print:text-sm">
-                Descripción
-              </th>
-              <th className="p-2 print:p-1 print:text-sm">Unidades</th>
-              <th className="p-2 print:p-1 print:text-sm">Precio</th>
-              <th className="p-2 print:p-1 print:text-sm">Subtotal</th>
-              <th className="print-hidden"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {state.products.sort(sortByDescription).map(renderProductRow)}
-          </tbody>
-        </table>
-      </div>
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-gray-700/50 text-left text-sm font-medium text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3">Producto</th>
+                <th className="px-4 py-3 text-center">Cantidad</th>
+                <th className="px-4 py-3 text-right">Precio</th>
+                <th className="px-4 py-3 text-right">Subtotal</th>
+                <th className="px-4 py-3 w-12"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.products.sort(sortByDescription).map(renderProductRow)}
+              {state.products.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
+                    <div className="flex flex-col items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-50">
+                        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
+                        <path d="M3 6h18"/>
+                        <path d="M16 10a4 4 0 0 1-8 0"/>
+                      </svg>
+                      <p>No hay productos agregados</p>
+                      <p className="text-sm">Buscá un producto para comenzar</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      {/* Totals Section */}
-      <div className="mt-4 p-4 dark:bg-gray-700 bg-gray-100 rounded-lg print:mt-8 print:bg-transparent">
-        <div className="grid grid-cols-2 gap-2 text-right">
-          <div className="font-bold">Subtotal:</div>
-          <div className="tabular-nums">
-            $
-            {state.products
-              .reduce((sum, p) => sum + p.salePrice * p.amount, 0)
-              .toLocaleString("es-AR", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-          </div>
-
-          {state.discount > 0 && (
-            <>
-              <div className="font-bold">Descuento ({state.discount}%):</div>
-              <div className="tabular-nums">
-                -$
-                {(
-                  state.products.reduce(
-                    (sum, p) => sum + p.salePrice * p.amount,
-                    0
-                  ) *
-                  (state.discount / 100)
-                ).toLocaleString("es-AR", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+        {/* Totals Section */}
+        <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-700/30">
+          <div className="flex justify-end">
+            <div className="w-72 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
+                <span className="font-medium tabular-nums">
+                  ${state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0).toLocaleString("es-AR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
               </div>
-            </>
-          )}
 
-          <div className="font-bold text-lg border-t border-gray-300 pt-2 mt-2">
-            Total:
-          </div>
-          <div className="text-lg border-t border-gray-300 pt-2 mt-2 tabular-nums">
-            $
-            {(
-              state.products.reduce(
-                (sum, p) => sum + p.salePrice * p.amount,
-                0
-              ) *
-              (1 - state.discount / 100)
-            ).toLocaleString("es-AR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+              {state.discount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Descuento ({state.discount}%)</span>
+                  <span className="font-medium text-green-600 dark:text-green-400 tabular-nums">
+                    -${(
+                      state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0) *
+                      (state.discount / 100)
+                    ).toLocaleString("es-AR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-between text-lg font-bold border-t border-gray-300 dark:border-gray-600 pt-2">
+                <span>Total</span>
+                <span className="tabular-nums">
+                  ${(
+                    state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0) *
+                    (1 - state.discount / 100)
+                  ).toLocaleString("es-AR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
