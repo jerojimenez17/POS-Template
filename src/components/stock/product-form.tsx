@@ -245,27 +245,27 @@ const ProductForm = ({ product, onClose }: Props) => {
               <FormItem>
                 <FormLabel>Codigo <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    placeholder=""
-                    type="text"
-                    className="border-black"
-                    autoComplete="code"
-                    disabled={isPending}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      {...field}
+                      placeholder=""
+                      type="text"
+                      className="border-black"
+                      autoComplete="code"
+                      disabled={isPending}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setScannerOpen(true)}
+                      className="h-10 w-10 border-black text-gray-500 hover:text-black"
+                      title="Escanear código de barras"
+                    >
+                      <ScanBarcode className="h-5 w-5" />
+                    </Button>
+                  </div>
                 </FormControl>
-                <div className="absolute right-2 top-8 flex items-center">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setScannerOpen(true)}
-                    className="h-8 w-8 text-gray-500 hover:text-black"
-                    title="Escanear código de barras"
-                  >
-                    <ScanBarcode className="h-5 w-5" />
-                  </Button>
-                </div>
                 <FormMessage />
               </FormItem>
             )}
@@ -328,7 +328,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
-        <div className="space-y-2 flex items-end gap-2">
+        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="category"
@@ -360,7 +360,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             <NewCategoryModal />
           </div>
         </div>
-        <div className="space-y-2 flex items-end gap-2">
+        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="subCategory"
@@ -393,7 +393,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             <NewSubcategoryModal categoryId={selectedCategoryId} />
           </div>
         </div>
-        <div className="space-y-2 flex items-end gap-2">
+        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="brand"
@@ -425,7 +425,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             <NewBrandModal />
           </div>
         </div>
-        <div className="space-y-2 flex items-end gap-2">
+        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="supplier"

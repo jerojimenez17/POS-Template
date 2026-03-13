@@ -97,7 +97,7 @@ export interface BulkProductInput {
   code: string;
   description: string;
   price: number;
-  amount?: number;
+  amount?: number | null;
   brandName?: string;
   categoryName?: string;
   subCategoryName?: string;
@@ -181,20 +181,26 @@ export const createProductsBulk = async (productsData: BulkProductInput[], updat
 
       if (existingProduct) {
         if (updateExisting) {
-          // Update existing product
+          const updateData: Parameters<typeof db.product.update>[0]["data"] = {
+            description: item.description.toString(),
+            price: isPriceValid ? parsedPrice : 0,
+            salePrice: isPriceValid ? parsedPrice : 0,
+            unit: item.unit || "unidades",
+            brand: brandId ? { connect: { id: brandId } } : { disconnect: true },
+            category: categoryId ? { connect: { id: categoryId } } : { disconnect: true },
+            subCategory: subCategoryId ? { connect: { id: subCategoryId } } : { disconnect: true },
+            last_update: new Date(),
+          };
+
+          if (item.amount !== null && item.amount !== undefined) {
+            updateData.amount = isNaN(parsedAmount) ? 0 : parsedAmount;
+          } else if (item.amount === undefined) {
+            updateData.amount = existingProduct.amount;
+          }
+
           await db.product.update({
             where: { id: existingProduct.id },
-            data: {
-              description: item.description.toString(),
-              price: isPriceValid ? parsedPrice : 0,
-              salePrice: isPriceValid ? parsedPrice : 0,
-              amount: isNaN(parsedAmount) ? 0 : parsedAmount,
-              unit: item.unit || "unidades",
-              brand: brandId ? { connect: { id: brandId } } : { disconnect: true },
-              category: categoryId ? { connect: { id: categoryId } } : { disconnect: true },
-              subCategory: subCategoryId ? { connect: { id: subCategoryId } } : { disconnect: true },
-              last_update: new Date(),
-            },
+            data: updateData,
           });
           updatedCount++;
         }

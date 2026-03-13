@@ -164,4 +164,146 @@ describe('createProductsBulk with updateExisting', () => {
       expect(result.success).toContain('0');
     });
   });
+
+  describe('Gestión de stock (amount) con colAmount del Excel', () => {
+    describe('Producto nuevo', () => {
+      it('cuando colAmount está definido → usar valor del Excel', async () => {
+        const productWithAmount = [
+          {
+            code: 'PROD001',
+            description: 'Producto nuevo',
+            price: 100,
+            amount: 50,
+          },
+        ];
+
+        vi.mocked(db.product.findFirst).mockResolvedValue(null);
+        vi.mocked(db.product.create).mockResolvedValue({
+          id: 'new-product-id',
+          code: 'PROD001',
+          description: 'Producto nuevo',
+          price: 100,
+          salePrice: 100,
+          amount: 50,
+        } as any);
+        vi.mocked(db.brand.findFirst).mockResolvedValue(null);
+        vi.mocked(db.category.findFirst).mockResolvedValue(null);
+
+        const result = await createProductsBulk(productWithAmount, false);
+
+        expect(db.product.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              amount: 50,
+            }),
+          })
+        );
+      });
+
+      it('cuando colAmount NO está definido (undefined) → stock = 0', async () => {
+        const productWithoutAmount = [
+          {
+            code: 'PROD001',
+            description: 'Producto nuevo',
+            price: 100,
+          },
+        ];
+
+        vi.mocked(db.product.findFirst).mockResolvedValue(null);
+        vi.mocked(db.product.create).mockResolvedValue({
+          id: 'new-product-id',
+          code: 'PROD001',
+          description: 'Producto nuevo',
+          price: 100,
+          salePrice: 100,
+          amount: 0,
+        } as any);
+        vi.mocked(db.brand.findFirst).mockResolvedValue(null);
+        vi.mocked(db.category.findFirst).mockResolvedValue(null);
+
+        const result = await createProductsBulk(productWithoutAmount, false);
+
+        expect(db.product.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              amount: 0,
+            }),
+          })
+        );
+      });
+    });
+
+    describe('Producto existente con updateExisting=true', () => {
+      const existingProduct = {
+        id: 'product-id-1',
+        code: 'PROD001',
+        description: 'Producto existente',
+        price: 50,
+        salePrice: 50,
+        amount: 100,
+      };
+
+      it('cuando colAmount está definido → actualizar stock con valor del Excel', async () => {
+        const productWithAmount = [
+          {
+            code: 'PROD001',
+            description: 'Producto actualizado',
+            price: 100,
+            amount: 75,
+          },
+        ];
+
+        vi.mocked(db.product.findFirst).mockResolvedValue(existingProduct as any);
+        vi.mocked(db.product.update).mockResolvedValue({
+          ...existingProduct,
+          amount: 75,
+        } as any);
+        vi.mocked(db.brand.findFirst).mockResolvedValue(null);
+        vi.mocked(db.category.findFirst).mockResolvedValue(null);
+
+        await createProductsBulk(productWithAmount, true);
+
+        expect(db.product.update).toHaveBeenCalledWith({
+          where: { id: 'product-id-1' },
+          data: expect.objectContaining({
+            amount: 75,
+          }),
+        });
+      });
+
+      it('cuando colAmount NO está definido (undefined) → mantener stock actual', async () => {
+        const productWithoutAmount = [
+          {
+            code: 'PROD001',
+            description: 'Producto actualizado',
+            price: 100,
+          },
+        ];
+
+        vi.mocked(db.product.findFirst).mockResolvedValue(existingProduct as any);
+        vi.mocked(db.product.update).mockResolvedValue({
+          ...existingProduct,
+          amount: 100,
+        } as any);
+        vi.mocked(db.brand.findFirst).mockResolvedValue(null);
+        vi.mocked(db.category.findFirst).mockResolvedValue(null);
+
+        await createProductsBulk(productWithoutAmount, true);
+
+        expect(db.product.update).toHaveBeenCalledWith({
+          where: { id: 'product-id-1' },
+          data: expect.objectContaining({
+            amount: 100,
+          }),
+        });
+        expect(db.product.update).toHaveBeenCalledWith(
+          expect.not.objectContaining({
+            data: expect.objectContaining({
+              amount: 0,
+            }),
+          })
+        );
+      });
+    });
+  });
 });
