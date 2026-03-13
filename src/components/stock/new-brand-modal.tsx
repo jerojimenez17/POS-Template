@@ -11,26 +11,24 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { useState } from "react";
-import { FormSuccess } from "../ui/form-success";
 import { createBrand } from "@/actions/brands";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Tag } from "lucide-react";
 
 const NewBrandModal = () => {
   const [brand, setBrand] = useState("");
-  const [success, setSuccess] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const handleAdd = async () => {
     if (brand === "") return;
     setIsPending(true);
-    setSuccess(false);
     try {
       const response = await createBrand(brand);
       if (response.success) {
-        setSuccess(true);
-        setBrand("");
         toast.success("Marca creada");
+        setBrand("");
+        setOpen(false);
       } else {
         toast.error(response.error || "Error al crear marca");
       }
@@ -42,43 +40,43 @@ const NewBrandModal = () => {
   };
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="shrink-0">
+        <Button variant="outline" size="icon" className="shrink-0 h-9 w-9">
           <Plus className="h-4 w-4" />
           <span className="sr-only">Nueva Marca</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nueva Marca</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Tag className="h-5 w-5" />
+            Nueva Marca
+          </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="brand" className="text-right">
-              Marca
-            </Label>
-            <Input
-              id="brand"
-              value={brand}
-              placeholder="Marca"
-              onChange={(e) => {
-                setBrand(e.currentTarget.value);
-              }}
-              className="col-span-3 border-black text-gray-800"
-              disabled={isPending}
-            />
-          </div>
+        <div className="py-4">
+          <Label htmlFor="brand" className="text-sm font-medium">
+            Nombre de la marca
+          </Label>
+          <Input
+            id="brand"
+            value={brand}
+            placeholder="Ej: Coca-Cola, Pepsi, etc."
+            onChange={(e) => setBrand(e.currentTarget.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            className="mt-1.5"
+            disabled={isPending}
+            autoFocus
+          />
         </div>
-        <DialogFooter>
+        <DialogFooter className="sm:justify-center">
           <Button
             onClick={handleAdd}
-            disabled={isPending}
-            type="submit"
+            disabled={isPending || !brand.trim()}
+            className="w-full sm:w-auto bg-black dark:bg-white dark:text-gray-900"
           >
-            Agregar
+            {isPending ? "Guardando..." : "Crear marca"}
           </Button>
-          {success && <FormSuccess message="Marca agregada!" />}
         </DialogFooter>
       </DialogContent>
     </Dialog>

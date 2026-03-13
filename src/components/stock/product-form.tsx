@@ -201,8 +201,6 @@ const ProductForm = ({ product, onClose }: Props) => {
     });
   };
 
-  const fileRef = form.register("image");
-
   return (
     <Form {...form}>
       <Toaster position="top-left" duration={3000} richColors />
@@ -216,21 +214,38 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="image"
             render={({}) => (
               <FormItem>
-                <FormLabel>Foto</FormLabel>
+                <FormLabel className="text-sm font-medium">Foto del producto</FormLabel>
                 <FormControl>
-                  <Input
-                    className="border-black file:text-black"
-                    {...fileRef}
-                    onChange={(e) => {
-                      if (e.currentTarget.files) {
-                        setImage(e.currentTarget.files[0]);
-                      }
-                    }}
-                    placeholder=""
-                    type="file"
-                    autoComplete="image"
-                    disabled={isPending}
-                  />
+                  <div className="flex items-center gap-4">
+                    <label className="flex-1 cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.currentTarget.files?.[0]) {
+                            setImage(e.currentTarget.files[0]);
+                          }
+                        }}
+                        disabled={isPending}
+                      />
+                      <div className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors bg-gray-50 dark:bg-gray-800">
+                        <div className="text-center">
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Click para subir imagen
+                          </p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            PNG, JPG hasta 5MB
+                          </p>
+                        </div>
+                      </div>
+                    </label>
+                    {image && (
+                      <div className="text-sm text-green-600 dark:text-green-400">
+                        ✓ Imagen seleccionada
+                      </div>
+                    )}
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -243,27 +258,27 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="code"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Codigo <span className="text-red-500">*</span></FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    placeholder=""
-                    type="text"
-                    className="border-black"
-                    autoComplete="code"
-                    disabled={isPending}
-                  />
-                </FormControl>
-                <div className="absolute right-2 top-8 flex items-center">
+                <FormLabel className="text-sm font-medium">Código <span className="text-red-500">*</span></FormLabel>
+                <div className="relative">
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="Código del producto"
+                      type="text"
+                      className="pr-12"
+                      autoComplete="code"
+                      disabled={isPending}
+                    />
+                  </FormControl>
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon"
+                    variant="outline"
+                    size="sm"
                     onClick={() => setScannerOpen(true)}
-                    className="h-8 w-8 text-gray-500 hover:text-black"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-9 p-0 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     title="Escanear código de barras"
                   >
-                    <ScanBarcode className="h-5 w-5" />
+                    <ScanBarcode className="h-4 w-4" />
                   </Button>
                 </div>
                 <FormMessage />
@@ -277,13 +292,12 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Descripcion <span className="text-red-500">*</span></FormLabel>
+                <FormLabel className="text-sm font-medium">Descripción <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Input
                     {...field}
-                    placeholder=""
+                    placeholder="Nombre del producto"
                     type="text"
-                    className="border-black"
                     autoComplete="description"
                     disabled={isPending}
                   />
@@ -299,9 +313,12 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="price"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Precio <span className="text-red-500">*</span></FormLabel>
+                <FormLabel className="text-sm font-medium">Precio de costo <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
-                  <Input {...field} disabled={isPending} type="number" step="0.01" />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <Input {...field} disabled={isPending} type="number" step="0.01" className="pl-7" />
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -314,70 +331,75 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="gain"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Margen de utilidad <span className="text-red-500">*</span></FormLabel>
+                <FormLabel className="text-sm font-medium">Margen de ganancia % <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
-                  <Input
-                    className="border border-black"
-                    {...field}
-                    disabled={isPending}
-                    type="number"
-                  />
+                  <div className="relative">
+                    <Input
+                      {...field}
+                      disabled={isPending}
+                      type="number"
+                      className="pr-7"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
-        <div className="space-y-2 flex items-end gap-2">
-          <FormField
-            control={form.control}
-            name="category"
-            render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Categoria <span className="text-red-500">*</span></FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger className="border border-black">
-                      <SelectValue placeholder="Selecciona Categoria" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent className="text-black bg-white">
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="pb-1">
+        <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
+          <div className="space-y-2">
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">Categoría <span className="text-red-500">*</span></FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Seleccionar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <div className="pt-6">
             <NewCategoryModal />
           </div>
         </div>
-        <div className="space-y-2 flex items-end gap-2">
+        <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
           <FormField
             control={form.control}
             name="subCategory"
             render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Sub-Categoria <span className="text-red-500">*</span></FormLabel>
+              <FormItem>
+                <FormLabel className="text-sm font-medium">Subcategoría</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
                   disabled={!selectedCategoryId}
                 >
                   <FormControl>
-                    <SelectTrigger className="border border-black">
-                      <SelectValue placeholder="Selecciona Sub-Categoria" />
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent className="text-black bg-white">
+                  <SelectContent>
                     {subcategories.map((sub) => (
                       <SelectItem key={sub.id} value={sub.id}>
                         {sub.name}
@@ -389,27 +411,27 @@ const ProductForm = ({ product, onClose }: Props) => {
               </FormItem>
             )}
           />
-          <div className="pb-1">
+          <div className="pt-6">
             <NewSubcategoryModal categoryId={selectedCategoryId} />
           </div>
         </div>
-        <div className="space-y-2 flex items-end gap-2">
+        <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
           <FormField
             control={form.control}
             name="brand"
             render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Marca <span className="text-red-500">*</span></FormLabel>
+              <FormItem>
+                <FormLabel className="text-sm font-medium">Marca <span className="text-red-500">*</span></FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
                 >
                   <FormControl>
-                    <SelectTrigger className="border border-black">
-                      <SelectValue placeholder="Selecciona Marca" />
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent className="text-black bg-white">
+                  <SelectContent>
                     {brands.map((brand) => (
                       <SelectItem key={brand.id} value={brand.id}>
                         {brand.name}
@@ -421,27 +443,27 @@ const ProductForm = ({ product, onClose }: Props) => {
               </FormItem>
             )}
           />
-          <div className="pb-1">
+          <div className="pt-6">
             <NewBrandModal />
           </div>
         </div>
-        <div className="space-y-2 flex items-end gap-2">
+        <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
           <FormField
             control={form.control}
             name="supplier"
             render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Proveedor</FormLabel>
+              <FormItem>
+                <FormLabel className="text-sm font-medium">Proveedor</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
                 >
                   <FormControl>
-                    <SelectTrigger className="border border-black">
-                      <SelectValue placeholder="Selecciona Proveedor" />
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent className="text-black bg-white">
+                  <SelectContent>
                     {suppliers.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.name}
@@ -453,7 +475,7 @@ const ProductForm = ({ product, onClose }: Props) => {
               </FormItem>
             )}
           />
-          <div className="pb-1">
+          <div className="pt-6">
             <NewSuplierModal />
           </div>
         </div>
@@ -464,41 +486,45 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="client_bonus"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Bonificacion a cliente</FormLabel>
+                <FormLabel className="text-sm font-medium">Bonificación a cliente</FormLabel>
                 <FormControl>
-                  <Input
-                    className="border border-black"
-                    {...field}
-                    disabled={isPending}
-                    type="number"
-                  />
+                  <div className="relative">
+                    <Input
+                      {...field}
+                      disabled={isPending}
+                      type="number"
+                      className="pr-7"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
-        <div className="space-y-2 border-black text-black">
+        <div className="space-y-2">
           <FormField
             control={form.control}
             name="unit"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Unidad <span className="text-red-500">*</span></FormLabel>
+                <FormLabel className="text-sm font-medium">Unidad <span className="text-red-500">*</span></FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
                 >
                   <FormControl>
-                    <SelectTrigger className="border border-black">
-                      <SelectValue placeholder="Selecciona la unidad de medida" />
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="Unidad">Unidad</SelectItem>
                     <SelectItem value="Kg">Kg</SelectItem>
-                    <SelectItem value="Gr">Gr</SelectItem>
-                    <SelectItem value="Lt">Lt</SelectItem>
+                    <SelectItem value="Gr">Gramo</SelectItem>
+                    <SelectItem value="Lt">Litro</SelectItem>
+                    <SelectItem value="Mt">Metro</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -506,16 +532,15 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
-        <div className="">
+        <div className="space-y-2">
           <FormField
             control={form.control}
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Cantidad <span className="text-red-500">*</span></FormLabel>
+                <FormLabel className="text-sm font-medium">Cantidad inicial <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Input
-                    className="border border-black"
                     type="number"
                     {...field}
                     disabled={isPending}
@@ -526,39 +551,74 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
-        <Button type="submit" disabled={isPending} className="col-span-1 md:col-span-2 w-full mt-4">
-          {product ? "Guardar Cambios" : "+Agregar Producto"}
-        </Button>
+        <div className="col-span-1 md:col-span-2 mt-2">
+          <Button 
+            type="submit" 
+            disabled={isPending} 
+            className="w-full h-11 text-base font-medium bg-black dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+          >
+            {isPending ? (
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Guardando...
+              </span>
+            ) : product ? (
+              "Guardar cambios"
+            ) : (
+              "Agregar producto"
+            )}
+          </Button>
+        </div>
       </form>
 
       {/* Scanner Modal Overlay */}
       {scannerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4">
           <Button
             variant="ghost"
-            className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full h-10 w-10 p-0"
+            className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full h-12 w-12 p-0"
             onClick={() => setScannerOpen(false)}
           >
             <X className="h-6 w-6" />
           </Button>
           
-          <div className="w-full max-w-md aspect-square bg-black rounded-2xl overflow-hidden relative border border-white/20 shadow-2xl">
-            <Scanner
-              formats={["code_128", "codabar", "qr_code", "ean_13", "ean_8"]}
-              onScan={(result) => {
-                if (result && result.length > 0) {
-                  const rawValue = result[0].rawValue;
-                  form.setValue("code", rawValue);
-                  setScannerOpen(false);
-                  toast.success(`Código escaneado: ${rawValue}`);
-                }
-              }}
-            />
-            <div className="absolute inset-0 border-2 border-white/30 pointer-events-none rounded-2xl">
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 border-2 border-white/50 rounded-lg"></div>
+          <div className="w-full max-w-sm">
+            <div className="text-center mb-6">
+              <h3 className="text-white text-xl font-semibold">Escanear código</h3>
+              <p className="text-gray-400 text-sm mt-1">Apuntá la cámara al código de barras</p>
+            </div>
+            
+            <div className="aspect-square bg-black rounded-2xl overflow-hidden relative border-2 border-white/20 shadow-2xl">
+              <Scanner
+                formats={["code_128", "codabar", "qr_code", "ean_13", "ean_8"]}
+                onScan={(result) => {
+                  if (result && result.length > 0) {
+                    const rawValue = result[0].rawValue;
+                    form.setValue("code", rawValue);
+                    setScannerOpen(false);
+                    toast.success(`Código escaneado: ${rawValue}`);
+                  }
+                }}
+              />
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-56 h-32 border-2 border-green-400/70 rounded-lg"></div>
+                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-green-400/30"></div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-center gap-4">
+              <Button
+                variant="outline"
+                onClick={() => setScannerOpen(false)}
+                className="bg-transparent text-white border-white/30 hover:bg-white/10"
+              >
+                Cancelar
+              </Button>
             </div>
           </div>
-          <p className="text-white mt-4 text-center font-medium">Apunta la cámara al código de barras</p>
         </div>
       )}
 

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { useRouter } from "next/navigation";
-import { Plus, ScanBarcode, BarChart3, Search, X, FileSpreadsheet } from "lucide-react";
+import { ScanBarcode, BarChart3, Search, X, FileSpreadsheet, PackagePlus } from "lucide-react";
 
 interface Props {
   handleOpenModal: () => void;
@@ -36,15 +36,15 @@ const StockFilterPanel = ({
   };
 
   return (
-    <div className="w-full flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 mb-6">
+    <div className="w-full flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
       
-      {/* Search Bar */}
-      <div className="relative w-full md:w-1/2 lg:w-1/3">
+      {/* Search Bar - Takes available width */}
+      <div className="relative flex-1 min-w-0">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
         <Input
           className="pl-10 h-10 w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all rounded-lg"
           type="search"
-          placeholder="Buscar productos..."
+          placeholder="Buscar productos por nombre o código..."
           value={descriptionFilterInput}
           onChange={handleSearchChange}
           onKeyDown={handleKeyDown}
@@ -52,42 +52,43 @@ const StockFilterPanel = ({
       </div>
 
       {/* Actions */}
-      <div className="flex w-full md:w-auto items-center gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
+      <div className="flex w-full md:w-auto items-center gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar shrink-0">
         <Button
           onClick={handleOpenModal}
-          className="bg-black hover:bg-gray-800 text-white font-medium rounded-lg h-10 px-4 flex items-center gap-2 transition-all shadow-sm whitespace-nowrap"
+          className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-gray-900 font-medium rounded-lg h-10 px-4 flex items-center gap-2 transition-all shadow-sm whitespace-nowrap"
         >
-          <Plus className="h-4 w-4" />
-          <span>Nuevo Producto</span>
+          <PackagePlus className="h-4 w-4" />
+          <span>Nuevo</span>
         </Button>
 
         {handleOpenExcelModal && (
           <Button
             onClick={handleOpenExcelModal}
             variant="outline"
-            className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 h-10 px-4 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap text-green-700 dark:text-green-400"
+            className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap text-green-700 dark:text-green-400"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            <span>Carga Masiva</span>
+            <span className="hidden sm:inline">Carga</span>
           </Button>
         )}
 
         <Button
           variant="outline"
           onClick={() => setScannerOpen(true)}
-          className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 h-10 w-10 p-0 rounded-lg flex items-center justify-center transition-colors"
+          className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap text-gray-600 dark:text-gray-300"
           title="Escanear código de barras"
         >
-          <ScanBarcode className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+          <ScanBarcode className="h-4 w-4" />
+          <span className="hidden sm:inline">Escanear</span>
         </Button>
 
         <Button
-          variant="ghost"
+          variant="secondary"
           onClick={() => router.push("productDashboard/products-ranking")}
-          className="hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 font-medium h-10 px-4 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap"
+          className="hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap"
         >
           <BarChart3 className="h-4 w-4" />
-          <span>Ranking</span>
+          <span className="hidden sm:inline">Ranking</span>
         </Button>
       </div>
 
