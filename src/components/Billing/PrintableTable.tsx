@@ -270,7 +270,12 @@ const PrintableTable = ({
           <div className="mt-2 text-sm grid grid-cols-2 gap-4 text-left">
             <div>
               <p><span className="font-semibold">Fecha:</span> {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}</p>
-              <p><span className="font-semibold">Factura:</span> {state.billType || "B"}</p>
+              <p>
+                <span className="font-semibold">
+                  {state.CAE && state.CAE.CAE !== "" ? "Factura:" : "Comprobante:"}
+                </span>{" "}
+                {state.CAE && state.CAE.CAE !== "" ? (state.billType || "C") : "Remito"}
+              </p>
               <p><span className="font-semibold">Vendedor:</span> {state.seller || session?.user?.email}</p>
               <p><span className="font-semibold">Medio de Pago:</span> {state.paidMethod}</p>
             </div>
