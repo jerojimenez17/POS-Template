@@ -104,16 +104,17 @@ export interface BulkProductInput {
   unit?: string;
 }
 
-export const createProductsBulk = async (productsData: BulkProductInput[]) => {
+export const createProductsBulk = async (productsData: BulkProductInput[], updateExisting?: boolean) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
   try {
     let createdCount = 0;
+    let updatedCount = 0;
     
     // Process sequentially to handle dependent creations safely
     for (const item of productsData) {
-      // Lookup or create brand
+      // Lookup brand
       let brandId = null;
       if (item.brandName && item.brandName.trim() !== "") {
         let brand = await db.brand.findFirst({
@@ -127,7 +128,7 @@ export const createProductsBulk = async (productsData: BulkProductInput[]) => {
         brandId = brand.id;
       }
 
-      // Lookup or create category
+      // Lookup category
       let categoryId = null;
       if (item.categoryName && item.categoryName.trim() !== "") {
         let category = await db.category.findFirst({
@@ -141,7 +142,7 @@ export const createProductsBulk = async (productsData: BulkProductInput[]) => {
         categoryId = category.id;
       }
 
-      // Lookup or create subcategory (needs categoryId)
+      // Lookup subcategory (needs categoryId)
       let subCategoryId = null;
       if (item.subCategoryName && item.subCategoryName.trim() !== "" && categoryId) {
         let subCategory = await db.subcategory.findFirst({
@@ -170,34 +171,73 @@ export const createProductsBulk = async (productsData: BulkProductInput[]) => {
       const amountStr = item.amount?.toString().replace(',','.');
       const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
       
-      // Upsert or Create product
-      await db.product.create({
-        data: {
+      // Check if product exists by code
+      const existingProduct = await db.product.findFirst({
+        where: {
           code: item.code.toString(),
-          description: item.description.toString(),
-          price: isPriceValid ? parsedPrice : 0,
-          salePrice: isPriceValid ? parsedPrice : 0, // Set salePrice same as price by default if gain is 0
-          gain: 0,
-          amount: isNaN(parsedAmount) ? 0 : parsedAmount,
-          unit: item.unit || "unidades",
-          brand: brandId ? { connect: { id: brandId } } : undefined,
-          category: categoryId ? { connect: { id: categoryId } } : undefined,
-          subCategory: subCategoryId ? { connect: { id: subCategoryId } } : undefined,
-          business: { connect: { id: session.user.businessId } },
-        }
+          businessId: session.user.businessId,
+        },
       });
-      createdCount++;
+
+      if (existingProduct) {
+        if (updateExisting) {
+          // Update existing product
+          await db.product.update({
+            where: { id: existingProduct.id },
+            data: {
+              description: item.description.toString(),
+              price: isPriceValid ? parsedPrice : 0,
+              salePrice: isPriceValid ? parsedPrice : 0,
+              amount: isNaN(parsedAmount) ? 0 : parsedAmount,
+              unit: item.unit || "unidades",
+              brand: brandId ? { connect: { id: brandId } } : { disconnect: true },
+              category: categoryId ? { connect: { id: categoryId } } : { disconnect: true },
+              subCategory: subCategoryId ? { connect: { id: subCategoryId } } : { disconnect: true },
+              last_update: new Date(),
+            },
+          });
+          updatedCount++;
+        }
+        // If updateExisting is false and product exists, do nothing (ignore)
+      } else {
+        // Create new product
+        await db.product.create({
+          data: {
+            code: item.code.toString(),
+            description: item.description.toString(),
+            price: isPriceValid ? parsedPrice : 0,
+            salePrice: isPriceValid ? parsedPrice : 0,
+            gain: 0,
+            amount: isNaN(parsedAmount) ? 0 : parsedAmount,
+            unit: item.unit || "unidades",
+            brand: brandId ? { connect: { id: brandId } } : undefined,
+            category: categoryId ? { connect: { id: categoryId } } : undefined,
+            subCategory: subCategoryId ? { connect: { id: subCategoryId } } : undefined,
+            business: { connect: { id: session.user.businessId } },
+          }
+        });
+        createdCount++;
+      }
     }
 
-    if (createdCount > 0) {
-      await pusherServer.trigger(
-        `movements-${session.user.businessId}`, 
-        "refresh", 
-        { type: "product-created" }
-      );
+    const totalCount = updatedCount > 0 ? updatedCount : createdCount;
+    if (totalCount > 0) {
+      try {
+        await pusherServer.trigger(
+          `movements-${session.user.businessId}`, 
+          "refresh", 
+          { type: "product-created" }
+        );
+      } catch {}
     }
 
-    revalidatePath("/stock");
+    try {
+      revalidatePath("/stock");
+    } catch {}
+    
+    if (updatedCount > 0) {
+      return { success: `Se actualizaron ${updatedCount} productos y se crearon ${createdCount} productos exitosamente` };
+    }
     return { success: `Se cargaron ${createdCount} productos exitosamente` };
   } catch (error) {
     console.error("Bulk create error:", error);
