@@ -125,7 +125,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
           code: String(codeVal),
           description: String(descVal),
           price: typeof priceVal === 'number' ? priceVal : parseFloat(String(priceVal).replace(',', '.')),
-          amount: idxAmount >= 0 ? (typeof row[idxAmount] === 'number' ? row[idxAmount] : parseFloat(String(row[idxAmount]).replace(',', '.'))) || 100 : undefined,
+          amount: idxAmount >= 0 ? (row[idxAmount] !== undefined && row[idxAmount] !== null && row[idxAmount] !== '' ? (typeof row[idxAmount] === 'number' ? row[idxAmount] : parseFloat(String(row[idxAmount]).replace(',', '.'))) : null) : null,
           brandName: idxBrand >= 0 ? String(row[idxBrand] || "") : undefined,
           categoryName: idxCategory >= 0 ? String(row[idxCategory] || "") : undefined,
           subCategoryName: idxSubCategory >= 0 ? String(row[idxSubCategory] || "") : undefined,
