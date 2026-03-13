@@ -30,7 +30,7 @@ const TotalPanel = ({ refreshCount = 0 }: TotalPanelProps) => {
   return (
     <div className="w-full max-w-sm my-6 mx-auto bg-linear-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900 border border-blue-100 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-col items-center justify-center transition-all hover:shadow-md">
       <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-        Balance Actual
+        Balance en Efectivo Actual
       </p>
       {loading ? (
         <div className="h-10 w-32 bg-gray-200 dark:bg-gray-700 animate-pulse rounded-md" />
