@@ -302,7 +302,6 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
                       handlePrint();
                       setTimeout(() => {
                         removeAll();
-                        handlePrint();
                       }, 5000);
                     }
                     setOpenFacturaModal(false);
@@ -387,7 +386,6 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
                       handlePrint();
                       setTimeout(() => {
                         removeAll();
-                        handlePrint();
                       }, 5000);
                     }
                     setOpenRemitoModal(false);
