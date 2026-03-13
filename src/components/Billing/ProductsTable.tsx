@@ -10,13 +10,13 @@ interface props {
   orderId?: string;
 }
 const ProductsTable = ({ session, isEditing, orderId }: props) => {
-  const [print, setPrint] = useState(false);
+  const [printTrigger, setPrintTrigger] = useState(0);
   return (
     <div className="h-full w-full">
       <PrintableTable
         session={session}
-        print={print}
-        className="h-auto w-full print:h-3/4"
+        printTrigger={printTrigger}
+        className="h-auto w-full"
         handleClose={function (): void {
           // handleClose currently not implemented or needed here
           console.warn("handleClose not implemented");
@@ -26,7 +26,7 @@ const ProductsTable = ({ session, isEditing, orderId }: props) => {
       <div className="flex flex-col relative">
         <BillButtons 
            session={session} 
-           handlePrint={() => setPrint(!print)} 
+           handlePrint={() => setPrintTrigger(prev => prev + 1)} 
            isEditing={isEditing}
            orderId={orderId}
         />
