@@ -283,6 +283,7 @@ model Order {
   returns       SaleReturn[]
   stockMovements StockMovement[]
   updates       OrderUpdate[]
+  cashMovements CashMovement[]
   @@index([businessId, date])
 }
 
@@ -417,6 +418,9 @@ model CashMovement {
 
   businessId  String
   business    Business @relation(fields: [businessId], references: [id])
+
+  orderId     String?
+  order       Order?   @relation(fields: [orderId], references: [id])
 }
 
 model VerificationToken {

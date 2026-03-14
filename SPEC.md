@@ -55,5 +55,46 @@ Agregar checkbox "Actualizar productos" en excel-upload-modal.tsx
 - [ ] Sin checked: solo se crean productos que NO existen
 - [ ] Sin checked: productos existentes se ignoran
 - [ ] **CRÍTICO:** Si colAmount está vacío, mantener stock actual al actualizar
-- [ ] Tests pasan
+ - [ ] Tests pasan
 - [ ] Lint y typecheck pasan
+
+---
+
+# SPEC.md - Create Client Button in ClientSelectionModal
+
+## Feature Request
+Add a button beside the search input in ClientSelectionModal to create a new client.
+
+## Requirements
+
+### R1: Plus Button
+- [x] Button icon (+) appears next to search input
+- [x] Clicking button opens create client modal
+
+### R2: Create Client Modal
+- [x] Modal with form fields
+- [x] Name field (required)
+- [x] Cell phone field (optional)
+- [x] Address field (optional)
+
+### R3: Create Client Flow
+- [x] Submit creates client via createClient server action
+- [x] After creation, modal closes
+- [x] Client list refreshes
+- [x] New client is automatically selected
+
+## Technical Details
+
+### Frontend Changes
+- **File:** `src/components/ledger/ClientSelectionModal.tsx`
+- Use existing `createClient` server action from `@/actions/clients`
+- Reuse existing UI components (Dialog, Input, Button, Label)
+- Client interface: name, cellPhone, address
+
+## Acceptance Criteria
+- [x] Plus button visible next to search input
+- [x] Modal opens when button clicked
+- [x] Form validates required name field
+- [x] Client created successfully
+- [x] New client appears in list and is selected
+- [x] Lint and typecheck pass

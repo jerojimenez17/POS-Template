@@ -1,245 +1,282 @@
-"use client";
-
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { db } from "@/firebase/config";
-import moment from "moment";
-import Account, { ProductAccount } from "@/models/Account";
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import Spinner from "@/components/ui/Spinner";
-import PlusButton from "@/components/ui/PlusButton";
-import LessButton from "@/components/ui/LessButton";
-import DeleteButton from "@/components/DeleteButton";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
+import { 
+  ArrowLeft,
+  User,
+  Calendar,
+  Package,
+  CheckCircle
+} from "lucide-react";
+import { db } from "@/lib/db";
+import AddPaymentForm from "./AddPaymentForm";
+import CancelOrderButton from "./CancelOrderButton";
 
-const Page = () => {
-  const params = useParams();
-  const id = Array.isArray(params.id) ? params.id[0] : params.id;
-  const [account, setAccount] = useState<Account | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingAccount, setLoadingAccount] = useState(true);
+interface OrderWithRelations {
+  id: string;
+  date: Date;
+  total: number;
+  paidStatus: string;
+  clientId: string | null;
+  client: { id: string; name: string | null } | null;
+  items: Array<{ id: string; description: string | null; code: string | null; price: number; quantity: number; subTotal: number }>;
+  cashMovements: Array<{ id: string; date: Date; total: number; paidMethod: string | null }>;
+}
 
-  useEffect(() => {
-    const fetchAccount = async () => {
-      if (!id) return;
+export default async function AccountLedgerDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ action?: string }>;
+}) {
+  const { id } = await params;
+  const actionParams = await searchParams;
+  const session = await auth();
+  
+  if (!session?.user?.businessId) {
+    redirect("/");
+  }
 
-      const docRef = doc(db, "accountLedger", id);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const productsAccount = snap
-          .data()
-          .productsAccount.map((productAccount: ProductAccount) => {
-            return new ProductAccount(
-              productAccount,
-              productAccount.amount,
-              moment(productAccount.date.toDate())
-            );
-          });
-        const data = snap.data();
-        const loadedAccount = new Account(
-          snap.id,
-          data.clientName,
-          data.clientEmail,
-          data.clientPhone,
-          productsAccount || [],
-          moment(data.date.toDate()),
-          moment(data.last_update.toDate()),
-          data.status
-        );
-        setAccount(loadedAccount);
-      }
+  const order = await db.order.findUnique({
+    where: { id, businessId: session.user.businessId },
+    include: {
+      client: true,
+      items: true,
+      cashMovements: {
+        orderBy: { date: "desc" },
+      },
+    },
+  }) as unknown as OrderWithRelations | null;
 
-      setLoadingAccount(false);
-    };
-
-    fetchAccount();
-  }, [id]);
-
-  const handleMarkAsPaid = async () => {
-    if (!account) return;
-    setLoading(true);
-    const docRef = doc(db, "accountLedger", account.id);
-    const document = await getDoc(docRef);
-
-    if (document.exists() && document.data().status === "pending") {
-      await updateDoc(docRef, {
-        status: "paid",
-        last_update: new Date(),
-      });
-      setAccount({ ...account, status: "paid" });
-    } else {
-      if (document.exists()) {
-        await updateDoc(docRef, {
-          status: "pending",
-          last_update: new Date(),
-        });
-        setAccount({ ...account, status: "pending" });
-      }
-    }
-    setLoading(false);
-  };
-  const handleChangeUnit = async (productId: string, amount: number) => {
-    setLoading(true);
-    if (id === undefined) return;
-    const docRef = doc(db, "accountLedger", id);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return;
-
-    const productsAccount = snap
-      .data()
-      .productsAccount.map((productAccount: ProductAccount) => {
-        return new ProductAccount(
-          productAccount,
-          productId === productAccount.id
-            ? productAccount.amount + amount
-            : productAccount.amount,
-          moment(productAccount.date.toDate())
-        );
-      });
-    const serializedProducts = productsAccount.map((p: ProductAccount) => ({
-      ...p,
-      date: p.date instanceof Date ? p.date : new Date(p.date.toDate()),
-    }));
-
-    updateDoc(docRef, {
-      productsAccount: serializedProducts,
-      last_update: new Date(),
-    });
-
-    if (account) {
-      setAccount({
-        ...account,
-        productsAccount: productsAccount,
-        total: productsAccount.reduce(
-          (acc: number, p: { salePrice: number; amount: number }) =>
-            acc + p.salePrice * p.amount,
-          0
-        ),
-        last_update: moment(),
-      });
-    }
-    setLoading(false);
-  };
-  const handleDeleteProduct = async (product: ProductAccount) => {
-    if (!account) return;
-    setLoading(true);
-    const updatedProducts = account.productsAccount.filter(
-      (pa) => !(pa.id === product.id && pa.date === product.date)
-    );
-
-    const newTotal = updatedProducts.reduce(
-      (acc, p) => acc + p.salePrice * p.amount,
-      0
-    );
-
-    const serializedProducts = updatedProducts.map((p) => ({
-      ...p,
-      date: p.date instanceof Date ? p.date : new Date(p.date.toDate()),
-    }));
-
-    const docRef = doc(db, "accountLedger", account.id);
-    await updateDoc(docRef, {
-      productsAccount: serializedProducts,
-      total: newTotal,
-      last_update: new Date(),
-    });
-
-    setAccount({
-      ...account,
-      productsAccount: updatedProducts,
-      total: newTotal,
-      last_update: moment(),
-    });
-    setLoading(false);
-  };
-
-  if (loadingAccount) return <Spinner />;
-  if (!account) return <div className="p-4">Cuenta no encontrada</div>;
-  return (
-    <>
-      {loading && <Spinner />}
-      <div className="p-4 h-full flex flex-col overflow-auto py-14 space-y-4">
-        <h1 className="text-xl text-center dark:text-gray-100 font-bold">
-          Cuenta
-        </h1>
-        <div className="border rounded-lg p-4 dark:bg-gray-700 dark:text-gray-100 shadow">
-          <p>
-            <strong>Cliente:</strong> {account.clientName}
-          </p>
-          <p>
-            <strong>Email:</strong> {account.clientEmail}
-          </p>
-          <p>
-            <strong>Teléfono:</strong> {account.clientPhone}
-          </p>
-          <p>
-            <strong>Total:</strong> $
-            {account.total.toLocaleString("es-AR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </p>
-          <p>
-            <strong>Fecha:</strong> {account.date.format("DD/MM/YYYY HH:mm")}
-          </p>
-          <p>
-            <strong>Última actualización:</strong>{" "}
-            {account.last_update.format("DD/MM/YYYY HH:mm")}
-          </p>
-          <p>
-            <strong>Estado:</strong>{" "}
-            {account.status === "paid" ? "Paga" : "Pendiente"}
-          </p>
-          <Button onClick={handleMarkAsPaid} className="mt-2">
-            Marcar como {account.status === "paid" ? "Pendiente" : "Paga"}
+  if (!order) {
+    return (
+      <div className="container mx-auto py-8 px-4 max-w-4xl">
+        <div className="flex items-center gap-4 mb-6">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/account-ledger">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Volver
+            </Link>
           </Button>
         </div>
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-muted-foreground">Orden no encontrada</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-100">
-          Productos
-        </h2>
-        <div className="flex flex-col mb-12 gap-2">
-          {account.productsAccount.map((product, index) => (
-            <div
-              key={product.id + index}
-              className="p-3 border rounded shadow-sm flex justify-between items-center"
-            >
-              <div>
-                <p className="font-medium">{product.description}</p>
-                <p className="text-sm text-muted-foreground">
-                  Cantidad: {product.amount} – Total: $
-                  {(product.salePrice * product.amount).toLocaleString(
-                    "es-AR",
-                    {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }
-                  )}{" "}
-                  - Fecha retiro: {product.date.format("DD/MM/YYYY HH:mm")}
-                </p>
+  const totalPaid = order.cashMovements.reduce((sum, pm) => sum + pm.total, 0);
+  const remainingBalance = order.total - totalPaid;
+
+  const formatDate = (date: Date | string) => {
+    const d = new Date(date);
+    return d.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const getStatusBadge = (paidStatus: string) => {
+    switch (paidStatus) {
+      case "inpago":
+        return <Badge variant="destructive">Pendiente</Badge>;
+      case "pago":
+        return <Badge className="bg-green-500 hover:bg-green-600">Pagado</Badge>;
+      default:
+        return <Badge variant="outline">{paidStatus}</Badge>;
+    }
+  };
+
+  return (
+    <div className="container mx-auto py-8 px-4 max-w-5xl">
+      <div className="flex items-center gap-4 mb-6">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/account-ledger">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Volver
+          </Link>
+        </Button>
+        <h1 className="text-2xl font-bold">Detalle de Cuenta</h1>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Main Info Card */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Orden #{order.id.slice(-6).toUpperCase()}</span>
+              {getStatusBadge(order.paidStatus)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Client & Date Info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                <User className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Cliente</p>
+                  <p className="font-medium">{order.client?.name || "Sin cliente"}</p>
+                </div>
               </div>
-              <div className="flex align-middle  justify-between">
-                <PlusButton
-                  disable={loading}
-                  onClick={() => handleChangeUnit(product.id, 1)}
-                  className="mt-2"
-                />
-                <LessButton
-                  disable={loading}
-                  onClick={() => handleChangeUnit(product.id, -1)}
-                  className="mt-2"
-                />
-                <DeleteButton
-                  disable={loading}
-                  onClick={() => handleDeleteProduct(product)}
-                ></DeleteButton>
+              <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                <Calendar className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Fecha</p>
+                  <p className="font-medium">{formatDate(order.date)}</p>
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-};
 
-export default Page;
+            <Separator />
+
+            {/* Products Table */}
+            <div>
+              <h3 className="font-semibold flex items-center gap-2 mb-4">
+                <Package className="h-5 w-5" />
+                Productos
+              </h3>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Descripción</TableHead>
+                      <TableHead className="text-center">Cantidad</TableHead>
+                      <TableHead className="text-right">P. Unitario</TableHead>
+                      <TableHead className="text-right">Subtotal</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {order.items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div className="font-medium">{item.description || "Producto"}</div>
+                          {item.code && (
+                            <div className="text-xs text-muted-foreground">{item.code}</div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">{item.quantity}</TableCell>
+                        <TableCell className="text-right">
+                          ${item.price.toLocaleString("es-AR")}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          ${item.subTotal.toLocaleString("es-AR")}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Payment History */}
+            <div>
+              <h3 className="font-semibold flex items-center gap-2 mb-4">
+                Historial de Pagos
+              </h3>
+              {order.cashMovements.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No hay pagos registrados</p>
+              ) : (
+                <div className="space-y-2">
+                  {order.cashMovements.map((payment) => (
+                    <div
+                      key={payment.id}
+                      className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg"
+                    >
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-sm">{payment.paidMethod || "Pago"}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-medium text-green-700 dark:text-green-400">
+                          +${payment.total.toLocaleString("es-AR")}
+                        </span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {formatDate(payment.date)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Summary & Actions Card */}
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle className="text-lg">Resumen</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Total Orden</span>
+                <span className="font-medium">${order.total.toLocaleString("es-AR")}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Pagado</span>
+                <span className="font-medium text-green-600">
+                  -${totalPaid.toLocaleString("es-AR")}
+                </span>
+              </div>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="font-semibold">Saldo Pendiente</span>
+                <span className="text-xl font-bold text-primary">
+                  ${remainingBalance.toLocaleString("es-AR")}
+                </span>
+              </div>
+            </div>
+
+            {order.paidStatus !== "pago" && (
+              <div className="space-y-2 pt-4">
+                <AddPaymentForm 
+                  orderId={order.id} 
+                  remainingBalance={remainingBalance}
+                  businessId={session.user.businessId}
+                  showForm={actionParams.action === "payment"}
+                />
+              </div>
+            )}
+
+            {order.paidStatus !== "pago" && (
+              <div className="pt-2">
+                <CancelOrderButton 
+                  orderId={order.id}
+                  businessId={session.user.businessId}
+                  showButton={actionParams.action === "cancel"}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
