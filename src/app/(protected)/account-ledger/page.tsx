@@ -179,9 +179,9 @@ export default async function AccountLedgerPage({
 
       <div className="flex flex-col gap-6">
         <div className="flex gap-2 border-b pb-2">
-          <StatusTab status="all" />
-          <StatusTab status="inpago" label="Pendientes" />
-          <StatusTab status="pago" label="Pagados" />
+          <StatusTab status="all" currentStatus={status} />
+          <StatusTab status="inpago" label="Pendientes" currentStatus={status} />
+          <StatusTab status="pago" label="Pagados" currentStatus={status} />
         </div>
 
         <Suspense
@@ -201,9 +201,11 @@ export default async function AccountLedgerPage({
 function StatusTab({
   status,
   label,
+  currentStatus,
 }: {
   status: StatusFilter;
   label?: string;
+  currentStatus: StatusFilter;
 }) {
   const getTabLabel = () => {
     if (label) return label;
@@ -227,7 +229,7 @@ function StatusTab({
     >
       <Link
         href={`/account-ledger?status=${status}`}
-        data-active={status === "all" ? "true" : undefined}
+        data-active={status === currentStatus ? "true" : undefined}
       >
         {getTabLabel()}
       </Link>

@@ -272,11 +272,11 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
       } as never);
       orders = orders ? [orders] : [];
     } else {
-      const paidStatus = (input.status === "pagado" ? "pago" : input.status || "inpago") as PaidStatus;
+      const paidStatus = (input.status === "pagado" ? "pago" : input.status) as PaidStatus | undefined;
       orders = await db.order.findMany({
         where: {
           businessId,
-          paidStatus,
+          ...(paidStatus && paidStatus !== ("all" as never) ? { paidStatus } : {}),
         },
         include: {
           client: true,
