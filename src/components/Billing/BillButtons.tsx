@@ -125,7 +125,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
 
       const totalAmount =
         BillState.products.reduce(
-          (acc, act) => acc + act.price * act.amount,
+          (acc, act) => acc + act.salePrice * act.amount,
           0
         ) * (1 - BillState.discount * 0.01);
 
