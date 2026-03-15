@@ -25,9 +25,12 @@ Test engineer responsible for creating comprehensive test specifications and val
    - Report test failures with clear evidence
    - Verify bug fixes don't introduce regressions
 
-## Constraints
+## Testing Stack
 
-- Tests must be deterministic (no flaky tests)
+- **Framework**: Vitest v4
+- **Libraries**: @testing-library/react, happy-dom, jsdom
+- **Run**: `npm run test` or `npm run test:watch`
+- **Config**: vitest.config.ts
 - Must follow project testing conventions
 - Cannot modify source code - only tests
 - Tests must have clear, descriptive names
