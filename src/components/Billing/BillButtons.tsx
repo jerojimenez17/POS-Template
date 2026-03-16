@@ -185,6 +185,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
   };
   const [openFacturaModal, setOpenFacturaModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);
+  const [openAccountModal, setOpenAccountModal] = useState(false);
   const [blockButton, setBlockButton] = useState(false);
   return (
     <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-3 py-4 px-4">
@@ -244,59 +245,20 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
             Remito
           </Button>
           
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button 
-                variant="outline" 
-                className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto"
-                disabled={BillState.products.length === 0}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-                A cuenta
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>
-                  <p>Crear Orden a Cuenta</p>
-                </DialogTitle>
-              </DialogHeader>
-              <ClientSelectionModal 
-                open={true}
-                onOpenChange={(open) => {
-                  if (!open) {
-                    // Reset the dialog state by clicking close
-                    const closeButton = document.querySelector('[data-state="open"] [data-dialog-close]');
-                    if (closeButton instanceof HTMLElement) {
-                      closeButton.click();
-                    }
-                  }
-                }}
-                items={BillState.products.map(p => ({
-                  id: p.id,
-                  code: p.code,
-                  description: p.description,
-                  salePrice: p.salePrice || 0,
-                  amount: p.amount,
-                }))}
-                total={BillState.total}
-                businessId={session?.user?.businessId || ""}
-                onSuccess={() => {
-                  removeAll();
-                }}
-              />
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline" className="rounded-lg">Cerrar</Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button 
+            variant="outline" 
+            className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto"
+            disabled={BillState.products.length === 0}
+            onClick={() => setOpenAccountModal(true)}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            A cuenta
+          </Button>
         </>
       )}
 
@@ -428,6 +390,23 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ClientSelectionModal 
+        open={openAccountModal}
+        onOpenChange={setOpenAccountModal}
+        items={BillState.products.map(p => ({
+          id: p.id,
+          code: p.code,
+          description: p.description,
+          salePrice: p.salePrice || 0,
+          amount: p.amount,
+        }))}
+        total={BillState.total}
+        businessId={session?.user?.businessId || ""}
+        onSuccess={() => {
+          removeAll();
+          setOpenAccountModal(false);
+        }}
+      />
       <Modal
         visible={openErrorModal}
         onClose={() => setOpenErrorModal(false)}
