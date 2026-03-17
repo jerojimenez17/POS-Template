@@ -258,31 +258,6 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="code"
             render={({ field }) => (
               <FormItem>
-<<<<<<< feat/ui-enhacenment-stock
-                <FormLabel className="text-sm font-medium">Código <span className="text-red-500">*</span></FormLabel>
-                <div className="relative">
-                  <FormControl>
-                    <Input
-                      {...field}
-                      placeholder="Código del producto"
-                      type="text"
-                      className="pr-12"
-                      autoComplete="code"
-                      disabled={isPending}
-                    />
-                  </FormControl>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setScannerOpen(true)}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-9 p-0 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    title="Escanear código de barras"
-                  >
-                    <ScanBarcode className="h-4 w-4" />
-                  </Button>
-                </div>
-=======
                 <FormLabel>Codigo <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <div className="flex gap-2">
@@ -306,7 +281,6 @@ const ProductForm = ({ product, onClose }: Props) => {
                     </Button>
                   </div>
                 </FormControl>
->>>>>>> main
                 <FormMessage />
               </FormItem>
             )}
@@ -374,43 +348,6 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
-<<<<<<< feat/ui-enhacenment-stock
-        <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
-          <div className="space-y-2">
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium">Categoría <span className="text-red-500">*</span></FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Seleccionar" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          <div className="pt-6">
-            <NewCategoryModal />
-          </div>
-        </div>
-        <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
-=======
         <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
@@ -444,7 +381,6 @@ const ProductForm = ({ product, onClose }: Props) => {
           </div>
         </div>
         <div className="flex flex-row items-end gap-2">
->>>>>>> main
           <FormField
             control={form.control}
             name="subCategory"
@@ -477,11 +413,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             <NewSubcategoryModal categoryId={selectedCategoryId} />
           </div>
         </div>
-<<<<<<< feat/ui-enhacenment-stock
-        <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
-=======
         <div className="flex flex-row items-end gap-2">
->>>>>>> main
           <FormField
             control={form.control}
             name="brand"
@@ -513,11 +445,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             <NewBrandModal />
           </div>
         </div>
-<<<<<<< feat/ui-enhacenment-stock
-        <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
-=======
         <div className="flex flex-row items-end gap-2">
->>>>>>> main
           <FormField
             control={form.control}
             name="supplier"
