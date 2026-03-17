@@ -11,10 +11,9 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { useState } from "react";
-import { FormSuccess } from "../ui/form-success";
 import { createSubcategory } from "@/actions/subcategories";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, FolderTree } from "lucide-react";
 
 interface Props {
   categoryId?: string;
@@ -22,8 +21,8 @@ interface Props {
 
 const NewSubcategoryModal = ({ categoryId }: Props) => {
   const [subcategory, setSubcategory] = useState("");
-  const [success, setSuccess] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const handleAdd = async () => {
     if (!categoryId) {
@@ -33,13 +32,12 @@ const NewSubcategoryModal = ({ categoryId }: Props) => {
     if (subcategory === "") return;
 
     setIsPending(true);
-    setSuccess(false);
     try {
       const response = await createSubcategory(subcategory, categoryId);
       if (response.success) {
-        setSuccess(true);
-        setSubcategory("");
         toast.success("Subcategoría creada");
+        setSubcategory("");
+        setOpen(false);
       } else {
         toast.error(response.error || "Error al crear subcategoría");
       }
@@ -51,48 +49,49 @@ const NewSubcategoryModal = ({ categoryId }: Props) => {
   };
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button 
           variant="outline" 
           size="icon" 
-          className="shrink-0" 
+          className="shrink-0 h-9 w-9" 
           disabled={!categoryId}
+          title={!categoryId ? "Seleccione una categoría primero" : "Nueva subcategoría"}
         >
           <Plus className="h-4 w-4" />
           <span className="sr-only">Nueva Subcategoría</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nueva Sub-Categoria</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <FolderTree className="h-5 w-5" />
+            Nueva Subcategoría
+          </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="subcategory" className="text-right">
-              Sub-Categoria
-            </Label>
-            <Input
-              id="subcategory"
-              value={subcategory}
-              placeholder="Nueva subcategoria"
-              onChange={(e) => {
-                setSubcategory(e.currentTarget.value);
-              }}
-              className="col-span-3 text-gray-800"
-              disabled={isPending}
-            />
-          </div>
+        <div className="py-4">
+          <Label htmlFor="subcategory" className="text-sm font-medium">
+            Nombre de la subcategoría
+          </Label>
+          <Input
+            id="subcategory"
+            value={subcategory}
+            placeholder="Ej: Sin azúcar, Light, etc."
+            onChange={(e) => setSubcategory(e.currentTarget.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            className="mt-1.5"
+            disabled={isPending}
+            autoFocus
+          />
         </div>
-        <DialogFooter>
+        <DialogFooter className="sm:justify-center">
           <Button
             onClick={handleAdd}
-            disabled={isPending}
-            type="submit"
+            disabled={isPending || !subcategory.trim()}
+            className="w-full sm:w-auto bg-black dark:bg-white dark:text-gray-900"
           >
-            Agregar
+            {isPending ? "Guardando..." : "Crear subcategoría"}
           </Button>
-          {success && <FormSuccess message="Subcategoria creada" />}
         </DialogFooter>
       </DialogContent>
     </Dialog>

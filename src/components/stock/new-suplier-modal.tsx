@@ -11,23 +11,21 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { useState } from "react";
-import { FormSuccess } from "../ui/form-success";
 import { createSupplier } from "@/actions/stock";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Truck } from "lucide-react";
 
 const NewSuplierModal = () => {
   const [suplier, setSuplier] = useState("");
   const [suplierEmail, setSuplierEmail] = useState("");
   const [suplierPhone, setSuplierPhone] = useState("");
   const [suplierBonus, setSuplierBonus] = useState(0);
-  const [success, setSuccess] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const handleAdd = async () => {
     if (suplier === "") return;
     setIsPending(true);
-    setSuccess(false);
     try {
       const response = await createSupplier({
         name: suplier,
@@ -36,14 +34,14 @@ const NewSuplierModal = () => {
         bonus: suplierBonus,
       });
       if (response.success) {
-        setSuccess(true);
+        toast.success("Proveedor creado");
         setSuplier("");
         setSuplierEmail("");
         setSuplierPhone("");
         setSuplierBonus(0);
-        toast.success("Proveedor agregado");
+        setOpen(false);
       } else {
-        toast.error(response.error || "Error al agregar proveedor");
+        toast.error(response.error || "Error al crear proveedor");
       }
     } catch {
       toast.error("Error inesperado");
@@ -53,82 +51,86 @@ const NewSuplierModal = () => {
   };
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="shrink-0">
+        <Button variant="outline" size="icon" className="shrink-0 h-9 w-9">
           <Plus className="h-4 w-4" />
           <span className="sr-only">Nuevo Proveedor</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Nuevo Proveedor</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Truck className="h-5 w-5" />
+            Nuevo Proveedor
+          </DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="suplier-name" className="text-right">
-              Nombre
+          <div className="space-y-2">
+            <Label htmlFor="suplier-name" className="text-sm font-medium">
+              Nombre <span className="text-red-500">*</span>
             </Label>
             <Input
               id="suplier-name"
-              placeholder="Ej: Proveedor-1"
+              placeholder="Nombre del proveedor"
               value={suplier}
-              onChange={(e) => {
-                setSuplier(e.currentTarget.value);
-              }}
-              className="col-span-3 text-gray-800"
+              onChange={(e) => setSuplier(e.currentTarget.value)}
               disabled={isPending}
+              autoFocus
             />
-            <Label htmlFor="suplier-email" className="text-right">
-              Email
-            </Label>
-            <Input
-              id="suplier-email"
-              value={suplierEmail}
-              placeholder="ejemplo@ejemplo.com"
-              onChange={(e) => {
-                setSuplierEmail(e.currentTarget.value);
-              }}
-              className="col-span-3 text-gray-800"
-              disabled={isPending}
-            />
-            <Label htmlFor="suplier-phone" className="text-right">
-              Telefono
-            </Label>
-            <Input
-              id="suplier-phone"
-              value={suplierPhone}
-              placeholder="EJ:223418113"
-              onChange={(e) => {
-                setSuplierPhone(e.currentTarget.value);
-              }}
-              className="col-span-3 text-gray-800"
-              disabled={isPending}
-            />
-            <Label htmlFor="suplier-bonus" className="text-right">
-              Bonificacion
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="suplier-email" className="text-sm font-medium">
+                Email
+              </Label>
+              <Input
+                id="suplier-email"
+                type="email"
+                value={suplierEmail}
+                placeholder="correo@ejemplo.com"
+                onChange={(e) => setSuplierEmail(e.currentTarget.value)}
+                disabled={isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="suplier-phone" className="text-sm font-medium">
+                Teléfono
+              </Label>
+              <Input
+                id="suplier-phone"
+                type="tel"
+                value={suplierPhone}
+                placeholder="+54 9 2234 581234"
+                onChange={(e) => setSuplierPhone(e.currentTarget.value)}
+                disabled={isPending}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="suplier-bonus" className="text-sm font-medium">
+              Bonificación %
             </Label>
             <Input
               id="suplier-bonus"
               type="number"
+              min={0}
+              max={100}
               value={suplierBonus !== 0 ? suplierBonus : ""}
-              onChange={(e) => {
-                setSuplierBonus(Number(e.currentTarget.value));
-              }}
-              className="col-span-3 text-gray-800"
+              onChange={(e) => setSuplierBonus(Number(e.currentTarget.value))}
+              placeholder="0"
               disabled={isPending}
             />
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="sm:justify-center">
           <Button
             onClick={handleAdd}
-            disabled={isPending}
-            type="submit"
+            disabled={isPending || !suplier.trim()}
+            className="w-full sm:w-auto bg-black dark:bg-white dark:text-gray-900"
           >
-            Agregar
+            {isPending ? "Guardando..." : "Crear proveedor"}
           </Button>
-          {success && <FormSuccess message="Proveedor agregado" />}
         </DialogFooter>
       </DialogContent>
     </Dialog>
