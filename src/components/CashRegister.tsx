@@ -23,6 +23,7 @@ interface props {
 const CashRegister = ({ session }: props) => {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [refreshTotal, setRefreshTotal] = useState(0);
+  const [showOnlyCash, setShowOnlyCash] = useState(true);
 
   useEffect(() => {
     const fetchMovements = async () => {
@@ -63,6 +64,8 @@ const CashRegister = ({ session }: props) => {
     }
   }, [session?.user?.businessId]);
 
+  const filteredMovements = movements.filter(m => !showOnlyCash || m.paidMethod === "Efectivo");
+
   return (
     <div className="min-h-full flex flex-col bg-slate-50 dark:bg-gray-900 pb-10">
       
@@ -89,8 +92,23 @@ const CashRegister = ({ session }: props) => {
 
         {/* Movements Table */}
         <div className="w-full bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex flex-col sm:flex-row justify-between items-center gap-4">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Historial de Movimientos</h2>
+            
+            <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
+                <button 
+                    onClick={() => setShowOnlyCash(true)}
+                    className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${showOnlyCash ? 'bg-white dark:bg-gray-800 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                >
+                    Solo Efectivo
+                </button>
+                <button 
+                    onClick={() => setShowOnlyCash(false)}
+                    className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${!showOnlyCash ? 'bg-white dark:bg-gray-800 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                >
+                    Ver Todos
+                </button>
+            </div>
           </div>
           
           <div className="overflow-x-auto">
@@ -103,17 +121,19 @@ const CashRegister = ({ session }: props) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {movements.length === 0 ? (
+                {filteredMovements.length === 0 ? (
                   <TableRow>
                      <TableCell colSpan={3} className="text-center py-8 text-gray-500 dark:text-gray-400">
                         No hay movimientos registrados recientes.
                      </TableCell>
                   </TableRow>
                 ) : (
-                  movements
+                  filteredMovements
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                     .map((movement) => {
                       const isNegative = movement.total < 0;
+                      const isDigital = movement.paidMethod && movement.paidMethod !== "Efectivo";
+
                       return (
                         <TableRow
                           key={movement.id}
@@ -133,12 +153,21 @@ const CashRegister = ({ session }: props) => {
                               isNegative ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-500"
                             }`}
                           >
-                            {isNegative ? "- " : "+ "}
-                            $
-                            {Math.abs(movement.total).toLocaleString("es-AR", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
+                            <div className="flex flex-col items-end">
+                              <div>
+                                {isNegative ? "- " : "+ "}
+                                $
+                                {Math.abs(movement.total).toLocaleString("es-AR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </div>
+                              {isDigital && (
+                                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-sm bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 mt-1">
+                                  {movement.paidMethod}
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

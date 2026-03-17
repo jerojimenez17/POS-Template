@@ -11,7 +11,7 @@ import postBill from "@/services/AFIPService";
 import { processSaleAction, updateOrderAction } from "@/actions/sales";
 import { toast, Toaster } from "sonner";
 import Spinner from "../ui/Spinner";
-import AccountLedgerModal from "../ledger/AccountLedgerModal";
+import ClientSelectionModal from "../ledger/ClientSelectionModal";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -43,7 +43,6 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(true);
-  const [openLedgerModal, setOpenLedgerModal] = useState(false);
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
@@ -126,7 +125,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
 
       const totalAmount =
         BillState.products.reduce(
-          (acc, act) => acc + act.price * act.amount,
+          (acc, act) => acc + act.salePrice * act.amount,
           0
         ) * (1 - BillState.discount * 0.01);
 
@@ -247,7 +246,11 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
           
           <Dialog>
             <DialogTrigger asChild>
-              <Button variant="outline" className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto">
+              <Button 
+                variant="outline" 
+                className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto"
+                disabled={BillState.products.length === 0}
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
                   <circle cx="9" cy="7" r="4"/>
@@ -260,10 +263,33 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>
-                  <p>Buscar Cuenta</p>
+                  <p>Crear Orden a Cuenta</p>
                 </DialogTitle>
               </DialogHeader>
-              <AccountLedgerModal billState={BillState} />
+              <ClientSelectionModal 
+                open={true}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    // Reset the dialog state by clicking close
+                    const closeButton = document.querySelector('[data-state="open"] [data-dialog-close]');
+                    if (closeButton instanceof HTMLElement) {
+                      closeButton.click();
+                    }
+                  }
+                }}
+                items={BillState.products.map(p => ({
+                  id: p.id,
+                  code: p.code,
+                  description: p.description,
+                  salePrice: p.salePrice || 0,
+                  amount: p.amount,
+                }))}
+                total={BillState.total}
+                businessId={session?.user?.businessId || ""}
+                onSuccess={() => {
+                  removeAll();
+                }}
+              />
               <DialogFooter>
                 <DialogClose asChild>
                   <Button variant="outline" className="rounded-lg">Cerrar</Button>
@@ -302,7 +328,6 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
                       handlePrint();
                       setTimeout(() => {
                         removeAll();
-                        handlePrint();
                       }, 5000);
                     }
                     setOpenFacturaModal(false);
@@ -387,7 +412,6 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
                       handlePrint();
                       setTimeout(() => {
                         removeAll();
-                        handlePrint();
                       }, 5000);
                     }
                     setOpenRemitoModal(false);

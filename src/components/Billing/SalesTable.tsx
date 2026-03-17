@@ -24,7 +24,7 @@ interface props {
 
 const SalesTable = ({ sales = [], session }: props) => {
   const { user } = useAuthContext();
-  const [print, setPrint] = useState(false);
+  const [printTrigger, setPrintTrigger] = useState(0);
   const [externalState, setExternalState] = useState<BillState>();
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -149,7 +149,7 @@ const SalesTable = ({ sales = [], session }: props) => {
                   onClick={() => {
                     setExternalState(sale);
                     setTimeout(() => {
-                      setPrint(!print);
+                      setPrintTrigger((prev) => prev + 1);
                     }, 100);
                   }}
                 />
@@ -211,10 +211,10 @@ const SalesTable = ({ sales = [], session }: props) => {
       </div>
       <PrintableTable
         className="hidden print:block"
-        print={print}
+        printTrigger={printTrigger}
         session={session}
         externalState={externalState}
-        handleClose={() => setPrint(false)}
+        handleClose={() => setPrintTrigger(0)}
       />
     </div>
   );

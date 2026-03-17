@@ -22,7 +22,7 @@ const Scanner = dynamic(
 );
 
 interface Props {
-  print: boolean;
+  printTrigger: number;
   className: string;
   handleClose: () => void;
   session: Session | null;
@@ -50,7 +50,7 @@ const defaultBillState: BillState = {
 };
 
 const PrintableTable = ({
-  print,
+  printTrigger,
   session,
   className,
   externalState,
@@ -70,6 +70,7 @@ const PrintableTable = ({
     address?: string | null;
   } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const lastPrintTrigger = useRef(0);
 
   // Fix hydration: Only run on client
   useEffect(() => {
@@ -88,18 +89,17 @@ const PrintableTable = ({
     documentTitle: `Factura_${(state?.date || new Date()).toISOString().split("T")[0]}`,
     onBeforePrint: () => Promise.resolve(), // Sometimes helps Safari rendering lifecycle
     pageStyle: `
-      @page { size: auto; margin: 0; }
+      @page { size: auto; margin: 10mm; }
       @media print {
         html, body {
           width: 100% !important;
-          height: auto !important;
+          min-width: 100% !important;
           margin: 0 !important;
-          padding: 5mm !important;
-          max-width: 100% !important;
+          padding: 0 !important;
         }
         body { -webkit-print-color-adjust: exact; }
         .print-header { display: block !important; }
-        table { width: 100% !important; max-width: 100% !important; table-layout: fixed; }
+        table { width: 100% !important; table-layout: fixed; }
         th, td { word-wrap: break-word; }
         .print-hidden { display: none !important; }
         .print-visible { display: block !important; }
@@ -119,10 +119,11 @@ const PrintableTable = ({
   }, [externalState, BillState]);
 
   useEffect(() => {
-    if (print && isClient && !scannerOpen) {
+    if (printTrigger > lastPrintTrigger.current && isClient && !scannerOpen) {
+      lastPrintTrigger.current = printTrigger;
       handlePrint();
     }
-  }, [print, isClient, scannerOpen, handlePrint]);
+  }, [printTrigger, isClient, scannerOpen, handlePrint]);
 
   const updateProductAmount = (productId: string, newAmount: number) => {
     const product = state.products.find((p) => p.id === productId);
@@ -186,7 +187,7 @@ const PrintableTable = ({
         <div className="text-sm text-gray-500 dark:text-gray-400">{product.code}</div>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex items-center justify-center gap-2 print:hidden">
           {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
             <>
               <button
@@ -213,6 +214,9 @@ const PrintableTable = ({
             />
           )}
         </div>
+        <div className="hidden print:block text-center font-medium tabular-nums">
+          {product.amount}
+        </div>
       </td>
       <td className="px-4 py-3 text-right font-medium tabular-nums">
         ${product.salePrice.toLocaleString("es-AR", {
@@ -226,7 +230,7 @@ const PrintableTable = ({
           maximumFractionDigits: 2,
         })}
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 print:hidden">
         <button 
           onClick={() => removeItem(product)}
           className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
@@ -266,7 +270,12 @@ const PrintableTable = ({
           <div className="mt-2 text-sm grid grid-cols-2 gap-4 text-left">
             <div>
               <p><span className="font-semibold">Fecha:</span> {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}</p>
-              <p><span className="font-semibold">Factura:</span> {state.billType || "B"}</p>
+              <p>
+                <span className="font-semibold">
+                  {state.CAE && state.CAE.CAE !== "" ? "Factura:" : "Comprobante:"}
+                </span>{" "}
+                {state.CAE && state.CAE.CAE !== "" ? (state.billType || "C") : "Remito"}
+              </p>
               <p><span className="font-semibold">Vendedor:</span> {state.seller || session?.user?.email}</p>
               <p><span className="font-semibold">Medio de Pago:</span> {state.paidMethod}</p>
             </div>
@@ -284,7 +293,7 @@ const PrintableTable = ({
       )}
 
       {/* Product Search - Screen only */}
-      <div className="mb-6 max-w-7xl mx-auto">
+      <div className="mb-6 max-w-7xl mx-auto print:hidden">
         <div className="flex gap-3">
           <div className="flex-1 relative">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
@@ -393,7 +402,7 @@ const PrintableTable = ({
                 <th className="px-4 py-3 text-center">Cantidad</th>
                 <th className="px-4 py-3 text-right">Precio</th>
                 <th className="px-4 py-3 text-right">Subtotal</th>
-                <th className="px-4 py-3 w-12"></th>
+                <th className="px-4 py-3 w-12 print:hidden"></th>
               </tr>
             </thead>
             <tbody>

@@ -21,6 +21,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [loading, setLoading] = useState(false);
   const [startRow, setStartRow] = useState(2);
   const [endRow, setEndRow] = useState<number | "">("");
+  const [updateExisting, setUpdateExisting] = useState(false);
   
   // Column Mappings
   const [colCode, setColCode] = useState("A");
@@ -124,7 +125,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
           code: String(codeVal),
           description: String(descVal),
           price: typeof priceVal === 'number' ? priceVal : parseFloat(String(priceVal).replace(',', '.')),
-          amount: idxAmount >= 0 ? (typeof row[idxAmount] === 'number' ? row[idxAmount] : parseFloat(String(row[idxAmount]).replace(',', '.'))) || 100 : undefined,
+          amount: idxAmount >= 0 ? (row[idxAmount] !== undefined && row[idxAmount] !== null && row[idxAmount] !== '' ? (typeof row[idxAmount] === 'number' ? row[idxAmount] : parseFloat(String(row[idxAmount]).replace(',', '.'))) : null) : null,
           brandName: idxBrand >= 0 ? String(row[idxBrand] || "") : undefined,
           categoryName: idxCategory >= 0 ? String(row[idxCategory] || "") : undefined,
           subCategoryName: idxSubCategory >= 0 ? String(row[idxSubCategory] || "") : undefined,
@@ -141,7 +142,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
 
       toast.loading(`Importando ${parsedProducts.length} productos...`, { id: "bulk-import" });
       
-      const result = await createProductsBulk(parsedProducts);
+      const result = await createProductsBulk(parsedProducts, updateExisting);
       
       if (result.error) {
         toast.error(result.error, { id: "bulk-import" });
@@ -233,29 +234,42 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
             </div>
           </div>
 
-          <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-             <div className="p-4 border-b">
-                <h3 className="font-semibold text-sm">Columnas Opcionales</h3>
-            </div>
-            <div className="p-4 grid grid-cols-2 gap-4">
-               <div className="grid gap-2">
-                 <Label>Cantidad (Stock)</Label>
-                 <Input value={colAmount} onChange={e => setColAmount(e.target.value)} placeholder="Ej: D" />
-               </div>
-               <div className="grid gap-2">
-                 <Label>Marca</Label>
-                 <Input value={colBrand} onChange={e => setColBrand(e.target.value)} placeholder="Ej: E" />
-               </div>
-               <div className="grid gap-2">
-                 <Label>Categoría</Label>
-                 <Input value={colCategory} onChange={e => setColCategory(e.target.value)} placeholder="Ej: F" />
-               </div>
-               <div className="grid gap-2">
-                 <Label>Subcategoría</Label>
-                 <Input value={colSubCategory} onChange={e => setColSubCategory(e.target.value)} placeholder="Ej: G" />
-               </div>
-            </div>
-          </div>
+           <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+              <div className="p-4 border-b">
+                 <h3 className="font-semibold text-sm">Columnas Opcionales</h3>
+             </div>
+             <div className="p-4 grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Cantidad (Stock)</Label>
+                  <Input value={colAmount} onChange={e => setColAmount(e.target.value)} placeholder="Ej: D" />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Marca</Label>
+                  <Input value={colBrand} onChange={e => setColBrand(e.target.value)} placeholder="Ej: E" />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Categoría</Label>
+                  <Input value={colCategory} onChange={e => setColCategory(e.target.value)} placeholder="Ej: F" />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Subcategoría</Label>
+                  <Input value={colSubCategory} onChange={e => setColSubCategory(e.target.value)} placeholder="Ej: G" />
+                </div>
+             </div>
+           </div>
+
+           <div className="flex items-center gap-2">
+             <input
+               type="checkbox"
+               id="updateExisting"
+               checked={updateExisting}
+               onChange={(e) => setUpdateExisting(e.target.checked)}
+               className="h-4 w-4 rounded border-gray-300"
+             />
+             <Label htmlFor="updateExisting" className="text-sm font-normal cursor-pointer">
+               Actualizar productos existentes si el código ya existe
+             </Label>
+           </div>
         </div>
 
         <DialogFooter>
