@@ -3,7 +3,7 @@
 import { ProductSchema } from "@/schemas";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { z } from "zod";
 import { newProduct } from "../actions/newProduct";
 import {
@@ -100,33 +100,85 @@ const ProductForm = ({ product, onClose }: Props) => {
     }
   }, [product, form]);
 
-  const fetchData = async () => {
-    const fetchedCategories = await getCategories();
-    setCategories(fetchedCategories.map((c: { id: string; name: string; }) => ({ id: c.id, name: c.name })));
-
-    const fetchedBrands = await getBrands();
-    setBrands(fetchedBrands.map((b: { id: string; name: string; }) => ({ id: b.id, name: b.name })));
-
-    const fetchedSuppliers = await getSuppliers();
-    setSuppliers(fetchedSuppliers.map((s: { id: string; name: string; }) => ({ id: s.id, name: s.name })));
-  };
-
   useEffect(() => {
-    fetchData();
+    let mounted = true;
+    (async () => {
+      try {
+        const fetchedCategories = await getCategories();
+        if (mounted) {
+          setCategories(
+            fetchedCategories.map((c: { id: string; name: string }) => ({
+              id: c.id,
+              name: c.name,
+            }))
+          );
+        }
+
+        const fetchedBrands = await getBrands();
+        if (mounted) {
+          setBrands(
+            fetchedBrands.map((b: { id: string; name: string }) => ({
+              id: b.id,
+              name: b.name,
+            }))
+          );
+        }
+
+        const fetchedSuppliers = await getSuppliers();
+        if (mounted) {
+          setSuppliers(
+            fetchedSuppliers.map((s: { id: string; name: string }) => ({
+              id: s.id,
+              name: s.name,
+            }))
+          );
+        }
+      } catch (e) {
+        console.error("Error cargando datos del formulario:", e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const selectedCategoryId = form.watch("category");
+  const prevCategoryIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const fetchSubs = async () => {
-      if (selectedCategoryId) {
-        const fetchedSubs = await getSubcategories(selectedCategoryId);
-        setSubcategories(fetchedSubs.map((s: { id: string; name: string; }) => ({ id: s.id, name: s.name })));
-      } else {
-        setSubcategories([]);
+    let mounted = true;
+
+    // Si cambia la categoría, limpiamos subcategoría para evitar valores inválidos.
+    if (prevCategoryIdRef.current !== undefined && prevCategoryIdRef.current !== selectedCategoryId) {
+      form.setValue("subCategory", "");
+    }
+    prevCategoryIdRef.current = selectedCategoryId || "";
+
+    (async () => {
+      try {
+        if (selectedCategoryId) {
+          const fetchedSubs = await getSubcategories(selectedCategoryId);
+          if (mounted) {
+            setSubcategories(
+              fetchedSubs.map((s: { id: string; name: string }) => ({
+                id: s.id,
+                name: s.name,
+              }))
+            );
+          }
+        } else if (mounted) {
+          setSubcategories([]);
+        }
+      } catch (e) {
+        console.error("Error cargando subcategorías:", e);
+        if (mounted) setSubcategories([]);
       }
+    })();
+
+    return () => {
+      mounted = false;
     };
-    fetchSubs();
-  }, [selectedCategoryId]);
+  }, [selectedCategoryId, form]);
 
   const onSubmit = async (values: z.infer<typeof ProductSchema>) => {
     startTransition(async () => {

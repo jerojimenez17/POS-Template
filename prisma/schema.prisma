@@ -331,9 +331,9 @@ model OrderUpdate {
 }
 
 model OrderItem {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   orderId     String
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
   productId   String?
   product     Product? @relation(fields: [productId], references: [id])
@@ -341,10 +341,13 @@ model OrderItem {
   // Snapshot fields (in case product changes or is deleted)
   code        String?
   description String?
-  costPrice   Float   @default(0) // Cost price at the moment of sale
-  price       Float   @default(0) // Sale price at the moment of sale
-  quantity    Float   @default(0) 
-  subTotal    Float   @default(0) 
+  costPrice   Float    @default(0) // Cost price at the moment of sale
+  price       Float    @default(0) // Sale price at the moment of sale
+  quantity    Float    @default(0) 
+  subTotal    Float    @default(0) 
+
+  // Track when item was added to the order
+  addedAt     DateTime @default(now())
 
   returnItems SaleReturnItem[]
   @@index([orderId])

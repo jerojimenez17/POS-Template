@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, User, Search, Plus } from "lucide-react";
 import { createClient } from "@/actions/clients";
+import { getClientUnpaidOrder, addItemsToOrder } from "@/actions/unpaid-orders";
 
 interface Client {
   id: string;
@@ -32,6 +33,20 @@ interface UnpaidOrderItem {
   price: number;
   quantity: number;
   subTotal: number;
+}
+
+interface OrderItem {
+  id: string;
+  quantity: number;
+  price: number;
+  subTotal: number;
+  addedAt: Date;
+}
+
+interface ExistingOrder {
+  id: string;
+  total: number;
+  items: OrderItem[];
 }
 
 interface ClientSelectionModalProps {
@@ -71,9 +86,17 @@ export default function ClientSelectionModal({
   const [newClientAddress, setNewClientAddress] = useState("");
   const [isCreatingClient, setIsCreatingClient] = useState(false);
 
+  // Smart client selection state (R3)
+  const [existingOrder, setExistingOrder] = useState<ExistingOrder | null>(null);
+  const [showExistingOrderDialog, setShowExistingOrderDialog] = useState(false);
+  const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
+
   useEffect(() => {
     if (open) {
       fetchClients();
+      setSelectedClientId("");
+      setExistingOrder(null);
+      setShowExistingOrderDialog(false);
     }
   }, [open]);
 
@@ -139,6 +162,27 @@ export default function ClientSelectionModal({
       return;
     }
 
+    setIsCheckingExistingOrder(true);
+    try {
+      const result = await getClientUnpaidOrder(selectedClientId, businessId);
+      
+      if (result.success && result.data) {
+        setExistingOrder(result.data as ExistingOrder);
+        setShowExistingOrderDialog(true);
+        setIsCheckingExistingOrder(false);
+        return;
+      }
+
+      await createNewOrder(selectedClientId);
+    } catch (error) {
+      console.error("Error checking existing order:", error);
+      await createNewOrder(selectedClientId);
+    } finally {
+      setIsCheckingExistingOrder(false);
+    }
+  };
+
+  const createNewOrder = async (clientId: string) => {
     setIsLoading(true);
     try {
       const orderItems: UnpaidOrderItem[] = items.map((item) => ({
@@ -156,7 +200,7 @@ export default function ClientSelectionModal({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          clientId: selectedClientId,
+          clientId,
           businessId,
           items: orderItems,
           total,
@@ -175,6 +219,42 @@ export default function ClientSelectionModal({
     } catch (error) {
       console.error("Error creating unpaid order:", error);
       toast.error("Error al crear la orden");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const addToExistingOrder = async () => {
+    if (!existingOrder) return;
+
+    setIsLoading(true);
+    try {
+      const orderItems: UnpaidOrderItem[] = items.map((item) => ({
+        productId: item.id,
+        code: item.code,
+        description: item.description,
+        price: item.salePrice,
+        quantity: item.amount,
+        subTotal: item.salePrice * item.amount,
+      }));
+
+      const result = await addItemsToOrder({
+        orderId: existingOrder.id,
+        businessId,
+        items: orderItems,
+      });
+
+      if (result.success) {
+        toast.success("Items agregados a la orden existente");
+        setShowExistingOrderDialog(false);
+        onOpenChange(false);
+        onSuccess?.();
+      } else {
+        toast.error(result.error || "Error al agregar items a la orden");
+      }
+    } catch (error) {
+      console.error("Error adding to existing order:", error);
+      toast.error("Error al agregar items a la orden");
     } finally {
       setIsLoading(false);
     }
@@ -260,8 +340,8 @@ export default function ClientSelectionModal({
               Cancelar
             </Button>
           </DialogClose>
-          <Button onClick={handleSubmit} disabled={isLoading || !selectedClientId}>
-            {isLoading ? (
+          <Button onClick={handleSubmit} disabled={isLoading || !selectedClientId || isCheckingExistingOrder}>
+            {isLoading || isCheckingExistingOrder ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : null}
             Confirmar
@@ -326,6 +406,67 @@ export default function ClientSelectionModal({
             ) : null}
             Crear Cliente
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Existing Order Dialog (R3: Smart Client Selection) */}
+    <Dialog open={showExistingOrderDialog} onOpenChange={setShowExistingOrderDialog}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Orden Pendiente Existente</DialogTitle>
+          <DialogDescription>
+            Este cliente ya tiene una orden pendiente
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="py-4 space-y-4">
+          <div className="p-4 bg-muted rounded-lg">
+            <p className="text-sm text-muted-foreground">Orden actual:</p>
+            <p className="text-lg font-bold">
+              ${existingOrder?.total.toLocaleString("es-AR") || "0"}
+            </p>
+          </div>
+          
+          <div className="p-4 bg-muted rounded-lg">
+            <p className="text-sm text-muted-foreground">Total a agregar:</p>
+            <p className="text-lg font-bold">
+              ${total.toLocaleString("es-AR")}
+            </p>
+          </div>
+
+          <p className="text-sm text-muted-foreground">
+            ¿Qué desea hacer con los productos seleccionados?
+          </p>
+        </div>
+
+        <DialogFooter className="flex-col gap-2">
+          <Button 
+            onClick={addToExistingOrder} 
+            disabled={isLoading}
+            className="w-full"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : null}
+            Agregar a orden existente
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={() => {
+              setShowExistingOrderDialog(false);
+              createNewOrder(selectedClientId);
+            }}
+            disabled={isLoading}
+            className="w-full"
+          >
+            Crear nueva orden
+          </Button>
+          <DialogClose asChild>
+            <Button variant="ghost" disabled={isLoading} className="w-full">
+              Cancelar
+            </Button>
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

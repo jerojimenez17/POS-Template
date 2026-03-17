@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { auth } from "../../auth";
 import { revalidatePath } from "next/cache";
 import { PaidStatus } from "@prisma/client";
+import { z } from "zod";
 
 interface ActionResult<T = unknown> {
   success: boolean;
@@ -46,6 +47,40 @@ interface GetUnpaidOrdersInput {
   orderId?: string;
 }
 
+const addItemsToOrderSchema = z.object({
+  orderId: z.string(),
+  businessId: z.string(),
+  items: z.array(
+    z.object({
+      productId: z.string(),
+      code: z.string().optional(),
+      description: z.string().optional(),
+      costPrice: z.number().optional(),
+      price: z.number(),
+      quantity: z.number(),
+      subTotal: z.number(),
+    })
+  ),
+});
+
+const updateOrderItemSchema = z.object({
+  itemId: z.string(),
+  orderId: z.string(),
+  quantity: z.number().min(0.01).optional(),
+  price: z.number().min(0).optional(),
+});
+
+const removeOrderItemSchema = z.object({
+  itemId: z.string(),
+  orderId: z.string(),
+});
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const getClientUnpaidOrderSchema = z.object({
+  clientId: z.string(),
+  businessId: z.string(),
+});
+
 export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<ActionResult> => {
   try {
     const session = await auth();
@@ -87,6 +122,7 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
               price: item.price,
               quantity: item.quantity,
               subTotal: item.subTotal,
+              addedAt: new Date(),
             })),
           },
         },
@@ -294,6 +330,301 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
         error instanceof Error
           ? error.message
           : "Error al obtener las órdenes",
+    };
+  }
+};
+
+export const getClientUnpaidOrder = async (clientId: string, businessId: string): Promise<ActionResult> => {
+  try {
+    const session = await auth();
+    const businessIdFinal = session?.user?.businessId || businessId;
+    if (!businessIdFinal) return { success: false, error: "No autorizado" };
+
+    return await db.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
+        where: {
+          clientId,
+          businessId: businessIdFinal,
+          paidStatus: "inpago",
+        },
+        include: {
+          items: true,
+          client: true,
+        },
+        orderBy: { date: "desc" },
+      });
+
+      return { success: true, data: order };
+    });
+  } catch (error) {
+    console.error("Error getting client unpaid order:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al obtener la orden",
+    };
+  }
+};
+
+export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchema>): Promise<ActionResult> => {
+  try {
+    const validatedInput = addItemsToOrderSchema.parse(input);
+    const session = await auth();
+    const businessId = session?.user?.businessId || validatedInput.businessId;
+    if (!businessId) return { success: false, error: "No autorizado" };
+
+    return await db.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: validatedInput.orderId },
+        include: { client: true, items: true },
+      });
+
+      if (!order) throw new Error("Orden no encontrada");
+      if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
+
+      for (const item of validatedInput.items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+        });
+        if (!product) {
+          throw new Error(`Producto ${item.description || item.productId} no encontrado`);
+        }
+        if (product.amount < item.quantity) {
+          throw new Error(`Stock insuficiente para ${item.description || item.productId}`);
+        }
+      }
+
+      const currentTimestamp = new Date();
+
+      for (const item of validatedInput.items) {
+        await tx.orderItem.create({
+          data: {
+            orderId: validatedInput.orderId,
+            productId: item.productId,
+            code: item.code,
+            description: item.description,
+            costPrice: item.costPrice || 0,
+            price: item.price,
+            quantity: item.quantity,
+            subTotal: item.subTotal,
+            addedAt: currentTimestamp,
+          },
+        });
+
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { amount: { decrement: item.quantity } },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            type: "SALE",
+            quantity: -item.quantity,
+            productId: item.productId,
+            orderId: order.id,
+            businessId,
+          },
+        });
+      }
+
+      const itemsTotal = validatedInput.items.reduce((sum, item) => sum + item.subTotal, 0);
+      const newTotal = order.total + itemsTotal;
+
+      await tx.order.update({
+        where: { id: validatedInput.orderId },
+        data: { total: newTotal },
+      });
+
+      if (order.clientId) {
+        await tx.client.update({
+          where: { id: order.clientId },
+          data: { balance: { increment: itemsTotal } },
+        });
+      }
+
+      revalidatePath("/orders");
+      revalidatePath("/stock");
+      revalidatePath("/clients");
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error("Error adding items to order:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al agregar items a la orden",
+    };
+  }
+};
+
+export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchema>): Promise<ActionResult> => {
+  try {
+    const validatedInput = updateOrderItemSchema.parse(input);
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    if (!businessId) return { success: false, error: "No autorizado" };
+
+    return await db.$transaction(async (tx) => {
+      const orderItem = await tx.orderItem.findUnique({
+        where: { id: validatedInput.itemId },
+      });
+
+      if (!orderItem) throw new Error("Item no encontrado");
+
+      const order = await tx.order.findUnique({
+        where: { id: validatedInput.orderId },
+        include: { items: true },
+      });
+
+      if (!order) throw new Error("Orden no encontrada");
+      if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
+
+      const quantityDiff = validatedInput.quantity !== undefined 
+        ? validatedInput.quantity - orderItem.quantity 
+        : 0;
+
+      if (quantityDiff > 0 && orderItem.productId) {
+        const product = await tx.product.findUnique({
+          where: { id: orderItem.productId },
+        });
+        if (!product || product.amount < quantityDiff) {
+          throw new Error("Stock insuficiente");
+        }
+      }
+
+      const newQuantity = validatedInput.quantity ?? orderItem.quantity;
+      const newPrice = validatedInput.price ?? orderItem.price;
+      const newSubTotal = newQuantity * newPrice;
+
+      await tx.orderItem.update({
+        where: { id: validatedInput.itemId },
+        data: {
+          quantity: newQuantity,
+          price: newPrice,
+          subTotal: newSubTotal,
+        },
+      });
+
+      if (quantityDiff !== 0 && orderItem.productId) {
+        await tx.product.update({
+          where: { id: orderItem.productId },
+          data: { amount: { decrement: quantityDiff } },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            type: "SALE",
+            quantity: -quantityDiff,
+            productId: orderItem.productId,
+            orderId: order.id,
+            businessId,
+          },
+        });
+      }
+
+      const itemsTotal = order.items.reduce((sum, item) => {
+        if (item.id === validatedInput.itemId) {
+          return sum + newSubTotal;
+        }
+        return sum + item.subTotal;
+      }, 0);
+
+      const totalDiff = itemsTotal - order.total;
+
+      await tx.order.update({
+        where: { id: validatedInput.orderId },
+        data: { total: itemsTotal },
+      });
+
+      if (order.clientId && totalDiff !== 0) {
+        await tx.client.update({
+          where: { id: order.clientId },
+          data: { balance: { increment: totalDiff } },
+        });
+      }
+
+      revalidatePath("/orders");
+      revalidatePath("/stock");
+      revalidatePath("/clients");
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error("Error updating order item:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al actualizar el item",
+    };
+  }
+};
+
+export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchema>): Promise<ActionResult> => {
+  try {
+    const validatedInput = removeOrderItemSchema.parse(input);
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    if (!businessId) return { success: false, error: "No autorizado" };
+
+    return await db.$transaction(async (tx) => {
+      const orderItem = await tx.orderItem.findUnique({
+        where: { id: validatedInput.itemId },
+      });
+
+      if (!orderItem) throw new Error("Item no encontrado");
+
+      const order = await tx.order.findUnique({
+        where: { id: validatedInput.orderId },
+        include: { items: true, client: true },
+      });
+
+      if (!order) throw new Error("Orden no encontrada");
+      if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
+
+      await tx.orderItem.delete({
+        where: { id: validatedInput.itemId },
+      });
+
+      if (orderItem.productId) {
+        await tx.product.update({
+          where: { id: orderItem.productId },
+          data: { amount: { increment: orderItem.quantity } },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            type: "RETURN",
+            quantity: orderItem.quantity,
+            productId: orderItem.productId,
+            orderId: order.id,
+            businessId,
+          },
+        });
+      }
+
+      const newTotal = order.total - orderItem.subTotal;
+
+      await tx.order.update({
+        where: { id: validatedInput.orderId },
+        data: { total: newTotal },
+      });
+
+      if (order.clientId) {
+        await tx.client.update({
+          where: { id: order.clientId },
+          data: { balance: { decrement: orderItem.subTotal } },
+        });
+      }
+
+      revalidatePath("/orders");
+      revalidatePath("/stock");
+      revalidatePath("/clients");
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error("Error removing order item:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al eliminar el item",
     };
   }
 };

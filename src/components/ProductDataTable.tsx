@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition, useState } from "react";
+import { useTransition, useState, useMemo } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -45,22 +45,24 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
   const [productToEdit, setProductToEdit] = useState<ProductExtended | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const filteredProducts = products
-    ?.filter((product) => {
-      const desc = product.description || "";
-      const code = product.code || "";
-      return (
-        desc.toLowerCase().includes(descriptionFilter.toLowerCase()) ||
-        code.toLowerCase().includes(descriptionFilter.toLowerCase())
-      );
-    })
-    .sort((a, b) => {
-      const timeA = new Date(a.creation_date).getTime();
-      const timeB = new Date(b.creation_date).getTime();
-      return timeB - timeA;
-    }) ?? [];
+  const filteredProducts = useMemo(() => {
+    return products
+      ?.filter((product) => {
+        const desc = product.description || "";
+        const code = product.code || "";
+        return (
+          desc.toLowerCase().includes(descriptionFilter.toLowerCase()) ||
+          code.toLowerCase().includes(descriptionFilter.toLowerCase())
+        );
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.creation_date).getTime();
+        const timeB = new Date(b.creation_date).getTime();
+        return timeB - timeA;
+      }) ?? [];
+  }, [products, descriptionFilter]);
 
-  const columns: ColumnDef<ProductExtended>[] = [
+  const columns = useMemo<ColumnDef<ProductExtended>[]>(() => [
     {
       accessorKey: "image",
       header: "Foto",
@@ -84,7 +86,8 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                 height={40}
                 width={40}
               />
-            )}
+            )
+            }
           </div>
         );
       },
@@ -200,7 +203,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
       },
       size: 120,
     },
-  ];
+  ], []);
 
   const table = useReactTable({
     data: filteredProducts,
@@ -208,6 +211,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
     getPaginationRowModel: getPaginationRowModel(),
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
+    autoResetPageIndex: false,
   });
 
   const handleDelete = async () => {

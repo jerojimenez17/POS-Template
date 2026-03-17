@@ -28,6 +28,7 @@ import {
 import { db } from "@/lib/db";
 import AddPaymentForm from "./AddPaymentForm";
 import CancelOrderButton from "./CancelOrderButton";
+import EditableOrderDetailWrapper from "./EditableOrderDetailWrapper";
 
 interface OrderWithRelations {
   id: string;
@@ -36,7 +37,7 @@ interface OrderWithRelations {
   paidStatus: string;
   clientId: string | null;
   client: { id: string; name: string | null } | null;
-  items: Array<{ id: string; description: string | null; code: string | null; price: number; quantity: number; subTotal: number }>;
+  items: Array<{ id: string; productId: string | null; description: string | null; code: string | null; price: number; quantity: number; subTotal: number; addedAt: Date }>;
   cashMovements: Array<{ id: string; date: Date; total: number; paidMethod: string | null }>;
 }
 
@@ -153,43 +154,50 @@ export default async function AccountLedgerDetailPage({
 
             <Separator />
 
-            {/* Products Table */}
+            {/* Products Table - Editable for unpaid orders */}
             <div>
               <h3 className="font-semibold flex items-center gap-2 mb-4">
                 <Package className="h-5 w-5" />
                 Productos
               </h3>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Descripción</TableHead>
-                      <TableHead className="text-center">Cantidad</TableHead>
-                      <TableHead className="text-right">P. Unitario</TableHead>
-                      <TableHead className="text-right">Subtotal</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {order.items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <div className="font-medium">{item.description || "Producto"}</div>
-                          {item.code && (
-                            <div className="text-xs text-muted-foreground">{item.code}</div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-right">
-                          ${item.price.toLocaleString("es-AR")}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          ${item.subTotal.toLocaleString("es-AR")}
-                        </TableCell>
+              {order.paidStatus === "inpago" ? (
+                <EditableOrderDetailWrapper
+                  order={order}
+                  businessId={session.user.businessId}
+                />
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-right">P. Unitario</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {order.items.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            <div className="font-medium">{item.description || "Producto"}</div>
+                            {item.code && (
+                              <div className="text-xs text-muted-foreground">{item.code}</div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">{item.quantity}</TableCell>
+                          <TableCell className="text-right">
+                            ${item.price.toLocaleString("es-AR")}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            ${item.subTotal.toLocaleString("es-AR")}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
 
             <Separator />
