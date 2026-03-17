@@ -6,18 +6,20 @@ import ClientSelectionModal from "@/components/ledger/ClientSelectionModal";
 vi.mock("@/actions/clients", () => ({
   createClient: vi.fn(),
 }));
-
+//disable any error for eslint
+/* eslint-disable @typescript-eslint/no-explicit-any */
 vi.mock("@/components/ui/input", () => ({
   Input: ({ placeholder, value, onChange, "data-testid": testId }: any) => (
     <input
-      data-testid={testId || "input"}
-      placeholder={placeholder}
-      value={value}
-      onChange={onChange}
+    data-testid={testId || "input"}
+    placeholder={placeholder}
+    value={value}
+    onChange={onChange}
     />
   ),
 }));
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, onClick, disabled, "data-testid": testId }: any) => (
     <button
@@ -37,13 +39,13 @@ vi.mock("sonner", () => ({
   },
 }));
 
-const getByText = (text: string) => {
-  const element = screen.queryByText(text);
-  if (!element) {
-    throw new Error(`Unable to find element with text: ${text}`);
-  }
-  return element;
-};
+// const getByText = (text: string) => {
+//   const element = screen.queryByText(text);
+//   if (!element) {
+//     throw new Error(`Unable to find element with text: ${text}`);
+//   }
+//   return element;
+// };
 
 describe("R3: ClientSelectionModal - Smart client selection", () => {
   const mockItems = [

@@ -1,8 +1,10 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import OrderItemsTable from "@/components/ledger/OrderItemsTable";
 
+//disable any error for eslint
+/* eslint-disable @typescript-eslint/no-explicit-any */
 vi.mock("@/components/ui/input", () => ({
   Input: ({ value, onChange, type, "data-testid": testId }: any) => (
     <input

@@ -80,11 +80,11 @@ describe("R1: addItemsToOrder - adds items with addedAt timestamp", () => {
     });
 
     expect(result.success).toBe(true);
-    const tx = {
-      orderItem: {
-        create: vi.fn().mock.calls[0],
-      },
-    };
+    // const tx = {
+    //   orderItem: {
+    //     create: vi.fn().mock.calls[0],
+    //   },
+    // };
   });
 
   it("should fail when trying to add items to a paid order", async () => {
