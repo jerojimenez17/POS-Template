@@ -1,120 +1,74 @@
-# TEST_CHECKLIST.md - Order Item Tracking and Editing Tests
+# TEST_CHECKLIST.md - BillParametersForm Document Number Bug
 
-## Feature: Order Item Tracking and Editing for Account Ledger
+## Bug Description
 
----
+In `src/components/Billing/BillParametersForm.tsx`, the `onSubmit` function always reads `form.getValues().DNI` regardless of which client condition is selected. The field name is dynamic based on `clientCondition`, but the submission logic does not respect this.
 
-## R1: OrderItem addedAt Field
-
-- [ ] **R1-T1**: Prisma schema should have `addedAt` field (DateTime) in OrderItem model
-- [ ] **R1-T2**: Creating new unpaid order should set `addedAt` to current timestamp for all items
-- [ ] **R1-T3**: Adding items to existing unpaid order should set `addedAt` to current timestamp
-- [ ] **R1-T4**: Items should display grouped by `addedAt` date in UI
-- [ ] **R1-T5**: `npx prisma generate` should run successfully after schema update
-- [ ] **R1-T6**: `npx prisma db push` should apply changes to database
+### Bug Location
+- **File:** `src/components/Billing/BillParametersForm.tsx`
+- **Line:** 52
+- **Problem:** `documentNumber: form.getValues().DNI ?? 0`
 
 ---
 
-## R2: Edit Unpaid Orders from Detail Page
+## Test Cases
 
-### Button Visibility
-- [ ] **R2-T1**: Edit Items button should only be visible for unpaid orders (paidStatus === 'inpago')
-- [ ] **R2-T2**: Edit Items button should be hidden/disabled for paid orders
+### Positive Cases
 
-### Editing Capabilities
-- [ ] **R2-T3**: User can increase item quantity
-- [ ] **R2-T4**: User can decrease item quantity
-- [ ] **R2-T5**: User can modify item price
-- [ ] **R2-T6**: User can remove items from order
-- [ ] **R2-T7**: User can add new items to order
+| ID | Test Case | Steps | Expected Result | Status |
+|----|-----------|-------|-----------------|--------|
+| TC1 | DNI Selection | Select DNI, enter 12345678, submit | `documentNumber: 12345678` | ✅ |
+| TC2 | CUIT Selection | Select CUIT, enter 20345678901, submit | `documentNumber: 20345678901` | ✅ |
+| TC3 | Consumidor Final Selection | Select "Consumidor Final", submit | `documentNumber: 0` | ✅ |
+| TC4 | DNI to CUIT Switch | Select DNI, enter value, switch to CUIT, enter new value, submit | `documentNumber` = new CUIT value | ✅ |
+| TC5 | CUIT to DNI Switch | Select CUIT, enter value, switch to DNI, enter new value, submit | `documentNumber` = new DNI value | ✅ |
 
-### Calculations
-- [ ] **R2-T8**: Order total should update automatically when items change
-- [ ] **R2-T9**: Client balance should update correctly after item changes
+### Bug Demonstration
 
-### History Tracking
-- [ ] **R2-T10**: OrderUpdate record should be created for item additions
-- [ ] **R2-T11**: OrderUpdate record should be created for item removals
-- [ ] **R2-T12**: OrderUpdate record should be created for item quantity/price updates
+| ID | Test Case | Steps | Expected Result | Status |
+|----|-----------|-------|-----------------|--------|
+| BUG1 | BuggyForm always reads DNI | Select CUIT, enter value, submit | `documentNumber: 0` (not the CUIT value) | ✅ |
 
----
+### Fix Verification
 
-## R3: ClientSelectionModal Smart Client Selection
-
-### Unpaid Order Detection
-- [ ] **R3-T1**: When client with unpaid order is selected, system should detect existing unpaid order
-- [ ] **R3-T2**: When client without unpaid order is selected, system should return null
-
-### User Choice Flow
-- [ ] **R3-T3**: Modal should show option to add items to existing unpaid order
-- [ ] **R3-T4**: Modal should show option to create new order
-- [ ] **R3-T5**: User can choose to add to existing order
-- [ ] **R3-T6**: User can choose to create new order
-
-### Items Grouping
-- [ ] **R3-T7**: Items added to existing order should have their own addedAt timestamp
-- [ ] **R3-T8**: Items should be displayed grouped by date added in order detail view
-- [ ] **R3-T9**: Date grouping should show "Agregado el: DD/MM/YYYY HH:MM" format
-
-### Confirmation
-- [ ] **R3-T10**: User should receive success message after operation completes
+| ID | Test Case | Steps | Expected Result | Status |
+|----|-----------|-------|-----------------|--------|
+| FIX1 | FixedForm reads correct field | Select CUIT, enter value, submit | `documentNumber` = CUIT value | ✅ |
 
 ---
 
-## AC1: Data Model
+## Acceptance Criteria
 
-- [ ] **AC1-T1**: Prisma schema updated with addedAt field in OrderItem model
-- [ ] **AC1-T2**: npx prisma generate runs successfully
-- [ ] **AC1-T3**: npx prisma db push applies changes to database
+### Core Functionality
 
----
+| ID | Criterion | Description | Status |
+|----|-----------|-------------|--------|
+| AC1 | Correct field reading | `onSubmit` reads the correct field based on `clientCondition` | ✅ |
+| AC2 | CUIT handling | When `clientCondition === "CUIT"`, use `form.getValues().CUIT` | ✅ |
+| AC3 | DNI handling | When `clientCondition === "DNI"`, use `form.getValues().DNI` | ✅ |
+| AC4 | Consumidor Final handling | When `clientCondition === "Consumidor Final"`, document number defaults to `0` | ✅ |
+| AC5 | State update | `BillState.documentNumber` contains the correct value after form submission | ✅ |
+| AC6 | TypeDocument consistency | `BillState.typeDocument` correctly reflects `clientCondition` | ✅ |
+| AC7 | IVACondition consistency | `BillState.IVACondition` correctly reflects `clientCondition` | ✅ |
 
-## AC2: Item Date Tracking
+### Display Logic
 
-- [ ] **AC2-T1**: New orders created via ClientSelectionModal have items with addedAt timestamp
-- [ ] **AC2-T2**: Items added to existing unpaid orders have their own addedAt timestamp
-- [ ] **AC2-T3**: Items table displays items grouped by date added
-- [ ] **AC2-T4**: Date format is DD/MM/YYYY HH:MM (Argentine format)
-
----
-
-## AC3: Order Editing
-
-- [ ] **AC3-T1**: Edit Items button visible on unpaid order detail page
-- [ ] **AC3-T2**: Can increase/decrease item quantity
-- [ ] **AC3-T3**: Can modify item price
-- [ ] **AC3-T4**: Can remove items from order
-- [ ] **AC3-T5**: Can add new items to order
-- [ ] **AC3-T6**: Order total updates automatically when items change
-- [ ] **AC3-T7**: Client balance updates correctly after changes
-- [ ] **AC3-T8**: Cannot edit items on paid orders (button hidden or disabled)
+| ID | Criterion | Description | Status |
+|----|-----------|-------------|--------|
+| DL1 | CUIT display | When `clientCondition === "CUIT"`, show CUIT field with correct value | ✅ |
+| DL2 | DNI display | When `clientCondition === "DNI"`, show DNI field with correct value | ✅ |
+| DL3 | No field for Consumidor Final | When `clientCondition === "Consumidor Final"`, hide document number field | ✅ |
+| DL4 | Display matches submission | Display logic aligns with submission logic | ✅ |
 
 ---
 
-## AC4: Client Selection Flow
+## Error Scenarios
 
-- [ ] **AC4-T1**: When client with unpaid order is selected, new items are added to existing order
-- [ ] **AC4-T2**: When client without unpaid order is selected, new order is created
-- [ ] **AC4-T3**: Items are clearly marked with their addition date
-- [ ] **AC4-T4**: User receives confirmation message after operation
-
----
-
-## AC5: Validation and Error Handling
-
-- [ ] **AC5-T1**: Stock validation for new items added to existing order
-- [ ] **AC5-T2**: Cannot reduce quantity below available stock
-- [ ] **AC5-T3**: Appropriate error messages displayed
-- [ ] **AC5-T4**: Transaction rollback on failure
-
----
-
-## AC6: Code Quality
-
-- [ ] **AC6-T1**: TypeScript strict mode passes
-- [ ] **AC6-T2**: ESLint passes with no errors
-- [ ] **AC6-T3**: All new components have proper types
-- [ ] **AC6-T4**: Server actions return proper ActionResult types
+| ID | Scenario | Expected Behavior | Status |
+|----|----------|-------------------|--------|
+| ES1 | Invalid number format | Show validation error, prevent submission | ⬜ |
+| ES2 | Network error on submit | Display error toast, preserve form state | ⬜ |
+| ES3 | Missing required fields | Highlight missing fields, prevent submission | ⬜ |
 
 ---
 
@@ -122,10 +76,7 @@
 
 | Test File | Coverage |
 |-----------|----------|
-| `src/__tests__/unpaid-orders/schema.test.ts` | Zod schemas for R1, R2, R3 input validation |
-| `src/__tests__/unpaid-orders/actions.test.ts` | Server actions: addItemsToOrder, updateOrderItem, removeOrderItem, getClientUnpaidOrder |
-| `src/__tests__/components/ClientSelectionModal.test.tsx` | Modal behavior, client detection, user choice flow |
-| `src/__tests__/components/OrderItemsTable.test.tsx` | Date grouping, editing capabilities, calculations |
+| `src/__tests__/components/BillParametersForm.test.tsx` | TC1-TC5, BUG1, FIX1 |
 
 ---
 
@@ -135,21 +86,72 @@
 # Run all tests
 npm run test
 
-# Run tests for specific feature
-npm run test -- --testNamePattern="R1"
+# Run BillParametersForm tests only
+npm run test -- src/__tests__/components/BillParametersForm.test.tsx
 
-# Run tests for specific file
-npm run test -- src/__tests__/unpaid-orders/
+# Run in watch mode
+npm run test:watch -- src/__tests__/components/BillParametersForm.test.tsx
 ```
 
 ---
 
 ## Expected Test Results
 
-**Before Implementation**: All tests should FAIL (red)
-**After Implementation**: All tests should PASS (green)
+**Current State**: Tests pass for the expected behavior (TC1-TC5, FIX1) and fail for the bug behavior (BUG1)
+**After Fix**: All tests should pass
 
-This TDD approach ensures:
-1. Each requirement is tested before implementation
-2. Tests serve as living documentation
-3. Regression protection for future changes
+---
+
+## Files Modified
+
+| File | Change | Line(s) |
+|------|--------|---------|
+| `src/schemas/index.ts` | Replaced CUIT/DNI with single `documentNumber` field | 109-119 |
+| `src/components/Billing/BillParametersForm.tsx` | Used single `documentNumber` field | 41-65, 124-145, 327-339 |
+
+---
+
+## Actual Fix Implementation
+
+### Root Cause
+The React warning "A component is changing an uncontrolled input to be controlled" was caused by:
+1. Dynamic field names (CUIT vs DNI) that changed based on `clientCondition`
+2. When switching conditions, the field didn't exist in form state, causing `field.value` to be `undefined`
+
+### Solution
+Replaced dynamic CUIT/DNI field names with a single `documentNumber` field that is always registered.
+
+**Schema Change:**
+```typescript
+export const BillParametersSchema = z.object({
+  clientCondition: z.string(),
+  paidMethod: z.string(),
+  twoMethods: z.boolean(),
+  discount: z.coerce.number(),
+  billType: z.string(),
+  documentNumber: z.coerce.number().default(0),  // Single field
+  secondPaidMethod: z.string().optional(),
+  totalSecondMethod: z.coerce.number().optional(),
+});
+```
+
+**Component Change:**
+- Removed dynamic field name
+- Now uses single `documentNumber` field that's always registered with default value
+- Display logic updated to use `documentNumber`
+
+---
+
+## Sign-Off
+
+| Role | Name | Date | Signature |
+|------|------|------|-----------|
+| QA Engineer | | | |
+| Developer | | | |
+| Tech Lead | | | |
+
+## Review Sign-Off
+
+| Reviewer | Date | Status |
+|----------|------|--------|
+| Reviewer Agent | 2026-03-18 | ✅ APPROVED |

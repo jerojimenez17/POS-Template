@@ -210,8 +210,123 @@ export const getClientUnpaidOrder = async (clientId: string, businessId: string)
 
 ## Dependencies
 
-- React 19 (use client components)
-- Radix UI (existing)
-- Tailwind CSS v4 (existing)
-- Zod for validation (existing)
-- react-hook-form (existing)
+---
+
+## BillParametersForm Document Number Bug Fix
+
+### Bug Description
+
+In `src/components/Billing/BillParametersForm.tsx`, the document number field uses a **dynamic field name** based on the current client condition:
+
+```typescript
+name={
+  form.watch("clientCondition") === ClientConditions.CUIT
+    ? ClientConditions.CUIT
+    : ClientConditions.DNI
+}
+```
+
+However, in the `onSubmit` function, the code **always** tries to read `DNI`:
+
+```typescript
+documentNumber: form.getValues().DNI ?? 0,  // Line 52
+```
+
+### Root Cause Analysis
+
+**Problematic Scenarios:**
+
+| Scenario | Steps | Result |
+|----------|-------|--------|
+| Initial DNI → Change to CUIT | Select DNI, enter value, switch to CUIT, enter value, submit | `form.getValues().DNI` returns `undefined` because field is now named `"CUIT"` ❌ |
+| Initial CUIT | Select CUIT, enter value, submit | `form.getValues().DNI` returns `undefined` ❌ |
+| Initial DNI → Submit | Select DNI, enter value, submit | Works correctly ✓ |
+
+**Schema Analysis (`src/schemas/index.ts:109-119`):**
+```typescript
+export const BillParametersSchema = z.object({
+  clientCondition: z.string(),
+  // ...
+  CUIT: z.coerce.number().optional(),  // Only one exists at a time
+  DNI: z.coerce.number().optional(),    // Only one exists at a time
+  // ...
+});
+```
+
+### Acceptance Criteria
+
+- [ ] `onSubmit` reads the correct field based on `clientCondition`
+- [ ] When `clientCondition === "CUIT"`, use `form.getValues().CUIT`
+- [ ] When `clientCondition === "DNI"`, use `form.getValues().DNI`
+- [ ] When `clientCondition === "Consumidor Final"`, document number defaults to `0`
+- [ ] `BillState.documentNumber` contains the correct value after form submission
+- [ ] `BillState.typeDocument` and `IVACondition` correctly reflect `clientCondition`
+- [ ] Display logic aligns with submission logic (show correct field based on condition)
+
+### Proposed Fix
+
+**Minimal Change - Modify `onSubmit` in `BillParametersForm.tsx:41-57`:**
+
+```typescript
+const onSubmit = () => {
+  const clientCondition = form.getValues().clientCondition;
+  const documentNumber = 
+    clientCondition === ClientConditions.CUIT 
+      ? form.getValues().CUIT ?? 0
+      : clientCondition === ClientConditions.DNI 
+        ? form.getValues().DNI ?? 0
+        : 0;
+      
+  setState({
+    ...form.getValues(),
+    id: "",
+    products: BillState.products,
+    total: BillState.total,
+    totalWithDiscount: BillState.totalWithDiscount,
+    seller: BillState.seller,
+    billType: form.getValues().billType,
+    date: currentDate,
+    typeDocument: clientCondition,
+    documentNumber,
+    IVACondition: clientCondition,
+  });
+  
+  setEditParameters(false);
+};
+```
+
+**Display Logic Fix (`BillParametersForm.tsx:326-330`):**
+
+The display should use the same conditional logic:
+```typescript
+{form.watch("clientCondition") === ClientConditions.CUIT && form.getValues().CUIT && (
+  <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
+    <span>CUIT:</span>
+    <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().CUIT}</span>
+  </div>
+)}
+
+{form.watch("clientCondition") === ClientConditions.DNI && form.getValues().DNI && (
+  <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
+    <span>DNI:</span>
+    <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().DNI}</span>
+  </div>
+)}
+```
+
+### Files to Modify
+
+| File | Change | Line(s) |
+|------|--------|---------|
+| `src/components/Billing/BillParametersForm.tsx` | Fix `onSubmit` document number logic | 41-57 |
+| `src/components/Billing/BillParametersForm.tsx` | Fix display logic | 326-330 |
+
+### Test Cases
+
+| Test | Steps | Expected Result |
+|------|-------|-----------------|
+| TC1 | Select DNI, enter 12345678, submit | `documentNumber: 12345678` |
+| TC2 | Select CUIT, enter 20345678901, submit | `documentNumber: 20345678901` |
+| TC3 | Select "Consumidor Final", submit | `documentNumber: 0` |
+| TC4 | Select DNI, enter value, switch to CUIT, enter value, submit | `documentNumber` = new CUIT value |
+| TC5 | Select CUIT, enter value, switch to DNI, enter value, submit | `documentNumber` = new DNI value |
