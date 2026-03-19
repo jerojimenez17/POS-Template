@@ -45,7 +45,7 @@ async function OrdersTable({ status }: OrdersTableProps) {
     redirect("/");
   }
 
-  const statusParam = status === "inpago" ? undefined : status;
+  const statusParam = status === "all" ? undefined : status;
   const result = await getUnpaidOrders({
     businessId: session.user.businessId,
     status: statusParam,
@@ -163,7 +163,7 @@ export default async function AccountLedgerPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const params = await searchParams;
-  const status = (params.status as StatusFilter) || "all";
+  const status = (params.status as StatusFilter) || "inpago";
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
@@ -179,9 +179,9 @@ export default async function AccountLedgerPage({
 
       <div className="flex flex-col gap-6">
         <div className="flex gap-2 border-b pb-2">
-          <StatusTab status="all" currentStatus={status} />
           <StatusTab status="inpago" label="Pendientes" currentStatus={status} />
           <StatusTab status="pago" label="Pagados" currentStatus={status} />
+          <StatusTab status="all" currentStatus={status} />
         </div>
 
         <Suspense
