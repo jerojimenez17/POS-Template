@@ -23,6 +23,7 @@ import {
   DollarSign
 } from "lucide-react";
 import { Suspense } from "react";
+import { PusherListener } from "./PusherListener";
 
 type StatusFilter = "all" | "inpago" | "pago" | "cancelado";
 
@@ -164,9 +165,11 @@ export default async function AccountLedgerPage({
 }) {
   const params = await searchParams;
   const status = (params.status as StatusFilter) || "inpago";
+  const session = await auth();
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
+      {session?.user?.businessId && <PusherListener businessId={session.user.businessId} />}
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/">

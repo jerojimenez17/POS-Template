@@ -3,8 +3,11 @@
 import { db } from "@/lib/db";
 import { auth } from "../../auth";
 import { revalidatePath } from "next/cache";
-import BillState from "@/models/BillState";
+import type BillState from "@/models/BillState";
+import { pusherServer } from "@/lib/pusher-server";
+import { StockActivityItem } from "@/components/StockActivityModal";
 
+// Interfaces para tipado fuerte
 interface SaleProduct {
   id: string;
   code: string;
@@ -179,8 +182,13 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       return order;
     });
 
+    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+
     revalidatePath("/stock");
     revalidatePath("/cashRegister");
+    revalidatePath("/account-ledger");
+    revalidatePath("/report");
+    revalidatePath("/searchBill");
     return { success: true, orderId: result.id };
   } catch (error) {
     console.error("Error processing sale:", error);
@@ -259,6 +267,13 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
       return returnRecord;
     });
 
+    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+    revalidatePath("/stock");
+    revalidatePath("/cashRegister");
+    revalidatePath("/account-ledger");
+    revalidatePath("/report");
+    revalidatePath("/searchBill");
+
     revalidatePath("/stock");
     revalidatePath("/cashRegister");
     return { success: true, returnId: result.id };
@@ -321,6 +336,29 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
       }
     });
 
+    const outsMap = new Map<string, StockActivityItem>();
+    const insMap = new Map<string, StockActivityItem>();
+
+    stockMovements.forEach(sm => {
+      if (sm.quantity === 0) return;
+      const isOut = sm.quantity < 0;
+      const absQty = Math.abs(sm.quantity);
+      
+      const targetMap = isOut ? outsMap : insMap;
+      const existing = targetMap.get(sm.productId) || {
+        productId: sm.productId,
+        code: sm.product?.code || "",
+        description: sm.product?.description || "Producto eliminado",
+        quantity: 0
+      };
+      
+      existing.quantity += absQty;
+      targetMap.set(sm.productId, existing);
+    });
+
+    const outs = Array.from(outsMap.values()).sort((a, b) => b.quantity - a.quantity);
+    const ins = Array.from(insMap.values()).sort((a, b) => b.quantity - a.quantity);
+
     return {
       success: true,
       data: {
@@ -332,6 +370,7 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
         returnCount: returns.length,
         paymentMethods,
         stockMovementCount: stockMovements.length,
+        stockActivity: { outs, ins },
       }
     };
   } catch (error) {
@@ -628,8 +667,13 @@ export const updateOrderAction = async (
       return { success: true };
     });
 
+    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+
     revalidatePath("/stock");
     revalidatePath("/cashRegister");
+    revalidatePath("/account-ledger");
+    revalidatePath("/report");
+    revalidatePath("/searchBill");
     revalidatePath(`/sales/${orderId}`);
 
     return result;

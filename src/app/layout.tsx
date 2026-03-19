@@ -22,8 +22,8 @@ const poppins = Poppins({
   weight: "400",
 });
 export const metadata: Metadata = {
-  title: "Tu app",
-  description: "A template for Point of Sales Apps",
+  title: "JAY-POS",
+  description: "A SaaS for Point of Sales",
 };
 
 import { Toaster } from "react-hot-toast";
