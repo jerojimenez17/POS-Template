@@ -358,7 +358,7 @@ export const getSalesAction = async (): Promise<BillState[]> => {
         IVACondition: order.clientIvaCondition || "Consumidor Final",
         clientIvaCondition: order.clientIvaCondition || undefined,
         clientDocumentNumber: order.clientDocumentNumber || undefined,
-        CAE: order.CAE ? (order.CAE as any) : undefined,
+        CAE: order.CAE ? (order.CAE as unknown as CAE) : undefined,
         twoMethods: !!order.paymentMethod2,
         paidMethod: order.paymentMethod || "Efectivo",
       };
@@ -412,7 +412,7 @@ export const getSaleByIdAction = async (id: string): Promise<BillState | null> =
       IVACondition: order.clientIvaCondition || "Consumidor Final",
       clientIvaCondition: order.clientIvaCondition || undefined,
       clientDocumentNumber: order.clientDocumentNumber || undefined,
-      CAE: order.CAE ? (order.CAE as any) : undefined,
+      CAE: order.CAE ? (order.CAE as unknown as CAE) : undefined,
       twoMethods: !!order.paymentMethod2,
       paidMethod: order.paymentMethod || "Efectivo",
     } as unknown as BillState;
@@ -638,6 +638,7 @@ export const getSaleHistoryAction = async (orderId: string) => {
 import { Prisma } from "@prisma/client";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
+import CAE from "@/models/CAE";
 
 export type OrderUpdateWithUser = Prisma.OrderUpdateGetPayload<{
   include: {
