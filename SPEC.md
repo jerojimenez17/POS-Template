@@ -330,3 +330,268 @@ The display should use the same conditional logic:
 | TC3 | Select "Consumidor Final", submit | `documentNumber: 0` |
 | TC4 | Select DNI, enter value, switch to CUIT, enter value, submit | `documentNumber` = new CUIT value |
 | TC5 | Select CUIT, enter value, switch to DNI, enter value, submit | `documentNumber` = new DNI value |
+
+---
+
+## Printing Replacement: react-to-print → Cross-Browser Alternative
+
+### 1. Análisis del Problema
+
+#### ¿Por qué react-to-print falla en Android Chrome?
+
+`react-to-print` funciona utilizando `window.print()` internamente, lo cual genera varios problemas en Android Chrome:
+
+| Problema | Descripción |
+|----------|-------------|
+| **API de impresión limitada** | Android Chrome no expone correctamente la API de impresión en ciertos contextos |
+| **WebViews** | Si la app corre dentro de una WebView (ej: desde otra app), la API de impresión puede no estar disponible |
+| **Print Preview issues** | El preview de impresión en Android Chrome puede fallar o no renderizar correctamente |
+| **Share dialog como fallback** | En lugar de abrir el diálogo de impresión, Android puede abrir el Share dialog |
+| **Inconsistencia de estilos** | CSS `@media print` puede no aplicarse correctamente en el contexto de Android |
+
+#### Problemas específicos reportados
+
+1. **Issue #187 en react-to-print**: En iPad con Chrome, se imprime toda la UI en lugar del componente seleccionado
+2. **Print.js issue #716**: PDF printing no funciona en Android Chrome/Edge
+3. **Android WebView**: `window.print()` puede no estar disponible en absoluto
+
+---
+
+### 2. Comparación de Alternativas
+
+#### 2.1 `@thermal-print/react` (v0.4.0)
+
+**Repository**: npm - @thermal-print/react  
+**Última actualización**: Diciembre 2025  
+**Weekly Downloads**: ~5 (muy nuevo)  
+**Compatibilidad React**: ^18.0.0  
+
+| Aspecto | Detalle |
+|--------|---------|
+| **Pros** | ✅ Ofrece 3 paths: ESC/POS, PrintNode IR, HTML/PDF |
+| | ✅ Migration guide desde @react-pdf/renderer |
+| | ✅ Soporte para browser printing |
+| | ✅ React 18/19 compatible |
+| **Contras** | ❌ Muy nuevo (Dic 2025), riesgo de cambios API |
+| | ❌ Pocos downloads, comunidad pequeña |
+| | ❌ No hay issues abiertos para revisar estabilidad |
+
+#### 2.2 `react-thermal-printer` (v0.22.0)
+
+**Repository**: https://github.com/seokju-na/react-thermal-printer  
+**Stars**: 450 | **Forks**: 62  
+**Weekly Downloads**: ~3,000  
+**Última actualización**: Marzo 2026  
+**Compatibilidad React**: ^18.0.0 || ^19  
+
+| Aspecto | Detalle |
+|--------|---------|
+| **Pros** | ✅ Maduro y estable (desde 2022) |
+| | ✅ Soporte React 19 |
+| | ✅ Genera ESC/POS bytes directamente |
+| **Contras** | ❌ Requiere conexión WebUSB/WebSerial al printer |
+| | ❌ No usa dialog de impresión del browser |
+| | ❌ Solo funciona con impresoras térmicas ESC/POS |
+
+#### 2.3 `html2canvas` + `jspdf` (Manual)
+
+| Aspecto | Detalle |
+|--------|---------|
+| **Pros** | ✅ Total control sobre el output |
+| | ✅ Funciona en todos los browsers |
+| | ✅ PDF generado puede descargarse o imprimirse |
+| **Contras** | ❌ Bundle size alto (~500KB combined) |
+| | ❌ Renderizado asíncrono puede causar FOUC |
+
+#### 2.4 `prntr` (Print.js fork)
+
+| Aspecto | Detalle |
+|--------|---------|
+| **Pros** | ✅ Muy ligero |
+| **Contras** | ❌ **Explicitamente NO funciona en Chrome Mobile** |
+| | ❌ **Explicitamente NO funciona en Safari Mobile** |
+
+#### Comparación Resumida
+
+| Librería | Android Chrome | iOS Safari | Desktop | Thermal Printers |
+|----------|---------------|------------|---------|------------------|
+| `react-to-print` (actual) | ⚠️ Problemas | ✅ | ✅ | ❌ |
+| `@thermal-print/react` | ✅ Esperado | ✅ Esperado | ✅ | ✅ |
+| `react-thermal-printer` | N/A (WebUSB) | ❌ | ✅ (WebUSB) | ✅ |
+| `html2canvas + jspdf` | ✅ | ✅ | ✅ | ❌ |
+
+---
+
+### 3. Recomendación
+
+#### Solución Híbrida Recomendada
+
+**Elegir**: `@thermal-print/react` + Fallback con `html2canvas` + `jspdf`
+
+#### Justificación
+
+1. **`@thermal-print/react`** ofrece:
+   - Conversion a HTML (para browser printing estándar)
+   - Conversion a ESC/POS (para impresoras térmicas directas)
+   - Migration guide desde `@react-pdf/renderer` (similar API a lo actual)
+
+2. **Fallback con `html2canvas` + `jspdf`**:
+   - Si `@thermal-print/react` falla
+   - Genera PDF que puede descargarse o imprimirse
+   - Funciona en todos los browsers móviles
+
+3. **Arquitectura propuesta**:
+
+```
+PrintableTable.tsx
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    PrintProvider.tsx                         │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐  │
+│  │ BrowserPrint  │  │ ThermalPrint  │  │  PDFExport    │  │
+│  │ (default)     │  │ (optional)    │  │  (fallback)   │  │
+│  └───────────────┘  └───────────────┘  └───────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 4. Requisitos Detallados
+
+#### 4.1 Requisitos Funcionales
+
+| ID | Requisito | Prioridad |
+|----|-----------|-----------|
+| RF-01 | Imprimir ticket/factura desde Android Chrome | Crítico |
+| RF-02 | Imprimir ticket/factura desde iOS Safari | Crítico |
+| RF-03 | Imprimir ticket/factura desde Desktop browsers | Crítico |
+| RF-04 | Mantener diseño actual del ticket | Alta |
+| RF-05 | Mantener funcionalidad de QR code (CAE) | Alta |
+| RF-06 | Soporte para impresoras térmicas via ESC/POS (opcional) | Media |
+
+#### 4.2 Requisitos No Funcionales
+
+| ID | Requisito | Prioridad |
+|----|-----------|-----------|
+| RNF-01 | Compatibilidad con React 19 | Crítico |
+| RNF-02 | Compatibilidad con Next.js 15 | Crítico |
+| RNF-03 | TypeScript strict mode | Crítico |
+| RNF-04 | Mantener bundle size razonable (<200KB adicional) | Alta |
+
+---
+
+### 5. Criterios de Aceptación
+
+| # | Criterio | Método de Verificación |
+|---|----------|------------------------|
+| CA-01 | Impresión funciona en Android Chrome (Chrome 120+) | Test manual en dispositivo físico |
+| CA-02 | Impresión funciona en iOS Safari (iOS 17+) | Test manual en simulador/dispositivo |
+| CA-03 | Impresión funciona en Chrome Desktop (Windows/Mac) | Test manual |
+| CA-04 | QR Code CAE se imprime correctamente | Verificación visual del ticket |
+| CA-05 | Diseño del ticket se mantiene idéntico | Comparación screenshot antes/después |
+| CA-06 | npm run build exitoso | Verificación automática |
+| CA-07 | npm run lint exitoso | Verificación automática |
+
+---
+
+### 6. Estructura de Archivos
+
+#### 6.1 Archivos a Modificar
+
+```
+src/
+├── components/
+│   └── Billing/
+│       ├── PrintableTable.tsx     # MODIFICAR - Reemplazar react-to-print
+│       └── PrintableTable.css     # NUEVO - Estilos de impresión
+├── lib/
+│   └── print/                     # NUEVO - Módulo de utilidades
+│       ├── index.ts
+│       ├── BrowserPrint.ts
+│       ├── ThermalPrint.ts
+│       └── PDFExport.ts
+```
+
+#### 6.2 Archivos a Crear
+
+| Archivo | Descripción |
+|---------|-------------|
+| `src/lib/print/index.ts` | Exports centralizados |
+| `src/lib/print/BrowserPrint.ts` | Print via browser API |
+| `src/lib/print/ThermalPrint.ts` | Print via ESC/POS (opcional) |
+| `src/lib/print/PDFExport.ts` | Fallback PDF |
+
+#### 6.3 Archivos a Eliminar
+
+| Archivo | Razón |
+|---------|-------|
+| `react-to-print` (dependency) | Reemplazado |
+
+---
+
+### 7. Nuevas Dependencias
+
+#### Dependencias Principales
+
+```json
+{
+  "dependencies": {
+    "@thermal-print/react": "^0.4.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.2"
+  }
+}
+```
+
+#### Análisis de Bundle Size
+
+| Paquete | Tamaño Estimado |
+|---------|-----------------|
+| `@thermal-print/react` | ~50KB |
+| `html2canvas` | ~300KB |
+| `jspdf` | ~200KB |
+
+**Total mínimo estimado**: ~350KB
+
+---
+
+### 8. Plan de Implementación
+
+#### Fase 1: Setup y Configuración
+1. Instalar dependencias
+2. Crear estructura de archivos `src/lib/print/`
+3. Crear módulo de utilidades
+
+#### Fase 2: Implementación Core
+1. Implementar `BrowserPrint.ts` con fallback logic
+2. Modificar `PrintableTable.tsx` para usar el nuevo sistema
+3. Testear en Desktop
+
+#### Fase 3: Mobile Testing
+1. Testear en Android Chrome (device real)
+2. Testear en iOS Safari (device real)
+3. Ajustar si es necesario
+
+#### Fase 4: Cleanup
+1. Remover `react-to-print` de package.json
+2. Verificar build y lint
+
+---
+
+### 9. Checklist de Implementación
+
+```markdown
+- [ ] Instalar dependencias (@thermal-print/react, html2canvas, jspdf)
+- [ ] Crear src/lib/print/
+- [ ] Implementar BrowserPrint.ts
+- [ ] Implementar PDFExport.ts
+- [ ] Modificar PrintableTable.tsx
+- [ ] Test Desktop browsers
+- [ ] Test Android Chrome
+- [ ] Test iOS Safari
+- [ ] Verificar QR code
+- [ ] npm run build exitoso
+- [ ] npm run lint exitoso
+- [ ] Remover react-to-print de package.json
+```

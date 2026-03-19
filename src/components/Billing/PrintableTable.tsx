@@ -1,6 +1,5 @@
 "use client";
-import React, { useContext, useRef, useState, useEffect } from "react";
-import { useReactToPrint } from "react-to-print";
+import React, { useContext, useRef, useState, useEffect, useCallback } from "react";
 import { BillContext } from "@/context/BillContext";
 import { getProductByCode, getProductsBySearch } from "@/actions/stock";
 import { ProductPrismaAdapter } from "@/models/ProductPrismaAdapter";
@@ -15,6 +14,7 @@ import { Inter } from "next/font/google";
 import { getBusinessBillingInfoAction } from "@/actions/business";
 import moment from "moment";
 import { QRCodeSVG } from "qrcode.react";
+import { printElement } from "@/lib/print";
 
 // Dynamically import scanner to avoid SSR issues
 const Scanner = dynamic(
@@ -85,28 +85,35 @@ const PrintableTable = ({
     fetchBillingInfo();
   }, []);
 
-  const handlePrint = useReactToPrint({
-    contentRef: contentRef || undefined,
-    documentTitle: `Factura_${(state?.date || new Date()).toISOString().split("T")[0]}`,
-    onBeforePrint: () => Promise.resolve(), // Sometimes helps Safari rendering lifecycle
-    pageStyle: `
-      @page { size: auto; margin: 10mm; }
-      @media print {
-        html, body {
-          width: 100% !important;
-          min-width: 100% !important;
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-        body { -webkit-print-color-adjust: exact; }
-        .print-header { display: block !important; }
-        table { width: 100% !important; table-layout: fixed; }
-        th, td { word-wrap: break-word; }
-        .print-hidden { display: none !important; }
-        .print-visible { display: block !important; }
-      }
-    `,
-  });
+  const handlePrint = useCallback(async () => {
+    if (contentRef.current) {
+      await printElement(contentRef.current, {
+        documentTitle: `Factura_${(state?.date || new Date()).toISOString().split("T")[0]}`,
+        pageStyle: `
+          @page { size: 80mm auto; margin: 5mm; }
+          @media print {
+            html, body {
+              width: 80mm !important;
+              min-width: 80mm !important;
+              max-width: 80mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            table { width: 100% !important; table-layout: fixed; }
+            th, td { word-wrap: break-word; font-size: 12px !important; }
+            .print-hidden { display: none !important; }
+            .print-visible { display: block !important; }
+            .hidden { display: none !important; }
+          }
+        `,
+        fallbackToPDF: true,
+        format: "thermal",
+      });
+    }
+  }, [state?.date]);
 
   useEffect(() => {
     if (errorMessage) {
@@ -251,7 +258,7 @@ const PrintableTable = ({
     <div ref={contentRef} className={`${className} print:block print:bg-white overflow-visible`}>
       {/* Header - Print only */}
       {isClient && (
-        <div className="print-visible print:mb-4 mt-4 print:text-center hidden">
+        <div className="print:block print:mb-4 mt-4 print:text-center hidden print:visible">
           <div className="flex flex-col items-center border-b pb-4 mb-4 border-gray-300">
             <h2
               className={cn(

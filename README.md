@@ -16,7 +16,7 @@ This project leverages a modern, bleeding-edge stack optimized for performance, 
 - **State Management & Data Fetching:** React Server Components, Server Actions, Context API
 - **Forms & Validation:** React Hook Form integrated with Zod for end-to-end type safety
 - **Real-time Updates:** Pusher WebSockets for instant state synchronization across clients
-- **Hardware Integration:** `@zxing/browser` for barcode scanning, `react-to-print` for thermal receipt generation
+- **Hardware Integration:** `@zxing/browser` for barcode scanning, `html2canvas` + `jspdf` for cross-browser thermal receipt printing
 
 **Backend & Infrastructure:**
 - **Database:** PostgreSQL for relational data integrity
