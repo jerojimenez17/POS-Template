@@ -46,7 +46,8 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
     const year = now.getFullYear();
 
     const discountPercent = Number(billState.discount) || 0;
-    const totalSecondMethodParsed = Number(billState.totalSecondMethod) || 0;
+    const isTwoMethods = !!billState.twoMethods;
+    const totalSecondMethodParsed = isTwoMethods ? (Number(billState.totalSecondMethod) || 0) : 0;
 
     const total = billState.totalWithDiscount || billState.total;
     const discountAmount = billState.total * discountPercent * 0.01;
@@ -59,8 +60,8 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           status: "confirmado",
           paidStatus: "pago",
           paymentMethod: billState.paidMethod || "Efectivo",
-          paymentMethod2: billState.secondPaidMethod,
-          totalMethod2: totalSecondMethodParsed,
+          paymentMethod2: isTwoMethods ? billState.secondPaidMethod : null,
+          totalMethod2: isTwoMethods ? totalSecondMethodParsed : null,
           discountPercentage: discountPercent,
           discountAmount: discountAmount,
           businessId: businessId,
@@ -128,7 +129,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       if (billState.paidMethod === "Efectivo") {
         cashToIncrement += (total - totalSecondMethodParsed);
       }
-      if (billState.secondPaidMethod === "Efectivo") {
+      if (isTwoMethods && billState.secondPaidMethod === "Efectivo") {
         cashToIncrement += totalSecondMethodParsed;
       }
 
@@ -140,17 +141,40 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         });
       }
 
-      await tx.cashMovement.create({
-        data: {
-          total: total,
-          seller: billState.seller,
-          paidMethod: billState.twoMethods 
-            ? `${billState.paidMethod} + ${billState.secondPaidMethod}`
-            : (billState.paidMethod || "Efectivo"),
-          businessId: businessId,
-          date: now,
-        },
-      });
+      if (isTwoMethods) {
+        if (total - totalSecondMethodParsed > 0) {
+          await tx.cashMovement.create({
+            data: {
+              total: total - totalSecondMethodParsed,
+              seller: billState.seller,
+              paidMethod: billState.paidMethod || "Efectivo",
+              businessId: businessId,
+              date: now,
+            },
+          });
+        }
+        if (totalSecondMethodParsed > 0) {
+          await tx.cashMovement.create({
+            data: {
+              total: totalSecondMethodParsed,
+              seller: billState.seller,
+              paidMethod: billState.secondPaidMethod || "Efectivo",
+              businessId: businessId,
+              date: now,
+            },
+          });
+        }
+      } else {
+        await tx.cashMovement.create({
+          data: {
+            total: total,
+            seller: billState.seller,
+            paidMethod: billState.paidMethod || "Efectivo",
+            businessId: businessId,
+            date: now,
+          },
+        });
+      }
 
       return order;
     });
@@ -359,7 +383,7 @@ export const getSalesAction = async (): Promise<BillState[]> => {
         clientIvaCondition: order.clientIvaCondition || undefined,
         clientDocumentNumber: order.clientDocumentNumber || undefined,
         CAE: order.CAE ? (order.CAE as unknown as CAE) : undefined,
-        twoMethods: !!order.paymentMethod2,
+        twoMethods: !!order.paymentMethod2 && order.totalMethod2 !== null && order.totalMethod2 > 0,
         paidMethod: order.paymentMethod || "Efectivo",
       };
     });
@@ -413,7 +437,7 @@ export const getSaleByIdAction = async (id: string): Promise<BillState | null> =
       clientIvaCondition: order.clientIvaCondition || undefined,
       clientDocumentNumber: order.clientDocumentNumber || undefined,
       CAE: order.CAE ? (order.CAE as unknown as CAE) : undefined,
-      twoMethods: !!order.paymentMethod2,
+      twoMethods: !!order.paymentMethod2 && order.totalMethod2 !== null && order.totalMethod2 > 0,
       paidMethod: order.paymentMethod || "Efectivo",
     } as unknown as BillState;
   } catch (error) {
@@ -552,6 +576,8 @@ export const updateOrderAction = async (
       const discountPercent = Number(updatedData.discount) || 0;
       const total = updatedData.totalWithDiscount || updatedData.total;
       const discountAmount = updatedData.total * discountPercent * 0.01;
+      const isTwoMethodsUpdate = !!updatedData.twoMethods;
+      const totalSecondMethodParsedUpdate = isTwoMethodsUpdate ? (Number(updatedData.totalSecondMethod) || 0) : 0;
 
       // 🔹 actualizar orden
       await tx.order.update({
@@ -560,8 +586,8 @@ export const updateOrderAction = async (
           total,
           seller: updatedData.seller,
           paymentMethod: updatedData.paidMethod || "Efectivo",
-          paymentMethod2: updatedData.secondPaidMethod,
-          totalMethod2: Number(updatedData.totalSecondMethod) || 0,
+          paymentMethod2: isTwoMethodsUpdate ? updatedData.secondPaidMethod : null,
+          totalMethod2: isTwoMethodsUpdate ? totalSecondMethodParsedUpdate : null,
           discountPercentage: discountPercent,
           discountAmount,
           clientId: updatedData.clientId,

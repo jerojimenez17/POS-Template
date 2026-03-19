@@ -77,7 +77,7 @@ const CashRegister = ({ session }: props) => {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gestión de ingresos, retiros y visualización de balance diario.</p>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full">
              <AddButton session={session} onSuccess={() => setRefreshTotal((prev) => prev + 1)} />
              <EditButton session={session} onSuccess={() => setRefreshTotal((prev) => prev + 1)} />
           </div>
