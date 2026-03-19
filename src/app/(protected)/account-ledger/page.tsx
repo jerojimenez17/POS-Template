@@ -45,7 +45,7 @@ async function OrdersTable({ status }: OrdersTableProps) {
     redirect("/");
   }
 
-  const statusParam = status === "all" ? undefined : status;
+  const statusParam = status === "inpago" ? undefined : status;
   const result = await getUnpaidOrders({
     businessId: session.user.businessId,
     status: statusParam,
