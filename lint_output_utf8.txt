@@ -1,0 +1,52 @@
+﻿
+> pos-template@0.1.0 lint
+> next lint
+
+node.exe : `next lint` is deprecated and 
+will be removed in Next.js 16.
+En C:\nvm4w\nodejs\npm.ps1: 29 Carácter: 3
++   & $NODE_EXE $NPM_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecifie 
+   d: (`next lint` is ... in Next.js 16.  
+  :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeComma 
+   ndError
+ 
+For new projects, use create-next-app to 
+choose your preferred linter.
+For existing projects, migrate to the 
+ESLint CLI:
+npx @next/codemod@canary 
+next-lint-to-eslint-cli .
+
+
+./src/actions/sales.ts
+338:37  Error: Unexpected any. Specify a 
+different type.  
+@typescript-eslint/no-explicit-any
+339:36  Error: Unexpected any. Specify a 
+different type.  
+@typescript-eslint/no-explicit-any
+
+./src/app/(protected)/account-ledger/Pushe
+rListener.tsx
+3:21  Error: 'useTransition' is defined 
+but never used.  
+@typescript-eslint/no-unused-vars
+
+./src/components/PeriodicReport.tsx
+79:6  Warning: React Hook useEffect has a 
+missing dependency: 'fetchReport'. Either 
+include it or remove the dependency 
+array.  react-hooks/exhaustive-deps
+
+./src/components/StockActivityModal.tsx
+3:17  Error: 'useState' is defined but 
+never used.  
+@typescript-eslint/no-unused-vars
+
+info  - Need to disable some ESLint 
+rules? Learn more here: https://nextjs.org
+/docs/app/api-reference/config/eslint#disa
+bling-rules

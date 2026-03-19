@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { getDailyReportAction } from "@/actions/sales";
 import {
   Card,
@@ -53,7 +53,7 @@ const PeriodicReport: React.FC<PeriodicReportProps> = ({ period, session }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [refreshToggle, setRefreshToggle] = useState(0);
 
-  const fetchReport = async (selectedDate: Date) => {
+  const fetchReport = useCallback(async (selectedDate: Date) => {
     setLoading(true);
     
     let startDate = selectedDate;
@@ -72,11 +72,11 @@ const PeriodicReport: React.FC<PeriodicReportProps> = ({ period, session }) => {
       setReport(res.data as PeriodicReportData);
     }
     setLoading(false);
-  };
+  }, [period]);
 
   useEffect(() => {
     fetchReport(date);
-  }, [date, period, refreshToggle]);
+  }, [date, period, refreshToggle, fetchReport]);
 
   useEffect(() => {
     if (session?.user?.businessId) {

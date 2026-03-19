@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { pusherClient } from "@/lib/pusher-client";
 

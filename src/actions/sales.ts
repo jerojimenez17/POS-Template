@@ -5,6 +5,7 @@ import { auth } from "../../auth";
 import { revalidatePath } from "next/cache";
 import type BillState from "@/models/BillState";
 import { pusherServer } from "@/lib/pusher-server";
+import { StockActivityItem } from "@/components/StockActivityModal";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -335,8 +336,8 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
       }
     });
 
-    const outsMap = new Map<string, any>();
-    const insMap = new Map<string, any>();
+    const outsMap = new Map<string, StockActivityItem>();
+    const insMap = new Map<string, StockActivityItem>();
 
     stockMovements.forEach(sm => {
       if (sm.quantity === 0) return;
