@@ -5,6 +5,7 @@ import { auth } from "../../auth";
 import { revalidatePath } from "next/cache";
 import { PaidStatus } from "@prisma/client";
 import { z } from "zod";
+import { pusherServer } from "@/lib/pusher-server";
 
 interface ActionResult<T = unknown> {
   success: boolean;
@@ -157,6 +158,8 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
     revalidatePath("/orders");
     revalidatePath("/stock");
     revalidatePath("/clients");
+    revalidatePath("/account-ledger");
+    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
   } catch (error) {
     console.error("Error creating unpaid order:", error);
     return {
@@ -172,7 +175,7 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
     const businessId = session?.user?.businessId || input.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
 
-    return await db.$transaction(async (tx) => {
+    await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: input.orderId },
         include: { client: true, cashMovements: true },
@@ -218,6 +221,10 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
     revalidatePath("/orders");
     revalidatePath("/clients");
     revalidatePath("/cashRegister");
+    revalidatePath("/account-ledger");
+    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+
+    return { success: true };
   } catch (error) {
     console.error("Error registering payment:", error);
     return {
@@ -281,6 +288,7 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
     revalidatePath("/orders");
     revalidatePath("/stock");
     revalidatePath("/clients");
+    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
   } catch (error) {
     console.error("Error canceling unpaid order:", error);
     return {
@@ -444,6 +452,8 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
       revalidatePath("/orders");
       revalidatePath("/stock");
       revalidatePath("/clients");
+      revalidatePath("/account-ledger");
+      await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
       return { success: true };
     });
@@ -545,6 +555,7 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
       revalidatePath("/orders");
       revalidatePath("/stock");
       revalidatePath("/clients");
+      await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
       return { success: true };
     });
@@ -617,6 +628,7 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
       revalidatePath("/orders");
       revalidatePath("/stock");
       revalidatePath("/clients");
+      await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
       return { success: true };
     });

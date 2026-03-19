@@ -14,6 +14,8 @@ import {
 } from "./../ui/select";
 import { Button } from "./../ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { pusherClient } from "@/lib/pusher-client";
+import { getSalesAction } from "@/actions/sales";
 
 import { Session } from "next-auth";
 
@@ -29,8 +31,7 @@ const SalesTable = ({ sales = [], session }: props) => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-
-
+  const [liveSales, setLiveSales] = useState<BillState[]>(sales);
 
   const { filtersState, seller } = useContext(FiltersContext);
   useEffect(() => {
@@ -39,8 +40,32 @@ const SalesTable = ({ sales = [], session }: props) => {
     }
   }, [user, seller]);
 
+  useEffect(() => {
+    setLiveSales(sales);
+  }, [sales]);
+
+  useEffect(() => {
+    if (session?.user?.businessId) {
+      const channelName = `orders-${session.user.businessId}`;
+      const channel = pusherClient.subscribe(channelName);
+      
+      const handleUpdate = async () => {
+        const result = await getSalesAction();
+        if (result) {
+          setLiveSales(result);
+        }
+      };
+
+      channel.bind("orders-update", handleUpdate);
+
+      return () => {
+        channel.unbind("orders-update", handleUpdate);
+      };
+    }
+  }, [session?.user?.businessId]);
+
   const filteredSales = React.useMemo(() => {
-    return sales
+    return liveSales
       .filter((sale) => {
         const { Remito, FacturaC } = filtersState;
         const isFacturaC = sale.CAE && sale.CAE.CAE !== "";
@@ -97,7 +122,7 @@ const SalesTable = ({ sales = [], session }: props) => {
         return !Seller.active || Seller.filter === sale.seller;
       })
       .sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [sales, filtersState]);
+  }, [liveSales, filtersState]);
 
   const total = React.useMemo(() => {
     return filteredSales.reduce((acc, sale) => acc + (sale.totalWithDiscount || 0), 0);
