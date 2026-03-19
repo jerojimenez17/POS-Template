@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { Inter } from "next/font/google";
 import { getBusinessBillingInfoAction } from "@/actions/business";
 import moment from "moment";
+import { QRCodeSVG } from "qrcode.react";
 
 // Dynamically import scanner to avoid SSR issues
 const Scanner = dynamic(
@@ -278,6 +279,21 @@ const PrintableTable = ({
               </p>
               <p><span className="font-semibold">Vendedor:</span> {state.seller || session?.user?.email}</p>
               <p><span className="font-semibold">Medio de Pago:</span> {state.paidMethod}</p>
+              
+             
+                <div className="mt-3 text-xs border-t border-gray-200 pt-2">
+                  <p><span className="font-semibold">Cliente:</span> {state.client}</p>
+                  {state.clientIvaCondition && (
+                    <p><span className="font-semibold">Condición IVA:</span> {state.clientIvaCondition.replace(/_/g, " ")}</p>
+                  )}
+                  {state.clientIvaCondition && 
+                   state.clientIvaCondition.toLowerCase() !== "consumidor final" && 
+                   state.clientIvaCondition.toLowerCase() !== "consumidor_final" && 
+                   state.clientDocumentNumber && (
+                    <p><span className="font-semibold">Documento:</span> {state.clientDocumentNumber}</p>
+                  )}
+                </div>
+              
             </div>
             
             {billingInfo && (
@@ -474,16 +490,39 @@ const PrintableTable = ({
 
       {/* CAE Section - Print only */}
       {isClient && state.CAE?.CAE && (
-        <div className="print-visible mt-8 text-xs border-t border-gray-300 pt-4">
-          <p className="text-center">
-            <strong>CAE:</strong> {state.CAE.CAE} |
-            <strong> Vencimiento:</strong> {state.CAE.vencimiento}
-          </p>
-          <p className="mt-2 text-center italic">
-            El crédito fiscal discriminado en el presente comprobante, sólo
-            podrá ser computado a efectos del Régimen de Sostenimiento e
-            Inclusión Fiscal para Pequeños Contribuyentes de la Ley N°27.618
-          </p>
+        <div className="print-visible mt-8 text-xs border-t border-gray-300 pt-4 pb-8">
+          <div className="flex items-center justify-between gap-4">
+            {state.CAE.qrData ? (
+              <div className="shrink-0 bg-white p-1 rounded-sm">
+                <QRCodeSVG value={state.CAE.qrData} size={110} level="M" includeMargin={false} />
+              </div>
+            ) : (
+              <div className="w-[110px] shrink-0"></div>
+            )}
+            
+            <div className="flex-1 text-center">
+              <p className="font-bold text-[14px] mb-2 uppercase tracking-wide">Comprobante Autorizado</p>
+              <p className="mb-1">
+                <span className="font-bold text-gray-700">CAE:</span> <span className="text-[13px]">{state.CAE.CAE}</span>
+              </p>
+              <p className="mb-3">
+                <span className="font-bold text-gray-700">Vencimiento:</span> <span className="text-[13px]">{state.CAE.vencimiento}</span>
+              </p>
+              <div className="w-full h-px bg-gray-200 my-2 mx-auto max-w-[200px]"></div>
+              <p className="text-[9px] leading-tight italic text-gray-500 max-w-[300px] mx-auto">
+                El crédito fiscal discriminado en el presente comprobante, sólo
+                podrá ser computado a efectos del Régimen de Sostenimiento e
+                Inclusión Fiscal para Pequeños Contribuyentes de la Ley N°27.618
+              </p>
+            </div>
+            
+            <div className="w-[110px] shrink-0 flex flex-col items-center justify-center opacity-60">
+               {/* Optional Logo placeholder for AFIP or symmetry */}
+               <div className="h-10 w-24 border-2 border-gray-300 border-dashed rounded flex flex-col items-center justify-center text-gray-400">
+                  <span className="text-[8px] font-bold">AFIP</span>
+               </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

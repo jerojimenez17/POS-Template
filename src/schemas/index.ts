@@ -111,9 +111,8 @@ export const BillParametersSchema = z.object({
   paidMethod: z.string(),
   twoMethods: z.boolean(),
   discount: z.coerce.number(),
-  CUIT: z.coerce.number().optional(),
   billType: z.string(),
-  DNI: z.coerce.number().optional(),
+  documentNumber: z.coerce.number().default(0),
   secondPaidMethod: z.string().optional(),
   totalSecondMethod: z.coerce.number().optional(),
 });

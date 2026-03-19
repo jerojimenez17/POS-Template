@@ -25,6 +25,14 @@ interface ProcessSaleInput {
   clientId?: string;
   twoMethods?: boolean;
   products: SaleProduct[];
+  clientIvaCondition?: string;
+  clientDocumentNumber?: string;
+  CAE?: {
+    CAE: string;
+    vencimiento: string;
+    nroComprobante: number;
+    qrData: string;
+  };
 }
 
 export const processSaleAction = async (billState: ProcessSaleInput) => {
@@ -57,6 +65,9 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           discountAmount: discountAmount,
           businessId: businessId,
           clientId: billState.clientId,
+          clientIvaCondition: billState.clientIvaCondition,
+          clientDocumentNumber: billState.clientDocumentNumber,
+          CAE: billState.CAE,
           items: {
             create: billState.products.map((p) => ({
               productId: p.id,
@@ -340,11 +351,14 @@ export const getSalesAction = async (): Promise<BillState[]> => {
         seller: order.seller || "",
         discount: order.discountPercentage,
         date: order.date,
-        typeDocument: "DNI",
-        documentNumber: 0,
+        typeDocument: order.clientIvaCondition || "DNI",
+        documentNumber: order.clientDocumentNumber ? Number(order.clientDocumentNumber) : 0,
         secondPaidMethod: order.paymentMethod2 || undefined,
         totalSecondMethod: order.totalMethod2 || undefined,
-        IVACondition: "Consumidor Final",
+        IVACondition: order.clientIvaCondition || "Consumidor Final",
+        clientIvaCondition: order.clientIvaCondition || undefined,
+        clientDocumentNumber: order.clientDocumentNumber || undefined,
+        CAE: order.CAE ? (order.CAE as unknown as CAE) : undefined,
         twoMethods: !!order.paymentMethod2,
         paidMethod: order.paymentMethod || "Efectivo",
       };
@@ -391,11 +405,14 @@ export const getSaleByIdAction = async (id: string): Promise<BillState | null> =
       seller: order.seller || "",
       discount: order.discountPercentage,
       date: order.date,
-      typeDocument: "DNI",
-      documentNumber: 0,
+      typeDocument: order.clientIvaCondition || "DNI",
+      documentNumber: order.clientDocumentNumber ? Number(order.clientDocumentNumber) : 0,
       secondPaidMethod: order.paymentMethod2 || undefined,
       totalSecondMethod: order.totalMethod2 || undefined,
-      IVACondition: "Consumidor Final",
+      IVACondition: order.clientIvaCondition || "Consumidor Final",
+      clientIvaCondition: order.clientIvaCondition || undefined,
+      clientDocumentNumber: order.clientDocumentNumber || undefined,
+      CAE: order.CAE ? (order.CAE as unknown as CAE) : undefined,
       twoMethods: !!order.paymentMethod2,
       paidMethod: order.paymentMethod || "Efectivo",
     } as unknown as BillState;
@@ -621,6 +638,7 @@ export const getSaleHistoryAction = async (orderId: string) => {
 import { Prisma } from "@prisma/client";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
+import CAE from "@/models/CAE";
 
 export type OrderUpdateWithUser = Prisma.OrderUpdateGetPayload<{
   include: {

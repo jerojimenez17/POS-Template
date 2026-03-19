@@ -39,6 +39,9 @@ const BillParametersForm = () => {
   const currentDate = useMemo(() => new Date(), []);
 
   const onSubmit = () => {
+    const clientCondition = form.getValues().clientCondition;
+    const documentNumber = form.getValues().documentNumber ?? 0;
+    
     setState({
       ...form.getValues(),
       id: "",
@@ -48,9 +51,11 @@ const BillParametersForm = () => {
       seller: BillState.seller,
       billType: form.getValues().billType,
       date: currentDate,
-      typeDocument: form.getValues().clientCondition,
-      documentNumber: form.getValues().DNI ?? 0,
-      IVACondition: form.getValues().clientCondition,
+      typeDocument: clientCondition,
+      documentNumber,
+      IVACondition: clientCondition,
+      clientIvaCondition: clientCondition,
+      clientDocumentNumber: String(documentNumber),
     });
     
     setEditParameters(false);
@@ -121,11 +126,7 @@ const BillParametersForm = () => {
               {form.watch("clientCondition") !== ClientConditions.CONSUMIDOR_FINAL && (
                 <FormField
                   control={form.control}
-                  name={
-                    form.watch("clientCondition") === ClientConditions.CUIT
-                      ? ClientConditions.CUIT
-                      : ClientConditions.DNI
-                  }
+                  name="documentNumber"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm text-gray-600 dark:text-gray-300">
@@ -135,8 +136,12 @@ const BillParametersForm = () => {
                       </FormLabel>
                       <Input
                         className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
-                        {...field}
-                        placeholder={field.value?.toString() || "0"}
+                        type="number"
+                        name={field.name}
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                        onBlur={field.onBlur}
+                        ref={field.ref}
                       />
                     </FormItem>
                   )}
@@ -323,10 +328,17 @@ const BillParametersForm = () => {
       </div>
 
       {/* CUIT/DNI */}
-      {form.getValues().CUIT && (
+      {form.watch("clientCondition") === ClientConditions.CUIT && form.getValues().documentNumber > 0 && (
         <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
           <span>CUIT:</span>
-          <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().CUIT}</span>
+          <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>
+        </div>
+      )}
+
+      {form.watch("clientCondition") === ClientConditions.DNI && form.getValues().documentNumber > 0 && (
+        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
+          <span>DNI:</span>
+          <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>
         </div>
       )}
 

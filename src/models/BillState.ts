@@ -23,4 +23,6 @@ export default interface BillState {
   paidMethod?: string;
   clientId?: string;
   client?: string;
+  clientIvaCondition?: string;
+  clientDocumentNumber?: string;
 }

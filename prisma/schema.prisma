@@ -284,6 +284,12 @@ model Order {
   stockMovements StockMovement[]
   updates       OrderUpdate[]
   cashMovements CashMovement[]
+
+  // Billing fields
+  clientIvaCondition   String?
+  clientDocumentNumber String?
+  CAE                  Json?
+
   @@index([businessId, date])
 }
 
