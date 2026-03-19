@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import JsBarcode from "jsbarcode";
 import {
   Dialog,
@@ -11,30 +11,38 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "../ui/button";
-import { useReactToPrint } from "react-to-print";
+import { printElement } from "@/lib/print";
 import CodeBarButton from "./codebarButton";
 
-interface props {
+interface Props {
   value: string;
 }
-const CodeBarModal = ({ value }: props) => {
-  const barcodeRef = useRef(null);
-  const [generate, setGenerate] = useState(false);
-  const [print, setPrint] = useState(false);
 
-  const printRef = useRef(null);
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-  });
-  useEffect(() => {
-    if (print === true) {
-      handlePrint();
+const CodeBarModal = ({ value }: Props) => {
+  const barcodeRef = useRef<SVGSVGElement>(null);
+  const [generate, setGenerate] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = useCallback(async () => {
+    if (printRef.current) {
+      await printElement(printRef.current, {
+        documentTitle: `CodigoBarras_${value}`,
+        pageStyle: `
+          @page { size: auto; margin: 10mm; }
+          @media print {
+            body { -webkit-print-color-adjust: exact; }
+            .no-print { display: none !important; }
+          }
+        `,
+        format: "thermal",
+      });
     }
-  }, [print, handlePrint]);
+  }, [value]);
+
   useEffect(() => {
     if (barcodeRef.current) {
       JsBarcode(barcodeRef.current, value, {
-        format: "CODE128", // Puedes cambiar el formato si necesitas otro tipo de código de barras
+        format: "CODE128",
         lineColor: "#000000",
         width: 3,
         height: 110,
@@ -82,7 +90,7 @@ const CodeBarModal = ({ value }: props) => {
             className="text-xl"
             onClick={(e) => {
               e.stopPropagation();
-              setPrint(!print);
+              handlePrint();
             }}
           >
             Imprimir
