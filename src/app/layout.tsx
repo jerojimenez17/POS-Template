@@ -39,6 +39,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className="dark">
       <head>
         <meta name="color-scheme" content="dark light" />
+        <link rel="icon" type="image/png" href="/LOGO.png" />
       </head>
           <body
             className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased min-h-screen overflow-x-hidden`}

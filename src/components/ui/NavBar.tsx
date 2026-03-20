@@ -26,6 +26,8 @@ import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
 import { UserButton } from "../auth/user-button";
 import { useSession } from "next-auth/react";
+import { Button } from "./button";
+import { LoginButton } from "../auth/login-button";
 
 //   {
 //     title: "Pedidos",
@@ -40,7 +42,7 @@ const font = Poppins({
 });
 export function NavigationMenuHeader() {
   const { data: session } = useSession();
-  const businessName = session?.user?.businessName || "Mi Negocio";
+  const businessName = session?.user?.businessName || "Jay APP";
 
   return (
     <div
@@ -117,7 +119,15 @@ export function NavigationMenuHeader() {
       </NavigationMenu> */}
       <div className="mr-4 my-auto flex items-center gap-x-4">
         <ThemeToggle />
-        <UserButton />
+        {session ? (
+          <UserButton />
+        ) : (
+          <LoginButton>
+            <Button variant="default" size="sm">
+              Iniciar Sesión
+            </Button>
+          </LoginButton>
+        )}
       </div>
     </div>
   );
