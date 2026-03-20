@@ -18,7 +18,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async linkAccount({ user }) {
       await db.user.update({
         where: { id: user.id },
-        data: { emailVerified: new Date() },
+        data: { 
+          emailVerified: new Date(),
+          image: user.image 
+        },
       });
     },
   },
@@ -33,6 +36,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     //   return true;
     // },
     async signIn({ user, account }) {
+      if (account?.provider === "google" && user.id) {
+        const existingUser = await getUserById(user.id);
+        if (existingUser && !existingUser.image && user.image) {
+          await db.user.update({
+            where: { id: user.id },
+            data: { image: user.image }
+          });
+        }
+      }
+      
       if (account?.provider !== "credentials") return true;
       if (account.provider === "credentials" && user.id) {
         const existingUser = await getUserById(user.id);
@@ -50,6 +63,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.businessId = token.businessId as string | null;
         session.user.businessName = token.businessName as string | null;
+        session.user.image = token.image as string | null;
       }
       return session;
     },
@@ -60,6 +74,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       token.role = existingUser.role;
       token.businessId = existingUser.businessId;
       token.businessName = existingUser.business?.name || null;
+      token.image = existingUser.image;
       console.log({ token });
       return token;
     },
