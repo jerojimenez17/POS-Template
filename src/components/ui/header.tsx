@@ -9,7 +9,7 @@ export const Header = ({ label }: HeaderProps) => {
         <h1 className="text-3xl font-semibold">🛍️ Nuevo Producto</h1>
       ) : (
         <h1 className={cn("text-3xl font-semibold")}>
-          🔐JAY APP
+          🔐Stock.ia
         </h1>
       )}
       {label !== "Stock" && (
