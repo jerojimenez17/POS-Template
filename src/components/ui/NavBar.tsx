@@ -42,7 +42,7 @@ const font = Poppins({
 });
 export function NavigationMenuHeader() {
   const { data: session } = useSession();
-  const businessName = session?.user?.businessName || "Jay APP";
+  const businessName = session?.user?.businessName || "Stock.ia";
 
   return (
     <div

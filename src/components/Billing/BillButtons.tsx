@@ -37,7 +37,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
   const [response, setResponse] = useState("");
   const [respAfip, setRespAfip] = useState<CAE | undefined>();
   const [openRemitoModal, setOpenRemitoModal] = useState(false);
-  const { BillState, billType, CAE, sellerName, removeAll, onOrderReset } =
+  const { BillState, billType, CAE, sellerName, removeAll, onOrderResetRef } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
@@ -274,8 +274,8 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
             businessId={session?.user?.businessId || ""}
             onSuccess={() => {
               removeAll();
-              if (onOrderReset) {
-                onOrderReset();
+              if (onOrderResetRef.current) {
+                onOrderResetRef.current();
               }
             }}
           />
@@ -310,8 +310,8 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
                       handlePrint();
                       setTimeout(() => {
                         removeAll();
-                        if (onOrderReset) {
-                          onOrderReset();
+                        if (onOrderResetRef.current) {
+                          onOrderResetRef.current();
                         }
                       }, 5000);
                     }
@@ -397,8 +397,8 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
                       handlePrint();
                       setTimeout(() => {
                         removeAll();
-                        if (onOrderReset) {
-                          onOrderReset();
+                        if (onOrderResetRef.current) {
+                          onOrderResetRef.current();
                         }
                       }, 5000);
                     }

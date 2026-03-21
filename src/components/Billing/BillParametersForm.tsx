@@ -22,7 +22,7 @@ import BillTypes from "@/models/billType";
 
 const BillParametersForm = () => {
   const [editParamters, setEditParameters] = useState(false);
-  const { setState, BillState, setOnOrderReset } = useContext(BillContext);
+  const { setState, BillState, onOrderResetRef } = useContext(BillContext);
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
     resolver: zodResolver(BillParametersSchema),
@@ -38,21 +38,19 @@ const BillParametersForm = () => {
   });
 
   useEffect(() => {
-    if (setOnOrderReset) {
-      setOnOrderReset(() => {
-        form.reset({
-          paidMethod: PaidMethods.EFECTIVO,
-          clientCondition: ClientConditions.CONSUMIDOR_FINAL,
-          discount: 0,
-          twoMethods: false,
-          billType: BillTypes.C,
-          totalSecondMethod: 0,
-          secondPaidMethod: PaidMethods.DEBITO,
-        });
-        setEditParameters(false);
+    onOrderResetRef.current = () => {
+      form.reset({
+        paidMethod: PaidMethods.EFECTIVO,
+        clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+        discount: 0,
+        twoMethods: false,
+        billType: BillTypes.C,
+        totalSecondMethod: 0,
+        secondPaidMethod: PaidMethods.DEBITO,
       });
-    }
-  }, [form, setOnOrderReset]);
+      setEditParameters(false);
+    };
+  }, [form, onOrderResetRef]);
 
   const currentDate = useMemo(() => new Date(), []);
 

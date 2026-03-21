@@ -96,6 +96,7 @@ const mockContextValue = {
   CAE: vi.fn(),
   setState: vi.fn(),
   addUnit: vi.fn(),
+  onOrderResetRef: { current: null },
 };
 
 const renderWithContext = (ui: React.ReactElement, contextValue = mockContextValue) => {
