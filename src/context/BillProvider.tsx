@@ -1,5 +1,5 @@
 "use client";
-import React, { ReactElement, useEffect, useReducer } from "react";
+import React, { ReactElement, useEffect, useReducer, useRef } from "react";
 import { BillContext } from "./BillContext";
 import { BillReducer } from "./BillReducer";
 import BillState from "@/models/BillState";
@@ -32,6 +32,7 @@ interface props {
 
 const BillProvider = ({ children }: props) => {
   const [BillState, dispatch] = useReducer(BillReducer, INITIAL_STATE);
+  const onOrderResetRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     dispatch({ type: "date", payload: new Date() });
@@ -180,6 +181,7 @@ const BillProvider = ({ children }: props) => {
     nroAsociado: nroAsociado,
     setState: setState,
     paidMethod: paidMethod,
+    onOrderResetRef: onOrderResetRef,
   };
   return <BillContext.Provider value={values}>{children}</BillContext.Provider>;
 };

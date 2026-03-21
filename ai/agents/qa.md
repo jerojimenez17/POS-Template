@@ -27,10 +27,11 @@ Test engineer responsible for creating comprehensive test specifications and val
 
 ## Testing Stack
 
-- **Framework**: Vitest v4
+- **Framework**: Vitest v4 (already installed in project)
 - **Libraries**: @testing-library/react, happy-dom, jsdom
-- **Run**: `npm run test` or `npm run test:watch`
+- **Run**: `npm run test` or `npm run test -- --watch`
 - **Config**: vitest.config.ts
+- Test files: `*.test.ts`, `*.test.tsx` in `__tests__` or alongside components
 - Must follow project testing conventions
 - Cannot modify source code - only tests
 - Tests must have clear, descriptive names

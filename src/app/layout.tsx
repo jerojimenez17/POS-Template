@@ -22,7 +22,7 @@ const poppins = Poppins({
   weight: "400",
 });
 export const metadata: Metadata = {
-  title: "JAY-POS",
+  title: "Stock.ia",
   description: "A SaaS for Point of Sales",
 };
 

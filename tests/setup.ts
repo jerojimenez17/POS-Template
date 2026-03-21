@@ -40,6 +40,11 @@ export const mockDb = {
   },
   cashMovement: {
     create: vi.fn().mockResolvedValue({ id: 'cash-1' }),
+    aggregate: vi.fn().mockResolvedValue({ _sum: { total: 0 }, _count: { total: 0 } }),
+  },
+  cashBox: {
+    findUnique: vi.fn().mockResolvedValue(null),
+    upsert: vi.fn().mockResolvedValue({ id: 'cashbox-1', businessId: 'business-123', total: 0 }),
   },
 };
 

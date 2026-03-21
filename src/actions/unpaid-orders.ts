@@ -175,7 +175,7 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
     const businessId = session?.user?.businessId || input.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
 
-    await db.$transaction(async (tx) => {
+    const movement = await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: input.orderId },
         include: { client: true, cashMovements: true },
@@ -199,7 +199,7 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
         date: new Date(),
         orderId: input.orderId,
       };
-      await tx.cashMovement.create({ data: cashMovementData } as never);
+      const newMovement = await tx.cashMovement.create({ data: cashMovementData } as never);
 
       if (order.clientId) {
         await tx.client.update({
@@ -215,14 +215,14 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
         data: { paidStatus: newPaidStatus },
       });
 
-      return { success: true };
+      return newMovement;
     });
 
     revalidatePath("/orders");
     revalidatePath("/clients");
     revalidatePath("/cashRegister");
     revalidatePath("/account-ledger");
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+    await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
 
     return { success: true };
   } catch (error) {
