@@ -153,17 +153,18 @@ export const saveOrderAction = async (billState: BillStateInput) => {
 };
 
 /**
- * Fetches the business balance from the CashBox model.
+ * Fetches the business balance by aggregating from cashMovements.
  */
 export const getBusinessBalanceAction = async () => {
   const session = await auth();
   if (!session?.user?.businessId) return 0;
 
   try {
-    const cashBox = await db.cashBox.findUnique({
+    const result = await db.cashMovement.aggregate({
       where: { businessId: session.user.businessId },
+      _sum: { total: true },
     });
-    return cashBox?.total || 0;
+    return result._sum.total || 0;
   } catch (error) {
     console.error("Error fetching business balance:", error);
     return 0;

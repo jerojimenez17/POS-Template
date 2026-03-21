@@ -25,6 +25,8 @@ export default interface BillContextProps {
   date: (newDate: Date) => void;
   CAE: (cae: CAE) => void;
   setState: (BillState: BillState) => void;
+  onOrderReset?: (() => void) | null;
+  setOnOrderReset?: (callback: (() => void) | null) => void;
 }
 
 export const BillContext = createContext<BillContextProps>(

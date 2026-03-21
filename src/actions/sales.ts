@@ -144,9 +144,11 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         });
       }
 
+      const movements: { id: string; total: number; paidMethod: string | null; businessId: string; seller: string | null; date: Date }[] = [];
+
       if (isTwoMethods) {
-        if (total - totalSecondMethodParsed > 0) {
-          await tx.cashMovement.create({
+        if (total - totalSecondMethodParsed > 0 && billState.paidMethod === "Efectivo") {
+          const m1 = await tx.cashMovement.create({
             data: {
               total: total - totalSecondMethodParsed,
               seller: billState.seller,
@@ -155,9 +157,10 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
               date: now,
             },
           });
+          movements.push(m1);
         }
-        if (totalSecondMethodParsed > 0) {
-          await tx.cashMovement.create({
+        if (totalSecondMethodParsed > 0 && billState.secondPaidMethod === "Efectivo") {
+          const m2 = await tx.cashMovement.create({
             data: {
               total: totalSecondMethodParsed,
               seller: billState.seller,
@@ -166,9 +169,10 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
               date: now,
             },
           });
+          movements.push(m2);
         }
-      } else {
-        await tx.cashMovement.create({
+      } else if (billState.paidMethod === "Efectivo") {
+        const m = await tx.cashMovement.create({
           data: {
             total: total,
             seller: billState.seller,
@@ -177,19 +181,24 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
             date: now,
           },
         });
+        movements.push(m);
       }
 
-      return order;
+      return { order, movements };
     });
 
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+
+    for (const movement of result.movements) {
+      await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+    }
 
     revalidatePath("/stock");
     revalidatePath("/cashRegister");
     revalidatePath("/account-ledger");
     revalidatePath("/report");
     revalidatePath("/searchBill");
-    return { success: true, orderId: result.id };
+    return { success: true, orderId: result.order.id };
   } catch (error) {
     console.error("Error processing sale:", error);
     return { error: "Error al procesar la venta" };

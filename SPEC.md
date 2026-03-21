@@ -1,597 +1,403 @@
-# SPEC.md - Order Item Tracking and Editing for Account Ledger
-
-## Feature Request Summary
-1. Track when each item was added to unpaid orders (add addedAt field)
-2. Allow editing unpaid orders from the detail page (add/edit/remove items)
-3. When client selects existing client in ClientSelectionModal, add items to their existing unpaid order or create new one with items grouped by date added
+# Bug Analysis: TotalPanel Not Updating After Payment
 
 ---
 
-## Requirements
-
-### R1: OrderItem addedAt Field
-**Description:** Track when each item was added to an unpaid order for identification purposes.
-
-- [ ] Add addedAt field (DateTime) to OrderItem model in Prisma schema
-- [ ] When creating items, set addedAt to current timestamp
-- [ ] When adding items to existing unpaid order, set addedAt to current timestamp
-- [ ] Items should display grouped by addedAt date in the UI
-
-### R2: Edit Unpaid Orders from Detail Page
-**Description:** Allow editing unpaid orders (add/edit/remove items) from the account-ledger/[id] page.
-
-- [ ] Show Edit Items button only for unpaid orders (paidStatus === inpago)
-- [ ] Enable editing product quantity
-- [ ] Enable editing product price
-- [ ] Enable removing items from order
-- [ ] Enable adding new items to order
-- [ ] Recalculate order total when items change
-- [ ] Update client balance accordingly
-- [ ] Create OrderUpdate records for all changes
-
-### R3: ClientSelectionModal Behavior
-**Description:** When selecting an existing client, add items to their existing unpaid order or create new one with items grouped by date.
-
-- [ ] Check if client has existing unpaid order (paidStatus === inpago)
-- [ ] If unpaid order exists: add new items to it with current timestamp
-- [ ] If no unpaid order exists: create new order with items
-- [ ] Display items grouped by date added in order detail view
-- [ ] Show date grouping in the items table (e.g., Agregado el: DD/MM/YYYY HH:MM)
-
----
-
-## Acceptance Criteria
-
-### AC1: Data Model
-- [ ] Prisma schema updated with addedAt field in OrderItem model
-- [ ] npx prisma generate runs successfully
-- [ ] npx prisma db push applies changes to database
-
-### AC2: Item Date Tracking
-- [ ] New orders created via ClientSelectionModal have items with addedAt timestamp
-- [ ] Items added to existing unpaid orders have their own addedAt timestamp
-- [ ] Items table displays items grouped by date added
-- [ ] Date format: DD/MM/YYYY HH:MM (Argentine format)
-
-### AC3: Order Editing
-- [ ] Edit Items button visible on unpaid order detail page
-- [ ] Can increase/decrease item quantity
-- [ ] Can modify item price
-- [ ] Can remove items from order
-- [ ] Can add new items to order
-- [ ] Order total updates automatically when items change
-- [ ] Client balance updates correctly after changes
-- [ ] Cannot edit items on paid orders (button hidden or disabled)
-
-### AC4: Client Selection Flow
-- [ ] When client with unpaid order is selected, new items are added to existing order
-- [ ] When client without unpaid order is selected, new order is created
-- [ ] Items are clearly marked with their addition date
-- [ ] User receives confirmation message after operation
-
-### AC5: Validation and Error Handling
-- [ ] Stock validation for new items added to existing order
-- [ ] Cannot reduce quantity below available stock
-- [ ] Appropriate error messages displayed
-- [ ] Transaction rollback on failure
-
-### AC6: Code Quality
-- [ ] TypeScript strict mode passes
-- [ ] ESLint passes with no errors
-- [ ] All new components have proper types
-- [ ] Server actions return proper ActionResult types
-
----
-
-## Data Model Changes
-
-### Prisma Schema (prisma/schema.prisma)
-
-Add addedAt field to OrderItem model:
-
-model OrderItem {
-  id          String   @id @default(cuid())
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
-  productId   String?
-  product     Product? @relation(fields: [productId], references: [id])
-
-  code        String?
-  description String?
-  costPrice   Float    @default(0)
-  price       Float    @default(0)
-  quantity    Float    @default(0) 
-  subTotal    Float    @default(0) 
-  
-  // NEW: Track when item was added
-  addedAt     DateTime @default(now())
-
-  returnItems SaleReturnItem[]
-  @@index([orderId])
-}
-
----
-
-## File Structure Recommendations
-
-src/
-├── actions/
-│   ├── unpaid-orders.ts        # Modify: addOrderItems, updateOrderItem, removeOrderItem
-│   └── orders.ts               
-├── components/
-│   └── ledger/
-│       ├── ClientSelectionModal.tsx  # Modify: check for existing unpaid order
-│       ├── OrderItemsTable.tsx       # NEW: Grouped items display
-│       ├── EditOrderItems.tsx        # NEW: Edit items component
-│       └── AddItemForm.tsx           # NEW: Add item to order form
-├── app/
-│   └── (protected)/
-│       └── account-ledger/
-│           └── [id]/
-│               └── page.tsx     # Modify: Add edit button, show grouped items
-├── types/
-│   └── order.ts                 # NEW: Order-related types
-└── schemas/
-    └── index.ts                 # Modify: Add validation for order item updates
-
----
-
-## Server Actions to Implement
-
-In src/actions/unpaid-orders.ts:
-
-// Add items to existing order
-export const addItemsToOrder = async (input: AddItemsToOrderInput): Promise<ActionResult>
-
-// Update existing order item
-export const updateOrderItem = async (input: UpdateOrderItemInput): Promise<ActionResult>
-
-// Remove item from order
-export const removeOrderItem = async (input: RemoveOrderItemInput): Promise<ActionResult>
-
-// Check/get client unpaid order
-export const getClientUnpaidOrder = async (clientId: string, businessId: string): Promise<ActionResult>
-
----
-
-## Implementation Steps
-
-### Step 1: Database Changes
-1. Update Prisma schema with addedAt field
-2. Run npx prisma generate
-3. Run npx prisma db push
-
-### Step 2: Update ClientSelectionModal
-1. Fetch existing unpaid order for selected client
-2. If exists: add items to it (call new action)
-3. If not: create new order (existing behavior)
-
-### Step 3: Create Order Item Editing Components
-1. Create OrderItemsTable.tsx with date grouping
-2. Create EditOrderItems.tsx for inline editing
-3. Create AddItemForm.tsx for adding new items
-
-### Step 4: Update Detail Page
-1. Add Edit Items button for unpaid orders
-2. Integrate editing components
-3. Display items grouped by date
-
-### Step 5: Implement Server Actions
-1. Implement addItemsToOrder
-2. Implement updateOrderItem
-3. Implement removeOrderItem
-4. Implement proper stock and balance updates
-
-### Step 6: Testing
-1. Test adding items to new client (no existing order)
-2. Test adding items to client with existing unpaid order
-3. Test editing items (quantity, price)
-4. Test removing items
-5. Test stock validation
-6. Test balance updates
-7. Test date grouping display
-
----
-
-## Related Files to Modify
-
-| File | Change Type | Description |
-|------|-------------|-------------|
-| prisma/schema.prisma | Modify | Add addedAt to OrderItem |
-| src/components/ledger/ClientSelectionModal.tsx | Modify | Check existing unpaid order |
-| src/app/(protected)/account-ledger/[id]/page.tsx | Modify | Add edit functionality |
-| src/actions/unpaid-orders.ts | Modify | Add new server actions |
-| src/types/order.ts | New | Add TypeScript types |
-| src/components/ledger/OrderItemsTable.tsx | New | Display grouped items |
-| src/components/ledger/EditOrderItems.tsx | New | Edit items component |
-
----
-
-## Dependencies
-
----
-
-## BillParametersForm Document Number Bug Fix
+## Bug 1: Account Ledger Payment Flow
 
 ### Bug Description
 
-In `src/components/Billing/BillParametersForm.tsx`, the document number field uses a **dynamic field name** based on the current client condition:
-
-```typescript
-name={
-  form.watch("clientCondition") === ClientConditions.CUIT
-    ? ClientConditions.CUIT
-    : ClientConditions.DNI
-}
-```
-
-However, in the `onSubmit` function, the code **always** tries to read `DNI`:
-
-```typescript
-documentNumber: form.getValues().DNI ?? 0,  // Line 52
-```
+When a user makes a payment in `/src/app/(protected)/account-ledger/[id]/`, the movement appears in `CashRegister.tsx` but `TotalPanel.tsx` does not show the updated balance total.
 
 ### Root Cause Analysis
 
-**Problematic Scenarios:**
+#### Issue 1: Pusher Event Mismatch
 
-| Scenario | Steps | Result |
-|----------|-------|--------|
-| Initial DNI → Change to CUIT | Select DNI, enter value, switch to CUIT, enter value, submit | `form.getValues().DNI` returns `undefined` because field is now named `"CUIT"` ❌ |
-| Initial CUIT | Select CUIT, enter value, submit | `form.getValues().DNI` returns `undefined` ❌ |
-| Initial DNI → Submit | Select DNI, enter value, submit | Works correctly ✓ |
+The `registerPayment` action in `src/actions/unpaid-orders.ts:172-234` creates a `cashMovement` record but **does not trigger the correct Pusher event** for the CashRegister to receive updates.
 
-**Schema Analysis (`src/schemas/index.ts:109-119`):**
-```typescript
-export const BillParametersSchema = z.object({
-  clientCondition: z.string(),
-  // ...
-  CUIT: z.coerce.number().optional(),  // Only one exists at a time
-  DNI: z.coerce.number().optional(),    // Only one exists at a time
-  // ...
-});
+| Location | Channel | Event |
+|----------|---------|-------|
+| `registerPayment` (line 225) | `orders-{businessId}` | `orders-update` |
+| `CashRegister` subscribes (line 47) | `movements-{businessId}` | `new-movement` |
+
+The payment triggers `orders-update` on `orders-{businessId}`, but CashRegister listens for `new-movement` on `movements-{businessId}`. These channels/events do not match.
+
+#### Issue 2: CashBox Balance Not Updated
+
+`TotalPanel` fetches the balance via `getBusinessBalanceAction()` which reads from the `CashBox` model (`src/actions/billing.ts:158-171`).
+
+However, `registerPayment` only creates a `cashMovement` record - it does **NOT** update the `CashBox.total` balance. Therefore, even if the Pusher event were correct, the balance would still show stale data.
+
+#### Code Flow Diagram
+
 ```
+AddPaymentForm → registerPayment → db.cashMovement.create()
+                                      ↓
+                              pusherServer.trigger(
+                                `orders-{id}`,      ← WRONG CHANNEL
+                                "orders-update"     ← WRONG EVENT
+                              )
+                                      ↓
+                              CashBox.total NOT updated
+                                      ↓
+CashRegister (listening on `movements-{id}` for `new-movement`) ← NEVER RECEIVES EVENT
+                                      ↓
+TotalPanel.refreshCount never increments
+                                      ↓
+TotalPanel does NOT re-fetch balance
+```
+
+### Expected Behavior
+
+1. When a payment is registered via `AddPaymentForm`, a `new-movement` Pusher event should be triggered on the `movements-{businessId}` channel
+2. `CashRegister` should receive this event and increment `refreshTotal`
+3. `TotalPanel` should receive the updated `refreshCount` prop and re-fetch the balance
+4. The `CashBox.total` balance should be updated when payments are registered
 
 ### Acceptance Criteria
 
-- [ ] `onSubmit` reads the correct field based on `clientCondition`
-- [ ] When `clientCondition === "CUIT"`, use `form.getValues().CUIT`
-- [ ] When `clientCondition === "DNI"`, use `form.getValues().DNI`
-- [ ] When `clientCondition === "Consumidor Final"`, document number defaults to `0`
-- [ ] `BillState.documentNumber` contains the correct value after form submission
-- [ ] `BillState.typeDocument` and `IVACondition` correctly reflect `clientCondition`
-- [ ] Display logic aligns with submission logic (show correct field based on condition)
+- [ ] When a payment is registered, `CashRegister` receives a Pusher event and displays the new movement
+- [ ] `TotalPanel` updates immediately after a payment is registered
+- [ ] The balance shown in `TotalPanel` reflects all registered payments
+- [ ] Both direct cash movements (via AddButton) and payments on orders trigger the same Pusher event flow
 
-### Proposed Fix
+### Proposed Solution
 
-**Minimal Change - Modify `onSubmit` in `BillParametersForm.tsx:41-57`:**
+#### Fix 1: Trigger Correct Pusher Event in `registerPayment`
+
+In `src/actions/unpaid-orders.ts`, add a Pusher trigger for the `new-movement` event on the `movements-{businessId}` channel after creating the cash movement:
 
 ```typescript
-const onSubmit = () => {
-  const clientCondition = form.getValues().clientCondition;
-  const documentNumber = 
-    clientCondition === ClientConditions.CUIT 
-      ? form.getValues().CUIT ?? 0
-      : clientCondition === ClientConditions.DNI 
-        ? form.getValues().DNI ?? 0
-        : 0;
-      
-  setState({
-    ...form.getValues(),
-    id: "",
-    products: BillState.products,
-    total: BillState.total,
-    totalWithDiscount: BillState.totalWithDiscount,
-    seller: BillState.seller,
-    billType: form.getValues().billType,
-    date: currentDate,
-    typeDocument: clientCondition,
-    documentNumber,
-    IVACondition: clientCondition,
-  });
-  
-  setEditParameters(false);
+// After line 202 (cashMovement.create), add:
+const movement = await tx.cashMovement.create({ data: cashMovementData });
+
+await pusherServer.trigger(
+  `movements-${businessId}`,
+  "new-movement",
+  movement
+);
+```
+
+#### Fix 2: Update CashBox Balance or Calculate from Movements
+
+The `CashBox` balance needs to be updated when payments are registered. Two options:
+
+**Option A:** Update `CashBox` in `registerPayment`:
+```typescript
+await tx.cashBox.upsert({
+  where: { businessId },
+  update: { total: { increment: input.amount } },
+  create: { businessId, total: input.amount },
+});
+```
+
+**Option B:** Have `getBusinessBalanceAction` calculate the balance from `cashMovements` (recommended):
+```typescript
+export const getBusinessBalanceAction = async () => {
+  const session = await auth();
+  if (!session?.user?.businessId) return 0;
+
+  try {
+    const result = await db.cashMovement.aggregate({
+      where: { businessId: session.user.businessId },
+      _sum: { total: true },
+    });
+    return result._sum.total || 0;
+  } catch (error) {
+    console.error("Error fetching business balance:", error);
+    return 0;
+  }
 };
 ```
 
-**Display Logic Fix (`BillParametersForm.tsx:326-330`):**
+Option B is preferred as it provides a real-time balance based on actual movements rather than a cached total.
 
-The display should use the same conditional logic:
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/actions/unpaid-orders.ts` | Add Pusher trigger for `new-movement` event on `movements-{businessId}` channel |
+| `src/actions/billing.ts` | Modify `getBusinessBalanceAction` to calculate from `cashMovements` aggregate |
+
+---
+
+## Bug 2: Mixed Payment (Pago Mixto) Cash Movement Real-time Update Failure
+
+### Bug Description
+
+When paying a bill with mixed payment (pago mixto) in `/src/app/(protected)/newBill/page.tsx`, if the second payment is in "efectivo" (cash), the movement is created and shown in `/src/components/CashRegister.tsx` but `/src/components/TotalPanel.tsx` doesn't update.
+
+### Root Cause Analysis
+
+#### Flow Trace
+
+1. **NewBill Page** (`newBill/page.tsx:13`) wraps content with `BillProvider`
+2. **BillParametersForm** (`BillParametersForm.tsx:186-241`) allows selecting "Dividir pago" (split payment) with two payment methods
+3. **processSaleAction** (`sales.ts:41-197`) is called when a sale is submitted
+
+#### Critical Finding
+
+In `processSaleAction` (`sales.ts:147-180`), cash movements are created for both single and mixed payments:
+
 ```typescript
-{form.watch("clientCondition") === ClientConditions.CUIT && form.getValues().CUIT && (
-  <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-    <span>CUIT:</span>
-    <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().CUIT}</span>
-  </div>
-)}
+// Lines 147-180 in sales.ts
+if (isTwoMethods) {
+  if (total - totalSecondMethodParsed > 0) {
+    await tx.cashMovement.create({ /* first payment */ });
+  }
+  if (totalSecondMethodParsed > 0) {
+    await tx.cashMovement.create({ /* second payment */ });
+  }
+} else {
+  await tx.cashMovement.create({ /* single payment */ });
+}
+```
 
-{form.watch("clientCondition") === ClientConditions.DNI && form.getValues().DNI && (
-  <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-    <span>DNI:</span>
-    <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().DNI}</span>
-  </div>
-)}
+**However**, after creating these movements, ONLY the orders Pusher event is triggered:
+
+```typescript
+// Line 185 in sales.ts
+await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+```
+
+**Missing**: No `pusherServer.trigger()` for `movements-${businessId}` channel with `"new-movement"` event.
+
+#### CashRegister Pusher Subscription
+
+In `CashRegister.tsx:47-59`:
+```typescript
+const channel = pusherClient.subscribe(`movements-${session.user.businessId}`);
+channel.bind("new-movement", (data: Movement) => {
+  setMovements((prev) => [newMovement, ...prev]);
+  setRefreshTotal((prev) => prev + 1);  // Triggers TotalPanel refresh
+});
+```
+
+#### Why TotalPanel Fails
+
+1. `CashRegister` receives no `new-movement` Pusher event
+2. `refreshTotal` state is never incremented
+3. `TotalPanel` depends on `refreshCount` prop to trigger balance re-fetch
+4. Without `refreshCount` change, `TotalPanel` never calls `getBusinessBalanceAction()`
+
+#### Comparison with Working Flows
+
+| Action | Pusher Trigger for Movements |
+|--------|------------------------------|
+| `createMovement` (movements.ts:29-33) | ✅ `pusherServer.trigger("movements-{id}", "new-movement", movement)` |
+| `registerPayment` (unpaid-orders.ts:225) | ✅ `pusherServer.trigger("movements-{id}", "new-movement", movement)` |
+| `processSaleAction` (sales.ts) | ❌ **MISSING** - only triggers `orders-{id}` |
+
+#### Why Movement Appears in CashRegister Table
+
+`revalidatePath("/cashRegister")` is called at line 188, causing server-side re-render. The movement appears in the table because the server data is refreshed, but the **real-time state update chain is broken**.
+
+#### Expected vs Actual Behavior
+
+| Scenario | Expected | Actual |
+|----------|----------|--------|
+| Single cash payment | `new-movement` Pusher event fires, CashRegister updates, TotalPanel updates | Movement appears in table (revalidatePath), but TotalPanel does NOT update |
+| Mixed payment (cash + digital) | Both movements trigger `new-movement`, both components update | Movements in table (revalidatePath), TotalPanel does NOT update |
+| Mixed payment (digital + cash) | Both movements trigger `new-movement`, both components update | Movements in table (revalidatePath), TotalPanel does NOT update |
+
+#### Affected Components
+
+1. `src/components/CashRegister.tsx` - Receives movements via revalidation but no real-time state update
+2. `src/components/TotalPanel.tsx` - Never receives `refreshCount` update, balance stale
+
+### Acceptance Criteria
+
+1. When `processSaleAction` creates any cash movement (single or mixed payment), `pusherServer.trigger()` must fire on `movements-{businessId}` channel with `"new-movement"` event
+2. `CashRegister.tsx` must receive the Pusher event and update both `movements` state and `refreshTotal` state
+3. `TotalPanel.tsx` must receive the `refreshCount` update and re-fetch the balance
+4. All three payment scenarios must work identically:
+   - Single payment (efectivo)
+   - Mixed payment (efectivo + another method)
+   - Mixed payment (another method + efectivo)
+
+### Proposed Solution
+
+#### Modify `src/actions/sales.ts`
+
+After creating cash movements (around line 180), add Pusher triggers for each movement created:
+
+```typescript
+// Store created movements
+const createdMovements = [];
+
+if (isTwoMethods) {
+  if (total - totalSecondMethodParsed > 0) {
+    const m1 = await tx.cashMovement.create({
+      data: {
+        total: total - totalSecondMethodParsed,
+        seller: billState.seller,
+        paidMethod: billState.paidMethod || "Efectivo",
+        businessId: businessId,
+        date: now,
+      },
+    });
+    createdMovements.push(m1);
+  }
+  if (totalSecondMethodParsed > 0) {
+    const m2 = await tx.cashMovement.create({
+      data: {
+        total: totalSecondMethodParsed,
+        seller: billState.seller,
+        paidMethod: billState.secondPaidMethod || "Efectivo",
+        businessId: businessId,
+        date: now,
+      },
+    });
+    createdMovements.push(m2);
+  }
+} else {
+  const m = await tx.cashMovement.create({
+    data: {
+      total: total,
+      seller: billState.seller,
+      paidMethod: billState.paidMethod || "Efectivo",
+      businessId: businessId,
+      date: now,
+    },
+  });
+  createdMovements.push(m);
+}
+
+// Trigger Pusher for each movement created
+for (const movement of createdMovements) {
+  await pusherServer.trigger(
+    `movements-${businessId}`,
+    "new-movement",
+    movement
+  );
+}
 ```
 
 ### Files to Modify
 
-| File | Change | Line(s) |
-|------|--------|---------|
-| `src/components/Billing/BillParametersForm.tsx` | Fix `onSubmit` document number logic | 41-57 |
-| `src/components/Billing/BillParametersForm.tsx` | Fix display logic | 326-330 |
+| File | Changes |
+|------|---------|
+| `src/actions/sales.ts` | Add `pusherServer.trigger()` calls for each cash movement created in `processSaleAction` |
 
-### Test Cases
+### Test Case to Add
 
-| Test | Steps | Expected Result |
-|------|-------|-----------------|
-| TC1 | Select DNI, enter 12345678, submit | `documentNumber: 12345678` |
-| TC2 | Select CUIT, enter 20345678901, submit | `documentNumber: 20345678901` |
-| TC3 | Select "Consumidor Final", submit | `documentNumber: 0` |
-| TC4 | Select DNI, enter value, switch to CUIT, enter value, submit | `documentNumber` = new CUIT value |
-| TC5 | Select CUIT, enter value, switch to DNI, enter value, submit | `documentNumber` = new DNI value |
+In `tests/pusher-payment-flow.test.ts`, add verification that `processSaleAction` triggers `new-movement` events for each cash movement created.
 
 ---
 
-## Printing Replacement: react-to-print → Cross-Browser Alternative
+## Feature: Reset BillParametersForm on Order Creation
 
-### 1. Análisis del Problema
+### Feature Description
 
-#### ¿Por qué react-to-print falla en Android Chrome?
+When a user creates an order (Factura or Remito) in `/src/app/(protected)/newBill/page.tsx`, the `BillParametersForm` should automatically reset to its default values:
+- `paidMethod`: EFECTIVO
+- `clientCondition`: CONSUMIDOR_FINAL
+- `discount`: 0
+- `twoMethods`: false
+- `billType`: C
 
-`react-to-print` funciona utilizando `window.print()` internamente, lo cual genera varios problemas en Android Chrome:
+### Current Behavior
 
-| Problema | Descripción |
-|----------|-------------|
-| **API de impresión limitada** | Android Chrome no expone correctamente la API de impresión en ciertos contextos |
-| **WebViews** | Si la app corre dentro de una WebView (ej: desde otra app), la API de impresión puede no estar disponible |
-| **Print Preview issues** | El preview de impresión en Android Chrome puede fallar o no renderizar correctamente |
-| **Share dialog como fallback** | En lugar de abrir el diálogo de impresión, Android puede abrir el Share dialog |
-| **Inconsistencia de estilos** | CSS `@media print` puede no aplicarse correctamente en el contexto de Android |
+1. User opens `/newBill` page
+2. User edits `BillParametersForm` (changes payment method, IVA condition, discount, etc.)
+3. User adds products and clicks "Facturar" or "Remito"
+4. Order is created successfully via `createSale()` in `BillButtons.tsx`
+5. `removeAll()` clears products after success
+6. **Bug**: `BillParametersForm` retains the modified values instead of resetting
 
-#### Problemas específicos reportados
+### Root Cause Analysis
 
-1. **Issue #187 en react-to-print**: En iPad con Chrome, se imprime toda la UI en lugar del componente seleccionado
-2. **Print.js issue #716**: PDF printing no funciona en Android Chrome/Edge
-3. **Android WebView**: `window.print()` puede no estar disponible en absoluto
+The `BillParametersForm` uses `react-hook-form` with local state (`editParamters`) and updates `BillContext` via `setState()`. After order creation, `removeAll()` is called in `BillButtons.tsx:309` and `BillButtons.tsx:393`, but there's no mechanism to reset the form's local state.
 
----
+The form maintains its own state independent of `BillContext` - the `form.reset()` method from react-hook-form is never called after order completion.
 
-### 2. Comparación de Alternativas
+### Acceptance Criteria
 
-#### 2.1 `@thermal-print/react` (v0.4.0)
+- [ ] After successful order creation (Factura or Remito), `BillParametersForm` resets to default values
+- [ ] Form should reset after `removeAll()` is called (within the 5-second timeout)
+- [ ] If user cancels the order creation, form should retain current values
+- [ ] The `editParamters` state should be `false` after reset
 
-**Repository**: npm - @thermal-print/react  
-**Última actualización**: Diciembre 2025  
-**Weekly Downloads**: ~5 (muy nuevo)  
-**Compatibilidad React**: ^18.0.0  
+### Proposed Solution
 
-| Aspecto | Detalle |
-|--------|---------|
-| **Pros** | ✅ Ofrece 3 paths: ESC/POS, PrintNode IR, HTML/PDF |
-| | ✅ Migration guide desde @react-pdf/renderer |
-| | ✅ Soporte para browser printing |
-| | ✅ React 18/19 compatible |
-| **Contras** | ❌ Muy nuevo (Dic 2025), riesgo de cambios API |
-| | ❌ Pocos downloads, comunidad pequeña |
-| | ❌ No hay issues abiertos para revisar estabilidad |
+#### Architecture Pattern: Event Callback via Context
 
-#### 2.2 `react-thermal-printer` (v0.22.0)
+Extend the existing `BillContext` pattern to support an `onOrderReset` callback.
 
-**Repository**: https://github.com/seokju-na/react-thermal-printer  
-**Stars**: 450 | **Forks**: 62  
-**Weekly Downloads**: ~3,000  
-**Última actualización**: Marzo 2026  
-**Compatibilidad React**: ^18.0.0 || ^19  
+#### Implementation Steps
 
-| Aspecto | Detalle |
-|--------|---------|
-| **Pros** | ✅ Maduro y estable (desde 2022) |
-| | ✅ Soporte React 19 |
-| | ✅ Genera ESC/POS bytes directamente |
-| **Contras** | ❌ Requiere conexión WebUSB/WebSerial al printer |
-| | ❌ No usa dialog de impresión del browser |
-| | ❌ Solo funciona con impresoras térmicas ESC/POS |
+**1. Update `src/context/BillContext.tsx` Interface**
 
-#### 2.3 `html2canvas` + `jspdf` (Manual)
+Add new optional callback properties:
 
-| Aspecto | Detalle |
-|--------|---------|
-| **Pros** | ✅ Total control sobre el output |
-| | ✅ Funciona en todos los browsers |
-| | ✅ PDF generado puede descargarse o imprimirse |
-| **Contras** | ❌ Bundle size alto (~500KB combined) |
-| | ❌ Renderizado asíncrono puede causar FOUC |
-
-#### 2.4 `prntr` (Print.js fork)
-
-| Aspecto | Detalle |
-|--------|---------|
-| **Pros** | ✅ Muy ligero |
-| **Contras** | ❌ **Explicitamente NO funciona en Chrome Mobile** |
-| | ❌ **Explicitamente NO funciona en Safari Mobile** |
-
-#### Comparación Resumida
-
-| Librería | Android Chrome | iOS Safari | Desktop | Thermal Printers |
-|----------|---------------|------------|---------|------------------|
-| `react-to-print` (actual) | ⚠️ Problemas | ✅ | ✅ | ❌ |
-| `@thermal-print/react` | ✅ Esperado | ✅ Esperado | ✅ | ✅ |
-| `react-thermal-printer` | N/A (WebUSB) | ❌ | ✅ (WebUSB) | ✅ |
-| `html2canvas + jspdf` | ✅ | ✅ | ✅ | ❌ |
-
----
-
-### 3. Recomendación
-
-#### Solución Híbrida Recomendada
-
-**Elegir**: `@thermal-print/react` + Fallback con `html2canvas` + `jspdf`
-
-#### Justificación
-
-1. **`@thermal-print/react`** ofrece:
-   - Conversion a HTML (para browser printing estándar)
-   - Conversion a ESC/POS (para impresoras térmicas directas)
-   - Migration guide desde `@react-pdf/renderer` (similar API a lo actual)
-
-2. **Fallback con `html2canvas` + `jspdf`**:
-   - Si `@thermal-print/react` falla
-   - Genera PDF que puede descargarse o imprimirse
-   - Funciona en todos los browsers móviles
-
-3. **Arquitectura propuesta**:
-
-```
-PrintableTable.tsx
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    PrintProvider.tsx                         │
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐  │
-│  │ BrowserPrint  │  │ ThermalPrint  │  │  PDFExport    │  │
-│  │ (default)     │  │ (optional)    │  │  (fallback)   │  │
-│  └───────────────┘  └───────────────┘  └───────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-### 4. Requisitos Detallados
-
-#### 4.1 Requisitos Funcionales
-
-| ID | Requisito | Prioridad |
-|----|-----------|-----------|
-| RF-01 | Imprimir ticket/factura desde Android Chrome | Crítico |
-| RF-02 | Imprimir ticket/factura desde iOS Safari | Crítico |
-| RF-03 | Imprimir ticket/factura desde Desktop browsers | Crítico |
-| RF-04 | Mantener diseño actual del ticket | Alta |
-| RF-05 | Mantener funcionalidad de QR code (CAE) | Alta |
-| RF-06 | Soporte para impresoras térmicas via ESC/POS (opcional) | Media |
-
-#### 4.2 Requisitos No Funcionales
-
-| ID | Requisito | Prioridad |
-|----|-----------|-----------|
-| RNF-01 | Compatibilidad con React 19 | Crítico |
-| RNF-02 | Compatibilidad con Next.js 15 | Crítico |
-| RNF-03 | TypeScript strict mode | Crítico |
-| RNF-04 | Mantener bundle size razonable (<200KB adicional) | Alta |
-
----
-
-### 5. Criterios de Aceptación
-
-| # | Criterio | Método de Verificación |
-|---|----------|------------------------|
-| CA-01 | Impresión funciona en Android Chrome (Chrome 120+) | Test manual en dispositivo físico |
-| CA-02 | Impresión funciona en iOS Safari (iOS 17+) | Test manual en simulador/dispositivo |
-| CA-03 | Impresión funciona en Chrome Desktop (Windows/Mac) | Test manual |
-| CA-04 | QR Code CAE se imprime correctamente | Verificación visual del ticket |
-| CA-05 | Diseño del ticket se mantiene idéntico | Comparación screenshot antes/después |
-| CA-06 | npm run build exitoso | Verificación automática |
-| CA-07 | npm run lint exitoso | Verificación automática |
-
----
-
-### 6. Estructura de Archivos
-
-#### 6.1 Archivos a Modificar
-
-```
-src/
-├── components/
-│   └── Billing/
-│       ├── PrintableTable.tsx     # MODIFICAR - Reemplazar react-to-print
-│       └── PrintableTable.css     # NUEVO - Estilos de impresión
-├── lib/
-│   └── print/                     # NUEVO - Módulo de utilidades
-│       ├── index.ts
-│       ├── BrowserPrint.ts
-│       ├── ThermalPrint.ts
-│       └── PDFExport.ts
-```
-
-#### 6.2 Archivos a Crear
-
-| Archivo | Descripción |
-|---------|-------------|
-| `src/lib/print/index.ts` | Exports centralizados |
-| `src/lib/print/BrowserPrint.ts` | Print via browser API |
-| `src/lib/print/ThermalPrint.ts` | Print via ESC/POS (opcional) |
-| `src/lib/print/PDFExport.ts` | Fallback PDF |
-
-#### 6.3 Archivos a Eliminar
-
-| Archivo | Razón |
-|---------|-------|
-| `react-to-print` (dependency) | Reemplazado |
-
----
-
-### 7. Nuevas Dependencias
-
-#### Dependencias Principales
-
-```json
-{
-  "dependencies": {
-    "@thermal-print/react": "^0.4.0",
-    "html2canvas": "^1.4.1",
-    "jspdf": "^2.5.2"
-  }
+```typescript
+export default interface BillContextProps {
+  // ... existing props
+  onOrderReset?: () => void;
+  setOnOrderReset?: (callback: (() => void) | null) => void;
 }
 ```
 
-#### Análisis de Bundle Size
+**2. Update `src/context/BillProvider.tsx`**
 
-| Paquete | Tamaño Estimado |
-|---------|-----------------|
-| `@thermal-print/react` | ~50KB |
-| `html2canvas` | ~300KB |
-| `jspdf` | ~200KB |
+Add state and handlers for the reset callback:
 
-**Total mínimo estimado**: ~350KB
+```typescript
+const [onOrderReset, setOnOrderReset] = useState<(() => void) | null>(null);
 
----
-
-### 8. Plan de Implementación
-
-#### Fase 1: Setup y Configuración
-1. Instalar dependencias
-2. Crear estructura de archivos `src/lib/print/`
-3. Crear módulo de utilidades
-
-#### Fase 2: Implementación Core
-1. Implementar `BrowserPrint.ts` con fallback logic
-2. Modificar `PrintableTable.tsx` para usar el nuevo sistema
-3. Testear en Desktop
-
-#### Fase 3: Mobile Testing
-1. Testear en Android Chrome (device real)
-2. Testear en iOS Safari (device real)
-3. Ajustar si es necesario
-
-#### Fase 4: Cleanup
-1. Remover `react-to-print` de package.json
-2. Verificar build y lint
-
----
-
-### 9. Checklist de Implementación
-
-```markdown
-- [ ] Instalar dependencias (@thermal-print/react, html2canvas, jspdf)
-- [ ] Crear src/lib/print/
-- [ ] Implementar BrowserPrint.ts
-- [ ] Implementar PDFExport.ts
-- [ ] Modificar PrintableTable.tsx
-- [ ] Test Desktop browsers
-- [ ] Test Android Chrome
-- [ ] Test iOS Safari
-- [ ] Verificar QR code
-- [ ] npm run build exitoso
-- [ ] npm run lint exitoso
-- [ ] Remover react-to-print de package.json
+// In values object:
+onOrderReset: onOrderReset,
+setOnOrderReset: setOnOrderReset,
 ```
+
+**3. Update `src/components/Billing/BillParametersForm.tsx`**
+
+Subscribe to the reset callback using `useEffect`, call `form.reset()` and set `setEditParameters(false)`:
+
+```typescript
+useEffect(() => {
+  if (setOnOrderReset) {
+    setOnOrderReset(() => {
+      form.reset({
+        paidMethod: PaidMethods.EFECTIVO,
+        clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+        discount: 0,
+        twoMethods: false,
+        billType: BillTypes.C,
+        totalSecondMethod: 0,
+        secondPaidMethod: PaidMethods.DEBITO,
+      });
+      setEditParameters(false);
+    });
+  }
+}, [form, setOnOrderReset]);
+```
+
+**4. Update `src/components/Billing/BillButtons.tsx`**
+
+In the Factura confirmation handler (around line 308-310), call the reset callback after `removeAll()`:
+
+```typescript
+onSuccess={() => {
+  removeAll();
+  if (BillState.onOrderReset) {
+    BillState.onOrderReset();
+  }
+}}
+```
+
+Apply the same change to the Remito handler (around line 392-394).
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/context/BillContext.tsx` | Add `onOrderReset` and `setOnOrderReset` to interface |
+| `src/context/BillProvider.tsx` | Implement callback state and handlers |
+| `src/components/Billing/BillParametersForm.tsx` | Subscribe to callback, call `form.reset()` on trigger |
+| `src/components/Billing/BillButtons.tsx` | Invoke callback after successful order |
+
+### Alternative: Direct Ref Approach
+
+Instead of callbacks, use a `useImperativeHandle` pattern to expose a `resetForm()` method from `BillParametersForm`, accessed via ref in the parent page. This requires restructuring `newBill/page.tsx` to manage refs between components.
+
+**Recommendation**: Use the callback approach as it follows existing context patterns, is minimally invasive, keeps components decoupled, and works well with the current component hierarchy.

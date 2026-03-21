@@ -16,13 +16,13 @@ import {
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { BillContext } from "@/context/BillContext";
 import BillTypes from "@/models/billType";
 
 const BillParametersForm = () => {
   const [editParamters, setEditParameters] = useState(false);
-  const { setState, BillState } = useContext(BillContext);
+  const { setState, BillState, setOnOrderReset } = useContext(BillContext);
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
     resolver: zodResolver(BillParametersSchema),
@@ -36,6 +36,24 @@ const BillParametersForm = () => {
       secondPaidMethod: PaidMethods.DEBITO,
     },
   });
+
+  useEffect(() => {
+    if (setOnOrderReset) {
+      setOnOrderReset(() => {
+        form.reset({
+          paidMethod: PaidMethods.EFECTIVO,
+          clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+          discount: 0,
+          twoMethods: false,
+          billType: BillTypes.C,
+          totalSecondMethod: 0,
+          secondPaidMethod: PaidMethods.DEBITO,
+        });
+        setEditParameters(false);
+      });
+    }
+  }, [form, setOnOrderReset]);
+
   const currentDate = useMemo(() => new Date(), []);
 
   const onSubmit = () => {
