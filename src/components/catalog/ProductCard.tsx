@@ -4,7 +4,6 @@ import { memo } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "../ui/card";
@@ -29,7 +28,6 @@ interface ProductCardProps {
 
 const ProductCard = memo(function ProductCard({
   product,
-  isCatalog,
   unitsToOrder,
   onQuantityChange,
   onAddToCart,
