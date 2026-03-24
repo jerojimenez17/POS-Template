@@ -63,6 +63,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.businessId = token.businessId as string | null;
         session.user.businessName = token.businessName as string | null;
+        session.user.businessSlug = token.businessSlug as string | null;
         session.user.image = token.image as string | null;
       }
       return session;
@@ -74,6 +75,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       token.role = existingUser.role;
       token.businessId = existingUser.businessId;
       token.businessName = existingUser.business?.name || null;
+      token.businessSlug = existingUser.business?.slug || null;
       token.image = existingUser.image;
       console.log({ token });
       return token;

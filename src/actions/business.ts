@@ -4,6 +4,25 @@ import { db } from "@/lib/db";
 import { auth } from "../../auth";
 import { revalidatePath } from "next/cache";
 
+export const getBusinessBySlug = async (slug: string) => {
+  try {
+    console.log("slug", slug);
+    const business = await db.business.findUnique({
+      where: { slug: slug.toLowerCase() },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        logo: true,
+      },
+    });
+    return business;
+  } catch (error) {
+    console.error("Error fetching business by slug:", error);
+    return null;
+  }
+};
+
 export const getBusinessStatusAction = async () => {
   const session = await auth();
   const businessId = session?.user?.businessId;
