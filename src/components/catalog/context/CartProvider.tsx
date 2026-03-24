@@ -1,5 +1,5 @@
 "use client";
-import React, { useReducer } from "react";
+import React, { JSX, useReducer } from "react";
 import { CartContext } from "./CartContext";
 import { CartReducer } from "./CartReducer";
 import Product from "../../../models/Product";
