@@ -90,20 +90,18 @@ const PrintableTable = ({
       await printElement(contentRef.current, {
         documentTitle: `Factura_${(state?.date || new Date()).toISOString().split("T")[0]}`,
         pageStyle: `
-          @page { size: 80mm auto; margin: 5mm; }
+          @page { size: 80mm auto; margin: 2mm; }
           @media print {
+            * { color: #000 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             html, body {
               width: 80mm !important;
               min-width: 80mm !important;
               max-width: 80mm !important;
               margin: 0 !important;
               padding: 0 !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
             }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            table { width: 100% !important; table-layout: fixed; }
-            th, td { word-wrap: break-word; font-size: 12px !important; }
+            table { width: 100% !important; border-collapse: collapse; }
+            th, td { border: 1px solid #000; padding: 2px !important; }
             .print-hidden { display: none !important; }
             .print-visible { display: block !important; }
             .hidden { display: none !important; }
@@ -111,6 +109,7 @@ const PrintableTable = ({
         `,
         fallbackToPDF: true,
         format: "thermal",
+        highContrast: true,
       });
     }
   }, [state?.date]);

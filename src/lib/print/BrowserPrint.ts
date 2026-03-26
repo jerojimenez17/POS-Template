@@ -13,6 +13,7 @@ export interface PrintOptions {
 export interface BrowserPrintOptions extends PrintOptions {
   fallbackToPDF?: boolean;
   onFallback?: () => void;
+  highContrast?: boolean;
 }
 
 const DEFAULT_PAGE_STYLE = `
@@ -66,93 +67,57 @@ async function tryBrowserPrint(
 
     const printDocument = printWindow.document;
     
+    const highContrastStyles = options.highContrast ? `
+      * { color: #000 !important; background-color: transparent !important; }
+      .text-gray-300, .text-gray-400, .text-gray-500, .text-gray-600, .text-gray-700 { color: #000 !important; }
+      .bg-gray-50, .bg-gray-100 { background-color: transparent !important; border: 1px solid #000; }
+      img, svg { filter: grayscale(100%) brightness(0.8) contrast(2); }
+    ` : "";
+
     const criticalStyles = `
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { 
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
         font-size: 14px;
         line-height: 1.5;
-        color: #1f2937;
+        color: #000;
       }
       .print-hidden { display: none !important; }
       .print-visible { display: block !important; }
       .print-visible-inline { display: inline !important; }
-      h1, h2, h3, h4 { font-weight: 700; }
+      h1, h2, h3, h4 { font-weight: 700; color: #000; }
       table { width: 100%; border-collapse: collapse; }
-      th, td { padding: 8px; text-align: left; }
-      .border-b { border-bottom: 1px solid #e5e7eb; }
-      .border-t { border-top: 1px solid #e5e7eb; }
-      .border-gray-200 { border-color: #e5e7eb; }
-      .border-gray-300 { border-color: #d1d5db; }
+      th, td { padding: 4px; text-align: left; }
+      .border-b { border-bottom: 1px solid #000; }
+      .border-t { border-top: 1px solid #000; }
+      .border-gray-200, .border-gray-300 { border-color: #000; }
       .text-center { text-align: center; }
       .text-right { text-align: right; }
       .text-left { text-align: left; }
       .font-bold, .font-semibold { font-weight: 700; }
       .font-medium { font-weight: 500; }
-      .text-sm { font-size: 0.875rem; }
-      .text-xs { font-size: 0.75rem; }
-      .text-lg { font-size: 1.125rem; }
+      .text-sm { font-size: 12px; }
+      .text-xs { font-size: 10px; }
+      .text-lg { font-size: 16px; }
       .uppercase { text-transform: uppercase; }
-      .tracking-tight { letter-spacing: -0.025em; }
-      .tracking-wide { letter-spacing: 0.025em; }
       .tabular-nums { font-variant-numeric: tabular-nums; }
       .flex { display: flex; }
       .grid { display: grid; }
       .flex-col { flex-direction: column; }
       .flex-1 { flex: 1; }
-      .shrink-0 { flex-shrink: 0; }
       .items-center { align-items: center; }
       .justify-between { justify-content: space-between; }
       .justify-center { justify-content: center; }
       .justify-end { justify-content: flex-end; }
-      .gap-2 { gap: 0.5rem; }
-      .gap-4 { gap: 1rem; }
+      .gap-2 { gap: 4px; }
+      .gap-4 { gap: 8px; }
       .w-full { width: 100%; }
-      .w-72 { width: 18rem; }
-      .max-w-\\[300px\\] { max-width: 300px; }
-      .max-w-\\[200px\\] { max-width: 200px; }
       .mx-auto { margin-left: auto; margin-right: auto; }
-      .my-2 { margin-top: 0.5rem; margin-bottom: 0.5rem; }
-      .mt-2 { margin-top: 0.5rem; }
-      .mt-3 { margin-top: 0.75rem; }
-      .mt-4 { margin-top: 1rem; }
-      .mt-8 { margin-top: 2rem; }
-      .mb-2 { margin-bottom: 0.5rem; }
-      .mb-4 { margin-bottom: 1rem; }
-      .mb-3 { margin-bottom: 0.75rem; }
-      .pt-2 { padding-top: 0.5rem; }
-      .pt-4 { padding-top: 1rem; }
-      .pb-4 { padding-bottom: 1rem; }
-      .pb-8 { padding-bottom: 2rem; }
-      .px-1 { padding-left: 0.25rem; padding-right: 0.25rem; }
-      .px-4 { padding-left: 1rem; padding-right: 1rem; }
-      .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
-      .py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
-      .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
-      .p-1 { padding: 0.25rem; }
-      .p-4 { padding: 1rem; }
-      .space-y-2 > * + * { margin-top: 0.5rem; }
-      .text-gray-300 { color: #d1d5db; }
-      .text-gray-400 { color: #9ca3af; }
-      .text-gray-500 { color: #6b7280; }
-      .text-gray-600 { color: #4b5563; }
-      .text-gray-700 { color: #374151; }
-      .text-gray-800 { color: #1f2937; }
-      .text-green-600 { color: #059669; }
-      .text-green-700 { color: #047857; }
-      .text-orange-700 { color: #c2410c; }
-      .bg-white { background-color: #ffffff; }
-      .bg-gray-50 { background-color: #f9fafb; }
-      .bg-gray-100 { background-color: #f3f4f6;; }
-      .leading-tight { line-height: 1.25; }
-      .italic { font-style: italic; }
-      .rounded-sm { border-radius: 0.125rem; }
-      .border-2 { border-width: 2px; }
-      .border-dashed { border-style: dashed; }
-      .h-px { height: 1px; }
-      .text-\\[9px\\] { font-size: 9px; }
-      .text-\\[13px\\] { font-size: 13px; }
-      .text-\\[14px\\] { font-size: 14px; }
+      .mt-2 { margin-top: 4px; }
+      .mt-4 { margin-top: 8px; }
+      .mb-2 { margin-bottom: 4px; }
+      .mb-4 { margin-bottom: 8px; }
+      ${highContrastStyles}
     `;
 
     printDocument.write(`
