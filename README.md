@@ -1,4 +1,4 @@
-# MPOS: Modern Point of Sale System 🚀
+# Stock.ia: Modern Point of Sale System 🚀
 
 This POS is a robust, full-stack Point of Sale and Inventory Management system built to showcase modern web development practices. It demonstrates how to build a scalable, real-time, multi-tenant B2B application handling complex business logic, transactions, and role-based access control.
 
