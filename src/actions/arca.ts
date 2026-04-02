@@ -90,3 +90,42 @@ export const getBusinessArcaData = async (
         return { error: "Error al obtener datos de ARCA" };
     }
 }
+
+export const getArcaCredentialsForBilling = async () => {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+
+    if (!businessId) {
+        return { error: "No autorizado" };
+    }
+
+    try {
+        const business = await db.business.findUnique({
+            where: { id: businessId },
+            select: {
+                cuit: true,
+                cert: true,
+                key: true,
+            },
+        });
+
+        if (!business) {
+            return { error: "Negocio no encontrado" };
+        }
+
+        if (!business.cuit || !business.cert || !business.key) {
+            return { error: "Credenciales de ARCA incompletas. Por favor consulte con soporte." };
+        }
+
+        return {
+            success: {
+                cuit: business.cuit,
+                cert: business.cert,
+                key: business.key,
+            },
+        };
+    } catch (error) {
+        console.error("Get ARCA Credentials Error:", error);
+        return { error: "Error al obtener credenciales de ARCA" };
+    }
+};

@@ -14,7 +14,7 @@ import { Inter } from "next/font/google";
 import { getBusinessBillingInfoAction } from "@/actions/business";
 import moment from "moment";
 import { QRCodeSVG } from "qrcode.react";
-import { printElement } from "@/lib/print";
+import { printThermalReceipt, type ThermalReceiptData } from "@/lib/print";
 
 // Dynamically import scanner to avoid SSR issues
 const Scanner = dynamic(
@@ -86,33 +86,43 @@ const PrintableTable = ({
   }, []);
 
   const handlePrint = useCallback(async () => {
-    if (contentRef.current) {
-      await printElement(contentRef.current, {
-        documentTitle: `Factura_${(state?.date || new Date()).toISOString().split("T")[0]}`,
-        pageStyle: `
-          @page { size: 80mm auto; margin: 2mm; }
-          @media print {
-            * { color: #000 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            html, body {
-              width: 80mm !important;
-              min-width: 80mm !important;
-              max-width: 80mm !important;
-              margin: 0 !important;
-              padding: 0 !important;
-            }
-            table { width: 100% !important; border-collapse: collapse; }
-            th, td { border: 1px solid #000; padding: 2px !important; }
-            .print-hidden { display: none !important; }
-            .print-visible { display: block !important; }
-            .hidden { display: none !important; }
-          }
-        `,
-        fallbackToPDF: true,
-        format: "thermal",
-        highContrast: true,
-      });
-    }
-  }, [state?.date]);
+    const receiptData: ThermalReceiptData = {
+      businessName: session?.user?.businessName || "Mi Comercio",
+      businessInfo: billingInfo ? {
+        razonSocial: billingInfo.razonSocial,
+        cuit: billingInfo.cuit,
+        condicionIva: billingInfo.condicionIva,
+        address: billingInfo.address,
+      } : undefined,
+      date: state.date || new Date(),
+      documentType: state.typeDocument || "DNI",
+      billType: state.CAE?.CAE ? (state.billType || "C") : "Remito",
+      seller: state.seller || session?.user?.email || "",
+      paidMethod: state.paidMethod || "Efectivo",
+      client: state.client,
+      clientIvaCondition: state.clientIvaCondition,
+      clientDocumentNumber: state.clientDocumentNumber,
+      products: state.products.map((p) => ({
+        description: p.description,
+        amount: p.amount,
+        unitPrice: p.salePrice,
+        subtotal: p.salePrice * p.amount,
+      })),
+      subtotal: state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0),
+      discount: state.discount > 0 ? state.discount : undefined,
+      discountAmount: state.discount > 0
+        ? state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0) * (state.discount / 100)
+        : undefined,
+      total: state.totalWithDiscount || state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0) * (1 - state.discount / 100),
+      cae: state.CAE?.CAE ? {
+        cae: state.CAE.CAE,
+        vencimiento: state.CAE.vencimiento,
+        qrData: state.CAE.qrData,
+      } : undefined,
+    };
+
+    await printThermalReceipt(receiptData);
+  }, [state, session, billingInfo]);
 
   useEffect(() => {
     if (errorMessage) {

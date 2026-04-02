@@ -16,6 +16,220 @@ export interface BrowserPrintOptions extends PrintOptions {
   highContrast?: boolean;
 }
 
+const THERMAL_WIDTH = 40;
+
+function centerText(text: string, width: number = THERMAL_WIDTH): string {
+  const padding = Math.max(0, Math.floor((width - text.length) / 2));
+  return " ".repeat(padding) + text;
+}
+
+function padRight(text: string, width: number = THERMAL_WIDTH): string {
+  return text.slice(0, width).padEnd(width);
+}
+
+function padLeft(text: string, width: number = THERMAL_WIDTH): string {
+  return text.slice(0, width).padStart(width);
+}
+
+function formatLine(left: string, right: string, width: number = THERMAL_WIDTH): string {
+  const maxLeft = Math.floor(width * 0.6);
+  const maxRight = Math.floor(width * 0.4);
+  return padRight(left.slice(0, maxLeft), maxLeft) + padLeft(right.slice(0, maxRight), maxRight);
+}
+
+function divider(char: string = "-", width: number = THERMAL_WIDTH): string {
+  return char.repeat(width);
+}
+
+export interface ThermalReceiptData {
+  businessName: string;
+  businessInfo?: {
+    razonSocial?: string | null;
+    cuit?: string | null;
+    condicionIva?: string | null;
+    address?: string | null;
+  };
+  date: Date;
+  documentType: string;
+  billType: string;
+  seller?: string;
+  paidMethod: string;
+  client?: string;
+  clientIvaCondition?: string;
+  clientDocumentNumber?: string;
+  products: Array<{
+    description: string;
+    amount: number;
+    unitPrice: number;
+    subtotal: number;
+  }>;
+  subtotal: number;
+  discount?: number;
+  discountAmount?: number;
+  total: number;
+  cae?: {
+    cae: string;
+    vencimiento: string;
+    qrData?: string;
+  };
+}
+
+export function generateThermalReceipt(data: ThermalReceiptData): string {
+  const lines: string[] = [];
+  
+  lines.push(centerText(data.businessName));
+  lines.push("");
+  
+  if (data.businessInfo?.razonSocial) {
+    lines.push(centerText(data.businessInfo.razonSocial));
+  }
+  
+  if (data.businessInfo?.cuit) {
+    lines.push(centerText(`CUIT: ${data.businessInfo.cuit}`));
+  }
+  
+  if (data.businessInfo?.condicionIva) {
+    lines.push(centerText(data.businessInfo.condicionIva.replace(/_/g, " ")));
+  }
+  
+  if (data.businessInfo?.address) {
+    lines.push(centerText(data.businessInfo.address));
+  }
+  
+  lines.push("");
+  lines.push(divider());
+  
+  const dateStr = new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(data.date);
+  lines.push(formatLine("Fecha:", dateStr));
+  
+  const docType = data.documentType || "DNI";
+  if (data.client) {
+    lines.push(formatLine("Cliente:", data.client));
+    if (data.clientIvaCondition && 
+        data.clientIvaCondition.toLowerCase() !== "consumidor final" &&
+        data.clientIvaCondition.toLowerCase() !== "consumidor_final") {
+      lines.push(formatLine(docType + ":", data.clientDocumentNumber || ""));
+      lines.push(formatLine("Cond.IVA:", data.clientIvaCondition.replace(/_/g, " ")));
+    }
+  }
+  
+  lines.push(formatLine("Tipo:", data.billType || "Remito"));
+  lines.push(formatLine("Pago:", data.paidMethod));
+  lines.push(formatLine("Vendedor:", data.seller || ""));
+  
+  lines.push(divider());
+  
+  lines.push(centerText("DETALLE"));
+  lines.push(divider("="));
+  
+  for (const p of data.products) {
+    const desc = p.description.slice(0, 20);
+    const qty = `x${p.amount}`;
+    const price = `$${p.subtotal.toFixed(2)}`;
+    lines.push(desc);
+    lines.push(formatLine(qty + " x $" + p.unitPrice.toFixed(2), price));
+  }
+  
+  lines.push(divider());
+  
+  lines.push(formatLine("Subtotal:", "$" + data.subtotal.toFixed(2)));
+  
+  if (data.discount && data.discount > 0 && data.discountAmount) {
+    lines.push(formatLine(`Desc(${data.discount}%):`, "-$" + data.discountAmount.toFixed(2)));
+  }
+  
+  lines.push(divider("="));
+  lines.push(formatLine("TOTAL:", "$" + data.total.toFixed(2)));
+  lines.push(divider("="));
+  lines.push("");
+  
+  if (data.cae?.cae) {
+    lines.push(centerText("** COMPROBANTE AUTORIZADO **"));
+    lines.push("");
+    lines.push(formatLine("CAE:", data.cae.cae));
+    lines.push(formatLine("Vto:", data.cae.vencimiento));
+    lines.push("");
+    lines.push(centerText("Verifique en: www.afip.gob.ar"));
+    lines.push("");
+    if (data.cae.qrData) {
+      lines.push(centerText("[QR CODE]"));
+      lines.push(centerText(data.cae.qrData));
+    }
+  }
+  
+  lines.push("");
+  lines.push(centerText("* GRACIAS POR SU COMPRA *"));
+  lines.push("");
+  
+  return lines.join("\n");
+}
+
+export async function printThermalReceipt(data: ThermalReceiptData): Promise<boolean> {
+  try {
+    const receipt = generateThermalReceipt(data);
+    
+    const printWindow = window.open("", "_blank", "width=350,height=600");
+    if (!printWindow) {
+      console.warn("Could not open print window");
+      return false;
+    }
+    
+    const printDocument = printWindow.document;
+    
+    printDocument.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Ticket</title>
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            html, body {
+              width: 80mm;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 12px;
+              line-height: 1.3;
+              color: #000;
+              background: #fff;
+              overflow: hidden;
+            }
+            @media print {
+              body { width: 80mm !important; }
+            }
+            pre {
+              white-space: pre-wrap;
+              word-wrap: break-word;
+              text-align: center;
+              padding: 5mm;
+            }
+          </style>
+        </head>
+        <body>
+          <pre>${receipt.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    
+    printDocument.close();
+    return true;
+  } catch (error) {
+    console.error("Thermal print error:", error);
+    return false;
+  }
+}
+
 const DEFAULT_PAGE_STYLE = `
   @page { size: auto; margin: 10mm; }
   @media print {
