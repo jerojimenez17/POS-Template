@@ -23,6 +23,9 @@ interface BillingModalProps {
   onOpenChange: (open: boolean) => void;
   sale: BillState;
   onSuccess: () => void;
+  cuit: string;
+  encryptedCert: string;
+  encryptedKey: string;
 }
 
 const BillingModal = ({
@@ -30,6 +33,9 @@ const BillingModal = ({
   onOpenChange,
   sale,
   onSuccess,
+  cuit,
+  encryptedCert,
+  encryptedKey,
 }: BillingModalProps) => {
   const [loading, setLoading] = useState(false);
   const [ivaCondition, setIvaCondition] = useState("Consumidor Final");
@@ -57,7 +63,7 @@ const BillingModal = ({
         documentNumber: Number(documentNumber),
         paidMethod: paymentMethod,
         discount: discount,
-        // Ensure totals are recalculated if needed or trust the backend/service handles it based on products? 
+        // Ensure totals are recalculated if needed or trust the backend/service handles it based on products?
         // postBill sends the whole object. If we change discount, we might need to recalculate totalWithDiscount.
         // For simplicity, we assume generic values for now or recalculate if needed.
         // But changing discount here might be tricky if "Totales" are displayed from `sale` prop.
@@ -66,11 +72,17 @@ const BillingModal = ({
       };
 
       // Recalculate total if discount changed (optional, if allowed)
-      // For now, let's assume discount is read-only or we keep it simple. 
-      // User prompt says "Allow entering... Totales". Usually totals are derived. 
+      // For now, let's assume discount is read-only or we keep it simple.
+      // User prompt says "Allow entering... Totales". Usually totals are derived.
       // Maybe just display totals.
-      
-      const resp = await postBill(billToProcess);
+
+      const resp = await postBill({
+        action: "createVoucher",
+        cuit,
+        encryptedCert,
+        encryptedKey,
+        billState: billToProcess,
+      });
 
       if (resp && resp.afip) {
         // Success
@@ -91,7 +103,9 @@ const BillingModal = ({
         onSuccess();
         onOpenChange(false);
       } else {
-        toast.error("Error al crear factura: " + (resp || "Respuesta inválida"));
+        toast.error(
+          "Error al crear factura: " + (resp || "Respuesta inválida"),
+        );
       }
     } catch (error) {
       console.error(error);
@@ -105,7 +119,9 @@ const BillingModal = ({
     }
   };
 
-  const handleDocumentNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocumentNumberChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const val = e.target.value;
     if (/^\d*$/.test(val)) {
       setDocumentNumber(val);
@@ -116,7 +132,7 @@ const BillingModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px] bg-white text-black">
+      <DialogContent className="sm:max-w-106.25 bg-white text-black">
         <DialogHeader>
           <DialogTitle className="text-pink-400">Facturar Venta</DialogTitle>
           <DialogDescription>
@@ -124,12 +140,9 @@ const BillingModal = ({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          
           {/* Tipo de Comprobante - Fixed */}
           <div className="grid grid-cols-4 items-center gap-4">
-            <label className="text-right text-sm text-gray-500">
-              Tipo
-            </label>
+            <label className="text-right text-sm text-gray-500">Tipo</label>
             <Input
               disabled
               value="Factura C"
@@ -143,25 +156,28 @@ const BillingModal = ({
               Condición
             </label>
             <div className="col-span-3">
-                <Select
-                    id="iva"
-                    active={true}
-                    value={ivaCondition}
-                    options={["Consumidor Final", "CUIT", "DNI"]}
-                    handleChange={(e) => {
-                        setIvaCondition(e.target.value);
-                        if (e.target.value === "Consumidor Final") {
-                            setDocumentNumber("");
-                        }
-                    }}
-                />
+              <Select
+                id="iva"
+                active={true}
+                value={ivaCondition}
+                options={["Consumidor Final", "CUIT", "DNI"]}
+                handleChange={(e) => {
+                  setIvaCondition(e.target.value);
+                  if (e.target.value === "Consumidor Final") {
+                    setDocumentNumber("");
+                  }
+                }}
+              />
             </div>
           </div>
 
           {/* Document Number */}
           {ivaCondition !== "Consumidor Final" && (
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="docNumber" className="text-right text-sm text-gray-500">
+              <label
+                htmlFor="docNumber"
+                className="text-right text-sm text-gray-500"
+              >
                 {ivaCondition === "CUIT" ? "CUIT" : "DNI"}
               </label>
               <Input
@@ -176,35 +192,48 @@ const BillingModal = ({
 
           {/* Forma de Pago */}
           <div className="grid grid-cols-4 items-center gap-4">
-            <label htmlFor="payment" className="text-right text-sm text-gray-500">
+            <label
+              htmlFor="payment"
+              className="text-right text-sm text-gray-500"
+            >
               Pago
             </label>
             <div className="col-span-3">
-                <Select
-                    id="payment"
-                    active={true}
-                    value={paymentMethod}
-                    options={paidMethods.map((pm) => pm.name)}
-                    handleChange={(e) => setPaymentMethod(e.target.value)}
-                />
+              <Select
+                id="payment"
+                active={true}
+                value={paymentMethod}
+                options={paidMethods.map((pm) => pm.name)}
+                handleChange={(e) => setPaymentMethod(e.target.value)}
+              />
             </div>
           </div>
 
           {/* Totales */}
           <div className="flex justify-end pt-4">
             <div className="text-lg font-bold text-pink-400">
-              Total: ${totalToDisplay.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+              Total: $
+              {totalToDisplay.toLocaleString("es-AR", {
+                minimumFractionDigits: 2,
+              })}
             </div>
           </div>
-
         </div>
         <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-                Cancelar
-            </Button>
-            <Button onClick={handleBilling} disabled={loading} className="bg-pink-400 hover:bg-pink-500 text-white">
-                {loading ? "Facturando..." : "Facturar"}
-            </Button>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleBilling}
+            disabled={loading}
+            className="bg-pink-400 hover:bg-pink-500 text-white"
+          >
+            {loading ? "Facturando..." : "Facturar"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
