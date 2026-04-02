@@ -21,9 +21,8 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
   const [openBilling, setOpenBilling] = useState(false);
 
   return (
-    <div className="rounded p-4 bg-white shadow-sm hover:shadow-md transition-shadow m-1 border border-gray-100 dark:border-gray-800 text-xs sm:text-sm md:text-base w-[700px] sm:w-full min-w-max">
+    <div className="rounded p-4 bg-white shadow-sm hover:shadow-md transition-shadow m-1 border border-gray-100 dark:border-gray-800 text-xs sm:text-sm md:text-base w-175 sm:w-full min-w-max">
       <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px_40px] items-center gap-4 text-gray-700 dark:text-gray-300">
-        
         {/* Date */}
         <div className="font-medium text-gray-900 dark:text-gray-100">
           {sale.date?.toLocaleDateString()}
@@ -32,7 +31,9 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
         {/* Invoice / CAE */}
         <div>
           {sale.CAE?.CAE && sale.CAE.CAE !== "" ? (
-            <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">{sale.CAE.CAE}</span>
+            <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">
+              {sale.CAE.CAE}
+            </span>
           ) : (
             <button
               onClick={() => setOpenBilling(true)}
@@ -74,17 +75,15 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
         </Link>
 
         {/* Action: Print */}
-        <div 
-          className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors" 
+        <div
+          className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
           onClick={onClick}
         >
           <PrintButton onClick={onClick} />
         </div>
 
         {/* Action: Delete */}
-        <div 
-          className="flex justify-center items-center p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors" 
-        >
+        <div className="flex justify-center items-center p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
           <DeleteButton
             disable={user?.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL}
             onClick={(e) => {
@@ -112,16 +111,18 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
         }}
         visible={openDelete}
       />
-      
+
       <BillingModal
         open={openBilling}
         onOpenChange={setOpenBilling}
         sale={sale}
+        cuit={process.env.NEXT_PUBLIC_CUIT ?? ""}
+        encryptedCert={process.env.NEXT_PUBLIC_ENCRYPTED_CERT ?? ""}
+        encryptedKey={process.env.NEXT_PUBLIC_ENCRYPTED_KEY ?? ""}
         onSuccess={() => {
           setOpenBilling(false);
         }}
       />
-
     </div>
   );
 };
