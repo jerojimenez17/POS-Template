@@ -116,9 +116,6 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
         open={openBilling}
         onOpenChange={setOpenBilling}
         sale={sale}
-        cuit={process.env.NEXT_PUBLIC_CUIT ?? ""}
-        encryptedCert={process.env.NEXT_PUBLIC_ENCRYPTED_CERT ?? ""}
-        encryptedKey={process.env.NEXT_PUBLIC_ENCRYPTED_KEY ?? ""}
         onSuccess={() => {
           setOpenBilling(false);
         }}

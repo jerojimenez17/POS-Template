@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 const ALGORITHM = "aes-256-cbc";
-const ENCRYPTION_KEY = process.env.ARCA_ENCRYPTION_KEY || "default-secret-key-32-chars-long!!"; // Must be 32 chars
+const ENCRYPTION_KEY = process.env.ARCA_ENCRYPTION_KEY || "12345678901234567890123456789012"; // Must be 32 chars
 const IV_LENGTH = 16;
 
 export function encrypt(text: string) {
