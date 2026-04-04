@@ -7,9 +7,8 @@ import { BillContext } from "@/context/BillContext";
 import Modal from "../Modal";
 import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
-import postBill from "@/services/AFIPService";
+import { createAfipVoucherAction } from "@/actions/afip";
 import { processSaleAction, updateOrderAction } from "@/actions/sales";
-import { getArcaCredentialsForBilling } from "@/actions/arca";
 import { toast, Toaster } from "sonner";
 import Spinner from "../ui/Spinner";
 import ClientSelectionModal from "../ledger/ClientSelectionModal";
@@ -74,33 +73,23 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
   const handleCreateVoucher = async (): Promise<CAE | null> => {
     if (!checkConnection()) return null;
     try {
-      console.log("Before createAfipVoucher");
+      console.log("Calling createAfipVoucherAction");
+      const resp = await createAfipVoucherAction(BillState);
 
-      const credentials = await getArcaCredentialsForBilling();
-      if (credentials.error) {
-        toast.error(credentials.error);
+      if (resp.error) {
+        toast.error(resp.error);
         setBlockButton(false);
         return null;
       }
 
-      const { cuit, cert, key } = credentials.success!;
-
-      const resp = await postBill({
-        action: "createVoucher",
-        cuit: cuit!,
-        encryptedCert: cert!,
-        encryptedKey: key!,
-        billState: BillState,
-      });
-      const afipData = resp.afip || resp;
+      const afipData = resp.data.afip || resp.data;
       if (afipData?.CAE) {
-        console.log(resp);
         setCreateVoucherError(false);
         const newCAE: CAE = {
           CAE: afipData.CAE,
           vencimiento: afipData.CAEFchVto,
-          nroComprobante: resp.nroCbte || afipData.nroCbte || 0,
-          qrData: resp.qrData || afipData.qrData || "",
+          nroComprobante: resp.data.nroCbte || afipData.nroCbte || 0,
+          qrData: resp.data.qrData || afipData.qrData || "",
         };
         CAE(newCAE);
         setLocalCAE(newCAE);
@@ -108,8 +97,10 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
         setBlockButton(false);
         return newCAE;
       } else {
-        toast.error(typeof resp === "string" ? resp : JSON.stringify(resp));
-        setResponse(typeof resp === "string" ? resp : JSON.stringify(resp));
+        const errorMsg = typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data);
+        toast.error(errorMsg);
+        setResponse(errorMsg);
+        setBlockButton(false);
         return null;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

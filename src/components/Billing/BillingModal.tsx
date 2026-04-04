@@ -12,7 +12,7 @@ import {
 import Select from "./Select";
 import BillState from "@/models/BillState";
 import { toast } from "sonner";
-import postBill from "@/services/AFIPService";
+import { createAfipVoucherAction } from "@/actions/afip";
 import { updateSale } from "@/services/firebaseService";
 import { Input } from "../ui/input";
 import { paidMethods } from "@/utils/PaidMethods";
@@ -23,9 +23,6 @@ interface BillingModalProps {
   onOpenChange: (open: boolean) => void;
   sale: BillState;
   onSuccess: () => void;
-  cuit: string;
-  encryptedCert: string;
-  encryptedKey: string;
 }
 
 const BillingModal = ({
@@ -33,9 +30,6 @@ const BillingModal = ({
   onOpenChange,
   sale,
   onSuccess,
-  cuit,
-  encryptedCert,
-  encryptedKey,
 }: BillingModalProps) => {
   const [loading, setLoading] = useState(false);
   const [ivaCondition, setIvaCondition] = useState("Consumidor Final");
@@ -76,22 +70,16 @@ const BillingModal = ({
       // User prompt says "Allow entering... Totales". Usually totals are derived.
       // Maybe just display totals.
 
-      const resp = await postBill({
-        action: "createVoucher",
-        cuit,
-        encryptedCert,
-        encryptedKey,
-        billState: billToProcess,
-      });
+      const resp = await createAfipVoucherAction(billToProcess);
 
-      if (resp && resp.afip) {
+      if (resp.success && resp.data.afip) {
         // Success
         await updateSale(sale.id, {
           CAE: {
-            CAE: resp.afip.CAE,
-            vencimiento: resp.afip.CAEFchVto,
-            nroComprobante: resp.nroCbte,
-            qrData: resp.qrData,
+            CAE: resp.data.afip.CAE,
+            vencimiento: resp.data.afip.CAEFchVto,
+            nroComprobante: resp.data.nroCbte || resp.data.afip.nroCbte,
+            qrData: resp.data.qrData || resp.data.afip.qrData,
           },
           // Also update these fields in case they changed
           IVACondition: ivaCondition,
@@ -104,7 +92,7 @@ const BillingModal = ({
         onOpenChange(false);
       } else {
         toast.error(
-          "Error al crear factura: " + (resp || "Respuesta inválida"),
+          "Error al crear factura: " + (resp.error || "Respuesta inválida"),
         );
       }
     } catch (error) {
