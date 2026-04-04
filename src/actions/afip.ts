@@ -51,9 +51,17 @@ export const createAfipVoucherAction = async (billState: BillState) => {
     );
 
     return { success: true, data: response.data };
-  } catch (error: any) {
-    console.error("Cloud Function Error:", error.response?.data || error.message);
-    const errorMsg = error.response?.data?.error || error.message || "Error al comunicarse con el servicio de AFIP";
+  } catch (error: unknown) {
+    let errorMsg = "Error al comunicarse con el servicio de AFIP";
+    
+    if (axios.isAxiosError(error)) {
+      console.error("Cloud Function Error:", error.response?.data || error.message);
+      errorMsg = error.response?.data?.error || error.message || errorMsg;
+    } else if (error instanceof Error) {
+      console.error("Error:", error.message);
+      errorMsg = error.message;
+    }
+    
     return { error: errorMsg };
   }
 };
