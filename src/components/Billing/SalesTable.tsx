@@ -27,7 +27,7 @@ interface props {
 const SalesTable = ({ sales = [], session }: props) => {
   const { user } = useAuthContext();
   const [printTrigger, setPrintTrigger] = useState(0);
-  const [externalState, setExternalState] = useState<BillState>();
+  const [externalState] = useState<BillState>();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -169,14 +169,9 @@ const SalesTable = ({ sales = [], session }: props) => {
               {currentSales.map((sale) => (
                 <SaleAccordion
                   user={user}
+                  session={session}
                   key={sale.id}
                   sale={sale}
-                  onClick={() => {
-                    setExternalState(sale);
-                    setTimeout(() => {
-                      setPrintTrigger((prev) => prev + 1);
-                    }, 100);
-                  }}
                 />
               ))}
               {currentSales.length === 0 && (

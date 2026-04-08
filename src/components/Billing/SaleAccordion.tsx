@@ -3,19 +3,20 @@ import Link from "next/link";
 import BillState from "@/models/BillState";
 import BillingModal from "./BillingModal";
 import React, { useState } from "react";
-import PrintButton from "./PrintButton";
+import PrintOptionsPopover from "./PrintOptionsPopover";
 import { deleteDoc, doc } from "firebase/firestore";
 import { User } from "firebase/auth";
 import DeleteButton from "../DeleteButton";
 import Modal from "../Modal";
 import { db } from "@/firebase/config";
+import { Session } from "next-auth";
 
 interface props {
   sale: BillState;
-  onClick: () => void;
   user: User | null;
+  session: Session | null;
 }
-const SaleAccordion = ({ sale, onClick, user }: props) => {
+const SaleAccordion = ({ sale, user, session }: props) => {
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteSale, setDeleteSale] = useState<BillState>();
   const [openBilling, setOpenBilling] = useState(false);
@@ -75,11 +76,8 @@ const SaleAccordion = ({ sale, onClick, user }: props) => {
         </Link>
 
         {/* Action: Print */}
-        <div
-          className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-          onClick={onClick}
-        >
-          <PrintButton onClick={onClick} />
+        <div className="flex justify-center items-center">
+          <PrintOptionsPopover sale={sale} session={session} />
         </div>
 
         {/* Action: Delete */}

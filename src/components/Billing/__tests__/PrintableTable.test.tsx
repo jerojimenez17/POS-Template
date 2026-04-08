@@ -97,6 +97,8 @@ const mockContextValue = {
   setState: vi.fn(),
   addUnit: vi.fn(),
   onOrderResetRef: { current: null },
+  printMode: "thermal" as const,
+  setPrintMode: vi.fn(),
 };
 
 const renderWithContext = (ui: React.ReactElement, contextValue = mockContextValue) => {

@@ -401,3 +401,312 @@ Apply the same change to the Remito handler (around line 392-394).
 Instead of callbacks, use a `useImperativeHandle` pattern to expose a `resetForm()` method from `BillParametersForm`, accessed via ref in the parent page. This requires restructuring `newBill/page.tsx` to manage refs between components.
 
 **Recommendation**: Use the callback approach as it follows existing context patterns, is minimally invasive, keeps components decoupled, and works well with the current component hierarchy.
+
+---
+
+## Feature: Dual Print Mode (Thermal / PDF)
+
+### Feature Description
+
+Implementar dos modos de impresión para facturas:
+1. **Thermal**: Impresión en texto plano para impresoras térmicas sencillas (actual)
+2. **PDF**: Generación de PDF con estilos para guardado digital o impresión en impresoras convencionales
+
+### UI Requirements
+
+#### Print Mode Toggle (newBill/page.tsx)
+- Switch para elegir entre "Thermal" y "PDF"
+- Estado guardado en BillContext para persistencia
+- Icono diferenciado según modo seleccionado
+- Ubicación: cerca del botón de imprimir/facturar
+
+#### Print Choice in SaleAccordion (SaleAccordion.tsx)
+- Nuevo botón de impresión con dropdown/popover
+- Opciones: "Impresión Térmica" y "Generar PDF"
+- Icono diferente (ej: Download o FileText) al actual
+
+### Data Flow
+
+```
+BillContext
+├── printMode: "thermal" | "pdf"
+├── setPrintMode: (mode) => void
+└── handlePrint: (state) => void
+    ├── if thermal → printThermalReceipt()
+    └── if pdf → exportToPDF() o printElement()
+```
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/context/BillContext.tsx` | Agregar estado printMode y métodos |
+| `src/context/BillProvider.tsx` | Implementar estado printMode |
+| `src/app/(protected)/newBill/page.tsx` | Agregar toggle UI |
+| `src/components/Billing/SaleAccordion.tsx` | Agregar botón con elección |
+| `src/components/Billing/PrintModeSelector.tsx` | Nuevo: selector de modo |
+| `src/components/Billing/PrintOptionsPopover.tsx` | Nuevo: popover con opciones |
+
+### Components
+
+#### PrintModeSelector (nuevo)
+```tsx
+<div className="flex items-center gap-2">
+  <ThermometerIcon className={printMode === "thermal" ? "text-primary" : "text-muted"} />
+  <Switch checked={printMode === "pdf"} onCheckedChange={setPrintMode} />
+  <FileTextIcon className={printMode === "pdf" ? "text-primary" : "text-muted"} />
+</div>
+```
+
+#### PrintOptionsPopover (nuevo)
+```tsx
+<Popover>
+  <PopoverTrigger asChild>
+    <Button variant="ghost" size="icon">
+      <Download className="h-4 w-4" />
+    </Button>
+  </PopoverTrigger>
+  <PopoverContent>
+    <button onClick={() => handlePrint("thermal")}>
+      🖨️ Impresión Térmica
+    </button>
+    <button onClick={() => handlePrint("pdf")}>
+      📄 Generar PDF
+    </button>
+  </PopoverContent>
+</Popover>
+```
+
+### Acceptance Criteria
+
+- [ ] Toggle visible en newBill/page.tsx para elegir modo de impresión
+- [ ] Estado persiste al cambiar entre componentes
+- [ ] Impresión térmica usa printThermalReceipt existente
+- [ ] Impresión PDF usa exportToPDF o printElement
+- [ ] SaleAccordion muestra popover con ambas opciones
+- [ ] Nuevo icono diferenciado para elección de impresión
+
+## Feature: Enhanced Print System
+
+### Feature Description
+
+Enhance the existing print system to provide professional-quality output for both thermal receipts and PDF invoices, with proper ESC/POS command support and AFIP-compliant QR code integration.
+
+### Technical Requirements
+
+#### 1. ESC/POS Thermal Printing
+
+Implement proper ESC/POS command protocols for thermal printer compatibility.
+
+**ESC/POS Command Specifications:**
+
+| Command | Hex Code | Description |
+|---------|----------|-------------|
+| Initialize Printer | `1B 40` | Initialize/reset printer |
+| Bold On | `1B 45 01` | Enable bold text |
+| Bold Off | `1B 45 00` | Disable bold text |
+| Double Height | `1B 21 10` | Enable double height |
+| Double Width | `1B 21 20` | Enable double width |
+| Double Size | `1B 21 30` | Enable double height + width |
+| Center Align | `1B 61 01` | Center text alignment |
+| Left Align | `1B 61 00` | Left text alignment |
+| Line Feed | `0A` | Line feed character |
+| Cut Paper | `1D 56 00` | Full cut (if supported) |
+| Cash Drawer | `1B 70 00` | Open cash drawer |
+
+**Thermal Receipt Structure:**
+```
+[HEADER - Center aligned, double height]
+- Company name
+- CUIT
+- Invoice type (A/B/C) + Point of Sale + Number
+- Date and time
+
+[ADDRESS SECTION - Left aligned]
+- Establishment address
+- Invoice condition (Responsable Inscripto, etc.)
+
+[SEPARATOR LINE]
+"----------------------------------------"
+
+[CLIENT INFO - Bold]
+- Customer name
+- Customer CUIT
+- Customer address
+
+[SEPARATOR LINE]
+
+[ITEMS TABLE]
+- Item description (truncated to 32 chars per line)
+- Quantity x Price = Subtotal
+- Each line left-aligned
+
+[SEPARATOR LINE]
+
+[TOTALS - Right aligned]
+- Subtotal
+- Taxes (IVA)
+- TOTAL (double height)
+
+[FOOTER]
+- CAE number
+- CAE expiration date
+- QR Code (if AFIP data present)
+- Thank you message
+```
+
+#### 2. Enhanced PDF Styling
+
+Professional invoice layout with company branding.
+
+**PDF Layout Requirements:**
+
+| Section | Style |
+|---------|-------|
+| Header | Company logo (if available), name in large font, CUIT |
+| Invoice Info | Type (A/B/C), Point of Sale, Number in prominent box |
+| Business Details | Address, phone, email in subtle text |
+| Client Section | Bordered box with client details |
+| Items Table | Alternating row colors, bold headers, right-aligned totals |
+| Totals | Large font for total, separate lines for tax breakdown |
+| Footer | CAE info, QR code, legal text |
+
+**Styling Specifications:**
+- Font: Helvetica or system sans-serif
+- Primary color: `#2563EB` (blue) for headers
+- Secondary color: `#666666` for secondary text
+- Border: `1px solid #E5E7EB` for tables and boxes
+- Background: `#F9FAFB` for alternating rows
+- Paper size: A4 (210mm x 297mm)
+- Margins: 20mm all sides
+- QR Code size: 25mm x 25mm
+
+#### 3. QR Code Integration
+
+Include QR code in both thermal and PDF when AFIP data (CAE) is available.
+
+**QR Code Data Format (CUIT + CAI + Fecha + Importe + DocNro):**
+```
+https://www.afip.gob.ar/fe/qr/?p=JSON_DATA
+```
+
+**JSON Payload Structure:**
+```json
+{
+  "ver": 1,
+  "fecha": "2024-01-15",
+  "cuit": 20123456789,
+  "ptoVta": 1,
+  "tipoCmp": 1,
+  "nroCmp": 12345678,
+  "importe": 12100.00,
+  "moneda": "PES",
+  "ctz": 1.000,
+  "tipoDocRec": 80,
+  "nroDocRec": 20123456789,
+  "tipoCodAut": "E",
+  "codAut": 70417068967834
+}
+```
+
+**QR Code Placement Rules:**
+
+| Output Mode | Position | Size |
+|-------------|----------|------|
+| Thermal | Bottom of receipt, centered | 80px x 80px |
+| PDF | Bottom right corner | 25mm x 25mm |
+
+**Condition:**
+- QR code MUST be generated when `bill.afip?.cae` exists
+- If no CAE, QR code should not be included
+- QR code should be scannable by AFIP's verification app
+
+#### 4. Bill Type Logic Fix
+
+**Critical Rule:** A bill with CAE (AFIP invoice) must NEVER display "Remito" as bill type.
+
+**Validation Logic:**
+```typescript
+function getBillType(bill: Bill): string {
+  // If CAE exists, this is an AFIP invoice
+  if (bill.afip?.cae) {
+    return `Factura ${bill.afip.tipoComprobante || 'B'}`; // A, B, C
+  }
+  
+  // Only show "Remito" if NO AFIP data exists
+  if (bill.isRemito && !bill.afip) {
+    return 'Remito';
+  }
+  
+  // Default fallback
+  return 'Comprobante';
+}
+```
+
+**Invoice Type Mapping (AFIP):**
+| AFIP Code | Display Name |
+|-----------|--------------|
+| 1 | Factura A |
+| 2 | Nota de Debito A |
+| 3 | Nota de Credito A |
+| 4 | Factura B |
+| 5 | Nota de Debito B |
+| 6 | Nota de Credito B |
+| 7 | Factura C |
+| 8 | Nota de Debito C |
+| 9 | Nota de Credito C |
+
+**Edge Cases:**
+- A document can be marked as `isRemito: true` but still have CAE if it was later converted to an invoice
+- In this case, display the AFIP invoice type, NOT "Remito"
+- The `isRemito` flag is for internal tracking, not display logic
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/lib/print/thermal-printer.ts` | New: ESC/POS command constants and formatting functions |
+| `src/lib/print/pdf-styles.ts` | New: PDF styling constants and templates |
+| `src/lib/print/qr-generator.ts` | New: QR code generation with AFIP data |
+| `src/lib/print/thermal-receipt.ts` | Refactor: Use new ESC/POS commands |
+| `src/lib/print/pdf-receipt.ts` | Refactor: Enhanced styling |
+| `src/lib/utils/bill-type.ts` | New: getBillType() helper with CAE validation |
+| `src/components/Billing/ThermalPrintButton.tsx` | Update: QR code support |
+| `src/components/Billing/PdfPrintButton.tsx` | Update: Enhanced styling |
+
+### Acceptance Criteria
+
+#### ESC/POS Commands
+- [ ] Printer initializes with `ESC @` command
+- [ ] Bold text uses `ESC E` commands
+- [ ] Text alignment uses `ESC a` commands
+- [ ] Double size text uses `ESC !` commands
+- [ ] Cash drawer kick uses `ESC p` command
+- [ ] Paper cut command sent after content (if supported)
+
+#### PDF Styling
+- [ ] Header displays company logo and details
+- [ ] Invoice number in prominent format (XXX-XXXX-XXXXXXXX)
+- [ ] Client info in bordered section
+- [ ] Items table with alternating row colors
+- [ ] Tax breakdown clearly visible
+- [ ] Footer with legal information
+
+#### QR Code Integration
+- [ ] QR code generated when CAE is present
+- [ ] QR code NOT generated when CAE is absent
+- [ ] QR code data matches AFIP specification
+- [ ] QR code positioned correctly in thermal (bottom center)
+- [ ] QR code positioned correctly in PDF (bottom right)
+
+#### Bill Type Logic
+- [ ] "Remito" NEVER shown when CAE exists
+- [ ] AFIP invoice type (A/B/C) shown when CAE exists
+- [ ] "Remito" shown only when no CAE and isRemito is true
+- [ ] Bill type validation covered by unit tests
+
+#### Compatibility
+- [ ] Thermal print works on Epson TM-series printers
+- [ ] Thermal print works on generic ESC/POS printers
+- [ ] PDF renders correctly in Chrome, Firefox, Safari
+- [ ] PDF saves with correct filename (invoice number)

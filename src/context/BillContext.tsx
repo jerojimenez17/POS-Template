@@ -3,6 +3,8 @@ import Product from "@/models/Product";
 import BillState from "@/models/BillState";
 import CAE from "@/models/CAE";
 
+export type PrintMode = "thermal" | "pdf";
+
 export default interface BillContextProps {
   BillState: BillState;
   addItem: (product: Product) => void;
@@ -26,6 +28,8 @@ export default interface BillContextProps {
   CAE: (cae: CAE) => void;
   setState: (BillState: BillState) => void;
   onOrderResetRef: React.MutableRefObject<(() => void) | null>;
+  printMode: PrintMode;
+  setPrintMode: (mode: PrintMode) => void;
 }
 
 export const BillContext = createContext<BillContextProps>(

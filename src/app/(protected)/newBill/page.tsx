@@ -1,5 +1,6 @@
 import BillParametersForm from "@/components/Billing/BillParametersForm";
 import ProductsTable from "@/components/Billing/ProductsTable";
+import PrintModeSelector from "@/components/Billing/PrintModeSelector";
 import BillProvider from "@/context/BillProvider";
 import { auth } from "../../../../auth";
 import Spinner from "@/components/ui/Spinner";
@@ -13,8 +14,9 @@ const NewBillPage = async () => {
         <BillProvider>
           {/* Header Section */}
           <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-            <div className="max-w-7xl mx-auto">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
               <BillParametersForm />
+              <PrintModeSelector />
             </div>
           </div>
           
