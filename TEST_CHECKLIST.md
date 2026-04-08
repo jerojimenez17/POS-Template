@@ -398,3 +398,287 @@ npm run test -- tests/pusher-payment-flow.test.ts tests/mixed-payment.test.ts
 |---------------|-------|--------|--------|
 | Mixed Payment Flow | 12 | 2 | 10 |
 | (Expected after fix) | 12 | 12 | 0 |
+
+---
+
+# TEST_CHECKLIST.md - Enhanced Print System (2026-04-06)
+
+## Feature Overview
+
+This checklist verifies the implementation of the Enhanced Print System with ESC/POS thermal printing, professional PDF styling, and AFIP-compliant QR code integration.
+
+**Status**: Implementation in Progress
+**Date**: 2026-04-06
+**Solution**: `thermal-printer.ts`, `pdf-styles.ts`, `qr-generator.ts`, `bill-type.ts`
+
+---
+
+## 1. Thermal Printing Tests
+
+### ESC/POS Commands
+- [ ] Test ESC/POS initialization command (`1B 40`) is present at start of thermal print job
+- [ ] Test bold text ON command (`1B 45 01`) is used for headers and totals
+- [ ] Test bold text OFF command (`1B 45 00`) is used after bold sections
+- [ ] Test center alignment command (`1B 61 01`) is used for header and QR code
+- [ ] Test left alignment command (`1B 61 00`) is used for product lines and address
+- [ ] Test double height command (`1B 21 10`) is used for company name and total
+- [ ] Test double width command (`1B 21 20`) is used when needed
+- [ ] Test double size command (`1B 21 30`) is used for main total
+- [ ] Test line feed (`0A`) is used between sections
+- [ ] Test paper cut command (`1D 56 00`) is sent after content
+
+### Thermal Receipt Structure
+- [ ] Test company name displays with double height and center alignment
+- [ ] Test CUIT displays correctly in header
+- [ ] Test invoice type (A/B/C) + Point of Sale + Number displays correctly
+- [ ] Test date and time are displayed
+- [ ] Test establishment address displays with left alignment
+- [ ] Test invoice condition (Responsable Inscripto, etc.) displays
+- [ ] Test separator lines (`---`) display between sections
+- [ ] Test customer name displays with bold formatting
+- [ ] Test customer CUIT displays
+- [ ] Test customer address displays
+- [ ] Test product descriptions are truncated to 32 chars per line
+- [ ] Test product format: `Quantity x Price = Subtotal`
+- [ ] Test all product lines are left-aligned
+- [ ] Test subtotal displays right-aligned
+- [ ] Test taxes (IVA) display right-aligned
+- [ ] Test TOTAL displays with double height
+- [ ] Test CAE number displays in footer
+- [ ] Test CAE expiration date displays
+- [ ] Test "Thank you" message displays
+
+### Text Formatting
+- [ ] Test product descriptions handle long names correctly (truncation at 32 chars)
+- [ ] Test decimal prices display with 2 decimal places
+- [ ] Test quantities display as integers
+- [ ] Test currency formatting includes proper thousand separators
+- [ ] Test empty product list shows appropriate message
+
+### Total Calculation
+- [ ] Test subtotal equals sum of all product subtotals
+- [ ] Test tax (IVA) calculates correctly based on invoice type
+- [ ] Test total equals subtotal plus tax
+- [ ] Test amounts are properly rounded to 2 decimal places
+
+---
+
+## 2. PDF Printing Tests
+
+### PDF Header
+- [ ] Test company logo displays (if available)
+- [ ] Test company name displays in large font
+- [ ] Test company CUIT displays
+- [ ] Test company address displays in subtle text
+- [ ] Test company phone/email displays
+
+### Invoice Information
+- [ ] Test invoice type (A/B/C) displays prominently
+- [ ] Test Point of Sale number displays (format: XXX)
+- [ ] Test invoice number displays (format: XXXX-XXXXXXXX)
+- [ ] Test full invoice number format is: `XXX-XXXX-XXXXXXXX`
+
+### Client Information Section
+- [ ] Test client section has bordered box
+- [ ] Test client name displays
+- [ ] Test client CUIT displays
+- [ ] Test client address displays
+- [ ] Test client condition displays (Responsable Inscripto, etc.)
+
+### Products Table
+- [ ] Test table has proper column headers (Description, Qty, Price, Subtotal)
+- [ ] Test alternating row colors are applied (`#F9FAFB`)
+- [ ] Test headers are bold
+- [ ] Test totals column is right-aligned
+- [ ] Test product descriptions wrap correctly
+- [ ] Test quantities are integers
+- [ ] Test prices have 2 decimal places
+- [ ] Test subtotals have 2 decimal places and thousand separators
+
+### Totals Section
+- [ ] Test Subtotal line displays
+- [ ] Test Tax/IVA breakdown by rate displays
+- [ ] Test TOTAL displays in large font
+- [ ] Test totals are right-aligned
+
+### PDF Footer
+- [ ] Test CAE number displays
+- [ ] Test CAE expiration date displays
+- [ ] Test QR code displays in bottom right corner (25mm x 25mm)
+- [ ] Test AFIP compliance text displays (when CAE present)
+- [ ] Test legal footer text displays
+
+### PDF Styling Verification
+- [ ] Test primary color `#2563EB` is used for headers
+- [ ] Test secondary color `#666666` is used for secondary text
+- [ ] Test border color `#E5E7EB` is used for tables
+- [ ] Test paper size is A4 (210mm x 297mm)
+- [ ] Test margins are 20mm all sides
+
+---
+
+## 3. Bill Type Logic Tests
+
+### CAE Presence Logic
+- [ ] Test bill WITH CAE displays correct invoice type (A/B/C), NOT "Remito"
+- [ ] Test bill WITHOUT CAE and isRemito=true displays "Remito"
+- [ ] Test bill WITHOUT CAE and isRemito=false displays "Comprobante"
+- [ ] Test bill with isRemito=true AND CAE present displays AFIP type (not "Remito")
+
+### Invoice Type Mapping
+- [ ] Test AFIP code 1 maps to "Factura A"
+- [ ] Test AFIP code 2 maps to "Nota de Debito A"
+- [ ] Test AFIP code 3 maps to "Nota de Credito A"
+- [ ] Test AFIP code 4 maps to "Factura B"
+- [ ] Test AFIP code 5 maps to "Nota de Debito B"
+- [ ] Test AFIP code 6 maps to "Nota de Credito B"
+- [ ] Test AFIP code 7 maps to "Factura C"
+- [ ] Test AFIP code 8 maps to "Nota de Debito C"
+- [ ] Test AFIP code 9 maps to "Nota de Credito C"
+
+### Edge Cases
+- [ ] Test fallback to "Factura B" when tipoComprobante is missing but CAE exists
+- [ ] Test that isRemito flag does not override CAE display logic
+- [ ] Test undefined/null CAE is handled gracefully
+
+### Unit Test Coverage
+- [ ] Test getBillType() function with mock bill containing CAE
+- [ ] Test getBillType() function with mock bill without CAE
+- [ ] Test getBillType() function with edge case (isRemito + CAE)
+
+---
+
+## 4. QR Code Tests
+
+### QR Code Generation
+- [ ] Test QR code IS generated when bill.afip.cae exists
+- [ ] Test QR code is NOT generated when bill.afip.cae is missing
+- [ ] Test QR code data format is `https://www.afip.gob.ar/fe/qr/?p=JSON_DATA`
+
+### QR Code JSON Payload
+- [ ] Test QR contains `"ver": 1`
+- [ ] Test QR contains `"fecha"` in YYYY-MM-DD format
+- [ ] Test QR contains `"cuit"` as 11-digit number (without hyphens)
+- [ ] Test QR contains `"ptoVta"` (point of sale number)
+- [ ] Test QR contains `"tipoCmp"` (invoice type code 1-9)
+- [ ] Test QR contains `"nroCmp"` (invoice number)
+- [ ] Test QR contains `"importe"` with 2 decimal places
+- [ ] Test QR contains `"moneda"` as "PES"
+- [ ] Test QR contains `"ctz"` as 1.000
+- [ ] Test QR contains `"tipoDocRec"` (customer document type)
+- [ ] Test QR contains `"nroDocRec"` (customer document number)
+- [ ] Test QR contains `"tipoCodAut"` as "E"
+- [ ] Test QR contains `"codAut"` (CAE number)
+
+### QR Code Scanning
+- [ ] Test QR code is scannable by AFIP verification app
+- [ ] Test QR code contains valid JSON (parseable)
+- [ ] Test QR code data matches actual bill values
+
+### QR Code Display - Thermal Mode
+- [ ] Test QR code displays at bottom of thermal receipt
+- [ ] Test QR code is center-aligned
+- [ ] Test QR code size is approximately 80px x 80px
+
+### QR Code Display - PDF Mode
+- [ ] Test QR code displays in bottom right corner
+- [ ] Test QR code size is 25mm x 25mm
+- [ ] Test QR code resolution is adequate for scanning
+
+### QR Code Conditional Display
+- [ ] Test QR code NOT present in thermal mode when CAE missing
+- [ ] Test QR code NOT present in PDF mode when CAE missing
+- [ ] Test no blank space or placeholder shown when QR omitted
+
+---
+
+## 5. Integration Tests
+
+### Thermal + AFIP Integration
+- [ ] Test thermal receipt shows "Factura A" header when CAE present with tipo 1
+- [ ] Test thermal receipt shows "Factura B" header when CAE present with tipo 4
+- [ ] Test thermal receipt shows "Factura C" header when CAE present with tipo 7
+- [ ] Test thermal receipt shows QR code only when full AFIP data exists
+
+### PDF + AFIP Integration
+- [ ] Test PDF shows invoice type A/B/C based on AFIP data
+- [ ] Test PDF shows CAE number in footer when available
+- [ ] Test PDF shows QR code only when CAE present
+
+### Edge Case: Missing AFIP Data
+- [ ] Test thermal receipt prints without QR when CAE missing
+- [ ] Test PDF generates without QR when CAE missing
+- [ ] Test bill type shows "Remito" when no CAE and isRemito=true
+
+---
+
+## 6. Compatibility Tests
+
+### Thermal Printer Compatibility
+- [ ] Test output works on Epson TM-series printers
+- [ ] Test output works on generic ESC/POS printers
+- [ ] Test cash drawer kick command (`1B 70 00`) opens drawer
+- [ ] Test paper cut works when supported by printer
+
+### PDF Browser Compatibility
+- [ ] Test PDF renders correctly in Chrome
+- [ ] Test PDF renders correctly in Firefox
+- [ ] Test PDF renders correctly in Safari
+- [ ] Test PDF saves with correct filename (invoice number format)
+
+### Character Encoding
+- [ ] Test Spanish characters (ñ, á, é, í, ó, ú, ü) display correctly
+- [ ] Test special characters in company/product names work
+- [ ] Test CUIT format (XX-XXXXXXXX-X) displays correctly
+
+---
+
+## 7. Performance Tests
+
+### Print Performance
+- [ ] Test thermal print job completes within 5 seconds
+- [ ] Test PDF generation completes within 3 seconds
+- [ ] Test QR code generation completes within 500ms
+
+### Output Quality
+- [ ] Test thermal output is legible on 80mm paper
+- [ ] Test PDF output is print-ready quality
+- [ ] Test QR code has sufficient error correction for scanning
+
+---
+
+## Test Files
+
+| File | Description |
+|------|-------------|
+| `src/lib/print/thermal-printer.ts` | ESC/POS command constants and formatting functions |
+| `src/lib/print/pdf-styles.ts` | PDF styling constants and templates |
+| `src/lib/print/qr-generator.ts` | QR code generation with AFIP data |
+| `src/lib/print/thermal-receipt.ts` | Thermal receipt generation |
+| `src/lib/print/pdf-receipt.ts` | PDF receipt generation |
+| `src/lib/utils/bill-type.ts` | getBillType() helper with CAE validation |
+| `src/components/Billing/ThermalPrintButton.tsx` | Thermal print button with QR support |
+| `src/components/Billing/PdfPrintButton.tsx` | PDF print button with enhanced styling |
+
+## Running Tests
+
+```bash
+# TypeScript check
+npx tsc --noEmit
+
+# Lint check
+npm run lint
+
+# Build check
+npm run build
+```
+
+---
+
+## Sign-Off
+
+| Role | Name | Date | Signature |
+|------|------|------|-----------|
+| QA Engineer | Agent | 2026-04-06 | [ ] |
+| Developer | Pending | | |
+| Tech Lead | Pending | | |

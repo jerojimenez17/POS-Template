@@ -14,7 +14,8 @@ import { Inter } from "next/font/google";
 import { getBusinessBillingInfoAction } from "@/actions/business";
 import moment from "moment";
 import { QRCodeSVG } from "qrcode.react";
-import { printThermalReceipt, type ThermalReceiptData } from "@/lib/print";
+import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES } from "@/lib/print";
+import { getBillTypeDisplay } from "@/lib/utils/bill-type";
 
 // Dynamically import scanner to avoid SSR issues
 const Scanner = dynamic(
@@ -56,7 +57,7 @@ const PrintableTable = ({
   className,
   externalState,
 }: Props) => {
-  const { BillState, addItem, removeItem } = useContext(BillContext);
+  const { BillState, addItem, removeItem, printMode } = useContext(BillContext);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchCode, setSearchCode] = useState("");
   const [suggestions, setSuggestions] = useState<Product[]>([]);
@@ -85,6 +86,9 @@ const PrintableTable = ({
     fetchBillingInfo();
   }, []);
 
+  const isRemito = !state.CAE || state.CAE.CAE === "";
+  const billTypeDisplay = getBillTypeDisplay(state.billType, state.CAE?.CAE, isRemito);
+
   const handlePrint = useCallback(async () => {
     const receiptData: ThermalReceiptData = {
       businessName: session?.user?.businessName || "Mi Comercio",
@@ -96,7 +100,7 @@ const PrintableTable = ({
       } : undefined,
       date: state.date || new Date(),
       documentType: state.typeDocument || "DNI",
-      billType: state.CAE?.CAE ? (state.billType || "C") : "Remito",
+      billType: billTypeDisplay,
       seller: state.seller || session?.user?.email || "",
       paidMethod: state.paidMethod || "Efectivo",
       client: state.client,
@@ -121,8 +125,34 @@ const PrintableTable = ({
       } : undefined,
     };
 
-    await printThermalReceipt(receiptData);
-  }, [state, session, billingInfo]);
+    if (printMode === "thermal") {
+      await printThermalReceipt(receiptData);
+    } else {
+      const content = document.createElement("div");
+      content.innerHTML = buildPDFHTML(receiptData, {
+        invoiceNumber: state.CAE?.nroComprobante,
+      });
+      
+      const styleEl = document.createElement("style");
+      styleEl.textContent = PDF_STYLES;
+      content.insertBefore(styleEl, content.firstChild);
+
+      document.body.appendChild(content);
+      try {
+        const filename = state.CAE?.CAE
+          ? `Factura_${state.CAE?.nroComprobante || "000000000000"}`
+          : `Comprobante_${state.id || Date.now()}`;
+        
+        await exportToPDF(content as HTMLElement, {
+          documentTitle: filename,
+          format: "a4",
+          filename: filename,
+        });
+      } finally {
+        document.body.removeChild(content);
+      }
+    }
+  }, [state, session, billingInfo, printMode, billTypeDisplay]);
 
   useEffect(() => {
     if (errorMessage) {
@@ -289,9 +319,9 @@ const PrintableTable = ({
               <p><span className="font-semibold">Fecha:</span> {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}</p>
               <p>
                 <span className="font-semibold">
-                  {state.CAE && state.CAE.CAE !== "" ? "Factura:" : "Comprobante:"}
+                  {state.CAE?.CAE ? "Factura:" : "Comprobante:"}
                 </span>{" "}
-                {state.CAE && state.CAE.CAE !== "" ? (state.billType || "C") : "Remito"}
+                {billTypeDisplay}
               </p>
               <p><span className="font-semibold">Vendedor:</span> {state.seller || session?.user?.email}</p>
               <p><span className="font-semibold">Medio de Pago:</span> {state.paidMethod}</p>

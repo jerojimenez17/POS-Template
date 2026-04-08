@@ -5,6 +5,8 @@ import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
 import { getSalesAction } from "@/actions/sales";
 
+export const dynamic = 'force-dynamic';
+
 const SearchBillContent = async () => {
   const session = await auth();
   const sales = await getSalesAction();

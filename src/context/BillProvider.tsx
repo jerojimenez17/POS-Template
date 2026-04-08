@@ -5,6 +5,7 @@ import { BillReducer } from "./BillReducer";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import CAE from "@/models/CAE";
+import { PrintMode } from "./BillContext";
 
 const INITIAL_STATE: BillState = {
   twoMethods: false,
@@ -32,6 +33,7 @@ interface props {
 
 const BillProvider = ({ children }: props) => {
   const [BillState, dispatch] = useReducer(BillReducer, INITIAL_STATE);
+  const [printMode, setPrintMode] = React.useState<PrintMode>("thermal");
   const onOrderResetRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -182,6 +184,8 @@ const BillProvider = ({ children }: props) => {
     setState: setState,
     paidMethod: paidMethod,
     onOrderResetRef: onOrderResetRef,
+    printMode: printMode,
+    setPrintMode: setPrintMode,
   };
   return <BillContext.Provider value={values}>{children}</BillContext.Provider>;
 };
