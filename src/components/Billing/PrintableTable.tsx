@@ -61,6 +61,7 @@ const PrintableTable = ({
   const [errorMessage, setErrorMessage] = useState("");
   const [searchCode, setSearchCode] = useState("");
   const [suggestions, setSuggestions] = useState<Product[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
   const [isClient, setIsClient] = useState(false);
@@ -172,6 +173,18 @@ const PrintableTable = ({
     }
   }, [printTrigger, isClient, scannerOpen, handlePrint]);
 
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Focus search input when "/" is pressed, unless user is already typing in an input text field
+      if (e.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        document.getElementById("product-search-input")?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
+
   const updateProductAmount = (productId: string, newAmount: number) => {
     const product = state.products.find((p) => p.id === productId);
     if (!product) return;
@@ -200,6 +213,7 @@ const PrintableTable = ({
 
   const handleSearch = async (value: string) => {
     setSearchCode(value);
+    setSelectedIndex(-1);
     if (value.length >= 2) {
       const results = await getProductsBySearch(value);
       setSuggestions(results.map(ProductPrismaAdapter.toDomain));
@@ -365,23 +379,42 @@ const PrintableTable = ({
               </svg>
             </div>
             <input
+              id="product-search-input"
               name="productSearch"
               className="flex w-full rounded-lg border border-input bg-white dark:bg-gray-800 px-3 py-3 pl-10 text-base shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm text-gray-900 dark:text-gray-100"
-              placeholder="Buscar producto por codigo o nombre..."
+              placeholder="Buscar producto por codigo o nombre (Presiona '/' para buscar)..."
               value={searchCode}
               onChange={(e) => handleSearch(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleAddProduct(searchCode);
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+                    handleAddProduct(suggestions[selectedIndex].code);
+                  } else {
+                    handleAddProduct(searchCode);
+                  }
+                } else if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setSelectedIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSelectedIndex(prev => Math.max(prev - 1, -1));
+                }
               }}
               autoComplete="off"
               spellCheck={false}
             />
             {suggestions.length > 0 && searchCode.length > 0 && (
               <div className="absolute z-20 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl max-h-72 overflow-y-auto">
-                {suggestions.map((product) => (
+                {suggestions.map((product, index) => (
                   <div
                     key={product.id}
-                    className="p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                    className={cn(
+                      "p-4 border-b border-gray-100 dark:border-gray-700 cursor-pointer transition-colors",
+                      index === selectedIndex 
+                        ? "bg-blue-50 dark:bg-gray-700 border-l-4 border-l-blue-500" 
+                        : "hover:bg-gray-50 dark:hover:bg-gray-700 border-l-4 border-l-transparent"
+                    )}
                     onClick={() => handleAddProduct(product.code)}
                   >
                     <div className="flex justify-between items-start">

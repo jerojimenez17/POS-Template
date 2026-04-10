@@ -61,6 +61,37 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
     };
   }, []);
 
+  // Global keydown listeners for F1, F2, F3 shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isEditing) return; // Disable shortcuts while editing sale (has different buttons)
+      
+      if (e.key === 'F1') {
+        e.preventDefault();
+        if (session?.user.email) {
+          sellerName(session.user.email || "");
+        }
+        setOpenFacturaModal(true);
+      }
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (session?.user.email) {
+          sellerName(session.user.email || "");
+        }
+        setOpenRemitoModal(true);
+      }
+      if (e.key === 'F3') {
+        e.preventDefault();
+        if (BillState.products.length > 0) {
+          setOpenAcuentaModal(true);
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [session, sellerName, BillState.products.length, isEditing]);
+
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {
     if (!isOnline) {
@@ -357,6 +388,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
             </DialogClose>
             <DialogClose asChild>
               <Button
+                autoFocus
                 onClick={async () => {
                   setBlockButton(true);
                   try {
@@ -403,6 +435,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
             </DialogClose>
             <DialogClose asChild>
               <Button
+                autoFocus
                 variant="default"
                 className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={async () => {
@@ -439,6 +472,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
             </DialogClose>
             <DialogClose asChild>
               <Button
+                autoFocus
                 onClick={async () => {
                   setBlockButton(true);
                   try {
