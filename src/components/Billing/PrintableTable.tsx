@@ -73,7 +73,20 @@ const PrintableTable = ({
     address?: string | null;
   } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   const lastPrintTrigger = useRef(0);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setSuggestions([]);
+        setSelectedIndex(-1);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Fix hydration: Only run on client
   useEffect(() => {
@@ -184,6 +197,15 @@ const PrintableTable = ({
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (selectedIndex >= 0) {
+      const el = document.getElementById(`suggestion-item-${selectedIndex}`);
+      if (el) {
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }
+  }, [selectedIndex]);
 
   const updateProductAmount = (productId: string, newAmount: number) => {
     const product = state.products.find((p) => p.id === productId);
@@ -371,7 +393,7 @@ const PrintableTable = ({
       {/* Product Search - Screen only */}
       <div className="mb-6 max-w-7xl mx-auto print:hidden">
         <div className="flex gap-3">
-          <div className="flex-1 relative">
+          <div ref={searchContainerRef} className="flex-1 relative">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"/>
@@ -395,20 +417,31 @@ const PrintableTable = ({
                   }
                 } else if (e.key === "ArrowDown") {
                   e.preventDefault();
-                  setSelectedIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+                  if (suggestions.length === 0) {
+                    getProductsBySearch("").then(results => {
+                      setSuggestions(results.map(ProductPrismaAdapter.toDomain));
+                      setSelectedIndex(0);
+                    });
+                  } else {
+                    setSelectedIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+                  }
                 } else if (e.key === "ArrowUp") {
                   e.preventDefault();
                   setSelectedIndex(prev => Math.max(prev - 1, -1));
+                } else if (e.key === "Escape") {
+                  setSuggestions([]);
+                  setSelectedIndex(-1);
                 }
               }}
               autoComplete="off"
               spellCheck={false}
             />
-            {suggestions.length > 0 && searchCode.length > 0 && (
+            {suggestions.length > 0 && (
               <div className="absolute z-20 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl max-h-72 overflow-y-auto">
                 {suggestions.map((product, index) => (
                   <div
                     key={product.id}
+                    id={`suggestion-item-${index}`}
                     className={cn(
                       "p-4 border-b border-gray-100 dark:border-gray-700 cursor-pointer transition-colors",
                       index === selectedIndex 
