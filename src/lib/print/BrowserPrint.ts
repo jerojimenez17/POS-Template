@@ -95,6 +95,15 @@ function formatInvoiceNumber(pointOfSale?: number, invoiceNumber?: number): stri
   return `${ptoVta}-${nroCmp}`;
 }
 
+function sanitize(text: string): string {
+  if (!text) return "";
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/N[°º]/g, "Nro")
+    .replace(/[^\x20-\x7E]/g, "");
+}
+
 export function generateThermalReceipt(data: ThermalReceiptData): string {
   const lines: string[] = [];
   
@@ -105,13 +114,13 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   lines.push(ESCPOS.ALIGN_CENTER);
   lines.push(ESCPOS.DOUBLE_HEIGHT);
   lines.push(ESCPOS.BOLD_ON);
-  lines.push(data.businessName);
+  lines.push(sanitize(data.businessName));
   lines.push(ESCPOS.NORMAL_SIZE);
   lines.push(ESCPOS.BOLD_OFF);
   lines.push(ESCPOS.LINE_FEED);
   
   if (data.businessInfo?.razonSocial) {
-    lines.push(data.businessInfo.razonSocial);
+    lines.push(sanitize(data.businessInfo.razonSocial));
   }
   
   if (data.businessInfo?.cuit) {
@@ -123,7 +132,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   }
   
   if (data.businessInfo?.address) {
-    lines.push(data.businessInfo.address);
+    lines.push(sanitize(data.businessInfo.address));
   }
   
   lines.push(ESCPOS.LINE_FEED);
@@ -151,7 +160,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   
   const docType = data.documentType || "DNI";
   if (data.client) {
-    lines.push(formatLine("Cliente:", data.client));
+    lines.push(formatLine("Cliente:", sanitize(data.client)));
     if (data.clientIvaCondition && 
         data.clientIvaCondition.toLowerCase() !== "consumidor final" &&
         data.clientIvaCondition.toLowerCase() !== "consumidor_final") {
@@ -160,8 +169,8 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
     }
   }
   
-  lines.push(formatLine("Pago:", data.paidMethod));
-  lines.push(formatLine("Vendedor:", data.seller || ""));
+  lines.push(formatLine("Pago:", sanitize(data.paidMethod)));
+  lines.push(formatLine("Vendedor:", sanitize(data.seller || "")));
   
   lines.push(ESCPOS.ALIGN_CENTER);
   lines.push(divider());
@@ -171,7 +180,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   lines.push(ESCPOS.ALIGN_LEFT);
   
   for (const p of data.products) {
-    const desc = p.description.slice(0, 20);
+    const desc = sanitize(p.description).slice(0, 20);
     const qty = "x" + p.amount;
     const price = "$" + p.subtotal.toFixed(2);
     lines.push(desc);
@@ -206,10 +215,6 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
     lines.push(ESCPOS.LINE_FEED);
     lines.push("Verifique en: www.afip.gob.ar");
     lines.push(ESCPOS.LINE_FEED);
-    if (data.cae.qrData) {
-      lines.push("[QR CODE]");
-      lines.push(data.cae.qrData);
-    }
   }
   
   lines.push(ESCPOS.LINE_FEED);
@@ -222,102 +227,136 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   return lines.join("\n");
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+
+
+function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | null): string {
+  const qrHtml = qrDataUrl ? `<div class="qr-container"><img src="${qrDataUrl}" alt="QR" /></div>` : "";
+  const dateStr = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(data.date);
+  const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
+  const isAFIPInvoice = Boolean(data.cae?.cae);
+  const invoiceNum = isAFIPInvoice ? formatInvoiceNumber(data.pointOfSale, data.invoiceNumber) : "";
+  const docType = data.documentType || "DNI";
+
+  const productsHtml = data.products.map(p => `
+    <div class="product-row">
+      <div class="product-desc">${sanitize(p.description)}</div>
+      <div class="product-price">x${p.amount} $${p.unitPrice.toFixed(2)}</div>
+      <div class="product-sum">$${p.subtotal.toFixed(2)}</div>
+    </div>
+  `).join("");
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Ticket</title>
+    <style>
+      @page { size: 80mm auto; margin: 0; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 80mm; background: #fff; color: #000; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 13px; line-height: 1.4; overflow: visible; }
+      .ticket { padding: 4mm 6mm; }
+      .header { text-align: center; margin-bottom: 4mm; border-bottom: 2px dashed #ccc; padding-bottom: 3mm; }
+      .business-name { font-size: 18px; font-weight: 800; text-transform: uppercase; margin-bottom: 1mm; }
+      .business-info { font-size: 11px; color: #444; }
+      .info-row { display: flex; justify-content: space-between; margin-bottom: 1mm; font-size: 12px; }
+      .info-label { font-weight: 600; }
+      .divider { border-top: 1px solid #ccc; margin: 3mm 0; }
+      .section-title { text-align: center; font-weight: 700; font-size: 12px; letter-spacing: 1px; margin-bottom: 3mm; }
+      .products { width: 100%; margin-bottom: 3mm; }
+      .product-row { display: flex; flex-wrap: wrap; margin-bottom: 2mm; justify-content: space-between; align-items: flex-end; }
+      .product-desc { width: 100%; font-weight: 600; font-size: 12.5px; }
+      .product-price { font-size: 11px; color: #555; }
+      .product-sum { font-weight: 700; font-size: 13px; }
+      .totals { border-top: 2px dashed #ccc; padding-top: 3mm; margin-top: 3mm; }
+      .total-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 1mm; }
+      .total-row.grand { font-size: 18px; font-weight: 800; border-top: 1px solid #000; padding-top: 2mm; margin-top: 1mm; }
+      .cae-section { text-align: center; margin-top: 4mm; padding: 2mm; border: 1px solid #ccc; border-radius: 4px; background: #fafafa; }
+      .cae-title { font-weight: 700; font-size: 12px; margin-bottom: 2px; }
+      .cae-text { font-size: 11px; }
+      .qr-container { display: flex; justify-content: center; margin: 3mm 0; }
+      .qr-container img { width: 120px; height: 120px; }
+      .footer { text-align: center; font-size: 12px; font-weight: 700; margin-top: 4mm; }
+    </style>
+    </head>
+    <body>
+      <div class="ticket">
+        <div class="header">
+          <div class="business-name">${sanitize(data.businessName)}</div>
+          ${data.businessInfo?.razonSocial ? `<div class="business-info">${sanitize(data.businessInfo.razonSocial)}</div>` : ''}
+          ${data.businessInfo?.cuit ? `<div class="business-info">CUIT: ${data.businessInfo.cuit}</div>` : ''}
+          ${data.businessInfo?.condicionIva ? `<div class="business-info">${data.businessInfo.condicionIva.replace(/_/g, " ")}</div>` : ''}
+          ${data.businessInfo?.address ? `<div class="business-info">${sanitize(data.businessInfo.address)}</div>` : ''}
+        </div>
+
+        <div class="info-row"><span class="info-label">Fecha:</span><span>${dateStr}</span></div>
+        ${invoiceNum ? `<div class="info-row"><span class="info-label">Nro:</span><span>${invoiceNum}</span></div>` : ''}
+        <div class="info-row"><span class="info-label">Tipo:</span><span>${billTypeDisplay}</span></div>
+        
+        ${data.client ? `
+          <div class="divider"></div>
+          <div class="info-row"><span class="info-label">Cliente:</span><span>${sanitize(data.client)}</span></div>
+          ${data.clientIvaCondition && 
+            data.clientIvaCondition.toLowerCase() !== "consumidor final" &&
+            data.clientIvaCondition.toLowerCase() !== "consumidor_final" ? `
+            <div class="info-row"><span class="info-label">${docType}:</span><span>${data.clientDocumentNumber || ""}</span></div>
+            <div class="info-row"><span class="info-label">Cond.IVA:</span><span>${data.clientIvaCondition.replace(/_/g, " ")}</span></div>
+          ` : ''}
+        ` : ''}
+
+        <div class="divider"></div>
+        <div class="info-row"><span class="info-label">Pago:</span><span>${sanitize(data.paidMethod)}</span></div>
+        <div class="info-row"><span class="info-label">Vendedor:</span><span>${sanitize(data.seller || "")}</span></div>
+
+        <div class="divider"></div>
+        <div class="section-title">DETALLE</div>
+        
+        <div class="products">
+          ${productsHtml}
+        </div>
+
+        <div class="totals">
+          <div class="total-row"><span>Subtotal:</span><span>$${data.subtotal.toFixed(2)}</span></div>
+          ${data.discount ? `
+            <div class="total-row"><span>Desc(${data.discount}%):</span><span>-$${data.discountAmount?.toFixed(2)}</span></div>
+          ` : ''}
+          <div class="total-row grand"><span>TOTAL:</span><span>$${data.total.toFixed(2)}</span></div>
+        </div>
+
+        ${data.cae?.cae ? `
+          <div class="cae-section">
+            <div class="cae-title">COMPROBANTE AUTORIZADO</div>
+            <div class="cae-text"><b>CAE:</b> ${data.cae.cae}</div>
+            <div class="cae-text"><b>Vto:</b> ${data.cae.vencimiento}</div>
+            <div style="font-size: 10px; margin-top: 2px;">Verifique en: www.afip.gob.ar</div>
+          </div>
+        ` : ''}
+
+        ${qrHtml}
+
+        <div class="footer">¡GRACIAS POR SU COMPRA!</div>
+      </div>
+
+      <script>
+        var timeoutId = null;
+        function finishPrint() {
+          if (timeoutId) return;
+          timeoutId = setTimeout(function() { window.print(); window.close(); }, 250);
+        }
+        var qrImg = document.querySelector('.qr-container img');
+        if (qrImg) {
+          if (qrImg.complete) finishPrint();
+          else qrImg.onload = finishPrint;
+          setTimeout(finishPrint, 1000);
+        } else {
+          finishPrint();
+        }
+      </script>
+    </body>
+    </html>
+  `;
 }
 
-function buildThermalPrintHTML(receipt: string, hasQRCode: boolean, qrData: string | null): string {
-  const escapedReceipt = escapeHtml(receipt);
-  const qrPlaceholder = hasQRCode ? '<div class="qr-container" id="qr-placeholder"></div>' : "";
-  const qrDataJson = hasQRCode ? JSON.stringify(qrData) : "null";
-  
-  return [
-    "<!DOCTYPE html>",
-    "<html>",
-    "<head>",
-    "<title>Ticket</title>",
-    "<style>",
-    "@page { size: 80mm auto; margin: 0; }",
-    "* { margin: 0; padding: 0; box-sizing: border-box; }",
-    "html, body {",
-    "  width: 80mm;",
-    "  font-family: 'Courier New', Courier, monospace;",
-    "  font-size: 12px;",
-    "  line-height: 1.3;",
-    "  color: #000;",
-    "  background: #fff;",
-    "  overflow: hidden;",
-    "}",
-    "@media print {",
-    "  body { width: 80mm !important; }",
-    "}",
-    "pre {",
-    "  white-space: pre-wrap;",
-    "  word-wrap: break-word;",
-    "  text-align: center;",
-    "  padding: 5mm;",
-    "}",
-    ".qr-container {",
-    "  display: flex;",
-    "  justify-content: center;",
-    "  margin: 4px 0;",
-    "}",
-    ".qr-container canvas, .qr-container img {",
-    "  width: 80px !important;",
-    "  height: 80px !important;",
-    "}",
-    "</style>",
-    "<script src=\"https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js\"></script>",
-    "</head>",
-    "<body>",
-    "<pre id=\"receipt\">" + escapedReceipt + "</pre>",
-    qrPlaceholder,
-    "<script>",
-    "(function() {",
-    "  function renderQR() {",
-    "    try {",
-    "      var qrContainer = document.getElementById('qr-placeholder');",
-    "      if (qrContainer && typeof QRCode !== 'undefined') {",
-    "        var canvas = document.createElement('canvas');",
-    "        QRCode.toCanvas(canvas, " + qrDataJson + ", {",
-    "          width: 120,",
-    "          margin: 0,",
-    "          color: { dark: '#000000', light: '#ffffff' }",
-    "        });",
-    "        canvas.style.width = '80px';",
-    "        canvas.style.height = '80px';",
-    "        qrContainer.appendChild(canvas);",
-    "      }",
-    "    } catch (e) {",
-    "      console.log('QR render fallback:', e);",
-    "      var qrContainer = document.getElementById('qr-placeholder');",
-    "      if (qrContainer) {",
-    "        qrContainer.innerHTML = '<span style=\"font-size:10px\">[QR]</span>';",
-    "      }",
-    "    }",
-    "  }",
-    "  if (document.readyState === 'loading') {",
-    "    document.addEventListener('DOMContentLoaded', function() {",
-    "      renderQR();",
-    "      setTimeout(function() { window.print(); window.close(); }, 300);",
-    "    });",
-    "  } else {",
-    "    renderQR();",
-    "    setTimeout(function() { window.print(); window.close(); }, 300);",
-    "  }",
-    "})();",
-    "</script>",
-    "</body>",
-    "</html>"
-  ].join("\n");
-}
-
-async function tryFallbackHTMLPrint(receipt: string, hasQRCode: boolean, qrData: string | null): Promise<boolean> {
+async function tryFallbackHTMLPrint(data: ThermalReceiptData, qrDataUrl: string | null): Promise<boolean> {
   try {
     const printWindow = window.open("", "_blank", "width=350,height=600");
     if (!printWindow) {
@@ -325,7 +364,7 @@ async function tryFallbackHTMLPrint(receipt: string, hasQRCode: boolean, qrData:
       return false;
     }
     
-    const html = buildThermalPrintHTML(receipt, hasQRCode, qrData);
+    const html = buildThermalPrintHTML(data, qrDataUrl);
     printWindow.document.write(html);
     printWindow.document.close();
     return true;
@@ -339,6 +378,21 @@ export async function printThermalReceipt(data: ThermalReceiptData): Promise<boo
   const receipt = generateThermalReceipt(data);
   const hasQRCode = Boolean(data.cae?.qrData);
   const qrData = data.cae?.qrData || null;
+  
+  let qrDataUrl: string | null = null;
+  if (hasQRCode && qrData) {
+    try {
+      const qrcodeModule = await import("qrcode");
+      const QRCode = qrcodeModule.default || qrcodeModule;
+      qrDataUrl = await QRCode.toDataURL(qrData, { 
+        margin: 0, 
+        width: 120, 
+        errorCorrectionLevel: 'M' 
+      });
+    } catch (e) {
+      console.error("Error generating fallback QR data url:", e);
+    }
+  }
 
   try {
     // Dynamically import qz-tray to avoid SSR issues
@@ -362,15 +416,7 @@ export async function printThermalReceipt(data: ThermalReceiptData): Promise<boo
     printData.push(receipt);
 
     // If QR code is present, add it as a raw image 
-    if (hasQRCode && qrData) {
-      // Dynamic import of qrcode
-      const QRCode = (await import("qrcode")).default;
-      // Convert QR to a data URL
-      const qrDataUrl = await QRCode.toDataURL(qrData, { 
-        margin: 0, 
-        width: 120, 
-        errorCorrectionLevel: 'M' 
-      });
+    if (hasQRCode && qrDataUrl) {
       const base64Image = qrDataUrl.split(",")[1];
       
       printData.push("\n"); // Make sure there's space before QR
@@ -397,8 +443,7 @@ export async function printThermalReceipt(data: ThermalReceiptData): Promise<boo
     return true;
   } catch (error) {
     console.warn("QZ Tray connection or print failed, falling back to HTML popup:", error);
-    // "si no conecta qz tray que pase al modo de pdf con el pop up"
-    return tryFallbackHTMLPrint(receipt, hasQRCode, qrData);
+    return tryFallbackHTMLPrint(data, qrDataUrl);
   }
 }
 
