@@ -108,6 +108,11 @@ export default function PrintOptionsPopover({
   };
 
   const handlePrintPDF = async () => {
+    const targetWin = window.open("", "_blank");
+    if (targetWin) {
+      targetWin.document.write("<html><head><title>Generando PDF...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
+    }
+
     const receiptData = getPrintData();
     const content = document.createElement("div");
     content.innerHTML = buildPDFHTML(receiptData, {
@@ -129,7 +134,11 @@ export default function PrintOptionsPopover({
         documentTitle: filename,
         format: "a4",
         filename: filename,
+        targetWindow: targetWin,
       });
+    } catch(err) {
+      if (targetWin) targetWin.close();
+      console.error("PDF Export error:", err);
     } finally {
       document.body.removeChild(content);
     }

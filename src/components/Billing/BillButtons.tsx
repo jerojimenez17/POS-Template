@@ -26,7 +26,7 @@ import {
 
 interface props {
   session: Session | null;
-  handlePrint: () => void;
+  handlePrint: (cae?: CAE, win?: Window | null) => void;
   isEditing?: boolean;
   orderId?: string;
 }
@@ -38,7 +38,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
   const [respAfip, setRespAfip] = useState<CAE | undefined>();
   const [localCAE, setLocalCAE] = useState<CAE>({ CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" });
   const [openRemitoModal, setOpenRemitoModal] = useState(false);
-  const { BillState, billType, CAE, sellerName, removeAll, onOrderResetRef } =
+  const { BillState, billType, CAE, sellerName, removeAll, onOrderResetRef, printMode } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
@@ -163,8 +163,8 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
     }
   };
 
-  const createSale = async (afip: boolean, isUpdate: boolean = false) => {
-    if (!checkConnection()) return;
+  const createSale = async (afip: boolean, isUpdate: boolean = false): Promise<CAE | undefined> => {
+    if (!checkConnection()) return undefined;
     try {
       setBlockButton(true);
       setOpenRemitoModal(false);
@@ -221,6 +221,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
         });
         toast.success("Factura guardada correctamente");
       }
+      return caeData || localCAE;
     } catch (err) {
       if (!isOnline) {
         toast.error("Operación cancelada: Sin conexión a internet");
@@ -230,6 +231,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
         );
       }
       setBlockButton(false);
+      throw err;
     }
   };
   const [openFacturaModal, setOpenFacturaModal] = useState(false);
@@ -390,21 +392,34 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
               <Button
                 autoFocus
                 onClick={async () => {
+                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+                  if (targetWin) {
+                    targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
+                  }
+
                   setBlockButton(true);
                   try {
-                    await createSale(true, false);
+                    const caeResult = await createSale(true, false);
+                    if (!caeResult) {
+                      if (targetWin) targetWin.close();
+                      setBlockButton(false);
+                      return;
+                    }
                     if (!openErrorModal && BillState.total > 0) {
-                      handlePrint();
+                      handlePrint(caeResult, targetWin);
                       setTimeout(() => {
                         removeAll();
                         if (onOrderResetRef.current) {
                           onOrderResetRef.current();
                         }
                       }, 5000);
+                    } else if (targetWin) {
+                       targetWin.close();
                     }
                     setOpenFacturaModal(false);
                     setBlockButton(false);
                   } catch (err) {
+                    if (targetWin) targetWin.close();
                     console.error(err);
                   }
                 }}
@@ -439,12 +454,21 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
                 variant="default"
                 className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={async () => {
+                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+                  if (targetWin) {
+                    targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Actualizando venta, por favor espere...</h2></body></html>");
+                  }
+
                   setBlockButton(true);
                   try {
-                    await createSale(false, true);
+                    const caeResult = await createSale(false, true);
+                    if (!caeResult && targetWin) targetWin.close();
+                    // Don't auto-print on update unless explicitly asked, typically update redirects
+                    if (targetWin) targetWin.close(); 
                     setOpenEditModal(false);
                     setBlockButton(false);
                   } catch (err) {
+                    if (targetWin) targetWin.close();
                     console.error(err);
                     setBlockButton(false);
                   }
@@ -474,21 +498,34 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
               <Button
                 autoFocus
                 onClick={async () => {
+                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+                  if (targetWin) {
+                    targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
+                  }
+
                   setBlockButton(true);
                   try {
-                    await createSale(false, false);
+                    const caeResult = await createSale(false, false);
+                    if (!caeResult) {
+                      if (targetWin) targetWin.close();
+                      setBlockButton(false);
+                      return;
+                    }
                     if (!openErrorModal && BillState.total > 0) {
-                      handlePrint();
+                      handlePrint(caeResult, targetWin);
                       setTimeout(() => {
                         removeAll();
                         if (onOrderResetRef.current) {
                           onOrderResetRef.current();
                         }
                       }, 5000);
+                    } else if (targetWin) {
+                       targetWin.close();
                     }
                     setOpenRemitoModal(false);
                     setBlockButton(false);
                   } catch (err) {
+                    if (targetWin) targetWin.close();
                     console.error(err);
                   }
                 }}

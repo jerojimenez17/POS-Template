@@ -8,20 +8,16 @@ import BillState from "@/models/BillState";
 import DecimalInput from "./DecimalInput";
 import dynamic from "next/dynamic";
 import { Session } from "next-auth";
-import { IDetectedBarcode } from "@yudiel/react-qr-scanner";
+import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
 import { cn } from "@/lib/utils";
 import { Inter } from "next/font/google";
 import { getBusinessBillingInfoAction } from "@/actions/business";
 import moment from "moment";
 import { QRCodeSVG } from "qrcode.react";
-import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES } from "@/lib/print";
+import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES, type PrintOptions } from "@/lib/print";
 import { getBillTypeDisplay } from "@/lib/utils/bill-type";
-
-// Dynamically import scanner to avoid SSR issues
-const Scanner = dynamic(
-  () => import("@yudiel/react-qr-scanner").then((mod) => mod.Scanner),
-  { ssr: false }
-);
+import QRCode from "qrcode";
+import CAE from "@/models/CAE";
 
 interface Props {
   printTrigger: number;
@@ -29,6 +25,8 @@ interface Props {
   handleClose: () => void;
   session: Session | null;
   externalState?: BillState;
+  forceCae?: CAE;
+  targetWindowRef?: React.MutableRefObject<Window | null>;
 }
 
 const inter = Inter({
@@ -56,6 +54,8 @@ const PrintableTable = ({
   session,
   className,
   externalState,
+  forceCae,
+  targetWindowRef,
 }: Props) => {
   const { BillState, addItem, removeItem, printMode } = useContext(BillContext);
   const [errorMessage, setErrorMessage] = useState("");
@@ -72,6 +72,7 @@ const PrintableTable = ({
     inicioActividades?: Date | string | null;
     address?: string | null;
   } | null>(null);
+  const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const lastPrintTrigger = useRef(0);
@@ -100,10 +101,25 @@ const PrintableTable = ({
     fetchBillingInfo();
   }, []);
 
-  const isRemito = !state.CAE || state.CAE.CAE === "";
-  const billTypeDisplay = getBillTypeDisplay(state.billType, state.CAE?.CAE, isRemito);
+  useEffect(() => {
+    const activeCae = forceCae || state.CAE;
+    if (activeCae?.qrData) {
+      QRCode.toString(activeCae.qrData, { type: "svg", margin: 0, width: 60 })
+        .then((svgString) => {
+          const dataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
+          setQrSvgDataUrl(dataUrl);
+        })
+        .catch(console.error);
+    } else {
+      setQrSvgDataUrl(null);
+    }
+  }, [state.CAE?.qrData, forceCae]);
+
+  const isRemito = !(forceCae || state.CAE)?.CAE || (forceCae || state.CAE)?.CAE === "";
+  const billTypeDisplay = getBillTypeDisplay(state.billType, (forceCae || state.CAE)?.CAE, isRemito);
 
   const handlePrint = useCallback(async () => {
+    const activeCae = forceCae || state.CAE;
     const receiptData: ThermalReceiptData = {
       businessName: session?.user?.businessName || "Mi Comercio",
       businessInfo: billingInfo ? {
@@ -132,10 +148,10 @@ const PrintableTable = ({
         ? state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0) * (state.discount / 100)
         : undefined,
       total: state.totalWithDiscount || state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0) * (1 - state.discount / 100),
-      cae: state.CAE?.CAE ? {
-        cae: state.CAE.CAE,
-        vencimiento: state.CAE.vencimiento,
-        qrData: state.CAE.qrData,
+      cae: activeCae?.CAE ? {
+        cae: activeCae.CAE,
+        vencimiento: activeCae.vencimiento,
+        qrData: activeCae.qrData,
       } : undefined,
     };
 
@@ -144,7 +160,8 @@ const PrintableTable = ({
     } else {
       const content = document.createElement("div");
       content.innerHTML = buildPDFHTML(receiptData, {
-        invoiceNumber: state.CAE?.nroComprobante,
+        invoiceNumber: activeCae?.nroComprobante,
+        qrSvgDataUrl: qrSvgDataUrl,
       });
       
       const styleEl = document.createElement("style");
@@ -153,20 +170,21 @@ const PrintableTable = ({
 
       document.body.appendChild(content);
       try {
-        const filename = state.CAE?.CAE
-          ? `Factura_${state.CAE?.nroComprobante || "000000000000"}`
+        const filename = activeCae?.CAE
+          ? `Factura_${activeCae?.nroComprobante || "000000000000"}`
           : `Comprobante_${state.id || Date.now()}`;
         
         await exportToPDF(content as HTMLElement, {
           documentTitle: filename,
           format: "a4",
           filename: filename,
-        });
+          targetWindow: targetWindowRef?.current || null,
+        } as PrintOptions);
       } finally {
         document.body.removeChild(content);
       }
     }
-  }, [state, session, billingInfo, printMode, billTypeDisplay]);
+  }, [state, session, billingInfo, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef]);
 
   useEffect(() => {
     if (errorMessage) {
@@ -181,10 +199,15 @@ const PrintableTable = ({
 
   useEffect(() => {
     if (printTrigger > lastPrintTrigger.current && isClient && !scannerOpen) {
+      // If we have QR data but the SVG URL isn't ready yet, we wait for it
+      // The dependency on qrSvgDataUrl will re-run this effect when it's ready
+      const activeCae = forceCae || state.CAE;
+      if (activeCae?.qrData && !qrSvgDataUrl) return;
+
       lastPrintTrigger.current = printTrigger;
       handlePrint();
     }
-  }, [printTrigger, isClient, scannerOpen, handlePrint]);
+  }, [printTrigger, isClient, scannerOpen, handlePrint, qrSvgDataUrl, forceCae, state.CAE?.qrData]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -231,6 +254,8 @@ const PrintableTable = ({
     const adaptedProduct = ProductPrismaAdapter.toDomain(product);
     addItem({ ...adaptedProduct, amount: 1 });
     setSearchCode("");
+    setSuggestions([]);
+    setSelectedIndex(-1);
   };
 
   const handleSearch = async (value: string) => {

@@ -9,6 +9,7 @@ export interface PrintOptions {
   format?: "a4" | "letter" | "thermal";
   orientation?: "portrait" | "landscape";
   margin?: number;
+  targetWindow?: Window | null;
 }
 
 const DEFAULT_OPTIONS: Required<PrintOptions> = {
@@ -19,6 +20,7 @@ const DEFAULT_OPTIONS: Required<PrintOptions> = {
   format: "thermal",
   orientation: "portrait",
   margin: 10,
+  targetWindow: null,
 };
 
 function getFormatDimensions(format: PrintOptions["format"]) {
@@ -107,15 +109,35 @@ export async function exportToPDF(
     heightLeft -= pageHeight - margin * 2;
   }
 
+  // To avoid automatic download and prioritize "Showing for printing":
+  // We use a Blob and open it in a new window.
   const pdfBlob = pdf.output("blob");
   const pdfUrl = URL.createObjectURL(pdfBlob);
 
-  const printWindow = window.open(pdfUrl, "_blank");
+  const printWindow = mergedOptions.targetWindow || window.open(pdfUrl, "_blank");
+  
   if (printWindow) {
+    if (printWindow.location.href !== pdfUrl && !printWindow.location.href.includes("blob:")) {
+       printWindow.location.href = pdfUrl;
+    }
+    // Focus the new window
+    printWindow.focus();
+    
+    // We try to trigger print, but many browsers block this for PDF blobs
+    // The user will still see the PDF in the new tab, which is "mostrar para imprimir"
     printWindow.onload = () => {
-      printWindow.print();
+      try {
+        printWindow.print();
+      } catch (e) {
+        console.warn("Auto-print failed, user can still print manually", e);
+      }
     };
   } else {
+    // If popup is blocked, we have to fallback to download or inform the user
+    // Since the user asked specifically "not to save/guarde", 
+    // we'll try to redirect the current window if it's a dedicated print action,
+    // or just fallback to download as last resort but with a warning.
+    console.warn("Popup blocked. Falling back to download.");
     downloadPDF(pdf, mergedOptions.filename || "document");
   }
 }

@@ -35,13 +35,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     //   }
     //   return true;
     // },
-    async signIn({ user, account }) {
-      if (account?.provider === "google" && user.id) {
-        const existingUser = await getUserById(user.id);
-        if (existingUser && !existingUser.image && user.image) {
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "google" && user.email) {
+        const existingUser = await getUserByEmail(user.email);
+        const imageUrl = user.image || (profile as any)?.picture;
+        if (existingUser && imageUrl && existingUser.image !== imageUrl) {
           await db.user.update({
-            where: { id: user.id },
-            data: { image: user.image }
+            where: { id: existingUser.id },
+            data: { image: imageUrl }
           });
         }
       }
