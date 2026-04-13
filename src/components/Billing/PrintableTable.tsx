@@ -6,7 +6,6 @@ import { ProductPrismaAdapter } from "@/models/ProductPrismaAdapter";
 import Product from "@/models/Product";
 import BillState from "@/models/BillState";
 import DecimalInput from "./DecimalInput";
-import dynamic from "next/dynamic";
 import { Session } from "next-auth";
 import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
 import { cn } from "@/lib/utils";
