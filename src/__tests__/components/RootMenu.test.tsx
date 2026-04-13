@@ -24,11 +24,19 @@ vi.mock("@/components/ui/MenuCard", () => ({
 
 describe("RootMenu Test Cases", () => {
   it("should NOT render Usuarios card when user is not ADMIN", () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: {
-        user: { role: "USER", businessSlug: "test-slug" },
+        user: { 
+          role: "USER", 
+          businessSlug: "test-slug",
+          businessId: null,
+          businessName: null,
+        },
+        expires: new Date().toISOString(),
       },
-    });
+      status: "authenticated",
+      update: vi.fn(),
+    } as any);
 
     render(<RootMenu />);
     
@@ -36,11 +44,19 @@ describe("RootMenu Test Cases", () => {
   });
 
   it("should render Usuarios card when user is ADMIN", () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: {
-        user: { role: "ADMIN", businessSlug: "test-slug" },
+        user: { 
+          role: "ADMIN", 
+          businessSlug: "test-slug",
+          businessId: null,
+          businessName: null,
+        },
+        expires: new Date().toISOString(),
       },
-    });
+      status: "authenticated",
+      update: vi.fn(),
+    } as any);
 
     render(<RootMenu />);
     
