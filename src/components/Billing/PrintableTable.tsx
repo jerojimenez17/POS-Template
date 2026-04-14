@@ -112,7 +112,7 @@ const PrintableTable = ({
     } else {
       setQrSvgDataUrl(null);
     }
-  }, [state.CAE?.qrData, forceCae]);
+  }, [state.CAE, state.CAE?.qrData, forceCae]);
 
   const isRemito = !(forceCae || state.CAE)?.CAE || (forceCae || state.CAE)?.CAE === "";
   const billTypeDisplay = getBillTypeDisplay(state.billType, (forceCae || state.CAE)?.CAE, isRemito);
@@ -206,7 +206,7 @@ const PrintableTable = ({
       lastPrintTrigger.current = printTrigger;
       handlePrint();
     }
-  }, [printTrigger, isClient, scannerOpen, handlePrint, qrSvgDataUrl, forceCae, state.CAE?.qrData]);
+  }, [printTrigger, isClient, scannerOpen, handlePrint, qrSvgDataUrl, forceCae, state.CAE, state.CAE?.qrData]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
