@@ -34,9 +34,9 @@ describe("RootMenu Test Cases", () => {
         },
         expires: new Date().toISOString(),
       },
-      status: "authenticated",
+      status: "authenticated" as const,
       update: vi.fn(),
-    } as any);
+    });
 
     render(<RootMenu />);
     
@@ -54,9 +54,9 @@ describe("RootMenu Test Cases", () => {
         },
         expires: new Date().toISOString(),
       },
-      status: "authenticated",
+      status: "authenticated" as const,
       update: vi.fn(),
-    } as any);
+    });
 
     render(<RootMenu />);
     
