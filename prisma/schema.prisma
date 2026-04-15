@@ -245,6 +245,7 @@ model Client {
   name          String
   address       String?
   cellPhone     String?   // Storing as string for flexibility
+  email         String?
   balance       Float     @default(0)
   
   date          DateTime  @default(now()) // Creation date

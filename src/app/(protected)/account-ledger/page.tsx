@@ -24,13 +24,15 @@ import {
 } from "lucide-react";
 import { Suspense } from "react";
 import { PusherListener } from "./PusherListener";
+import ConfirmOrderButton from "./ConfirmOrderButton";
 
-type StatusFilter = "all" | "inpago" | "pago" | "cancelado";
+type StatusFilter = "all" | "inpago" | "pago" | "cancelado" | "pendiente";
 
 type OrderWithClient = {
   id: string;
   date: Date;
   total: number;
+  status: string;
   paidStatus: string;
   clientId: string | null;
   client: { id: string; name: string | null } | null;
@@ -70,10 +72,13 @@ async function OrdersTable({ status }: OrdersTableProps) {
     );
   }
 
-  const getStatusBadge = (paidStatus: string) => {
+  const getStatusBadge = (status: string, paidStatus: string) => {
+    if (status === "pendiente") {
+      return <Badge variant="secondary" className="bg-orange-100 text-orange-800 hover:bg-orange-200">Por Confirmar</Badge>;
+    }
     switch (paidStatus) {
       case "inpago":
-        return <Badge variant="destructive">Pendiente</Badge>;
+        return <Badge variant="destructive">Pendiente Pago</Badge>;
       case "pago":
         return <Badge className="bg-green-500 hover:bg-green-600">Pagado</Badge>;
       default:
@@ -124,7 +129,7 @@ async function OrdersTable({ status }: OrdersTableProps) {
                 {formatDate(order.date)}
               </div>
             </TableCell>
-            <TableCell>{getStatusBadge(order.paidStatus)}</TableCell>
+            <TableCell>{getStatusBadge(order.status, order.paidStatus)}</TableCell>
             <TableCell className="text-right">
               <div className="flex items-center justify-end gap-2">
                 <Button variant="outline" size="sm" asChild>
@@ -133,7 +138,9 @@ async function OrdersTable({ status }: OrdersTableProps) {
                     Ver
                   </Link>
                 </Button>
-                {order.paidStatus !== "pago" && (
+                {order.status === "pendiente" ? (
+                  <ConfirmOrderButton orderId={order.id} />
+                ) : order.paidStatus !== "pago" ? (
                   <>
                     <Button variant="default" size="sm" asChild>
                       <Link href={`/account-ledger/${order.id}?action=payment`}>
@@ -148,7 +155,7 @@ async function OrdersTable({ status }: OrdersTableProps) {
                       </Link>
                     </Button>
                   </>
-                )}
+                ) : null}
               </div>
             </TableCell>
           </TableRow>
@@ -182,7 +189,8 @@ export default async function AccountLedgerPage({
 
       <div className="flex flex-col gap-6">
         <div className="flex gap-2 border-b pb-2">
-          <StatusTab status="inpago" label="Pendientes" currentStatus={status} />
+          <StatusTab status="pendiente" label="Por Confirmar" currentStatus={status} />
+          <StatusTab status="inpago" label="Pendientes de Pago" currentStatus={status} />
           <StatusTab status="pago" label="Pagados" currentStatus={status} />
           <StatusTab status="all" currentStatus={status} />
         </div>
@@ -215,8 +223,10 @@ function StatusTab({
     switch (status) {
       case "all":
         return "Todos";
+      case "pendiente":
+        return "Por Confirmar";
       case "inpago":
-        return "Pendientes";
+        return "Pendientes Pago";
       case "pago":
         return "Pagados";
       default:
