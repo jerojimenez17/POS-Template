@@ -106,15 +106,71 @@ const newOrder = await tx.order.create({
 
 export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-        await db.order.update({
-            where: { id: orderId},
-            data: { status: newStatus }
+        await db.$transaction(async (tx) => {
+            const order = await tx.order.findUnique({
+                where: { id: orderId },
+                include: { items: true }
+            });
+
+            if (!order) throw new Error("Orden no encontrada");
+
+            // If transitioning from pendiente to confirmado, perform stock and balance updates
+            if (order.status === "pendiente" && newStatus === "confirmado") {
+                // Update client balance (increase debt)
+                if (order.clientId) {
+                    await tx.client.update({
+                        where: { id: order.clientId },
+                        data: {
+                            balance: { decrement: order.total },
+                            last_update: new Date(),
+                        }
+                    });
+                }
+
+                // Decrement stock and create stock movements
+                for (const item of order.items) {
+                    if (item.productId) {
+                        const product = await tx.product.findUnique({
+                            where: { id: item.productId }
+                        });
+
+                        if (!product || product.amount < item.quantity) {
+                            throw new Error(`Stock insuficiente para el producto ${item.description || item.productId}`);
+                        }
+
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: { amount: { decrement: item.quantity } }
+                        });
+
+                        await tx.stockMovement.create({
+                            data: {
+                                type: "SALE",
+                                quantity: -item.quantity,
+                                productId: item.productId,
+                                orderId: order.id,
+                                businessId: order.businessId,
+                                reason: `Confirmación de Pedido #${order.id}`
+                            }
+                        });
+                    }
+                }
+            }
+
+            // Finally, update the status
+            await tx.order.update({
+                where: { id: orderId },
+                data: { status: newStatus }
+            });
         });
+
         revalidatePath("/orders");
+        revalidatePath("/stock");
+        revalidatePath("/clients");
         return { success: true };
     } catch (error) {
         console.error(error);
-        return { error: "Error actualizando estado" };
+        return { error: "Error actualizando estado: " + (error instanceof Error ? error.message : "") };
     }
 }
 
