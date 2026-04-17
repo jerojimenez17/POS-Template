@@ -163,7 +163,12 @@ const StockTable = ({ descriptionFilter }: props) => {
                           setProductToEdit(product);
                           setOpenDeleteModal(true);
                         } } disable={false}                      />
-                      <CodeBarModal value={product.code || ""}></CodeBarModal>
+                      <CodeBarModal 
+                      code={product.code || ""} 
+                      description={product.description || ""}
+                      salePrice={product.salePrice}
+                      unit={product.unit ?? undefined}
+                    />
                     </TableCell>
                   </TableRow>
                 );

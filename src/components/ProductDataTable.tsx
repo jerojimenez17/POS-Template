@@ -197,7 +197,12 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
               }}
               disable={false}
             />
-            <CodeBarModal value={product.code || ""} />
+            <CodeBarModal 
+                      code={product.code || ""} 
+                      description={product.description || ""}
+                      salePrice={product.salePrice}
+                      unit={product.unit ?? undefined}
+                    />
           </div>
         );
       },
@@ -434,7 +439,12 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                     }}
                     disable={false}
                   />
-                  <CodeBarModal value={product.code || ""} />
+<CodeBarModal 
+                      code={product.code || ""} 
+                      description={product.description || ""}
+                      salePrice={product.salePrice}
+                      unit={product.unit ?? undefined}
+                    />
                 </div>
               </div>
             );
