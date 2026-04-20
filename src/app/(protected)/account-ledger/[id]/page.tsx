@@ -29,6 +29,7 @@ import { db } from "@/lib/db";
 import AddPaymentForm from "./AddPaymentForm";
 import CancelOrderButton from "./CancelOrderButton";
 import EditableOrderDetailWrapper from "./EditableOrderDetailWrapper";
+import { LocalDate } from "@/components/ui/LocalDate";
 
 interface OrderWithRelations {
   id: string;
@@ -90,16 +91,7 @@ export default async function AccountLedgerDetailPage({
   const totalPaid = order.cashMovements.reduce((sum, pm) => sum + pm.total, 0);
   const remainingBalance = order.total - totalPaid;
 
-  const formatDate = (date: Date | string) => {
-    const d = new Date(date);
-    return d.toLocaleDateString("es-AR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+
 
   const getStatusBadge = (paidStatus: string) => {
     switch (paidStatus) {
@@ -147,7 +139,7 @@ export default async function AccountLedgerDetailPage({
                 <Calendar className="h-5 w-5 text-muted-foreground" />
                 <div>
                   <p className="text-xs text-muted-foreground uppercase font-medium">Fecha</p>
-                  <p className="font-medium">{formatDate(order.date)}</p>
+                  <p className="font-medium"><LocalDate date={order.date} /></p>
                 </div>
               </div>
             </div>
@@ -225,7 +217,7 @@ export default async function AccountLedgerDetailPage({
                           +${payment.total.toLocaleString("es-AR")}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2">
-                          {formatDate(payment.date)}
+                          <LocalDate date={payment.date} />
                         </span>
                       </div>
                     </div>

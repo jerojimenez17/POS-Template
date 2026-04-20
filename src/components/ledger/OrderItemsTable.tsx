@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Trash2, Plus } from "lucide-react";
+import { formatLocalDate } from "@/utils/date";
 
 interface OrderItem {
   id: string;
@@ -24,37 +25,22 @@ interface OrderItemsTableProps {
   onAddItem?: () => void;
 }
 
-const formatDate = (date: Date): string => {
-  const d = new Date(date);
-  const today = new Date();
-  
-  const isSameDay = 
-    d.getDate() === today.getDate() &&
-    d.getMonth() === today.getMonth() &&
-    d.getFullYear() === today.getFullYear();
-  
-  if (isSameDay) {
-    return "Hoy";
-  }
-  
-  const day = d.getDate().toString().padStart(2, "0");
-  const month = (d.getMonth() + 1).toString().padStart(2, "0");
-  const year = d.getFullYear();
-  const hours = d.getHours().toString().padStart(2, "0");
-  const minutes = d.getMinutes().toString().padStart(2, "0");
-  
-  return `${day}/${month}/${year} ${hours}:${minutes}`;
-};
 
 const groupItemsByDate = (items: OrderItem[]): Map<string, OrderItem[]> => {
   const groups = new Map<string, OrderItem[]>();
-  
+
   items.forEach((item) => {
-    const dateKey = new Date(item.addedAt).toISOString().split("T")[0];
+    // Use local date key to avoid UTC midnight boundary issues in non-UTC timezones
+    const d = new Date(item.addedAt);
+    const dateKey = new Intl.DateTimeFormat("es-AR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
     const existing = groups.get(dateKey) || [];
     groups.set(dateKey, [...existing, item]);
   });
-  
+
   return groups;
 };
 
@@ -102,7 +88,7 @@ export default function OrderItemsTable({
       {sortedDates.map((dateKey) => {
         const dateItems = groupedItems.get(dateKey) || [];
         const firstItem = dateItems[0];
-        const displayDate = firstItem ? formatDate(firstItem.addedAt) : "";
+        const displayDate = firstItem ? formatLocalDate(firstItem.addedAt) : "";
 
         return (
           <div key={dateKey} className="space-y-2">
