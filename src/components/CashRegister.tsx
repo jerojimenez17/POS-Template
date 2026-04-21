@@ -16,6 +16,7 @@ import EditButton from "@/components/EditButton";
 import AddButton from "@/components/AddButton";
 
 import { Session } from "next-auth";
+import { formatLocalDate } from "@/utils/date";
 
 interface props {
   session: Session | null;
@@ -140,10 +141,9 @@ const CashRegister = ({ session }: props) => {
                           className="hover:bg-gray-50 dark:hover:bg-gray-800/80 transition-colors"
                         >
                           <TableCell className="text-sm text-gray-600 dark:text-gray-400">
-                            <span className="font-medium text-gray-900 dark:text-gray-200 mr-2">
-                              {movement.date.toLocaleDateString()}
+                            <span className="font-medium text-gray-900 dark:text-gray-200">
+                              {formatLocalDate(movement.date)}
                             </span>
-                            {movement.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </TableCell>
                           <TableCell className="text-sm font-medium text-gray-700 dark:text-gray-300">
                             {movement.seller?.split('@')[0] || "Sistema"}

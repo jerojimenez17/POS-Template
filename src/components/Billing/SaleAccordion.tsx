@@ -10,6 +10,7 @@ import DeleteButton from "../DeleteButton";
 import Modal from "../Modal";
 import { db } from "@/firebase/config";
 import { Session } from "next-auth";
+import { formatLocalDate } from "@/utils/date";
 
 interface props {
   sale: BillState;
@@ -26,7 +27,7 @@ const SaleAccordion = ({ sale, user, session }: props) => {
       <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px_40px] items-center gap-4 text-gray-700 dark:text-gray-300">
         {/* Date */}
         <div className="font-medium text-gray-900 dark:text-gray-100">
-          {sale.date?.toLocaleDateString()}
+          {sale.date ? formatLocalDate(sale.date) : ""}
         </div>
 
         {/* Invoice / CAE */}

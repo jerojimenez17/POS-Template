@@ -25,6 +25,7 @@ import {
 import { Suspense } from "react";
 import { PusherListener } from "./PusherListener";
 import ConfirmOrderButton from "./ConfirmOrderButton";
+import { LocalDate } from "@/components/ui/LocalDate";
 
 type StatusFilter = "all" | "inpago" | "pago" | "cancelado" | "pendiente";
 
@@ -86,16 +87,7 @@ async function OrdersTable({ status }: OrdersTableProps) {
     }
   };
 
-  const formatDate = (date: Date | string) => {
-    const d = new Date(date);
-    return d.toLocaleDateString("es-AR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+
 
   return (
     <Table>
@@ -126,7 +118,7 @@ async function OrdersTable({ status }: OrdersTableProps) {
             <TableCell>
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                {formatDate(order.date)}
+                <LocalDate date={order.date} />
               </div>
             </TableCell>
             <TableCell>{getStatusBadge(order.status, order.paidStatus)}</TableCell>
