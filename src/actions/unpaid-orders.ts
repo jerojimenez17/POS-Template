@@ -130,6 +130,10 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
         include: { items: true },
       });
 
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+
       for (const item of input.items) {
         await tx.product.update({
           where: { id: item.productId },
@@ -143,6 +147,29 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
             productId: item.productId,
             orderId: order.id,
             businessId,
+          },
+        });
+
+        await tx.productRanking.upsert({
+          where: {
+            productId_month_year_businessId: {
+              productId: item.productId,
+              month,
+              year,
+              businessId,
+            },
+          },
+          update: { 
+            totalSold: { increment: item.quantity },
+            totalIncome: { increment: item.quantity * item.price }
+          },
+          create: {
+            productId: item.productId,
+            month,
+            year,
+            businessId,
+            totalSold: item.quantity,
+            totalIncome: item.quantity * item.price,
           },
         });
       }
@@ -265,6 +292,33 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
               productId: item.productId,
               orderId: order.id,
               businessId,
+            },
+          });
+
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const year = now.getFullYear();
+
+          await tx.productRanking.upsert({
+            where: {
+              productId_month_year_businessId: {
+                productId: item.productId,
+                month,
+                year,
+                businessId,
+              },
+            },
+            update: { 
+              totalSold: { decrement: item.quantity },
+              totalIncome: { decrement: item.quantity * item.price }
+            },
+            create: {
+              productId: item.productId,
+              month,
+              year,
+              businessId,
+              totalSold: 0,
+              totalIncome: 0,
             },
           });
         }
@@ -406,6 +460,8 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
       }
 
       const currentTimestamp = new Date();
+      const month = currentTimestamp.getMonth() + 1;
+      const year = currentTimestamp.getFullYear();
 
       for (const item of validatedInput.items) {
         await tx.orderItem.create({
@@ -434,6 +490,29 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
             productId: item.productId,
             orderId: order.id,
             businessId,
+          },
+        });
+
+        await tx.productRanking.upsert({
+          where: {
+            productId_month_year_businessId: {
+              productId: item.productId,
+              month,
+              year,
+              businessId,
+            },
+          },
+          update: { 
+            totalSold: { increment: item.quantity },
+            totalIncome: { increment: item.quantity * item.price }
+          },
+          create: {
+            productId: item.productId,
+            month,
+            year,
+            businessId,
+            totalSold: item.quantity,
+            totalIncome: item.quantity * item.price,
           },
         });
       }
@@ -533,6 +612,33 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
             businessId,
           },
         });
+
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+
+        await tx.productRanking.upsert({
+          where: {
+            productId_month_year_businessId: {
+              productId: orderItem.productId,
+              month,
+              year,
+              businessId,
+            },
+          },
+          update: { 
+            totalSold: { increment: quantityDiff },
+            totalIncome: { increment: quantityDiff * orderItem.price }
+          },
+          create: {
+            productId: orderItem.productId,
+            month,
+            year,
+            businessId,
+            totalSold: quantityDiff > 0 ? quantityDiff : 0,
+            totalIncome: quantityDiff > 0 ? quantityDiff * orderItem.price : 0,
+          },
+        });
       }
 
       const itemsTotal = order.items.reduce((sum, item) => {
@@ -611,6 +717,33 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
             productId: orderItem.productId,
             orderId: order.id,
             businessId,
+          },
+        });
+
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+
+        await tx.productRanking.upsert({
+          where: {
+            productId_month_year_businessId: {
+              productId: orderItem.productId,
+              month,
+              year,
+              businessId,
+            },
+          },
+          update: { 
+            totalSold: { decrement: orderItem.quantity },
+            totalIncome: { decrement: orderItem.quantity * orderItem.price }
+          },
+          create: {
+            productId: orderItem.productId,
+            month,
+            year,
+            businessId,
+            totalSold: 0,
+            totalIncome: 0,
           },
         });
       }

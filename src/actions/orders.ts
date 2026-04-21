@@ -127,7 +127,11 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                     });
                 }
 
-                // Decrement stock and create stock movements
+                // Decrement stock, create stock movements, and update product ranking
+                const now = new Date();
+                const month = now.getMonth() + 1;
+                const year = now.getFullYear();
+
                 for (const item of order.items) {
                     if (item.productId) {
                         const product = await tx.product.findUnique({
@@ -152,6 +156,29 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                                 businessId: order.businessId,
                                 reason: `Confirmación de Pedido #${order.id}`
                             }
+                        });
+
+                        await tx.productRanking.upsert({
+                            where: {
+                                productId_month_year_businessId: {
+                                    productId: item.productId,
+                                    month,
+                                    year,
+                                    businessId: order.businessId,
+                                },
+                            },
+                            update: { 
+                                totalSold: { increment: item.quantity },
+                                totalIncome: { increment: item.quantity * item.price }
+                            },
+                            create: {
+                                productId: item.productId,
+                                month,
+                                year,
+                                businessId: order.businessId,
+                                totalSold: item.quantity,
+                                totalIncome: item.quantity * item.price,
+                            },
                         });
                     }
                 }

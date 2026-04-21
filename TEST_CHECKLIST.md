@@ -1,12 +1,23 @@
-# TEST CHECKLIST: Admin Users Card
+# TEST_CHECKLIST.md
 
-## Acceptance Criteria
-- [x] UI renders base cards correctly for any user.
-- [x] Users card is NOT rendered when `session.user.role` is 'USER'.
-- [x] Users card IS rendered when `session.user.role` is 'ADMIN'.
-- [x] Users card has the correct URL `/admin/users`.
-- [x] Users card has the `Users` icon from `lucide-react`.
+## Test Scenarios for Product Deletion Fix
 
-## Expected Behaviors
-- Unauthenticated users handled gracefully (no crash, default components shown).
-- Users card visibility toggles based purely on the `role` attribute.
+### Scenario 1: Product with Stock Movements Deletion
+- [ ] Create a new Product.
+- [ ] Create a `StockMovement` for this Product.
+- [ ] Call `deleteProduct` on the backend.
+- [ ] Verify the Product is successfully deleted from the database.
+- [ ] Verify the `StockMovement` is also deleted (Cascade).
+
+### Scenario 2: Product referenced in an Order (OrderItem)
+- [ ] Create a new Product.
+- [ ] Create an Order with an `OrderItem` using this Product.
+- [ ] Call `deleteProduct`.
+- [ ] Verify the Product is deleted.
+- [ ] Verify the `OrderItem` remains in the database.
+- [ ] Verify the `OrderItem.productId` is set to `null` (SetNull).
+
+### Scenario 3: Product referenced in a SaleReturnItem
+- [ ] Create a new Product, Order with OrderItem, and a SaleReturn with `SaleReturnItem` pointing to this Product.
+- [ ] Call `deleteProduct`.
+- [ ] Verify the `SaleReturnItem` remains in the database but its `productId` is `null` (SetNull).
