@@ -317,7 +317,7 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
   try {
     const [orders, returns, stockMovements] = await Promise.all([
       db.order.findMany({
-        where: { businessId, date: { gte: start, lte: end } },
+        where: { businessId, date: { gte: start, lte: end }, paidStatus: "pago" },
         include: { items: true },
       }),
       db.saleReturn.findMany({
@@ -395,7 +395,7 @@ export const getSalesAction = async (): Promise<BillState[]> => {
 
   try {
     const orders = await db.order.findMany({
-      where: { businessId },
+      where: { businessId, paidStatus: "pago" },
       include: {
         items: true,
         client: true,

@@ -343,7 +343,7 @@ model OrderItem {
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
   productId   String?
-  product     Product? @relation(fields: [productId], references: [id])
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   // Snapshot fields (in case product changes or is deleted)
   code        String?
@@ -374,7 +374,7 @@ model StockMovement {
   date        DateTime     @default(now())
   
   productId   String
-  product     Product      @relation(fields: [productId], references: [id])
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
   
   orderId     String?
   order       Order?       @relation(fields: [orderId], references: [id])
@@ -413,7 +413,7 @@ model SaleReturnItem {
   orderItem     OrderItem   @relation(fields: [orderItemId], references: [id])
   
   productId     String?
-  product       Product?    @relation(fields: [productId], references: [id])
+  product       Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
   
   quantity      Float
   refundAmount  Float       @default(0)
