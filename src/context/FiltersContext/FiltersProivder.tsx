@@ -5,6 +5,18 @@ import { FiltersReducer } from "./FiltersReducer";
 import { FiltersContext } from "./FiltersContext";
 import FilterField from "@/models/FilterField";
 
+// Helper: get today's date at 00:00
+const getTodayStart = (): Date => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+// Helper: get current date/time
+const getNow = (): Date => {
+  return new Date();
+};
+
 const INITIAL_STATE: FilterState = {
   Remito: {
     active: true,
@@ -47,12 +59,12 @@ const INITIAL_STATE: FilterState = {
     filter: "cuentaDNI",
   } as FilterField,
   startDate: {
-    active: false,
-    date: new Date(),
+    active: true,
+    date: getTodayStart(),
   },
   endDate: {
-    active: false,
-    date: new Date(),
+    active: true,
+    date: getNow(),
   },
 };
 
