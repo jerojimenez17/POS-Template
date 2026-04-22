@@ -73,6 +73,15 @@ export default function SearchBillFilters({ onApply }: SearchBillFiltersProps) {
   const [saleTypes, setSaleTypes] = useState<string[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
 
+  // Track if filters have been modified from defaults
+  const [filtersModified, setFiltersModified] = useState({
+    startDate: false,
+    endDate: false,
+    seller: false,
+    saleTypes: false,
+    paymentMethods: false,
+  });
+
   // Load sellers on mount
   useEffect(() => {
     getUniqueSellersAction().then(setSellers);
@@ -104,12 +113,29 @@ export default function SearchBillFilters({ onApply }: SearchBillFiltersProps) {
     setSaleTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
     );
+    setFiltersModified(prev => ({ ...prev, saleTypes: true }));
   };
 
   const togglePaymentMethod = (method: string) => {
     setPaymentMethods((prev) =>
       prev.includes(method) ? prev.filter((m) => m !== method) : [...prev, method]
     );
+    setFiltersModified(prev => ({ ...prev, paymentMethods: true }));
+  };
+
+  const handleSellerChange = (newSeller: string) => {
+    setSeller(newSeller);
+    setFiltersModified(prev => ({ ...prev, seller: newSeller !== "" }));
+  };
+
+  const handleStartDateChange = (newDate: string) => {
+    setStartDate(newDate);
+    setFiltersModified(prev => ({ ...prev, startDate: newDate !== defaults.today }));
+  };
+
+  const handleEndDateChange = (newDate: string) => {
+    setEndDate(newDate);
+    setFiltersModified(prev => ({ ...prev, endDate: newDate !== defaults.today }));
   };
 
   const handleReset = () => {
@@ -120,6 +146,45 @@ export default function SearchBillFilters({ onApply }: SearchBillFiltersProps) {
     setEndTime(defaults.currentTime);
     setSaleTypes([]);
     setPaymentMethods([]);
+    setFiltersModified({
+      startDate: false,
+      endDate: false,
+      seller: false,
+      saleTypes: false,
+      paymentMethods: false,
+    });
+  };
+
+  // Individual filter reset handlers
+  const handleRemoveSeller = () => {
+    setSeller("");
+    setFiltersModified(prev => ({ ...prev, seller: false }));
+  };
+
+  const handleRemoveStartDate = () => {
+    setStartDate(defaults.today);
+    setStartTime("00:00");
+    setFiltersModified(prev => ({ ...prev, startDate: false }));
+  };
+
+  const handleRemoveEndDate = () => {
+    setEndDate(defaults.today);
+    setEndTime(defaults.currentTime);
+    setFiltersModified(prev => ({ ...prev, endDate: false }));
+  };
+
+  const handleRemoveSaleType = (type: string) => {
+    setSaleTypes(prev => prev.filter(t => t !== type));
+    if (saleTypes.length === 1) {
+      setFiltersModified(prev => ({ ...prev, saleTypes: false }));
+    }
+  };
+
+  const handleRemovePaymentMethod = (method: string) => {
+    setPaymentMethods(prev => prev.filter(m => m !== method));
+    if (paymentMethods.length === 1) {
+      setFiltersModified(prev => ({ ...prev, paymentMethods: false }));
+    }
   };
 
   return (
@@ -130,15 +195,15 @@ export default function SearchBillFilters({ onApply }: SearchBillFiltersProps) {
       <CardContent className="space-y-4">
         <DateFilterRow
           startDate={startDate}
-          setStartDate={setStartDate}
+          setStartDate={handleStartDateChange}
           startTime={startTime}
           setStartTime={setStartTime}
           endDate={endDate}
-          setEndDate={setEndDate}
+          setEndDate={handleEndDateChange}
           endTime={endTime}
           setEndTime={setEndTime}
           seller={seller}
-          setSeller={setSeller}
+          setSeller={handleSellerChange}
           sellers={sellers}
         />
         <FilterChipGroup
@@ -158,12 +223,17 @@ export default function SearchBillFilters({ onApply }: SearchBillFiltersProps) {
         />
         <ActiveFiltersSummary
           seller={seller}
-          startDate={startDate}
-          endDate={endDate}
-          saleTypes={saleTypes}
-          paymentMethods={paymentMethods}
+          startDate={filtersModified.startDate ? startDate : ""}
+          endDate={filtersModified.endDate ? endDate : ""}
+          saleTypes={filtersModified.saleTypes ? saleTypes : []}
+          paymentMethods={filtersModified.paymentMethods ? paymentMethods : []}
           paymentMethodLabels={PAYMENT_METHOD_LABELS}
           onReset={handleReset}
+          onRemoveSeller={handleRemoveSeller}
+          onRemoveStartDate={handleRemoveStartDate}
+          onRemoveEndDate={handleRemoveEndDate}
+          onRemoveSaleType={handleRemoveSaleType}
+          onRemovePaymentMethod={handleRemovePaymentMethod}
         />
       </CardContent>
     </Card>
