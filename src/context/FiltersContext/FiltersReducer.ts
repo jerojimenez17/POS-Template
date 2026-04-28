@@ -32,6 +32,9 @@ export const FiltersReducer = (
       };
 
     case "seller":
+      if (state.Seller.filter === action.payload && state.Seller.active === true) {
+        return state;
+      }
       return {
         ...state,
         Seller: {

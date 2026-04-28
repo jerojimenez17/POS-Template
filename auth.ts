@@ -78,7 +78,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       token.businessName = existingUser.business?.name || null;
       token.businessSlug = existingUser.business?.slug || null;
       token.image = existingUser.image;
-      console.log({ token });
       return token;
     },
   },

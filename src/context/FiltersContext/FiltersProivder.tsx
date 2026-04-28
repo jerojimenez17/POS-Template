@@ -1,6 +1,6 @@
 "use client";
 import FilterState from "@/models/FiltersState";
-import { JSX, useReducer } from "react";
+import { JSX, useReducer, useCallback, useMemo } from "react";
 import { FiltersReducer } from "./FiltersReducer";
 import { FiltersContext } from "./FiltersContext";
 import FilterField from "@/models/FilterField";
@@ -63,97 +63,98 @@ interface props {
 const FiltersProvider = ({ children }: props) => {
   const [filtersState, dispatch] = useReducer(FiltersReducer, INITIAL_STATE);
 
-  const switchRemito = () => {
+  const switchRemito = useCallback(() => {
     dispatch({
       type: "switchRemito",
       payload: null,
     });
-  };
-  const switchFacturaC = () => {
+  }, []);
+  const switchFacturaC = useCallback(() => {
     dispatch({
       type: "switchFacturaC",
       payload: null,
     });
-  };
-  const switchDebito = () => {
+  }, []);
+  const switchDebito = useCallback(() => {
     dispatch({
       type: "switchDebito",
       payload: null,
     });
-  };
-  const switchUnPago = () => {
+  }, []);
+  const switchUnPago = useCallback(() => {
     dispatch({
       type: "switchUnPago",
       payload: null,
     });
-  };
-  const switchAhora3 = () => {
+  }, []);
+  const switchAhora3 = useCallback(() => {
     dispatch({
       type: "switchAhora3",
       payload: null,
     });
-  };
-  const switchAhora6 = () => {
+  }, []);
+  const switchAhora6 = useCallback(() => {
     dispatch({
       type: "switchAhora6",
       payload: null,
     });
-  };
-  const switchTransferencia = () => {
+  }, []);
+  const switchTransferencia = useCallback(() => {
     dispatch({
       type: "switchTransferencia",
       payload: null,
     });
-  };
-  const switchCuentaDNI = () => {
+  }, []);
+  const switchCuentaDNI = useCallback(() => {
     dispatch({
       type: "switchCuentaDNI",
       payload: null,
     });
-  };
-  const switchEfectivo = () => {
+  }, []);
+  const switchEfectivo = useCallback(() => {
     dispatch({
       type: "switchEfectivo",
       payload: null,
     });
-  };
-  const startDate = (date: Date) => {
+  }, []);
+  const startDate = useCallback((date: Date) => {
     dispatch({
       type: "startDate",
       payload: date,
     });
-  };
-  const endDate = (date: Date) => {
+  }, []);
+  const endDate = useCallback((date: Date) => {
     dispatch({
       type: "endDate",
       payload: date,
     });
-  };
-  const disableStartDate = () => {
+  }, []);
+  const disableStartDate = useCallback(() => {
     dispatch({
       type: "disableStartDate",
       payload: null,
     });
-  };
-  const disableEndDate = () => {
+  }, []);
+  const disableEndDate = useCallback(() => {
     dispatch({
       type: "disableEndDate",
       payload: null,
     });
-  };
-  const seller = (seller: string) => {
+  }, []);
+  const seller = useCallback((seller: string) => {
     dispatch({
       type: "seller",
       payload: seller,
     });
-  };
-  const disableSeller = () => {
+  }, []);
+  const disableSeller = useCallback(() => {
     dispatch({
       type: "disableSeller",
       payload: null,
     });
-  };
-  const values = {
+  }, []);
+  
+  const values = useMemo(() => ({
     filtersState: filtersState,
     switchRemito: switchRemito,
     switchFacturaC: switchFacturaC,
@@ -170,7 +171,13 @@ const FiltersProvider = ({ children }: props) => {
     disableStartDate: disableStartDate,
     seller: seller,
     disableSeller: disableSeller,
-  };
+  }), [
+    filtersState, switchRemito, switchFacturaC, switchDebito, switchEfectivo, 
+    switchUnPago, switchAhora3, switchAhora6, switchCuentaDNI, 
+    switchTransferencia, startDate, endDate, disableEndDate, 
+    disableStartDate, seller, disableSeller
+  ]);
+
   return (
     <FiltersContext.Provider value={values}>{children}</FiltersContext.Provider>
   );

@@ -40,9 +40,10 @@ interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
   user?: UserType | null;
+  cashboxes?: any[];
 }
 
-export const UserModal = ({ isOpen, onClose, user }: UserModalProps) => {
+export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalProps) => {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -55,6 +56,7 @@ export const UserModal = ({ isOpen, onClose, user }: UserModalProps) => {
       email: user?.email || "",
       password: "", // Always empty by default
       role: user?.role || "USER",
+      cashboxId: user?.cashboxId || "",
     },
   });
 
@@ -66,13 +68,15 @@ export const UserModal = ({ isOpen, onClose, user }: UserModalProps) => {
              email: user.email || "",
              password: "",
              role: user.role || "USER",
+             cashboxId: user.cashboxId || "",
          })
      } else {
          form.reset({
              name: "",
              email: "",
              password: "",
-             role: "USER"
+             role: "USER",
+             cashboxId: "",
          })
      }
   });
@@ -185,6 +189,38 @@ export const UserModal = ({ isOpen, onClose, user }: UserModalProps) => {
                       <SelectItem value="ADMIN">Administrador</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="cashboxId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Caja Asignada</FormLabel>
+                  <Select
+                    disabled={isPending}
+                    onValueChange={field.onChange}
+                    defaultValue={field.value || undefined}
+                    value={field.value || undefined}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona una caja" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {cashboxes.map((cashbox) => (
+                        <SelectItem key={cashbox.id} value={cashbox.id}>
+                          {cashbox.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    La caja en la que operará este vendedor.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

@@ -33,13 +33,15 @@ export interface UserType {
   name: string | null;
   email: string | null;
   role: UserRole | null;
+  cashboxId?: string | null;
 }
 
 interface UsersTableProps {
   users: UserType[];
+  cashboxes: any[];
 }
 
-export const UsersTable = ({ users }: UsersTableProps) => {
+export const UsersTable = ({ users, cashboxes }: UsersTableProps) => {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
@@ -153,6 +155,7 @@ export const UsersTable = ({ users }: UsersTableProps) => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         user={selectedUser}
+        cashboxes={cashboxes}
       />
 
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

@@ -34,7 +34,20 @@ interface props {
 const BillProvider = ({ children }: props) => {
   const [BillState, dispatch] = useReducer(BillReducer, INITIAL_STATE);
   const [printMode, setPrintMode] = React.useState<PrintMode>("thermal");
+  const [qzTrayActive, setQzTrayActive] = React.useState<boolean>(true);
   const onOrderResetRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("qzTrayActive");
+    if (saved !== null) {
+      setQzTrayActive(saved === "true");
+    }
+  }, []);
+
+  const handleSetQzTrayActive = (active: boolean) => {
+    setQzTrayActive(active);
+    localStorage.setItem("qzTrayActive", String(active));
+  };
 
   useEffect(() => {
     dispatch({ type: "date", payload: new Date() });
@@ -186,6 +199,8 @@ const BillProvider = ({ children }: props) => {
     onOrderResetRef: onOrderResetRef,
     printMode: printMode,
     setPrintMode: setPrintMode,
+    qzTrayActive: qzTrayActive,
+    setQzTrayActive: handleSetQzTrayActive,
   };
   return <BillContext.Provider value={values}>{children}</BillContext.Provider>;
 };

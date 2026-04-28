@@ -56,7 +56,7 @@ const PrintableTable = ({
   forceCae,
   targetWindowRef,
 }: Props) => {
-  const { BillState, addItem, removeItem, printMode } = useContext(BillContext);
+  const { BillState, addItem, removeItem, printMode, qzTrayActive } = useContext(BillContext);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchCode, setSearchCode] = useState("");
   const [suggestions, setSuggestions] = useState<Product[]>([]);
@@ -155,7 +155,7 @@ const PrintableTable = ({
     };
 
     if (printMode === "thermal") {
-      await printThermalReceipt(receiptData);
+      await printThermalReceipt(receiptData, qzTrayActive);
     } else {
       const content = document.createElement("div");
       content.innerHTML = buildPDFHTML(receiptData, {

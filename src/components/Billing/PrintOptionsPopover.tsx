@@ -25,21 +25,9 @@ export default function PrintOptionsPopover({
   sale,
   session,
 }: PrintOptionsPopoverProps) {
-  const [billingInfo, setBillingInfo] = useState<{
-    razonSocial?: string | null;
-    cuit?: string | null;
-    condicionIva?: string | null;
-    address?: string | null;
-  } | null>(null);
-  const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchBillingInfo = async () => {
-      const info = await getBusinessBillingInfoAction();
-      if (info) setBillingInfo(info);
-    };
-    fetchBillingInfo();
-  }, []);
+
+  const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (sale.CAE?.qrData) {
@@ -58,15 +46,15 @@ export default function PrintOptionsPopover({
   const isRemito = !sale.CAE || sale.CAE.CAE === "";
   const billTypeDisplay = getBillTypeDisplay(sale.billType, sale.CAE?.CAE, isRemito);
 
-  const getPrintData = (): ThermalReceiptData => ({
+  const getPrintData = (info: any): ThermalReceiptData => ({
     businessName: session?.user?.businessName || "Mi Comercio",
-    businessInfo: billingInfo
-      ? {
-          razonSocial: billingInfo.razonSocial,
-          cuit: billingInfo.cuit,
-          condicionIva: billingInfo.condicionIva,
-          address: billingInfo.address,
-        }
+    businessInfo: info
+        ? {
+            razonSocial: info.razonSocial,
+            cuit: info.cuit,
+            condicionIva: info.condicionIva,
+            address: info.address,
+          }
       : undefined,
     date: sale.date || new Date(),
     documentType: sale.typeDocument || "DNI",
@@ -104,7 +92,8 @@ export default function PrintOptionsPopover({
   });
 
   const handlePrintThermal = async () => {
-    await printThermalReceipt(getPrintData());
+    const info = await getBusinessBillingInfoAction();
+    await printThermalReceipt(getPrintData(info));
   };
 
   const handlePrintPDF = async () => {
@@ -113,7 +102,8 @@ export default function PrintOptionsPopover({
       targetWin.document.write("<html><head><title>Generando PDF...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
     }
 
-    const receiptData = getPrintData();
+    const info = await getBusinessBillingInfoAction();
+    const receiptData = getPrintData(info);
     const content = document.createElement("div");
     content.innerHTML = buildPDFHTML(receiptData, {
       invoiceNumber: sale.CAE?.nroComprobante,

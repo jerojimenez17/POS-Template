@@ -13,14 +13,38 @@ export const updateBusinessBalance = async (amount: number) => {
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
   try {
-    await db.cashBox.upsert({
-      where: { businessId: session.user.businessId },
-      update: { total: { increment: amount } },
-      create: { 
-        businessId: session.user.businessId,
-        total: amount 
-      },
+    // 1. Try to find active session for this user
+    const activeSession = await db.cashboxSession.findFirst({
+      where: { userId: session.user.id, status: "OPEN" },
     });
+
+    if (activeSession) {
+      await db.cashBox.update({
+        where: { id: activeSession.cashboxId },
+        data: { total: { increment: amount } },
+      });
+      return { success: true };
+    }
+
+    // 2. Fallback: Find the first cashbox for the business
+    const existingCashBox = await db.cashBox.findFirst({
+      where: { businessId: session.user.businessId },
+    });
+
+    if (existingCashBox) {
+      await db.cashBox.update({
+        where: { id: existingCashBox.id },
+        data: { total: { increment: amount } },
+      });
+    } else {
+      await db.cashBox.create({
+        data: {
+          businessId: session.user.businessId,
+          total: amount,
+          name: "Caja Principal",
+        },
+      });
+    }
     return { success: true };
   } catch (error) {
     console.error("Error updating business balance:", error);

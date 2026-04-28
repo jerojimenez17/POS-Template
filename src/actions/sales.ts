@@ -56,6 +56,13 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
     const discountAmount = billState.total * discountPercent * 0.01;
     
     const result = await db.$transaction(async (tx) => {
+      const activeSession = await tx.cashboxSession.findFirst({
+        where: { userId: session.user!.id, status: "OPEN" },
+      });
+      if (!activeSession) {
+        throw new Error("No hay una sesión de caja abierta.");
+      }
+
       const order = await tx.order.create({
         data: {
           total: total,
@@ -72,6 +79,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           clientIvaCondition: billState.clientIvaCondition,
           clientDocumentNumber: billState.clientDocumentNumber,
           CAE: billState.CAE,
+          cashboxSessionId: activeSession.id,
           items: {
             create: billState.products.map((p) => ({
               productId: p.id,
@@ -137,10 +145,9 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       }
 
       if (cashToIncrement > 0) {
-        await tx.cashBox.upsert({
-          where: { businessId },
-          update: { total: { increment: cashToIncrement } },
-          create: { businessId, total: cashToIncrement },
+        await tx.cashBox.update({
+          where: { id: activeSession.cashboxId },
+          data: { total: { increment: cashToIncrement } },
         });
       }
 
@@ -154,6 +161,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
               seller: billState.seller,
               paidMethod: billState.paidMethod || "Efectivo",
               businessId: businessId,
+              cashboxSessionId: activeSession.id,
               date: now,
             },
           });
@@ -166,6 +174,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
               seller: billState.seller,
               paidMethod: billState.secondPaidMethod || "Efectivo",
               businessId: businessId,
+              cashboxSessionId: activeSession.id,
               date: now,
             },
           });
@@ -178,6 +187,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
             seller: billState.seller,
             paidMethod: billState.paidMethod || "Efectivo",
             businessId: businessId,
+            cashboxSessionId: activeSession.id,
             date: now,
           },
         });
@@ -212,6 +222,13 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
 
   try {
     const result = await db.$transaction(async (tx) => {
+      const activeSession = await tx.cashboxSession.findFirst({
+        where: { userId: session.user!.id, status: "OPEN" },
+      });
+      if (!activeSession) {
+        throw new Error("No hay una sesión de caja abierta.");
+      }
+
       const returnRecord = await tx.saleReturn.create({
         data: {
           orderId: data.orderId,
@@ -259,7 +276,7 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
 
       const totalRefund = data.items.reduce((acc, item) => acc + item.refundAmount, 0);
       await tx.cashBox.update({
-        where: { businessId },
+        where: { id: activeSession.cashboxId },
         data: { total: { decrement: totalRefund } },
       });
 
@@ -268,6 +285,7 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
           total: -totalRefund,
           paidMethod: "Devolución",
           businessId,
+          cashboxSessionId: activeSession.id,
           seller: session?.user?.email,
           date: new Date(),
         },

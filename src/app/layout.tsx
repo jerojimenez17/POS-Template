@@ -5,6 +5,7 @@ import { NavigationMenuHeader } from "@/components/ui/NavBar";
 import FiltersProvider from "@/context/FiltersContext/FiltersProivder";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { PaymentStatusGuard } from "@/components/PaymentStatusGuard";
+import { CashboxProvider } from "@/context/CashboxContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -45,6 +46,7 @@ export default function RootLayout({
             className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased min-h-screen overflow-x-hidden`}
             >
             <AuthProvider>
+            <CashboxProvider>
             <ThemeProvider>
               <FiltersProvider>
                 <div className="min-h-screen bg-slate-100 dark:bg-gray-800">
@@ -55,6 +57,7 @@ export default function RootLayout({
                 </div>
         </FiltersProvider>
       </ThemeProvider>
+            </CashboxProvider>
             </AuthProvider>
           </body>
     </html>

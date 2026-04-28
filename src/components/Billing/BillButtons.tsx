@@ -13,6 +13,7 @@ import { toast, Toaster } from "sonner";
 import Spinner from "../ui/Spinner";
 import ClientSelectionModal from "../ledger/ClientSelectionModal";
 import { useRouter } from "next/navigation";
+import { useCashbox } from "@/context/CashboxContext";
 import {
   Dialog,
   DialogClose,
@@ -42,8 +43,18 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
+  const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(true);
+
+  const checkSession = () => {
+    if (!hasActiveSession) {
+      toast.error("Debe abrir una sesión de caja antes de realizar esta operación");
+      setIsOpeningModalOpen(true);
+      return false;
+    }
+    return true;
+  };
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
@@ -68,6 +79,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
       
       if (e.key === 'F1') {
         e.preventDefault();
+        if (!checkSession()) return;
         if (session?.user.email) {
           sellerName(session.user.email || "");
         }
@@ -75,6 +87,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
       }
       if (e.key === 'F2') {
         e.preventDefault();
+        if (!checkSession()) return;
         if (session?.user.email) {
           sellerName(session.user.email || "");
         }
@@ -82,6 +95,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
       }
       if (e.key === 'F3') {
         e.preventDefault();
+        if (!checkSession()) return;
         if (BillState.products.length > 0) {
           setOpenAcuentaModal(true);
         }
@@ -273,6 +287,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
         <>
           <Button
             onClick={() => {
+              if (!checkSession()) return;
               if (session?.user.email) {
                 sellerName(session.user.email || "");
               }
@@ -302,6 +317,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
           <Button
             variant="outline"
             onClick={() => {
+              if (!checkSession()) return;
               if (session?.user.email) {
                 sellerName(session.user.email || "");
               }
@@ -330,7 +346,10 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
             variant="outline"
             className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto"
             disabled={BillState.products.length === 0}
-            onClick={() => setOpenAcuentaModal(true)}
+            onClick={() => {
+              if (!checkSession()) return;
+              setOpenAcuentaModal(true);
+            }}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

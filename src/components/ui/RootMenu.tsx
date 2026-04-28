@@ -1,7 +1,7 @@
 "use client";
 import MenuCard from "./MenuCard";
 import { useSession } from "next-auth/react";
-import { LayoutGrid, FileText, Search, Package, BookOpen, Calculator, BarChart3, Users } from "lucide-react";
+import { LayoutGrid, FileText, Search, Package, BookOpen, Calculator, BarChart3, Users, Box } from "lucide-react";
 
 const RootMenu = () => {
   const { data: session } = useSession();
@@ -50,6 +50,12 @@ const RootMenu = () => {
           {role === 'ADMIN' && (
             <MenuCard url="/admin/users" title="Usuarios">
               <Users className="w-16 h-16" strokeWidth={1.5} />
+            </MenuCard>
+          )}
+
+          {role === 'ADMIN' && (
+            <MenuCard url="/admin/cashboxes" title="Cajas">
+              <Box className="w-16 h-16" strokeWidth={1.5} />
             </MenuCard>
           )}
         </div>

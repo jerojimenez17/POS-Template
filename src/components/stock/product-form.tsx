@@ -33,14 +33,16 @@ import {
 import { FormSuccess } from "../ui/form-success";
 import { v4 } from "uuid";
 import { FormError } from "../ui/form-error";
-import NewCategoryModal from "./new-category-modal";
-import NewSubcategoryModal from "./new-subcategory-modal";
-import NewBrandModal from "./new-brand-modal";
-import NewSuplierModal from "./new-suplier-modal";
-import { Scanner } from "@yudiel/react-qr-scanner";
-import { toast, Toaster } from "sonner";
+import CreateAttributeModal from "./create-attribute-modal";
 import { ScanBarcode, X } from "lucide-react";
+import { toast } from "sonner";
+import dynamic from "next/dynamic";
 import { getCategories } from "@/actions/categories";
+
+const Scanner = dynamic(() => import("@yudiel/react-qr-scanner").then(m => m.Scanner), {
+  ssr: false,
+  loading: () => <div className="h-64 w-64 bg-black flex items-center justify-center text-white">Cargando escáner...</div>
+});
 import { getBrands } from "@/actions/brands";
 import { getSubcategories } from "@/actions/subcategories";
 import { getSuppliers, updateProduct } from "@/actions/stock";
@@ -180,6 +182,26 @@ const ProductForm = ({ product, onClose }: Props) => {
     };
   }, [selectedCategoryId, form]);
 
+  const handleCategorySuccess = (item: { id: string; name: string }) => {
+    setCategories((prev) => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+    form.setValue("category", item.id);
+  };
+
+  const handleSubcategorySuccess = (item: { id: string; name: string }) => {
+    setSubcategories((prev) => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+    form.setValue("subCategory", item.id);
+  };
+
+  const handleBrandSuccess = (item: { id: string; name: string }) => {
+    setBrands((prev) => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+    form.setValue("brand", item.id);
+  };
+
+  const handleSupplierSuccess = (item: { id: string; name: string }) => {
+    setSuppliers((prev) => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+    form.setValue("supplier", item.id);
+  };
+
   const onSubmit = async (values: z.infer<typeof ProductSchema>) => {
     startTransition(async () => {
       try {
@@ -255,7 +277,6 @@ const ProductForm = ({ product, onClose }: Props) => {
 
   return (
     <Form {...form}>
-      <Toaster position="top-left" duration={3000} richColors />
       <form
         onSubmit={form.handleSubmit(onSubmit)}
         className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
@@ -429,7 +450,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
           <div className="pb-1">
-            <NewCategoryModal />
+            <CreateAttributeModal type="category" onSuccess={handleCategorySuccess} />
           </div>
         </div>
         <div className="flex flex-row items-end gap-2">
@@ -462,7 +483,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
           <div className="pt-6">
-            <NewSubcategoryModal categoryId={selectedCategoryId} />
+            <CreateAttributeModal type="subcategory" parentId={selectedCategoryId} onSuccess={handleSubcategorySuccess} />
           </div>
         </div>
         <div className="flex flex-row items-end gap-2">
@@ -494,7 +515,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
           <div className="pt-6">
-            <NewBrandModal />
+            <CreateAttributeModal type="brand" onSuccess={handleBrandSuccess} />
           </div>
         </div>
         <div className="flex flex-row items-end gap-2">
@@ -526,7 +547,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
           <div className="pt-6">
-            <NewSuplierModal />
+            <CreateAttributeModal type="supplier" onSuccess={handleSupplierSuccess} />
           </div>
         </div>
 

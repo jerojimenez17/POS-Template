@@ -53,7 +53,8 @@ model Business {
   subcategories Subcategory[]
   brands        Brand[]
   clients       Client[]
-  cashBox       CashBox?
+  cashBoxes     CashBox[]
+  cashboxSessions CashboxSession[]
   rankings      ProductRanking[]
   orders        Order[]
   cashMovements CashMovement[]
@@ -89,10 +90,42 @@ enum IvaCondition {
 
 model CashBox {
   id         String   @id @default(cuid())
+  name       String   @default("Caja Principal")
   total      Float    @default(0)
-  businessId String   @unique
+  businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   updatedAt  DateTime @updatedAt
+
+  users      User[]
+  sessions   CashboxSession[]
+}
+
+enum SessionStatus {
+  OPEN
+  CLOSED
+}
+
+model CashboxSession {
+  id             String        @id @default(cuid())
+  cashboxId      String
+  cashbox        CashBox       @relation(fields: [cashboxId], references: [id])
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  businessId     String
+  business       Business      @relation(fields: [businessId], references: [id])
+  
+  startTime      DateTime      @default(now())
+  endTime        DateTime?
+  initialBalance Float         @default(0)
+  finalBalance   Float?
+  status         SessionStatus @default(OPEN)
+  
+  zReport        Json?
+  
+  orders         Order[]
+  cashMovements  CashMovement[]
+
+  @@index([businessId, startTime])
 }
 
 model User {
@@ -108,6 +141,10 @@ model User {
   businessId    String
   business      Business @relation("BusinessUsers", fields: [businessId], references: [id])
   orderUpdates  OrderUpdate[]
+
+  cashboxId     String?
+  cashbox       CashBox?  @relation(fields: [cashboxId], references: [id])
+  sessions      CashboxSession[]
 }
 
 // Enums
@@ -291,6 +328,9 @@ model Order {
   clientDocumentNumber String?
   CAE                  Json?
 
+  cashboxSessionId     String?
+  cashboxSession       CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
+
   @@index([businessId, date])
 }
 
@@ -431,6 +471,9 @@ model CashMovement {
 
   orderId     String?
   order       Order?   @relation(fields: [orderId], references: [id])
+
+  cashboxSessionId String?
+  cashboxSession   CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
 }
 
 model VerificationToken {

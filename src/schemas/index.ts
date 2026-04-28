@@ -28,6 +28,7 @@ export const BusinessUserSchema = z.object({
   email: z.string().email({ message: "El email es obligatorio" }),
   password: z.string().min(6, { message: "La contraseña de 6 caracteres mínimo" }).optional().or(z.literal("")),
   role: z.enum(["ADMIN", "USER","SUPER_ADMIN"]).default("USER"),
+  cashboxId: z.string().optional().nullable(),
 });
 export const UnitsSchema = z.object({
   amount: z.number().min(1, { message: "La cantidad es obligatoria" }),
