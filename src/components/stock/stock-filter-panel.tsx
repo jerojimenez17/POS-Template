@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { useRouter } from "next/navigation";
-import { ScanBarcode, BarChart3, Search, X, FileSpreadsheet, PackagePlus } from "lucide-react";
+import { ScanBarcode, Search, X, FileSpreadsheet, PackagePlus, CheckSquare } from "lucide-react";
 
 interface Props {
   handleOpenModal: () => void;
   handleDescriptionFilter: (filter: string) => void;
   handleOpenExcelModal?: () => void;
+  handleOpenSelectionModal?: () => void;
 }
 
 const StockFilterPanel = ({
@@ -17,9 +18,9 @@ const StockFilterPanel = ({
   handleDescriptionFilter,
   handleOpenExcelModal,
 }: Props) => {
+  const router = useRouter();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [descriptionFilterInput, setDescriptionFilterInput] = useState("");
-  const router = useRouter();
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.currentTarget.value;
@@ -82,14 +83,14 @@ const StockFilterPanel = ({
           <span className="hidden sm:inline">Escanear</span>
         </Button>
 
-        <Button
-          variant="secondary"
-          onClick={() => router.push("productDashboard/products-ranking")}
-          className="hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap"
-        >
-          <BarChart3 className="h-4 w-4" />
-          <span className="hidden sm:inline">Ranking</span>
-        </Button>
+         <Button
+           variant="secondary"
+           onClick={() => router.push("/stock/bulk-update")}
+           className="hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap"
+         >
+           <CheckSquare className="h-4 w-4" />
+           <span className="hidden sm:inline">Seleccion Multiple</span>
+         </Button>
       </div>
 
       {/* Scanner Modal Overlay */}

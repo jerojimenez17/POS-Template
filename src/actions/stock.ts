@@ -417,3 +417,154 @@ export const getProductsBySearch = async (query: string) => {
     return [];
   }
 };
+
+export const getProductsFiltered = async (filters: {
+  search?: string;
+  categoryId?: string;
+  brandId?: string;
+  unit?: string;
+}) => {
+  const session = await auth();
+  if (!session?.user?.businessId) return [];
+
+  try {
+    const products = await db.product.findMany({
+      where: {
+        businessId: session.user.businessId,
+        ...(filters.search
+          ? {
+              OR: [
+                { code: { contains: filters.search, mode: "insensitive" } },
+                { description: { contains: filters.search, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+        ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+        ...(filters.brandId ? { brandId: filters.brandId } : {}),
+        ...(filters.unit ? { unit: filters.unit } : {}),
+      },
+      include: { supplier: true, brand: true, category: true, subCategory: true },
+      orderBy: { description: "asc" },
+    });
+
+    return products;
+  } catch (error) {
+    console.error("Error fetching filtered products:", error);
+    return [];
+  }
+};
+
+export const bulkUpdatePrices = async (
+  productIds: string[],
+  percentage: number
+) => {
+  if (!productIds || productIds.length === 0) {
+    return { success: false, error: "No se seleccionaron productos" };
+  }
+
+  if (percentage < 0 || percentage > 100) {
+    return { success: false, error: "Porcentaje inválido" };
+  }
+
+  const session = await auth();
+  if (!session?.user?.businessId) return { success: false, error: "No autorizado" };
+
+  try {
+    const factor = (100 + percentage) / 100;
+
+    const products = await Promise.all(
+      productIds.map((id) => db.product.findUnique({ where: { id } }))
+    );
+
+    const updates: ReturnType<typeof db.product.update>[] = [];
+
+    products.forEach((product, index) => {
+      if (!product) return;
+
+      const newSalePrice = product.salePrice * factor;
+      const gain = product.price === 0 ? 0 : ((newSalePrice - product.price) / product.price) * 100;
+
+      updates.push(
+        db.product.update({
+          where: { id: productIds[index] },
+          data: {
+            salePrice: { multiply: factor },
+            gain: gain,
+          },
+        })
+      );
+    });
+
+    await db.$transaction(updates);
+
+    revalidatePath("/stock");
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating prices:", error);
+    return { success: false, error: "Error al actualizar precios" };
+  }
+};
+
+export const bulkUpdateAmounts = async (
+  productIds: string[],
+  amountChange: number,
+  mode: 'set' | 'add' | 'subtract'
+) => {
+  if (!productIds || productIds.length === 0) {
+    return { success: false, error: "No se seleccionaron productos" };
+  }
+
+  if (isNaN(amountChange) || amountChange < 0) {
+    return { success: false, error: "Cantidad inválida" };
+  }
+
+  const session = await auth();
+  if (!session?.user?.businessId) return { success: false, error: "No autorizado" };
+
+  try {
+    const products = await Promise.all(
+      productIds.map((id) => db.product.findUnique({ where: { id } }))
+    );
+
+    const updates: ReturnType<typeof db.product.update>[] = [];
+
+    products.forEach((product, index) => {
+      if (!product) return;
+
+      let amountData: number | { decrement: number } | {increment: number};
+
+      switch (mode) {
+        case 'set':
+          amountData = amountChange;
+          break;
+        case 'add':
+          amountData = { increment: amountChange };
+          break;
+        case 'subtract':
+          amountData = { decrement: amountChange };
+          break;
+      }
+
+      updates.push(
+        db.product.update({
+          where: { id: productIds[index] },
+          data: {
+            amount: amountData,
+            last_update: new Date(),
+          },
+        })
+      );
+    });
+
+    await db.$transaction(updates);
+
+    revalidatePath("/stock");
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating amounts:", error);
+    return { 
+      success: false, 
+      error: "Error al actualizar stock" 
+    };
+  }
+};

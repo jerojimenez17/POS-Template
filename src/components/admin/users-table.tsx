@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { UserRole } from "@prisma/client";
+import { CashBox, UserRole } from "@prisma/client";
 
 export interface UserType {
   id: string;
@@ -38,7 +38,7 @@ export interface UserType {
 
 interface UsersTableProps {
   users: UserType[];
-  cashboxes: any[];
+  cashboxes: CashBox[];
 }
 
 export const UsersTable = ({ users, cashboxes }: UsersTableProps) => {

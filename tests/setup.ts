@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import '@testing-library/jest-dom';
 
 export const mockDb = {
   $transaction: vi.fn().mockImplementation(async (callback) => {

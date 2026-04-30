@@ -1,5 +1,5 @@
 "use client";
-import React, { useContext, useRef, useState, useEffect, useCallback } from "react";
+import React, {  useRef, useState, useEffect, useCallback } from "react";
 import { BillContext } from "@/context/BillContext";
 import { getProductByCode, getProductsBySearch } from "@/actions/stock";
 import { ProductPrismaAdapter } from "@/models/ProductPrismaAdapter";
@@ -56,12 +56,16 @@ const PrintableTable = ({
   forceCae,
   targetWindowRef,
 }: Props) => {
-  const { BillState, addItem, removeItem, printMode, qzTrayActive } = useContext(BillContext);
+  const { BillState, addItem, removeItem, printMode, qzTrayActive } = React.useContext(BillContext);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchCode, setSearchCode] = useState("");
+  const searchCodeRef = useRef(""); // Ref to track current value for timeouts
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const lastKeystrokeTime = useRef<number>(0);
+  const barcodeTimeout = useRef<NodeJS.Timeout | null>(null);
+  const [isBarcodeMode, setIsBarcodeMode] = useState(false);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
   const [isClient, setIsClient] = useState(false);
   const [billingInfo, setBillingInfo] = useState<{
@@ -259,13 +263,75 @@ const PrintableTable = ({
 
   const handleSearch = async (value: string) => {
     setSearchCode(value);
+    searchCodeRef.current = value;
     setSelectedIndex(-1);
+
+    const now = Date.now();
+
+    // Clear any existing timeout
+    if (barcodeTimeout.current) {
+      clearTimeout(barcodeTimeout.current);
+    }
+
+    // Calculate time since last keystroke
+    const timeSinceLastKeystroke = lastKeystrokeTime.current === 0 ? 50 : now - lastKeystrokeTime.current;
+    lastKeystrokeTime.current = now;
+
+    // Detect barcode mode: fast keystrokes (< 50ms between them)
+    const isCurrentlyBarcode = timeSinceLastKeystroke < 50;
+    
+    if (isCurrentlyBarcode) {
+      setIsBarcodeMode(true);
+    } else {
+      setIsBarcodeMode(false);
+    }
+
+    // Reset barcode mode after 300ms of no keystrokes (barcode scanners finish)
+    if (isCurrentlyBarcode) {
+      // Capture the current value in a closure for the timeout
+      const currentValue = value;
+      barcodeTimeout.current = setTimeout(() => {
+        // Only process if we have enough characters
+        if (currentValue.length >= 3) {
+          processBarcode(currentValue);
+        } else {
+          setIsBarcodeMode(false);
+          lastKeystrokeTime.current = 0;
+        }
+      }, 300);
+      return;
+    }
+
+    // Manual typing mode (existing behavior)
     if (value.length >= 2) {
       const results = await getProductsBySearch(value);
       setSuggestions(results.map(ProductPrismaAdapter.toDomain));
     } else {
       setSuggestions([]);
     }
+  };
+
+  const processBarcode = async (code: string) => {
+    const product = await getProductByCode(code);
+    if (!product) {
+      setErrorMessage("Producto no encontrado");
+      setSearchCode("");
+      setSuggestions([]);
+    } else if (product.amount <= 0) {
+      setErrorMessage("Producto sin Stock");
+      setSearchCode("");
+      setSuggestions([]);
+    } else {
+      const adaptedProduct = ProductPrismaAdapter.toDomain(product);
+      addItem({ ...adaptedProduct, amount: 1 });
+      setSearchCode("");
+      setSuggestions([]);
+      setSelectedIndex(-1);
+    }
+
+    // Reset barcode mode
+    setIsBarcodeMode(false);
+    lastKeystrokeTime.current = 0;
   };
 
   const handleScannerResult = (result: IDetectedBarcode[]) => {
@@ -427,7 +493,10 @@ const PrintableTable = ({
             <input
               id="product-search-input"
               name="productSearch"
-              className="flex w-full rounded-lg border border-input bg-white dark:bg-gray-800 px-3 py-3 pl-10 text-base shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm text-gray-900 dark:text-gray-100"
+              className={cn(
+                "flex w-full rounded-lg border border-input bg-white dark:bg-gray-800 px-3 py-3 pl-10 text-base shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm text-gray-900 dark:text-gray-100",
+                isBarcodeMode && "border-blue-500 ring-2 ring-blue-500 dark:border-blue-400 dark:ring-blue-400"
+              )}
               placeholder="Buscar producto por codigo o nombre (Presiona '/' para buscar)..."
               value={searchCode}
               onChange={(e) => handleSearch(e.target.value)}

@@ -1,5 +1,5 @@
 "use client";
-
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Printer, FileText, Download } from "lucide-react";
 import {
   DropdownMenu,

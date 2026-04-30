@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import {  useEffect } from "react";
 import { CloseSessionButton } from "./CloseSessionButton";
 import { OpenSessionModal } from "./OpenSessionModal";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Key } from "lucide-react";
 import { useCashbox } from "@/context/CashboxContext";
 
 interface SessionManagerProps {
-  hasActiveSession: boolean;
+  hasActiveSession: boolean | undefined ;
 }
 
 export const SessionManager = ({ hasActiveSession: hasActiveSessionProp }: SessionManagerProps) => {
@@ -23,7 +23,7 @@ export const SessionManager = ({ hasActiveSession: hasActiveSessionProp }: Sessi
 
   // Sync prop with context
   useEffect(() => {
-    setHasActiveSession(hasActiveSessionProp);
+    setHasActiveSession(!!hasActiveSessionProp);
   }, [hasActiveSessionProp, setHasActiveSession]);
 
   // Handle default visibility logic

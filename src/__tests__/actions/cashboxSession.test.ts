@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { openSession, closeSession, getActiveSession } from "@/actions/cashbox";
-
+import { openSession, closeSession } from "@/actions/cashbox";
+//disable eslit any type for this file
+/* eslint-disable @typescript-eslint/no-explicit-any */
 vi.mock("@/lib/db", () => ({
   db: {
     cashboxSession: {

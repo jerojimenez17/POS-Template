@@ -35,12 +35,13 @@ import { createBusinessUser, updateBusinessUser } from "@/components/actions/use
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { UserType } from "@/components/admin/users-table";
+import { CashBox } from "@prisma/client";
 
 interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
   user?: UserType | null;
-  cashboxes?: any[];
+  cashboxes?: CashBox[];
 }
 
 export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalProps) => {
