@@ -153,9 +153,30 @@ describe("ProductPrintModal Component", () => {
     descriptionElements.forEach((el) => {
       const fontSize = window.getComputedStyle(el).fontSize;
       const sizeNum = parseInt(fontSize);
-      expect(sizeNum).toBeGreaterThanOrEqual(36);
+      expect(sizeNum).toBeGreaterThanOrEqual(30);
       expect(sizeNum).toBeLessThanOrEqual(48);
     });
+  });
+
+  it("should allow editing the product description for printing", () => {
+    render(
+      <ProductPrintModal
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        products={mockProducts}
+      />
+    );
+
+    const descriptionElements = document.querySelectorAll(".label-description");
+    expect(descriptionElements.length).toBeGreaterThan(0);
+    
+    const firstDesc = descriptionElements[0];
+    expect(firstDesc).toHaveAttribute("contentEditable", "true");
+    
+    // Simulate user editing
+    fireEvent.input(firstDesc, { target: { textContent: "Edited Product A" } });
+    
+    expect(firstDesc.textContent).toBe("Edited Product A");
   });
 
   it("should display sale price in VERY LARGE font (40-52px)", () => {

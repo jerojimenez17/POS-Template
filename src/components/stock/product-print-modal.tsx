@@ -178,7 +178,13 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
                     className="flex flex-col text-black items-center justify-center border border-dashed border-gray-300 rounded p-2 bg-white label-container"
                     style={{ width: "78mm", height: "75mm", overflow: "hidden" }}
                   >
-                    <div className="label-description">
+                    <div 
+                      className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
+                      contentEditable
+                      suppressContentEditableWarning
+                      spellCheck={false}
+                      title="Haz clic para editar la descripción antes de imprimir"
+                    >
                       {product.description}
                     </div>
                     <div className="label-price">
