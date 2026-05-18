@@ -15,8 +15,12 @@ export const updateBusinessArcaData = async (
 ): Promise<{ success?: string; error?: string }> => {
   const session = await auth();
 
-  if (session?.user.role !== UserRole.SUPER_ADMIN) {
+  if (!session || (session.user.role !== UserRole.SUPER_ADMIN && session.user.role !== UserRole.ADMIN)) {
     return { error: "No autorizado" };
+  }
+
+  if (session.user.role === UserRole.ADMIN && session.user.businessId !== businessId) {
+    return { error: "No autorizado para modificar otro negocio" };
   }
 
   const validatedFields = ArcaFieldsSchema.safeParse(values);
@@ -25,7 +29,7 @@ export const updateBusinessArcaData = async (
     return { error: "Campos inválidos" };
   }
 
-  const { cuit, razonSocial, inicioActividades, condicionIva, cert, key } = validatedFields.data;
+  const { cuit, razonSocial, inicioActividades, condicionIva, cert, key, ptoVenta } = validatedFields.data;
 
   try {
     const updateData: ArcaUpdateInput = {
@@ -33,6 +37,7 @@ export const updateBusinessArcaData = async (
       razonSocial,
       inicioActividades,
       condicionIva,
+      ptoVenta,
     };
 
     if (cert) {
@@ -63,8 +68,12 @@ export const getBusinessArcaData = async (
 ): Promise<{ success?: ArcaData; error?: string }> => {
     const session = await auth();
 
-    if (session?.user.role !== UserRole.SUPER_ADMIN) {
+    if (!session || (session.user.role !== UserRole.SUPER_ADMIN && session.user.role !== UserRole.ADMIN)) {
         return { error: "No autorizado" };
+    }
+
+    if (session.user.role === UserRole.ADMIN && session.user.businessId !== businessId) {
+        return { error: "No autorizado para ver otro negocio" };
     }
 
     try {
@@ -77,6 +86,7 @@ export const getBusinessArcaData = async (
                 condicionIva: true,
                 cert: true,
                 key: true,
+                ptoVenta: true,
             }
         });
 

@@ -32,15 +32,22 @@ export const createAfipVoucherAction = async (billState: BillState) => {
   }
 
   try {
+    console.log("AFIP SDK API KEY:", process.env.AFIPSDK_API_KEY);
+    console.log("Function URL:", functionUrl);
     // 2. Call the Cloud Function from the server
+    const { ptoVenta, ...billStateWithoutPtoVenta } = billState;
     const response = await axios.post(
       functionUrl,
       {
         action: "createVoucher",
-        cuit,
         encryptedCert: cert,
         encryptedKey: key,
-        billState,
+        arca: {
+          accessToken: process.env.AFIPSDK_API_KEY,
+          cuit,
+          puntoVenta: ptoVenta,
+        },
+        billState: billStateWithoutPtoVenta,
       },
       {
         headers: {
