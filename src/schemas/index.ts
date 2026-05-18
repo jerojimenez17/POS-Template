@@ -116,6 +116,7 @@ export const BillParametersSchema = z.object({
   documentNumber: z.coerce.number().default(0),
   secondPaidMethod: z.string().optional(),
   totalSecondMethod: z.coerce.number().optional(),
+  ptoVenta: z.coerce.number().optional(),
 });
 export const AccountSchema = z
   .object({
@@ -147,4 +148,5 @@ export const ArcaFieldsSchema = z.object({
   condicionIva: z.enum(["RESPONSABLE_INSCRIPTO", "MONOTRIBUTO"]),
   cert: z.string().optional(),
   key: z.string().optional(),
+  ptoVenta: z.array(z.coerce.number().int().positive()).default([]),
 });
