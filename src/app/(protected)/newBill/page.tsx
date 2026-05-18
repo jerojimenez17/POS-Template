@@ -7,11 +7,22 @@ import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
 import { getActiveSession } from "@/actions/cashbox";
 import { SessionManager } from "@/components/cashbox/SessionManager";
+import SeedButton from "@/components/Billing/SeedButton";
 
 const NewBillPage = async () => {
   const session = await auth();
   const activeSessionResult = await getActiveSession();
   const hasActiveSession = activeSessionResult.success && activeSessionResult.data !== null;
+
+  let ptoVentas: number[] = [];
+  if (session?.user?.businessId) {
+    const { db } = await import("@/lib/db");
+    const business = await db.business.findUnique({
+      where: { id: session.user.businessId },
+      select: { ptoVenta: true }
+    });
+    ptoVentas = business?.ptoVenta || [];
+  }
 
   return (
     <Suspense fallback={<Spinner />}>
@@ -20,8 +31,9 @@ const NewBillPage = async () => {
           {/* Header Section */}
           <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
-              <BillParametersForm />
+              <BillParametersForm ptoVentas={ptoVentas} />
               <div className="flex items-center gap-3">
+                {/* <SeedButton /> */}
                 <SessionManager hasActiveSession={hasActiveSession} />
                 <PrintModeSelector />
               </div>
