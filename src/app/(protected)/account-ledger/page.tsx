@@ -26,6 +26,7 @@ import { Suspense } from "react";
 import { PusherListener } from "./PusherListener";
 import ConfirmOrderButton from "./ConfirmOrderButton";
 import { LocalDate } from "@/components/ui/LocalDate";
+import SearchLedger from "./SearchLedger";
 
 type StatusFilter = "all" | "inpago" | "pago" | "cancelado" | "pendiente";
 
@@ -41,9 +42,10 @@ type OrderWithClient = {
 
 interface OrdersTableProps {
   status: StatusFilter;
+  search?: string;
 }
 
-async function OrdersTable({ status }: OrdersTableProps) {
+async function OrdersTable({ status, search }: OrdersTableProps) {
   const session = await auth();
   if (!session?.user?.businessId) {
     redirect("/");
@@ -63,7 +65,24 @@ async function OrdersTable({ status }: OrdersTableProps) {
     );
   }
 
-  const orders = result.data || [];
+  let orders = result.data || [];
+
+  // Filter by search term
+  if (search) {
+    const term = search.toLowerCase();
+    orders = orders.filter(
+      (o) => o.client?.name?.toLowerCase().includes(term)
+    );
+  }
+
+  // Sort alphabetically by client name
+  orders.sort((a, b) => {
+    const nameA = a.client?.name?.toLowerCase() || "";
+    const nameB = b.client?.name?.toLowerCase() || "";
+    if (nameA < nameB) return -1;
+    if (nameA > nameB) return 1;
+    return 0;
+  });
 
   if (orders.length === 0) {
     return (
@@ -160,10 +179,11 @@ async function OrdersTable({ status }: OrdersTableProps) {
 export default async function AccountLedgerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; search?: string }>;
 }) {
   const params = await searchParams;
   const status = (params.status as StatusFilter) || "inpago";
+  const search = params.search;
   const session = await auth();
 
   return (
@@ -177,6 +197,10 @@ export default async function AccountLedgerPage({
           </Link>
         </Button>
         <h1 className="text-2xl font-bold">Cuenta Corriente</h1>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between mb-6">
+        <SearchLedger />
       </div>
 
       <div className="flex flex-col gap-6">
@@ -194,7 +218,7 @@ export default async function AccountLedgerPage({
             </div>
           }
         >
-          <OrdersTable status={status} />
+          <OrdersTable status={status} search={search} />
         </Suspense>
       </div>
     </div>
