@@ -136,17 +136,17 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   }
   
   lines.push(ESCPOS.LINE_FEED);
-  lines.push(divider());
-  
-  const dateStr = new Intl.DateTimeFormat("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(data.date);
-  
-  lines.push(ESCPOS.ALIGN_LEFT);
+    lines.push(divider());
+    
+    const dateStr = new Intl.DateTimeFormat("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(data.date);
+    
+    lines.push(ESCPOS.ALIGN_LEFT);
   lines.push(formatLine("Fecha:", dateStr));
   
   if (isAFIPInvoice) {
@@ -374,7 +374,7 @@ async function tryFallbackHTMLPrint(data: ThermalReceiptData, qrDataUrl: string 
   }
 }
 
-export async function printThermalReceipt(data: ThermalReceiptData): Promise<boolean> {
+export async function printThermalReceipt(data: ThermalReceiptData, qzTrayEnabled: boolean = true): Promise<boolean> {
   const receipt = generateThermalReceipt(data);
   const hasQRCode = Boolean(data.cae?.qrData);
   const qrData = data.cae?.qrData || null;
@@ -392,6 +392,10 @@ export async function printThermalReceipt(data: ThermalReceiptData): Promise<boo
     } catch (e) {
       console.error("Error generating fallback QR data url:", e);
     }
+  }
+
+  if (!qzTrayEnabled) {
+    return tryFallbackHTMLPrint(data, qrDataUrl);
   }
 
   try {

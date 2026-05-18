@@ -12,6 +12,7 @@ import {
   AvatarFallback 
 } from "@/components/ui/avatar";
 import { useSession, signOut } from "next-auth/react";
+import { closeSession } from "@/actions/cashbox";
 import { FaUser } from "react-icons/fa";
 import { ExitIcon } from "@radix-ui/react-icons";
 
@@ -36,7 +37,11 @@ export const UserButton = () => {
           {user?.name || "Usuario"}
         </div>
         <DropdownMenuItem 
-          onClick={() => signOut()}
+          onClick={async () => {
+            // Close cashbox session if exists before signing out
+            await closeSession();
+            signOut();
+          }}
           className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/10"
         >
           <ExitIcon className="h-4 w-4 mr-2" />

@@ -5,7 +5,6 @@ export default auth((req) => {
   const { nextUrl } = req;
 
   const isLoggedIn = !!req.auth;
-  console.log(nextUrl.pathname);
   const isApiAuthRoute = nextUrl.pathname.startsWith(apiAuthPrefix);
   const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
   const isAuthRoute = authRoutes.includes(nextUrl.pathname);
@@ -15,8 +14,6 @@ export default auth((req) => {
   if (nextUrl.pathname.includes("/catalogo")) {
     return;
   }
-  console.log({ isLoggedIn });
-  console.log({ isPublicRoute });
   if (isAuthRoute) {
     if (isLoggedIn) {
       // return NextResponse.redirect(new URL("/settings", nextUrl).toString());

@@ -30,6 +30,8 @@ export default interface BillContextProps {
   onOrderResetRef: React.MutableRefObject<(() => void) | null>;
   printMode: PrintMode;
   setPrintMode: (mode: PrintMode) => void;
+  qzTrayActive: boolean;
+  setQzTrayActive: (active: boolean) => void;
 }
 
 export const BillContext = createContext<BillContextProps>(

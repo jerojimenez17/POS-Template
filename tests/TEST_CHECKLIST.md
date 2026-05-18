@@ -125,3 +125,20 @@ npm run test
 - Tests are designed to FAIL initially (TDD approach)
 - The source files need implementation for the feature to be complete
 - Bill form reset feature: See SPEC.md section "Feature: Reset BillParametersForm on Order Creation"
+
+---
+
+# TEST_CHECKLIST.md - Importación de Deudas Iniciales (Seed Excel)
+
+## Acceptance Criteria Verification
+
+| ID | Criterion | Status |
+|----|-----------|--------|
+| SEED1 | Ignore rows with total debt equal to 0 | [x] |
+| SEED2 | Parse valid dates or fallback to current date | [x] |
+| SEED3 | Create "Traspaso" product if not exists, reuse if exists | [x] |
+| SEED4 | Find existing client by name or create new | [x] |
+| SEED5 | Create unpaid order with "Traspaso" item matching debt amount | [x] |
+| SEED6 | Update client balance with debt amount | [x] |
+| SEED7 | Return success response with number of processed rows | [x] |
+

@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState, useTransition } from "react";
 import { ArcaFieldsSchema } from "@/schemas";
+import { CheckCircle2, XCircle, Plus, Trash2 } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -45,10 +46,35 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
       razonSocial: initialData?.razonSocial || "",
       inicioActividades: initialData?.inicioActividades ? new Date(initialData.inicioActividades) : undefined,
       condicionIva: initialData?.condicionIva || "MONOTRIBUTO",
-      cert: "", // Don't show encrypted cert
-      key: "",  // Don't show encrypted key
+      cert: "", 
+      key: "",  
+      ptoVenta: initialData?.ptoVenta || [],
     },
   });
+
+  const [ptoVentaValues, setPtoVentaValues] = useState<number[]>(initialData?.ptoVenta || []);
+
+  const addPtoVenta = () => {
+    const newValues = [...ptoVentaValues, 1];
+    setPtoVentaValues(newValues);
+    form.setValue("ptoVenta", newValues);
+  };
+
+  const updatePtoVenta = (index: number, value: number) => {
+    const newValues = [...ptoVentaValues];
+    newValues[index] = value;
+    setPtoVentaValues(newValues);
+    form.setValue("ptoVenta", newValues);
+  };
+
+  const removePtoVenta = (index: number) => {
+    const newValues = ptoVentaValues.filter((_, i) => i !== index);
+    setPtoVentaValues(newValues);
+    form.setValue("ptoVenta", newValues);
+  };
+
+  const hasCert = initialData?.cert === "CONFIGURADO" || initialData?.cert && initialData.cert.length > 0;
+  const hasKey = initialData?.key === "CONFIGURADO" || initialData?.key && initialData.key.length > 0;
 
   const onSubmit = (values: z.infer<typeof ArcaFieldsSchema>) => {
     setError("");
@@ -162,17 +188,68 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
               />
             </div>
 
+            <div className="space-y-4 border p-4 rounded-md">
+              <div className="flex items-center justify-between">
+                <FormLabel className="text-base font-semibold">Puntos de Venta</FormLabel>
+                <Button type="button" variant="outline" size="sm" onClick={addPtoVenta} disabled={isPending}>
+                  <Plus className="w-4 h-4 mr-2" /> Agregar Punto de Venta
+                </Button>
+              </div>
+              
+              {ptoVentaValues.length === 0 && (
+                <p className="text-sm text-muted-foreground">No hay puntos de venta configurados.</p>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {ptoVentaValues.map((pto, index) => (
+                  <div key={index} className="flex items-center space-x-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      value={pto}
+                      onChange={(e) => updatePtoVenta(index, parseInt(e.target.value) || 1)}
+                      disabled={isPending}
+                      className="w-full"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      onClick={() => removePtoVenta(index)}
+                      disabled={isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Se guardarán los puntos de venta indicados arriba.
+              </p>
+            </div>
             <FormField
               control={form.control}
               name="cert"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Certificado (CERT)</FormLabel>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Certificado (CERT)</FormLabel>
+                    {hasCert && (
+                      <span className="flex items-center text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded-md">
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> Configurado
+                      </span>
+                    )}
+                    {!hasCert && (
+                      <span className="flex items-center text-xs font-medium text-destructive bg-destructive/10 px-2 py-1 rounded-md">
+                        <XCircle className="w-3 h-3 mr-1" /> Sin configurar
+                      </span>
+                    )}
+                  </div>
                   <FormControl>
                     <Textarea
                       {...field}
                       disabled={isPending}
-                      placeholder="Pega el contenido del certificado aquí"
+                      placeholder="Para actualizar el certificado, pega el nuevo contenido aquí. De lo contrario, déjalo vacío."
                       className="font-mono text-xs"
                     />
                   </FormControl>
@@ -186,12 +263,24 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
               name="key"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Llave Privada (KEY)</FormLabel>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Llave Privada (KEY)</FormLabel>
+                    {hasKey && (
+                      <span className="flex items-center text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded-md">
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> Configurada
+                      </span>
+                    )}
+                    {!hasKey && (
+                      <span className="flex items-center text-xs font-medium text-destructive bg-destructive/10 px-2 py-1 rounded-md">
+                        <XCircle className="w-3 h-3 mr-1" /> Sin configurar
+                      </span>
+                    )}
+                  </div>
                   <FormControl>
                     <Textarea
                       {...field}
                       disabled={isPending}
-                      placeholder="Pega el contenido de la llave privada aquí"
+                      placeholder="Para actualizar la llave privada, pega el nuevo contenido aquí. De lo contrario, déjalo vacío."
                       className="font-mono text-xs"
                     />
                   </FormControl>

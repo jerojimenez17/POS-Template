@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { createProductsBulk, BulkProductInput } from "@/actions/stock";
+import { createProductsBulk, BulkProductInput, previewProductsBulk, PreviewProductsBulkResult } from "@/actions/stock";
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
-import { UploadCloud, CheckCircle2 } from "lucide-react";
+import { UploadCloud, CheckCircle2, ArrowRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 
 interface Props {
   open: boolean;
@@ -22,6 +24,10 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [startRow, setStartRow] = useState(2);
   const [endRow, setEndRow] = useState<number | "">("");
   const [updateExisting, setUpdateExisting] = useState(false);
+  const [step, setStep] = useState<"config" | "preview">("config");
+  const [previewData, setPreviewData] = useState<PreviewProductsBulkResult["preview"] | null>(null);
+  const [parsedProductsState, setParsedProductsState] = useState<BulkProductInput[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   // Column Mappings
   const [colCode, setColCode] = useState("A");
@@ -48,14 +54,15 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
     return index - 1; // 0-based index
   };
 
-  const handleProcess = async () => {
+  const handlePreview = async () => {
+    setErrorMsg(null);
     if (!file) {
-      toast.error("Seleccione un archivo Excel primero");
+      setErrorMsg("Seleccione un archivo Excel primero.");
       return;
     }
 
     if (!colCode || !colDescription || !colPrice) {
-      toast.error("Debe especificar las columnas obligatorias: Código, Descripción y Precio");
+      setErrorMsg("Debe especificar las columnas obligatorias: Código, Descripción y Precio.");
       return;
     }
 
@@ -132,50 +139,95 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         });
       }
 
-      console.log("Productos parseados exitosamente:", parsedProducts.length);
-
       if (parsedProducts.length === 0) {
-        toast.error("No se encontraron productos válidos en el rango de filas especificado. Verifique que las columnas seleccionadas tengan datos.");
+        // Find the first non-empty row to give a helpful error
+        let sampleRow = "";
+        for (let i = sRow; i < eRow; i++) {
+          const row = jsonData[i];
+          if (row && row.length > 0) {
+             const c = row[idxCode];
+             const d = row[idxDesc];
+             const p = row[idxPrice];
+             sampleRow = `Ejemplo fila ${i+1}: Código=${c ?? 'vacío'}, Desc=${d ?? 'vacío'}, Precio=${p ?? 'vacío'}.`;
+             break;
+          }
+        }
+        setErrorMsg(`No se encontraron productos válidos. Verifique las letras de las columnas. ${sampleRow}`);
         setLoading(false);
         return;
       }
 
-      toast.loading(`Importando ${parsedProducts.length} productos...`, { id: "bulk-import" });
+      toast.loading(`Generando vista previa de ${parsedProducts.length} productos...`, { id: "bulk-import" });
       
-      const result = await createProductsBulk(parsedProducts, updateExisting);
+      const result = await previewProductsBulk(parsedProducts, updateExisting);
       
       if (result.error) {
-        toast.error(result.error, { id: "bulk-import" });
-      } else {
-        toast.success(result.success, { id: "bulk-import" });
-        onSuccess();
-        onOpenChange(false);
+        setErrorMsg(result.error);
+        toast.dismiss("bulk-import");
+      } else if (result.preview) {
+        toast.dismiss("bulk-import");
+        setParsedProductsState(parsedProducts);
+        setPreviewData(result.preview);
+        setStep("preview");
       }
     } catch (error) {
       console.error("Error detallado en procesamiento de Excel:", error);
-      toast.error("Ocurrió un error al procesar el archivo. Revise la consola para más detalles.", { id: "bulk-import" });
+      setErrorMsg("Ocurrió un error al procesar el archivo. Verifique el formato.");
+      toast.dismiss("bulk-import");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    toast.loading(`Importando ${parsedProductsState.length} productos...`, { id: "bulk-confirm" });
+    try {
+      const result = await createProductsBulk(parsedProductsState, updateExisting);
+      if (result.error) {
+        toast.error(result.error, { id: "bulk-confirm" });
+      } else {
+        toast.success(result.success, { id: "bulk-confirm" });
+        setStep("config");
+        setPreviewData(null);
+        setParsedProductsState([]);
+        onSuccess();
+        onOpenChange(false);
+      }
+    } catch {
+      toast.error("Error al importar.", { id: "bulk-confirm" });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(val) => {
+      if (!val) {
+        setStep("config");
+        setPreviewData(null);
+        setErrorMsg(null);
+      }
+      onOpenChange(val);
+    }}>
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400">
                 <UploadCloud className="h-5 w-5" />
             </div>
             <div>
-                 <DialogTitle className="text-xl">Carga Masiva (Excel)</DialogTitle>
+                 <DialogTitle className="text-xl">
+                   {step === "config" ? "Carga Masiva (Excel)" : "Vista Previa de Importación"}
+                 </DialogTitle>
                  <DialogDescription>
-                    Importa múltiples productos desde una hoja de cálculo.
+                    {step === "config" ? "Importa múltiples productos desde una hoja de cálculo." : "Revisa el estado de los productos antes de confirmar."}
                  </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
+        {step === "config" ? (
         <div className="grid gap-6 py-4">
           <div className="grid gap-2">
             <Label htmlFor="file">Archivo Excel (.xlsx, .xls)</Label>
@@ -270,16 +322,78 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                Actualizar productos existentes si el código ya existe
              </Label>
            </div>
+           
+           {errorMsg && (
+             <div className="p-3 text-sm text-red-600 bg-red-100 rounded-md border border-red-200">
+               {errorMsg}
+             </div>
+           )}
         </div>
+        ) : (
+          <div className="grid gap-4 py-4">
+            <div className="flex flex-wrap gap-4">
+              <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-200">Nuevos: {previewData?.createdCount}</Badge>
+              <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">A Actualizar: {previewData?.updatedCount}</Badge>
+              <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-200">Ignorados: {previewData?.ignoredCount}</Badge>
+            </div>
+            <div className="border rounded-md max-h-[400px] overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Descripción</TableHead>
+                    <TableHead>Precio</TableHead>
+                    <TableHead>Stock</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {previewData?.items.slice(0, 100).map((item, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>
+                        {item.status === "create" && <Badge className="bg-blue-500 hover:bg-blue-600">Nuevo</Badge>}
+                        {item.status === "update" && <Badge className="bg-yellow-500 hover:bg-yellow-600">Actualizar</Badge>}
+                        {item.status === "ignore" && <Badge variant="outline">Ignorado</Badge>}
+                      </TableCell>
+                      <TableCell>{item.code}</TableCell>
+                      <TableCell>{item.description}</TableCell>
+                      <TableCell>${item.price.toLocaleString("es-AR")}</TableCell>
+                      <TableCell>{item.amount ?? "-"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {previewData && previewData.items.length > 100 && (
+              <p className="text-sm text-muted-foreground text-center">
+                Mostrando los primeros 100 productos de {previewData.items.length}
+              </p>
+            )}
+          </div>
+        )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-            Cancelar
-          </Button>
-          <Button onClick={handleProcess} disabled={loading || !file} className="bg-green-600 hover:bg-green-700 text-white">
-            {loading ? "Procesando..." : "Importar Datos"}
-            <CheckCircle2 className="ml-2 h-4 w-4" />
-          </Button>
+          {step === "config" ? (
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+                Cancelar
+              </Button>
+              <Button onClick={handlePreview} disabled={loading || !file} className="bg-blue-600 hover:bg-blue-700 text-white">
+                {loading ? "Calculando..." : "Siguiente"}
+                {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => setStep("config")} disabled={loading}>
+                Volver
+              </Button>
+              <Button onClick={handleConfirm} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white">
+                Confirmar Importación
+                <CheckCircle2 className="ml-2 h-4 w-4" />
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

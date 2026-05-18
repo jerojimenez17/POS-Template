@@ -42,6 +42,7 @@ export default async function ArcaPage({ params }: ArcaPageProps) {
     condicionIva: business.condicionIva as "MONOTRIBUTO" | "RESPONSABLE_INSCRIPTO",
     cert: "",
     key: "",
+    ptoVenta: business.ptoVenta || [],
   };
 
   return (

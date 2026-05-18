@@ -28,6 +28,7 @@ export const BusinessUserSchema = z.object({
   email: z.string().email({ message: "El email es obligatorio" }),
   password: z.string().min(6, { message: "La contraseña de 6 caracteres mínimo" }).optional().or(z.literal("")),
   role: z.enum(["ADMIN", "USER","SUPER_ADMIN"]).default("USER"),
+  cashboxId: z.string().optional().nullable(),
 });
 export const UnitsSchema = z.object({
   amount: z.number().min(1, { message: "La cantidad es obligatoria" }),
@@ -115,6 +116,7 @@ export const BillParametersSchema = z.object({
   documentNumber: z.coerce.number().default(0),
   secondPaidMethod: z.string().optional(),
   totalSecondMethod: z.coerce.number().optional(),
+  ptoVenta: z.coerce.number().optional(),
 });
 export const AccountSchema = z
   .object({
@@ -146,4 +148,5 @@ export const ArcaFieldsSchema = z.object({
   condicionIva: z.enum(["RESPONSABLE_INSCRIPTO", "MONOTRIBUTO"]),
   cert: z.string().optional(),
   key: z.string().optional(),
+  ptoVenta: z.array(z.coerce.number().int().positive()).default([]),
 });

@@ -7,6 +7,7 @@ export interface ArcaData {
   condicionIva: IvaCondition;
   cert: string | null;
   key: string | null;
+  ptoVenta: number[];
 }
 
 export interface ArcaUpdateInput {
@@ -16,4 +17,5 @@ export interface ArcaUpdateInput {
   condicionIva?: IvaCondition;
   cert?: string;
   key?: string;
+  ptoVenta?: number[];
 }

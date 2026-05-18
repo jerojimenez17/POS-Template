@@ -25,4 +25,5 @@ export default interface BillState {
   client?: string;
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
+  ptoVenta?: number;
 }

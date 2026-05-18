@@ -1,23 +1,18 @@
-# TEST_CHECKLIST.md
+# TEST CHECKLIST: Implementación ptoVenta y ARCA
 
-## Test Scenarios for Product Deletion Fix
+## Validación de Esquemas y Tipos
+- [ ] Validar que `ArcaFieldsSchema` acepte un arreglo de enteros para `ptoVenta`
+- [ ] Validar que `BillParametersSchema` acepte el `ptoVenta` seleccionado (entero)
 
-### Scenario 1: Product with Stock Movements Deletion
-- [ ] Create a new Product.
-- [ ] Create a `StockMovement` for this Product.
-- [ ] Call `deleteProduct` on the backend.
-- [ ] Verify the Product is successfully deleted from the database.
-- [ ] Verify the `StockMovement` is also deleted (Cascade).
+## Server Actions (ARCA)
+- [ ] `updateBusinessArcaData` debe permitir guardar un arreglo de `ptoVenta`
+- [ ] `updateBusinessArcaData` debe poder ser invocado por un rol `ADMIN` para su propio negocio
 
-### Scenario 2: Product referenced in an Order (OrderItem)
-- [ ] Create a new Product.
-- [ ] Create an Order with an `OrderItem` using this Product.
-- [ ] Call `deleteProduct`.
-- [ ] Verify the Product is deleted.
-- [ ] Verify the `OrderItem` remains in the database.
-- [ ] Verify the `OrderItem.productId` is set to `null` (SetNull).
+## Server Actions (Vouchers)
+- [ ] `getLastVoucher` (frontend) debe rechazar peticiones si el usuario no tiene rol apropiado
+- [ ] `getLastVoucher` (frontend) debe invocar la URL de la Cloud Function y retornar el resultado exitoso
+- [ ] `getLastVoucher` (frontend) debe retornar error si la Cloud Function falla
 
-### Scenario 3: Product referenced in a SaleReturnItem
-- [ ] Create a new Product, Order with OrderItem, and a SaleReturn with `SaleReturnItem` pointing to this Product.
-- [ ] Call `deleteProduct`.
-- [ ] Verify the `SaleReturnItem` remains in the database but its `productId` is `null` (SetNull).
+## UI Components
+- [ ] `arca-form.tsx`: Se debe renderizar y permitir añadir al menos un elemento a `ptoVenta`
+- [ ] `BillParametersForm.tsx`: El punto de venta inicial debe obtenerse del primer elemento del arreglo cargado en el context/business

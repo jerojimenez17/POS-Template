@@ -10,9 +10,11 @@ import { ProductExtended } from "./product-form";
 import ExcelUploadModal from "./excel-upload-modal";
 
 
+
 const ProductDashboard = () => {
   const [openModal, setOpenModal] = useState(false);
   const [openExcelModal, setOpenExcelModal] = useState(false);
+
   const [descriptionFilter, setDescriptionFilter] = useState("");
   const [products, setProducts] = useState<ProductExtended[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +60,7 @@ const ProductDashboard = () => {
             }
             handleOpenModal={() => setOpenModal(!openModal)}
             handleOpenExcelModal={() => setOpenExcelModal(true)}
+            handleOpenSelectionModal={() => {}}
           />
         </div>
 
@@ -79,6 +82,12 @@ const ProductDashboard = () => {
           />
         )}
       </div>
+
+
+
+
+
+
     </div>
   );
 };
