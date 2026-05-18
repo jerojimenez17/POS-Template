@@ -7,7 +7,7 @@ import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
 import { getActiveSession } from "@/actions/cashbox";
 import { SessionManager } from "@/components/cashbox/SessionManager";
-import SeedButton from "@/components/Billing/SeedButton";
+// import SeedButton from "@/components/Billing/SeedButton";
 
 const NewBillPage = async () => {
   const session = await auth();
