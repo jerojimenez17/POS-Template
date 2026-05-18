@@ -104,6 +104,80 @@ export interface BulkProductInput {
   unit?: string;
 }
 
+export interface PreviewProductItem extends BulkProductInput {
+  status: "create" | "update" | "ignore";
+}
+
+export interface PreviewProductsBulkResult {
+  success?: boolean;
+  error?: string;
+  preview?: {
+    createdCount: number;
+    updatedCount: number;
+    ignoredCount: number;
+    items: PreviewProductItem[];
+  };
+}
+
+export const previewProductsBulk = async (productsData: BulkProductInput[], updateExisting?: boolean): Promise<PreviewProductsBulkResult> => {
+  const session = await auth();
+  if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  try {
+    const codes = productsData.map(p => p.code.toString());
+    
+    const existingProducts = await db.product.findMany({
+      where: {
+        businessId: session.user.businessId,
+        code: { in: codes }
+      },
+      select: { code: true }
+    });
+    
+    const existingCodes = new Set(existingProducts.map(p => p.code));
+    
+    let createdCount = 0;
+    let updatedCount = 0;
+    let ignoredCount = 0;
+    
+    const items: PreviewProductItem[] = productsData.map(item => {
+      const exists = existingCodes.has(item.code.toString());
+      let status: "create" | "update" | "ignore" = "create";
+      
+      if (exists) {
+        if (updateExisting) {
+          status = "update";
+          updatedCount++;
+        } else {
+          status = "ignore";
+          ignoredCount++;
+        }
+      } else {
+        status = "create";
+        createdCount++;
+      }
+      
+      return {
+        ...item,
+        status
+      };
+    });
+    
+    return {
+      success: true,
+      preview: {
+        createdCount,
+        updatedCount,
+        ignoredCount,
+        items
+      }
+    };
+  } catch (error) {
+    console.error("Preview bulk error:", error);
+    return { error: "Error al generar vista previa" };
+  }
+};
+
 export const createProductsBulk = async (productsData: BulkProductInput[], updateExisting?: boolean) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
