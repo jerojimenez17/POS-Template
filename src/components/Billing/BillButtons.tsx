@@ -96,7 +96,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
       if (e.key === 'F3') {
         e.preventDefault();
         if (!checkSession()) return;
-        if (BillState.products.length > 0) {
+        if (BillState.products?.length > 0) {
           setOpenAcuentaModal(true);
         }
       }
@@ -104,7 +104,7 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, sellerName, BillState.products.length, isEditing]);
+  }, [session, sellerName, BillState.products?.length, isEditing]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {
