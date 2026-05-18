@@ -72,6 +72,8 @@ model Business {
   address          String?
   cert             String?      @db.Text
   key              String?      @db.Text
+  ptoVenta         Int[]        @default([])
+  // Arca Fileds Ends
   accountStatus    BusinessStatus @default(ACTIVO)
   lastPaymentDate  DateTime?
   orderUpdates OrderUpdate[]
