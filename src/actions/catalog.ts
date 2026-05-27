@@ -15,6 +15,14 @@ export interface PublicProduct {
 }
 
 export const getPublicProductsByBusinessId = async (businessId: string): Promise<PublicProduct[]> => {
+  const features = await db.businessFeatures.findUnique({
+    where: { businessId: businessId },
+  });
+
+  if (!features || !features.hasPublicCatalog) {
+    throw new Error("El catálogo público no está habilitado para este negocio.");
+  }
+
   try {
     const products = await db.product.findMany({
       where: {

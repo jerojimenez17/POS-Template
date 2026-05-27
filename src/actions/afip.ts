@@ -1,19 +1,20 @@
 "use server";
 
 import axios from "axios";
-import { auth } from "../../auth";
-import { getArcaCredentialsForBilling } from "./arca";
+import { requireFeature } from "@/lib/auth-gates";
 import BillState from "@/models/BillState";
+import { getArcaCredentialsForBilling } from "./arca";
 
 /**
  * Server Action to create an AFIP voucher by calling the Firebase Cloud Function.
  * This action validates the user session and uses a shared secret for authentication.
  */
 export const createAfipVoucherAction = async (billState: BillState) => {
-  const session = await auth();
-
-  if (!session) {
-    return { error: "No autorizado. Inicie sesión para continuar." };
+  try {
+    await requireFeature("hasBilling");
+  } catch (error) {
+    const err = error as Error;
+    return { error: err.message || "No autorizado" };
   }
 
   // 1. Get encrypted business credentials

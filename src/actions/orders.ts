@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { OrderStatus, PaidStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 
 // Type definitions for input to avoid circular dependencies with models
 interface OrderProductInput {
@@ -31,6 +32,11 @@ interface OrderInput {
 
 export const createOrder = async (order: OrderInput) => {
   try {
+    await assertWritePermission();
+    if (order.paidStatus === "inpago") {
+      await requireFeature("hasClientLedger");
+    }
+
     return await db.$transaction(async (tx) => {
       // 1. Validate and Update Stock
       for (const product of order.products) {
@@ -106,6 +112,7 @@ const newOrder = await tx.order.create({
 
 export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
+        await assertWritePermission();
         await db.$transaction(async (tx) => {
             const order = await tx.order.findUnique({
                 where: { id: orderId },
@@ -203,6 +210,10 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
 
 export const updateOrderPaidStatus = async (orderId: string, newStatus: PaidStatus) => {
     try {
+        await assertWritePermission();
+        if (newStatus === "inpago") {
+            await requireFeature("hasClientLedger");
+        }
         await db.$transaction(async (tx) => {
            const order = await tx.order.findUnique({ where: { id: orderId } });
            if (!order) throw new Error("Orden no encontrada");

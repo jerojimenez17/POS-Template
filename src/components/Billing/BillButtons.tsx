@@ -24,6 +24,9 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "../ui/dialog";
+import { Lock, FileText, Wallet, CheckCircle } from "lucide-react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import { useFeatures } from "@/hooks/useFeatures";
 
 interface props {
   session: Session | null;
@@ -31,7 +34,7 @@ interface props {
   isEditing?: boolean;
   orderId?: string;
 }
-const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
+const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props) => {
   const router = useRouter();
   const [createVoucherError, setCreateVoucherError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -566,4 +569,145 @@ const BillButtons = ({ session, handlePrint, isEditing, orderId }: props) => {
   );
 };
 
-export default BillButtons;
+export default BillButtonsDefault;
+
+interface BillButtonsProps {
+  onStandardCheckout: () => void;
+  onLedgerCheckout: () => void;
+  onAfipCheckout: () => void;
+  disabled?: boolean;
+}
+
+export const BillButtons: React.FC<BillButtonsProps> = ({
+  onStandardCheckout,
+  onLedgerCheckout,
+  onAfipCheckout,
+  disabled = false,
+}) => {
+  const { hasFeature, isDelinquent } = useFeatures();
+  
+  const canUseLedger = hasFeature("hasClientLedger");
+  const canUseAfip = hasFeature("hasAfipBilling");
+
+  // Keyboard shortcut listener (F1, F2, F3)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (disabled || isDelinquent) return;
+      
+      if (e.key === "F1") {
+        e.preventDefault();
+        onStandardCheckout();
+      } else if (e.key === "F2") {
+        e.preventDefault();
+        if (canUseLedger) {
+          onLedgerCheckout();
+        }
+      } else if (e.key === "F3") {
+        e.preventDefault();
+        if (canUseAfip) {
+          onAfipCheckout();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [disabled, isDelinquent, canUseLedger, canUseAfip, onStandardCheckout, onLedgerCheckout, onAfipCheckout]);
+
+  return (
+    <Tooltip.Provider delayDuration={150}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+        {/* F1: Standard Checkout */}
+        <button
+          onClick={onStandardCheckout}
+          disabled={disabled || isDelinquent}
+          className="flex flex-col items-center justify-center p-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white rounded-xl shadow-lg border border-emerald-500 transition-all font-semibold relative overflow-hidden group"
+        >
+          <CheckCircle className="h-6 w-6 mb-2 group-hover:scale-110 transition-transform" />
+          <span className="text-sm">Efectivo / Débito</span>
+          <kbd className="mt-2 text-xs bg-emerald-800 px-2 py-0.5 rounded opacity-80 border border-emerald-700">F1</kbd>
+        </button>
+
+        {/* F2: Client Ledger Checkout */}
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <div className="w-full">
+              <button
+                onClick={onLedgerCheckout}
+                disabled={disabled || isDelinquent || !canUseLedger}
+                className={`w-full flex flex-col items-center justify-center p-4 rounded-xl shadow-lg border transition-all font-semibold relative overflow-hidden group
+                  ${canUseLedger 
+                    ? "bg-sky-600 hover:bg-sky-700 border-sky-500 text-white cursor-pointer" 
+                    : "bg-gray-100 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 text-gray-400 cursor-not-allowed"
+                  }
+                  ${(disabled || isDelinquent) && "opacity-50 cursor-not-allowed"}
+                `}
+              >
+                {!canUseLedger && (
+                  <div className="absolute top-2 right-2 flex items-center gap-1 bg-amber-500 text-[10px] text-white font-extrabold px-1.5 py-0.5 rounded shadow">
+                    <Lock className="h-3 w-3" /> PRO
+                  </div>
+                )}
+                <Wallet className="h-6 w-6 mb-2 group-hover:scale-110 transition-transform" />
+                <span className="text-sm">Cargar a Cuenta Corriente</span>
+                <kbd className={`mt-2 text-xs px-2 py-0.5 rounded border ${canUseLedger ? "bg-sky-800 border-sky-700 text-sky-100 opacity-80" : "bg-gray-200 dark:bg-zinc-700 text-gray-400 border-gray-300 dark:border-zinc-600"}`}>F2</kbd>
+              </button>
+            </div>
+          </Tooltip.Trigger>
+          {!canUseLedger && (
+            <Tooltip.Portal>
+              <Tooltip.Content
+                side="top"
+                className="bg-zinc-900 text-white border border-zinc-700 text-xs px-3 py-1.5 rounded-lg shadow-xl max-w-xs leading-relaxed z-50"
+                sideOffset={5}
+              >
+                La función de Cuenta Corriente requiere una suscripción **Plan PRO** o superior.
+                <Tooltip.Arrow className="fill-zinc-950" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          )}
+        </Tooltip.Root>
+
+        {/* F3: AFIP Electronic Checkout */}
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <div className="w-full">
+              <button
+                onClick={onAfipCheckout}
+                disabled={disabled || isDelinquent || !canUseAfip}
+                className={`w-full flex flex-col items-center justify-center p-4 rounded-xl shadow-lg border transition-all font-semibold relative overflow-hidden group
+                  ${canUseAfip 
+                    ? "bg-violet-600 hover:bg-violet-700 border-violet-500 text-white cursor-pointer" 
+                    : "bg-gray-100 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 text-gray-400 cursor-not-allowed"
+                  }
+                  ${(disabled || isDelinquent) && "opacity-50 cursor-not-allowed"}
+                `}
+              >
+                {!canUseAfip && (
+                  <div className="absolute top-2 right-2 flex items-center gap-1 bg-amber-500 text-[10px] text-white font-extrabold px-1.5 py-0.5 rounded shadow">
+                    <Lock className="h-3 w-3" /> ENTERPRISE
+                  </div>
+                )}
+                <FileText className="h-6 w-6 mb-2 group-hover:scale-110 transition-transform" />
+                <span className="text-sm">Facturación Electrónica</span>
+                <kbd className={`mt-2 text-xs px-2 py-0.5 rounded border ${canUseAfip ? "bg-violet-800 border-violet-700 text-violet-100 opacity-80" : "bg-gray-200 dark:bg-zinc-700 text-gray-400 border-gray-300 dark:border-zinc-600"}`}>F3</kbd>
+              </button>
+            </div>
+          </Tooltip.Trigger>
+          {!canUseAfip && (
+            <Tooltip.Portal>
+              <Tooltip.Content
+                side="top"
+                className="bg-zinc-900 text-white border border-zinc-700 text-xs px-3 py-1.5 rounded-lg shadow-xl max-w-xs leading-relaxed z-50"
+                sideOffset={5}
+              >
+                La Facturación Electrónica ARCA requiere una suscripción **Plan ENTERPRISE**.
+                <Tooltip.Arrow className="fill-zinc-950" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          )}
+        </Tooltip.Root>
+      </div>
+    </Tooltip.Provider>
+  );
+};

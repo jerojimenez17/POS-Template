@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { PaidStatus } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
+import { requireFeature } from "@/lib/auth-gates";
 
 interface ActionResult<T = unknown> {
   success: boolean;
@@ -84,6 +85,7 @@ const getClientUnpaidOrderSchema = z.object({
 
 export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<ActionResult> => {
   try {
+    await requireFeature("hasClientLedger");
     const session = await auth();
     const businessId = session?.user?.businessId || input.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
