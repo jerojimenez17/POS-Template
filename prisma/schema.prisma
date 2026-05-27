@@ -77,6 +77,7 @@ model Business {
   accountStatus    BusinessStatus @default(ACTIVO)
   lastPaymentDate  DateTime?
   orderUpdates OrderUpdate[]
+  features         BusinessFeatures?
 }
 
 enum BusinessStatus {
@@ -485,4 +486,32 @@ model VerificationToken {
   expires DateTime
 
   @@unique([email, token])
+}
+
+enum Plan {
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+model BusinessFeatures {
+  id                String   @id @default(cuid())
+  businessId        String   @unique
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  plan              Plan     @default(BASIC)
+  
+  // Feature Toggles
+  hasAfipBilling    Boolean  @default(false)
+  hasPublicCatalog  Boolean  @default(false)
+  hasClientLedger   Boolean  @default(false)
+  hasMultiCashbox   Boolean  @default(false)
+  
+  // Operational Limits
+  maxUsers          Int      @default(1)
+  maxProducts       Int      @default(100)
+  
+  updatedAt         DateTime @updatedAt
+
+  @@index([businessId])
 }

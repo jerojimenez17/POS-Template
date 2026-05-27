@@ -4,7 +4,7 @@ import authConfig from "./auth.config";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
 import { getUserById, getUserByEmail } from "./data/user";
-import { UserRole } from "@prisma/client";
+import { UserRole, Plan, BusinessStatus } from "@prisma/client";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { LoginSchema } from "@/schemas";
 import bcrypt from "bcryptjs";
@@ -66,6 +66,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.businessName = token.businessName as string | null;
         session.user.businessSlug = token.businessSlug as string | null;
         session.user.image = token.image as string | null;
+        session.user.business = token.business as any;
       }
       return session;
     },
@@ -78,6 +79,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       token.businessName = existingUser.business?.name || null;
       token.businessSlug = existingUser.business?.slug || null;
       token.image = existingUser.image;
+      if (existingUser.business) {
+        token.business = {
+          name: existingUser.business.name,
+          slug: existingUser.business.slug,
+          accountStatus: existingUser.business.accountStatus as BusinessStatus,
+          features: existingUser.business.features || {
+            plan: Plan.BASIC,
+            hasAfipBilling: false,
+            hasPublicCatalog: false,
+            hasClientLedger: false,
+            hasMultiCashbox: false,
+            maxUsers: 1,
+            maxProducts: 100,
+          },
+        };
+      } else {
+        token.business = null;
+      }
       return token;
     },
   },

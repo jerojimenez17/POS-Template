@@ -1,9 +1,9 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { UserRole } from "@prisma/client";
+import { UserRole, Plan } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { auth } from "../../auth";
+import { auth } from "@/lib/auth";
 
 export const promoteToAdmin = async (userId: string, businessName: string, slug: string) => {
   try {
@@ -95,4 +95,68 @@ export const deleteBusiness = async (businessId: string) => {
         console.error("Error deleting business:", error);
         return { error: "Error al eliminar negocio" };
     }
-}
+};
+
+export const updateBusinessFeaturesAction = async (payload: {
+  businessId: string;
+  plan: Plan;
+  hasAfipBilling: boolean;
+  hasPublicCatalog: boolean;
+  hasClientLedger: boolean;
+  hasMultiCashbox: boolean;
+  maxUsers: number;
+  maxProducts: number;
+}) => {
+  const session = await auth();
+
+  if (session?.user?.role !== UserRole.SUPER_ADMIN) {
+    return { success: false, error: "No autorizado" };
+  }
+
+  try {
+    await db.$transaction(async (tx) => {
+      const business = await tx.business.findUnique({
+        where: { id: payload.businessId },
+      });
+
+      if (!business) {
+        throw new Error("Negocio no encontrado");
+      }
+
+      await tx.businessFeatures.upsert({
+        where: { businessId: payload.businessId },
+        update: {
+          plan: payload.plan,
+          hasAfipBilling: payload.hasAfipBilling,
+          hasPublicCatalog: payload.hasPublicCatalog,
+          hasClientLedger: payload.hasClientLedger,
+          hasMultiCashbox: payload.hasMultiCashbox,
+          maxUsers: payload.maxUsers,
+          maxProducts: payload.maxProducts,
+        },
+        create: {
+          businessId: payload.businessId,
+          plan: payload.plan,
+          hasAfipBilling: payload.hasAfipBilling,
+          hasPublicCatalog: payload.hasPublicCatalog,
+          hasClientLedger: payload.hasClientLedger,
+          hasMultiCashbox: payload.hasMultiCashbox,
+          maxUsers: payload.maxUsers,
+          maxProducts: payload.maxProducts,
+        },
+      });
+    });
+
+    try {
+      revalidatePath("/superadmin/dashboard");
+    } catch {
+      // Ignore static generation store missing in test environments
+    }
+    return { success: true };
+  } catch (error) {
+    const err = error as Error;
+    console.error("Error updating business features:", error);
+    return { success: false, error: err.message || "Error al actualizar características del negocio" };
+  }
+};
+

@@ -62,6 +62,11 @@ export default async function BusinessesPage() {
                                     ARCA
                                 </Link>
                              </Button>
+                             <Button asChild variant="outline" size="sm" className="bg-slate-50 hover:bg-slate-100 border-slate-300 dark:border-slate-700">
+                                <Link href={`/superadmin/businesses/${business.id}/features`}>
+                                    Features
+                                </Link>
+                             </Button>
                         </div>
                     </TableCell>
                     </TableRow>

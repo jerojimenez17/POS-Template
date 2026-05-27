@@ -14,10 +14,10 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
       '@/auth': path.resolve(__dirname, './auth.ts'),
       '@/auth.config': path.resolve(__dirname, './auth.config.ts'),
       '@/routes': path.resolve(__dirname, './routes.ts'),
+      '@': path.resolve(__dirname, './src'),
     },
     extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
   },
