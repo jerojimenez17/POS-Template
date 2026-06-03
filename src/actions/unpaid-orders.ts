@@ -287,16 +287,6 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
             data: { amount: { increment: item.quantity } },
           });
 
-          await tx.stockMovement.create({
-            data: {
-              type: "RETURN",
-              quantity: item.quantity,
-              productId: item.productId,
-              orderId: order.id,
-              businessId,
-            },
-          });
-
           const now = new Date();
           const month = now.getMonth() + 1;
           const year = now.getFullYear();
@@ -333,10 +323,12 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
         });
       }
 
-      await tx.order.update({
-        where: { id: input.orderId },
-        data: { paidStatus: "inpago" },
-      } as never);
+      // Delete related records before deleting the order
+      await tx.stockMovement.deleteMany({ where: { orderId: input.orderId } });
+      await tx.cashMovement.deleteMany({ where: { orderId: input.orderId } });
+
+      // Delete the order (cascades to OrderItem and OrderUpdate)
+      await tx.order.delete({ where: { id: input.orderId } });
 
       return { success: true };
     });

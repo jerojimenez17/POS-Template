@@ -23,7 +23,10 @@ import {
   User,
   Calendar,
   Package,
-  CheckCircle
+  CheckCircle,
+  Phone,
+  Mail,
+  MapPin
 } from "lucide-react";
 import { db } from "@/lib/db";
 import AddPaymentForm from "./AddPaymentForm";
@@ -35,9 +38,10 @@ interface OrderWithRelations {
   id: string;
   date: Date;
   total: number;
+  status: string;
   paidStatus: string;
   clientId: string | null;
-  client: { id: string; name: string | null } | null;
+  client: { id: string; name: string | null; cellPhone: string | null; email: string | null; address: string | null } | null;
   items: Array<{ id: string; productId: string | null; description: string | null; code: string | null; price: number; quantity: number; subTotal: number; addedAt: Date }>;
   cashMovements: Array<{ id: string; date: Date; total: number; paidMethod: string | null }>;
 }
@@ -143,6 +147,38 @@ export default async function AccountLedgerDetailPage({
                 </div>
               </div>
             </div>
+
+            {order.status === "pendiente" && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {order.client?.cellPhone && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                    <Phone className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-medium">Teléfono</p>
+                      <p className="font-medium">{order.client.cellPhone}</p>
+                    </div>
+                  </div>
+                )}
+                {order.client?.email && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                    <Mail className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-medium">Email</p>
+                      <p className="font-medium">{order.client.email}</p>
+                    </div>
+                  </div>
+                )}
+                {order.client?.address && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                    <MapPin className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-medium">Dirección</p>
+                      <p className="font-medium">{order.client.address}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <Separator />
 
