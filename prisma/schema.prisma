@@ -1,9 +1,7 @@
 // prisma/schema.prisma
 datasource db {
   provider = "postgresql"
-  // connection URLs are now configured in prisma.config.ts for Migrate
-  // and passed to PrismaClient via adapter or accelerateUrl.
-  // url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
   // uncomment next line if you use Prisma <5.10
   // directUrl = env("DATABASE_URL_UNPOOLED")
 }
@@ -39,47 +37,47 @@ enum UserRole {
 }
 
 model Business {
-  id            String   @id @default(cuid())
-  name          String
-  slug          String   @unique
-  logo          String?
-  
+  id   String  @id @default(cuid())
+  name String
+  slug String  @unique
+  logo String?
+
   // Owner link
-  userId        String?  @unique
-  
-  users         User[]   @relation("BusinessUsers")
-  
-  products      Product[]
-  suppliers     Supplier[]
-  categories    Category[]
-  subcategories Subcategory[]
-  brands        Brand[]
-  clients       Client[]
-  cashBoxes     CashBox[]
+  userId String? @unique
+
+  users User[] @relation("BusinessUsers")
+
+  products        Product[]
+  suppliers       Supplier[]
+  categories      Category[]
+  subcategories   Subcategory[]
+  brands          Brand[]
+  clients         Client[]
+  cashBoxes       CashBox[]
   cashboxSessions CashboxSession[]
-  rankings      ProductRanking[]
-  orders        Order[]
-  cashMovements CashMovement[]
-  saleReturns   SaleReturn[]
-  stockMovements StockMovement[]
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  rankings        ProductRanking[]
+  orders          Order[]
+  cashMovements   CashMovement[]
+  saleReturns     SaleReturn[]
+  stockMovements  StockMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // ARCA Billing fields
-  cuit             String?
-  razonSocial      String?
+  cuit              String?
+  razonSocial       String?
   inicioActividades DateTime?
-  condicionIva     IvaCondition @default(MONOTRIBUTO)
-  address          String?
-  cert             String?      @db.Text
-  key              String?      @db.Text
-  ptoVenta         Int[]        @default([])
+  condicionIva      IvaCondition      @default(MONOTRIBUTO)
+  address           String?
+  cert              String?           @db.Text
+  key               String?           @db.Text
+  ptoVenta          Int[]             @default([])
   // Arca Fileds Ends
-  accountStatus    BusinessStatus @default(ACTIVO)
-  lastPaymentDate  DateTime?
-  orderUpdates OrderUpdate[]
-  features         BusinessFeatures?
+  accountStatus     BusinessStatus    @default(ACTIVO)
+  lastPaymentDate   DateTime?
+  orderUpdates      OrderUpdate[]
+  features          BusinessFeatures?
 }
 
 enum BusinessStatus {
@@ -101,8 +99,8 @@ model CashBox {
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   updatedAt  DateTime @updatedAt
 
-  users      User[]
-  sessions   CashboxSession[]
+  users    User[]
+  sessions CashboxSession[]
 }
 
 enum SessionStatus {
@@ -111,24 +109,24 @@ enum SessionStatus {
 }
 
 model CashboxSession {
-  id             String        @id @default(cuid())
-  cashboxId      String
-  cashbox        CashBox       @relation(fields: [cashboxId], references: [id])
-  userId         String
-  user           User          @relation(fields: [userId], references: [id])
-  businessId     String
-  business       Business      @relation(fields: [businessId], references: [id])
-  
+  id         String   @id @default(cuid())
+  cashboxId  String
+  cashbox    CashBox  @relation(fields: [cashboxId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
   startTime      DateTime      @default(now())
   endTime        DateTime?
   initialBalance Float         @default(0)
   finalBalance   Float?
   status         SessionStatus @default(OPEN)
-  
-  zReport        Json?
-  
-  orders         Order[]
-  cashMovements  CashMovement[]
+
+  zReport Json?
+
+  orders        Order[]
+  cashMovements CashMovement[]
 
   @@index([businessId, startTime])
 }
@@ -142,14 +140,14 @@ model User {
   emailVerified DateTime?
   image         String?
   accounts      Account[]
-  
-  businessId    String
-  business      Business @relation("BusinessUsers", fields: [businessId], references: [id])
-  orderUpdates  OrderUpdate[]
 
-  cashboxId     String?
-  cashbox       CashBox?  @relation(fields: [cashboxId], references: [id])
-  sessions      CashboxSession[]
+  businessId   String
+  business     Business      @relation("BusinessUsers", fields: [businessId], references: [id])
+  orderUpdates OrderUpdate[]
+
+  cashboxId String?
+  cashbox   CashBox?         @relation(fields: [cashboxId], references: [id])
+  sessions  CashboxSession[]
 }
 
 // Enums
@@ -166,54 +164,54 @@ enum PaidStatus {
 }
 
 model Supplier {
-  id            String    @id @default(cuid())
+  id            String   @id @default(cuid())
   name          String
   email         String?
   phone         String?
-  bonus         Float     @default(0)
-  creation_date DateTime  @default(now())
-  
+  bonus         Float    @default(0)
+  creation_date DateTime @default(now())
+
   // Make optional for migration
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id])
-  
-  products      Product[]
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  products Product[]
 }
 
 model Product {
-  id            String    @id @default(cuid())
-  code          String?
-  description   String?
-  
-  brandId       String?
-  brand         Brand?    @relation(fields: [brandId], references: [id])
-  
-  categoryId    String?
-  category      Category? @relation(fields: [categoryId], references: [id])
-  
+  id          String  @id @default(cuid())
+  code        String?
+  description String?
+
+  brandId String?
+  brand   Brand?  @relation(fields: [brandId], references: [id])
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
   subCategoryId String?
   subCategory   Subcategory? @relation(fields: [subCategoryId], references: [id])
 
-  price         Float     @default(0) // Cost price
-  salePrice     Float     @default(0)
-  gain          Float     @default(0)
-  amount        Float     @default(0)
-  unit          String?
-  image         String?
-  imageName     String?
-  client_bonus  Float     @default(0)
-  
-  supplierId    String?
-  supplier      Supplier? @relation(fields: [supplierId], references: [id])
-  
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id])
-  
-  catalog       Boolean   @default(true)
-  details       String?
+  price        Float   @default(0) // Cost price
+  salePrice    Float   @default(0)
+  gain         Float   @default(0)
+  amount       Float   @default(0)
+  unit         String?
+  image        String?
+  imageName    String?
+  client_bonus Float   @default(0)
 
-  last_update   DateTime  @default(now())
-  creation_date DateTime  @default(now())
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  catalog Boolean @default(true)
+  details String?
+
+  last_update   DateTime @default(now())
+  creation_date DateTime @default(now())
 
   // Relations
   orderItems      OrderItem[]
@@ -237,107 +235,107 @@ model ProductRanking {
 }
 
 model Category {
-  id            String    @id @default(cuid())
-  name          String
-  
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id])
-  
+  id   String @id @default(cuid())
+  name String
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
   products      Product[]
   subcategories Subcategory[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([name, businessId])
 }
 
 model Subcategory {
-  id            String    @id @default(cuid())
-  name          String
-  
-  categoryId    String
-  category      Category  @relation(fields: [categoryId], references: [id])
-  
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id])
-  
-  products      Product[]
+  id   String @id @default(cuid())
+  name String
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([name, categoryId, businessId])
 }
 
 model Brand {
-  id            String    @id @default(cuid())
-  name          String
-  
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id])
-  
-  products      Product[]
+  id   String @id @default(cuid())
+  name String
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([name, businessId])
 }
 
 model Client {
-  id            String    @id @default(cuid())
-  name          String
-  address       String?
-  cellPhone     String?   // Storing as string for flexibility
-  email         String?
-  balance       Float     @default(0)
-  
-  date          DateTime  @default(now()) // Creation date
-  last_update   DateTime  @default(now())
+  id        String  @id @default(cuid())
+  name      String
+  address   String?
+  cellPhone String? // Storing as string for flexibility
+  email     String?
+  balance   Float   @default(0)
 
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id])
+  date        DateTime @default(now()) // Creation date
+  last_update DateTime @default(now())
 
-  orders        Order[]
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  orders Order[]
 }
 
 model Order {
-  id                String      @id @default(cuid())
-  date              DateTime    @default(now())
-  total             Float       @default(0)
-  status            OrderStatus @default(confirmado)
-  paidStatus        PaidStatus  @default(inpago)
-  seller            String?
-  
-  // Payment methods
-  paymentMethod     String?     @default("Efectivo")
-  paymentMethod2    String?
-  totalMethod2      Float?      @default(0)
-  
-  // Discounts
-  discountPercentage Float      @default(0)
-  discountAmount     Float      @default(0)
+  id         String      @id @default(cuid())
+  date       DateTime    @default(now())
+  total      Float       @default(0)
+  status     OrderStatus @default(confirmado)
+  paidStatus PaidStatus  @default(inpago)
+  seller     String?
 
-  clientId      String?
-  client        Client?      @relation(fields: [clientId], references: [id])
-  
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id])
-  
-  items         OrderItem[]
-  returns       SaleReturn[]
+  // Payment methods
+  paymentMethod  String? @default("Efectivo")
+  paymentMethod2 String?
+  totalMethod2   Float?  @default(0)
+
+  // Discounts
+  discountPercentage Float @default(0)
+  discountAmount     Float @default(0)
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id])
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  items          OrderItem[]
+  returns        SaleReturn[]
   stockMovements StockMovement[]
-  updates       OrderUpdate[]
-  cashMovements CashMovement[]
+  updates        OrderUpdate[]
+  cashMovements  CashMovement[]
 
   // Billing fields
   clientIvaCondition   String?
   clientDocumentNumber String?
   CAE                  Json?
 
-  cashboxSessionId     String?
-  cashboxSession       CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
+  cashboxSessionId String?
+  cashboxSession   CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
 
   @@index([businessId, date])
 }
@@ -354,57 +352,58 @@ enum OrderUpdateType {
 }
 
 model OrderUpdate {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  businessId  String
-  business    Business @relation(fields: [businessId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
   updatedById String
-  updatedBy   User     @relation(fields: [updatedById], references: [id])
+  updatedBy   User   @relation(fields: [updatedById], references: [id])
 
-  type        OrderUpdateType
+  type OrderUpdateType
 
   // mensaje opcional para mostrar en UI
-  message     String?
+  message String?
 
   // cambios específicos (diff)
-  changes     Json?
+  changes Json?
 
   // snapshot completo cada N cambios
-  snapshot    Json?
+  snapshot Json?
 
   // posición en la historia
-  version     Int
+  version Int
 
-  date        DateTime @default(now())
+  date DateTime @default(now())
 
   @@unique([orderId, version])
   @@index([businessId, date])
 }
 
 model OrderItem {
-  id          String   @id @default(cuid())
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
-  productId   String?
-  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   // Snapshot fields (in case product changes or is deleted)
   code        String?
   description String?
-  costPrice   Float    @default(0) // Cost price at the moment of sale
-  price       Float    @default(0) // Sale price at the moment of sale
-  quantity    Float    @default(0) 
-  subTotal    Float    @default(0) 
+  costPrice   Float   @default(0) // Cost price at the moment of sale
+  price       Float   @default(0) // Sale price at the moment of sale
+  quantity    Float   @default(0)
+  subTotal    Float   @default(0)
 
   // Track when item was added to the order
-  addedAt     DateTime @default(now())
+  addedAt DateTime @default(now())
 
   returnItems SaleReturnItem[]
+
   @@index([orderId])
 }
 
@@ -416,69 +415,71 @@ enum MovementType {
 }
 
 model StockMovement {
-  id          String       @id @default(cuid())
-  type        MovementType
-  quantity    Float
-  date        DateTime     @default(now())
-  
-  productId   String
-  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
-  orderId     String?
-  order       Order?       @relation(fields: [orderId], references: [id])
-  
-  businessId  String
-  business    Business     @relation(fields: [businessId], references: [id])
+  id       String       @id @default(cuid())
+  type     MovementType
+  quantity Float
+  date     DateTime     @default(now())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
   // Reference for returns or adjustments
-  reason      String?
+  reason String?
+
   @@index([businessId, date])
   @@index([productId, date])
 }
 
 model SaleReturn {
-  id          String       @id @default(cuid())
-  date        DateTime     @default(now())
-  total       Float        @default(0)
-  reason      String?
-  
-  orderId     String
-  order       Order        @relation(fields: [orderId], references: [id])
-  
-  businessId  String
-  business    Business     @relation(fields: [businessId], references: [id])
-  
-  items       SaleReturnItem[]
+  id     String   @id @default(cuid())
+  date   DateTime @default(now())
+  total  Float    @default(0)
+  reason String?
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  items SaleReturnItem[]
+
   @@index([businessId, date])
 }
 
 model SaleReturnItem {
-  id            String      @id @default(cuid())
-  returnId      String
-  saleReturn    SaleReturn  @relation(fields: [returnId], references: [id], onDelete: Cascade)
-  
-  orderItemId   String
-  orderItem     OrderItem   @relation(fields: [orderItemId], references: [id])
-  
-  productId     String?
-  product       Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
-  
-  quantity      Float
-  refundAmount  Float       @default(0)
+  id         String     @id @default(cuid())
+  returnId   String
+  saleReturn SaleReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  quantity     Float
+  refundAmount Float @default(0)
 }
 
 model CashMovement {
-  id          String   @id @default(cuid())
-  total       Float    @default(0)
-  seller      String?
-  paidMethod  String?
-  date        DateTime @default(now())
+  id         String   @id @default(cuid())
+  total      Float    @default(0)
+  seller     String?
+  paidMethod String?
+  date       DateTime @default(now())
 
-  businessId  String
-  business    Business @relation(fields: [businessId], references: [id])
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
 
-  orderId     String?
-  order       Order?   @relation(fields: [orderId], references: [id])
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
 
   cashboxSessionId String?
   cashboxSession   CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
@@ -500,23 +501,23 @@ enum Plan {
 }
 
 model BusinessFeatures {
-  id                String   @id @default(cuid())
-  businessId        String   @unique
-  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  
-  plan              Plan     @default(BASIC)
-  
+  id         String   @id @default(cuid())
+  businessId String   @unique
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  plan Plan @default(BASIC)
+
   // Feature Toggles
-  hasAfipBilling    Boolean  @default(false)
-  hasPublicCatalog  Boolean  @default(false)
-  hasClientLedger   Boolean  @default(false)
-  hasMultiCashbox   Boolean  @default(false)
-  
+  hasAfipBilling   Boolean @default(false)
+  hasPublicCatalog Boolean @default(false)
+  hasClientLedger  Boolean @default(false)
+  hasMultiCashbox  Boolean @default(false)
+
   // Operational Limits
-  maxUsers          Int      @default(1)
-  maxProducts       Int      @default(100)
-  
-  updatedAt         DateTime @updatedAt
+  maxUsers    Int @default(1)
+  maxProducts Int @default(100)
+
+  updatedAt DateTime @updatedAt
 
   @@index([businessId])
 }
