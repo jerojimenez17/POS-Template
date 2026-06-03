@@ -1,7 +1,6 @@
 "use server";
 
 import { LoginSchema } from "@/schemas";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { signIn } from "../../../auth";
 import { DEFAULT_LOGIN_REDIRECT } from "../../../routes";
@@ -26,7 +25,7 @@ export const login = async (
     return { error: "Email o contraseña incorrectos" };
   }
 
-  if (existingUser.emailVerified) { // email not verified yet
+  if (existingUser.emailVerified) {
     return {
       error: "Por favor, verifica tu email antes de iniciar sesión",
     };
@@ -47,8 +46,8 @@ export const login = async (
           return { error: "Ocurrió un error al iniciar sesión" };
       }
     }
-    throw error; // Re-lanzar errores inesperados
+    throw error;
   }
 
-  redirect(callbackUrl || DEFAULT_LOGIN_REDIRECT);
+  return { success: true, redirectTo: callbackUrl || DEFAULT_LOGIN_REDIRECT };
 };

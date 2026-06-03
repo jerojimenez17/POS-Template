@@ -39,7 +39,7 @@ const ProductDashboard = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
       <div className="max-w-7xl mx-auto px-4 py-6">
         <Dialog open={openModal} onOpenChange={setOpenModal}>
-          <DialogContent className="overflow-hidden flex flex-col max-h-[90vh] sm:max-w-2xl">
+          <DialogContent className="overflow-hidden flex flex-col max-h-[90vh] sm:max-w-3xl">
             <DialogHeader>
               <DialogTitle>Agregar producto</DialogTitle>
             </DialogHeader>

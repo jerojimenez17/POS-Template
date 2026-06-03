@@ -25,6 +25,8 @@ export class ProductPrismaAdapter {
     product.client_bonus = prismaProduct.client_bonus;
     product.last_update = prismaProduct.last_update;
     product.creation_date = prismaProduct.creation_date;
+    product.catalog = prismaProduct.catalog;
+    product.details = prismaProduct.details || "";
     
     // Relations
     product.brand = prismaProduct.brand?.name || "";

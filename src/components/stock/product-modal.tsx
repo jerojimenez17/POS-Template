@@ -83,6 +83,11 @@ export function ProductModal({ product, children }: ProductModalProps) {
             <CardDescription>
               <strong>Unidad:</strong> {product.unit}
             </CardDescription>
+            {product.details && (
+              <CardDescription>
+                <strong>Detalles:</strong> {product.details}
+              </CardDescription>
+            )}
           </CardContent>
         </Card>
       </DialogContent>

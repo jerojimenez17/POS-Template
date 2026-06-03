@@ -1,7 +1,9 @@
 // prisma/schema.prisma
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // connection URLs are now configured in prisma.config.ts for Migrate
+  // and passed to PrismaClient via adapter or accelerateUrl.
+  // url      = env("DATABASE_URL")
   // uncomment next line if you use Prisma <5.10
   // directUrl = env("DATABASE_URL_UNPOOLED")
 }
@@ -207,6 +209,9 @@ model Product {
   businessId    String
   business      Business @relation(fields: [businessId], references: [id])
   
+  catalog       Boolean   @default(true)
+  details       String?
+
   last_update   DateTime  @default(now())
   creation_date DateTime  @default(now())
 

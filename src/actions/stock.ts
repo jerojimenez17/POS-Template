@@ -76,6 +76,8 @@ export const createProduct = async (data: Product) => {
         client_bonus: data.client_bonus ? parseFloat(data.client_bonus.toString()) : 0,
         supplier: data.supplierId ? { connect: { id: data.supplierId } } : undefined,
         business: { connect: { id: session.user.businessId } },
+        catalog: data.catalog !== undefined ? data.catalog : true,
+        details: data.details || null,
       },
     });
     
@@ -102,6 +104,8 @@ export interface BulkProductInput {
   categoryName?: string;
   subCategoryName?: string;
   unit?: string;
+  catalog?: boolean;
+  details?: string;
 }
 
 export interface PreviewProductItem extends BulkProductInput {
@@ -264,6 +268,8 @@ export const createProductsBulk = async (productsData: BulkProductInput[], updat
             category: categoryId ? { connect: { id: categoryId } } : { disconnect: true },
             subCategory: subCategoryId ? { connect: { id: subCategoryId } } : { disconnect: true },
             last_update: new Date(),
+            catalog: item.catalog !== undefined ? item.catalog : undefined,
+            details: item.details !== undefined ? item.details : undefined,
           };
 
           if (item.amount !== null && item.amount !== undefined) {
@@ -294,6 +300,8 @@ export const createProductsBulk = async (productsData: BulkProductInput[], updat
             category: categoryId ? { connect: { id: categoryId } } : undefined,
             subCategory: subCategoryId ? { connect: { id: subCategoryId } } : undefined,
             business: { connect: { id: session.user.businessId } },
+            catalog: item.catalog !== undefined ? item.catalog : true,
+            details: item.details || null,
           }
         });
         createdCount++;
@@ -339,6 +347,8 @@ interface UpdateProductInput {
   imageName?: string | null;
   client_bonus?: number | string;
   supplierId?: string | null;
+  catalog?: boolean;
+  details?: string | null;
 }
 
 export const updateProduct = async (id: string, data: UpdateProductInput) => {
@@ -363,6 +373,8 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
         imageName: typeof data.imageName === "string" ? data.imageName : data.imageName === null ? null : undefined,
         client_bonus: data.client_bonus !== undefined ? parseFloat(data.client_bonus.toString()) : undefined,
         supplier: data.supplierId ? { connect: { id: data.supplierId } } : { disconnect: true },
+        catalog: data.catalog !== undefined ? data.catalog : undefined,
+        details: data.details !== undefined ? data.details : undefined,
         last_update: new Date(),
       },
     });
@@ -576,6 +588,23 @@ export const bulkUpdatePrices = async (
   } catch (error) {
     console.error("Error updating prices:", error);
     return { success: false, error: "Error al actualizar precios" };
+  }
+};
+
+export const toggleProductCatalogAction = async (productId: string, catalog: boolean) => {
+  const session = await auth();
+  if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  try {
+    await db.product.update({
+      where: { id: productId },
+      data: { catalog },
+    });
+    revalidatePath("/stock");
+    return { success: true };
+  } catch (error) {
+    console.error("Error toggling catalog:", error);
+    return { error: "No se pudo actualizar la visibilidad en el catálogo" };
   }
 };
 

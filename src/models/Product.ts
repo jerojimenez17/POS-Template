@@ -21,4 +21,6 @@ export default class Product {
   last_update = new Date(Date.now());
   creation_date = new Date(Date.now());
   category = "";
+  catalog = true;
+  details = "";
 }

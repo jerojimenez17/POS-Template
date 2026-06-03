@@ -104,6 +104,9 @@ const ProductCard = memo(function ProductCard({
         <div className="flex items-center gap-2 mt-1">
            <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{product.brand || "Generico"}</span>
         </div>
+        {product.details && (
+          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{product.details}</p>
+        )}
       </CardHeader>
 
       <CardContent className="p-5 pt-2 mt-auto">

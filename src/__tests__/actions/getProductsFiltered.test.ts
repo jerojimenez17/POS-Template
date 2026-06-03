@@ -273,7 +273,7 @@ describe("getProductsFiltered Server Action", () => {
     const result = await getProductsFiltered({ search: "test" });
 
     expect(result).toEqual([]);
-    expect(consoleSpy).toHaveBeenCalledWith("Error filtering products:", expect.any(Error));
+    expect(consoleSpy).toHaveBeenCalledWith("Error fetching filtered products:", expect.any(Error));
     consoleSpy.mockRestore();
   });
 });

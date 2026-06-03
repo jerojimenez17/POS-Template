@@ -15,9 +15,10 @@ import Modal from "../Modal";
 import ProductForm from "./product-form";
 import CodeBarModal from "./code-bar-modal";
 import { Session } from "next-auth";
-import { getProducts, deleteProduct } from "@/actions/stock";
+import { getProducts, deleteProduct, toggleProductCatalogAction } from "@/actions/stock";
 import { ProductExtended } from "./product-form";
 import { toast } from "sonner";
+import { Switch } from "../ui/switch";
 
 interface props {
   descriptionFilter: string;
@@ -79,6 +80,9 @@ const StockTable = ({ descriptionFilter }: props) => {
               </TableHead>
               <TableHead className="hover:text-gray-800 text-center font-extrabold text-white text-lg p-2">
                 Foto
+              </TableHead>
+              <TableHead className="hover:text-gray-800 text-center font-extrabold text-white text-lg p-2">
+                Catálogo
               </TableHead>
               <TableHead className="hover:text-gray-800 text-center font-extrabold text-white text-lg p-1">
                 Acciones
@@ -154,6 +158,30 @@ const StockTable = ({ descriptionFilter }: props) => {
                           width={75}
                         />
                       )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={product.catalog !== false}
+                        onCheckedChange={(checked) => {
+                          setProducts((prev) =>
+                            prev.map((p) =>
+                              p.id === product.id ? { ...p, catalog: checked } : p
+                            )
+                          );
+                          startTransition(async () => {
+                            const result = await toggleProductCatalogAction(product.id, checked);
+                            if (result.error) {
+                              toast.error(result.error);
+                              setProducts((prev) =>
+                                prev.map((p) =>
+                                  p.id === product.id ? { ...p, catalog: !checked } : p
+                                )
+                              );
+                            }
+                          });
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
                     </TableCell>
                     <TableCell className="z-50">
                       <DeleteButton

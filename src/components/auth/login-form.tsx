@@ -43,6 +43,9 @@ export const LoginForm = () => {
         if (data?.error) {
           setError(data.error);
         }
+        if (data?.success) {
+          window.location.href = data.redirectTo || "/";
+        }
       });
     });
   };
