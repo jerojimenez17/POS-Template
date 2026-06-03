@@ -10,6 +10,9 @@ vi.mock("@/lib/db", () => ({
     business: {
       findUnique: vi.fn(),
     },
+    businessFeatures: {
+      findUnique: vi.fn().mockResolvedValue({ hasPublicCatalog: true }),
+    },
   },
 }));
 
@@ -260,5 +263,49 @@ describe("getPublicProductsByBusinessId", () => {
 
     expect(result[0].brand).toBeNull();
     expect(result[0].category).toBeNull();
+  });
+
+  it("should map the details property on PublicProduct", async () => {
+    const { db } = await import("@/lib/db");
+
+    const mockProducts = [
+      {
+        id: "product-1",
+        code: "P001",
+        description: "Product One",
+        details: "Detailed description of the product",
+        salePrice: 100,
+        unit: "unidades",
+        image: "https://example.com/img1.jpg",
+        amount: 50,
+        brand: { name: "Brand A" },
+        category: { name: "Category X" },
+      },
+    ];
+
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
+
+    const result = await getPublicProductsByBusinessId("business-123");
+
+    expect(result).toHaveLength(1);
+    expect(result[0].details).toBe("Detailed description of the product");
+  });
+
+  it("should query only products where catalog is true", async () => {
+    const { db } = await import("@/lib/db");
+
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    await getPublicProductsByBusinessId("business-123");
+
+    expect(db.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          businessId: "business-123",
+          salePrice: { gt: 0 },
+          catalog: true,
+        }),
+      })
+    );
   });
 });

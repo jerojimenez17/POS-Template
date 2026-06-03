@@ -12,6 +12,8 @@ export interface PublicProduct {
   unit: string | null;
   image: string | null;
   amount: number;
+  details: string | null;
+  catalog?: boolean;
 }
 
 export const getPublicProductsByBusinessId = async (businessId: string): Promise<PublicProduct[]> => {
@@ -28,6 +30,7 @@ export const getPublicProductsByBusinessId = async (businessId: string): Promise
       where: {
         businessId: businessId,
         salePrice: { gt: 0 },
+        catalog: true,
       },
       select: {
         id: true,
@@ -37,6 +40,8 @@ export const getPublicProductsByBusinessId = async (businessId: string): Promise
         unit: true,
         image: true,
         amount: true,
+        catalog: true,
+        details: true,
         brand: { select: { name: true } },
         category: { select: { name: true } },
       },
@@ -53,6 +58,8 @@ export const getPublicProductsByBusinessId = async (businessId: string): Promise
       unit: p.unit,
       image: p.image,
       amount: p.amount,
+      catalog: p.catalog,
+      details: p.details,
     }));
   } catch (error) {
     console.error("Error fetching public products:", error);

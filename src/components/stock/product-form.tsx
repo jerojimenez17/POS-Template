@@ -15,6 +15,8 @@ import {
   FormMessage,
 } from "../ui/form";
 import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
+import { Switch } from "../ui/switch";
 import { Button } from "../ui/button";
 import {
   Select,
@@ -39,15 +41,28 @@ import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import { getCategories } from "@/actions/categories";
 
-const Scanner = dynamic(() => import("@yudiel/react-qr-scanner").then(m => m.Scanner), {
-  ssr: false,
-  loading: () => <div className="h-64 w-64 bg-black flex items-center justify-center text-white">Cargando escáner...</div>
-});
+const Scanner = dynamic(
+  () => import("@yudiel/react-qr-scanner").then((m) => m.Scanner),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 w-64 bg-black flex items-center justify-center text-white">
+        Cargando escáner...
+      </div>
+    ),
+  },
+);
 import { getBrands } from "@/actions/brands";
 import { getSubcategories } from "@/actions/subcategories";
 import { getSuppliers, updateProduct } from "@/actions/stock";
 
-import { Product, Supplier, Brand, Category, Subcategory } from "@prisma/client";
+import {
+  Product,
+  Supplier,
+  Brand,
+  Category,
+  Subcategory,
+} from "@prisma/client";
 
 export type ProductExtended = Product & {
   supplier?: Supplier | null;
@@ -65,11 +80,17 @@ const ProductForm = ({ product, onClose }: Props) => {
   const [isPending, startTransition] = useTransition();
   const [uploadMessages, setUploadMessages] = useState<string[]>([]);
   const [errorMessages, setErrorMessages] = useState<string[]>([]);
-  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>(
+    [],
+  );
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [suppliers, setSuppliers] = useState<{id: string, name: string}[]>([]);
-  const [subcategories, setSubcategories] = useState<{id: string, name: string}[]>([]);
-  const [brands, setBrands] = useState<{id: string, name: string}[]>([]);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  const [subcategories, setSubcategories] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
   const [image, setImage] = useState<File | null>(null);
 
   const getInitialValues = (prod?: ProductExtended) => ({
@@ -89,6 +110,8 @@ const ProductForm = ({ product, onClose }: Props) => {
     gain: prod?.gain || 0.0,
     last_update: prod ? new Date(prod.last_update) : new Date(),
     salePrice: prod?.salePrice || 0,
+    catalog: prod?.catalog ?? true,
+    details: prod?.details || "",
   });
 
   const form = useForm<z.infer<typeof ProductSchema>>({
@@ -112,7 +135,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             fetchedCategories.map((c: { id: string; name: string }) => ({
               id: c.id,
               name: c.name,
-            }))
+            })),
           );
         }
 
@@ -122,7 +145,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             fetchedBrands.map((b: { id: string; name: string }) => ({
               id: b.id,
               name: b.name,
-            }))
+            })),
           );
         }
 
@@ -132,7 +155,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             fetchedSuppliers.map((s: { id: string; name: string }) => ({
               id: s.id,
               name: s.name,
-            }))
+            })),
           );
         }
       } catch (e) {
@@ -151,7 +174,10 @@ const ProductForm = ({ product, onClose }: Props) => {
     let mounted = true;
 
     // Si cambia la categoría, limpiamos subcategoría para evitar valores inválidos.
-    if (prevCategoryIdRef.current !== undefined && prevCategoryIdRef.current !== selectedCategoryId) {
+    if (
+      prevCategoryIdRef.current !== undefined &&
+      prevCategoryIdRef.current !== selectedCategoryId
+    ) {
       form.setValue("subCategory", "");
     }
     prevCategoryIdRef.current = selectedCategoryId || "";
@@ -165,7 +191,7 @@ const ProductForm = ({ product, onClose }: Props) => {
               fetchedSubs.map((s: { id: string; name: string }) => ({
                 id: s.id,
                 name: s.name,
-              }))
+              })),
             );
           }
         } else if (mounted) {
@@ -183,22 +209,30 @@ const ProductForm = ({ product, onClose }: Props) => {
   }, [selectedCategoryId, form]);
 
   const handleCategorySuccess = (item: { id: string; name: string }) => {
-    setCategories((prev) => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+    setCategories((prev) =>
+      [...prev, item].sort((a, b) => a.name.localeCompare(b.name)),
+    );
     form.setValue("category", item.id);
   };
 
   const handleSubcategorySuccess = (item: { id: string; name: string }) => {
-    setSubcategories((prev) => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+    setSubcategories((prev) =>
+      [...prev, item].sort((a, b) => a.name.localeCompare(b.name)),
+    );
     form.setValue("subCategory", item.id);
   };
 
   const handleBrandSuccess = (item: { id: string; name: string }) => {
-    setBrands((prev) => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+    setBrands((prev) =>
+      [...prev, item].sort((a, b) => a.name.localeCompare(b.name)),
+    );
     form.setValue("brand", item.id);
   };
 
   const handleSupplierSuccess = (item: { id: string; name: string }) => {
-    setSuppliers((prev) => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+    setSuppliers((prev) =>
+      [...prev, item].sort((a, b) => a.name.localeCompare(b.name)),
+    );
     form.setValue("supplier", item.id);
   };
 
@@ -221,7 +255,7 @@ const ProductForm = ({ product, onClose }: Props) => {
           ) {
             const oldImageRef = ref(
               storage,
-              `/productImage/${product.imageName}`
+              `/productImage/${product.imageName}`,
             );
             await deleteObject(oldImageRef).catch(() => {
               toast.error("La imagen anterior no se pudo eliminar.");
@@ -241,7 +275,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             subCategoryId: values.subCategory,
             supplierId: values.supplier,
           };
-          
+
           const result = await updateProduct(product.id, updateData);
           if (result.error) {
             toast.error(result.error);
@@ -255,7 +289,8 @@ const ProductForm = ({ product, onClose }: Props) => {
           const submissionValues = {
             ...values,
             image: typeof values.image === "string" ? values.image : "",
-            imageName: typeof values.imageName === "string" ? values.imageName : "",
+            imageName:
+              typeof values.imageName === "string" ? values.imageName : "",
           };
           const result = await newProduct(submissionValues);
           if (result.error) {
@@ -287,7 +322,9 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="image"
             render={({}) => (
               <FormItem>
-                <FormLabel className="text-sm font-medium">Foto del producto</FormLabel>
+                <FormLabel className="text-sm font-medium">
+                  Foto del producto
+                </FormLabel>
                 <FormControl>
                   <div className="flex items-center gap-4">
                     <label className="flex-1 cursor-pointer">
@@ -331,7 +368,9 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="code"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Codigo <span className="text-red-500">*</span></FormLabel>
+                <FormLabel>
+                  Codigo <span className="text-red-500">*</span>
+                </FormLabel>
                 <FormControl>
                   <div className="flex gap-2">
                     <Input
@@ -365,7 +404,9 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-sm font-medium">Descripción <span className="text-red-500">*</span></FormLabel>
+                <FormLabel className="text-sm font-medium">
+                  Descripción <span className="text-red-500">*</span>
+                </FormLabel>
                 <FormControl>
                   <Input
                     {...field}
@@ -386,11 +427,21 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="price"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-sm font-medium">Precio de costo <span className="text-red-500">*</span></FormLabel>
+                <FormLabel className="text-sm font-medium">
+                  Precio de costo <span className="text-red-500">*</span>
+                </FormLabel>
                 <FormControl>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-                    <Input {...field} disabled={isPending} type="number" step="0.01" className="pl-7" />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      $
+                    </span>
+                    <Input
+                      {...field}
+                      disabled={isPending}
+                      type="number"
+                      step="0.01"
+                      className="pl-7"
+                    />
                   </div>
                 </FormControl>
                 <FormMessage />
@@ -404,7 +455,9 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="gain"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-sm font-medium">Margen de ganancia % <span className="text-red-500">*</span></FormLabel>
+                <FormLabel className="text-sm font-medium">
+                  Margen de ganancia % <span className="text-red-500">*</span>
+                </FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Input
@@ -413,7 +466,9 @@ const ProductForm = ({ product, onClose }: Props) => {
                       type="number"
                       className="pr-7"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      %
+                    </span>
                   </div>
                 </FormControl>
                 <FormMessage />
@@ -426,14 +481,13 @@ const ProductForm = ({ product, onClose }: Props) => {
             control={form.control}
             name="category"
             render={({ field }) => (
-              <FormItem className="w-full">
-                <FormLabel>Categoria <span className="text-red-500">*</span></FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                >
+              <FormItem className="flex-1">
+                <FormLabel>
+                  Categoria <span className="text-red-500">*</span>
+                </FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
-                    <SelectTrigger className="border border-black">
+                    <SelectTrigger>
                       <SelectValue placeholder="Selecciona Categoria" />
                     </SelectTrigger>
                   </FormControl>
@@ -449,8 +503,11 @@ const ProductForm = ({ product, onClose }: Props) => {
               </FormItem>
             )}
           />
-          <div className="pb-1">
-            <CreateAttributeModal type="category" onSuccess={handleCategorySuccess} />
+          <div className="pt-1.5">
+            <CreateAttributeModal
+              type="category"
+              onSuccess={handleCategorySuccess}
+            />
           </div>
         </div>
         <div className="flex flex-row items-end gap-2">
@@ -458,15 +515,15 @@ const ProductForm = ({ product, onClose }: Props) => {
             control={form.control}
             name="subCategory"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-sm font-medium">Subcategoría</FormLabel>
+              <FormItem className="flex-1">
+                <FormLabel>Subcategoría</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
                   disabled={!selectedCategoryId}
                 >
                   <FormControl>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger>
                       <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                   </FormControl>
@@ -482,8 +539,12 @@ const ProductForm = ({ product, onClose }: Props) => {
               </FormItem>
             )}
           />
-          <div className="pt-6">
-            <CreateAttributeModal type="subcategory" parentId={selectedCategoryId} onSuccess={handleSubcategorySuccess} />
+          <div className="pt-1.5">
+            <CreateAttributeModal
+              type="subcategory"
+              parentId={selectedCategoryId}
+              onSuccess={handleSubcategorySuccess}
+            />
           </div>
         </div>
         <div className="flex flex-row items-end gap-2">
@@ -491,14 +552,13 @@ const ProductForm = ({ product, onClose }: Props) => {
             control={form.control}
             name="brand"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-sm font-medium">Marca <span className="text-red-500">*</span></FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                >
+              <FormItem className="flex-1">
+                <FormLabel>
+                  Marca <span className="text-red-500">*</span>
+                </FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger>
                       <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                   </FormControl>
@@ -514,7 +574,7 @@ const ProductForm = ({ product, onClose }: Props) => {
               </FormItem>
             )}
           />
-          <div className="pt-6">
+          <div className="pt-1.5">
             <CreateAttributeModal type="brand" onSuccess={handleBrandSuccess} />
           </div>
         </div>
@@ -523,14 +583,11 @@ const ProductForm = ({ product, onClose }: Props) => {
             control={form.control}
             name="supplier"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-sm font-medium">Proveedor</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                >
+              <FormItem className="flex-1">
+                <FormLabel>Proveedor</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger>
                       <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                   </FormControl>
@@ -546,8 +603,11 @@ const ProductForm = ({ product, onClose }: Props) => {
               </FormItem>
             )}
           />
-          <div className="pt-6">
-            <CreateAttributeModal type="supplier" onSuccess={handleSupplierSuccess} />
+          <div className="pt-1.5">
+            <CreateAttributeModal
+              type="supplier"
+              onSuccess={handleSupplierSuccess}
+            />
           </div>
         </div>
 
@@ -557,7 +617,9 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="client_bonus"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-sm font-medium">Bonificación a cliente</FormLabel>
+                <FormLabel className="text-sm font-medium">
+                  Bonificación a cliente
+                </FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Input
@@ -566,7 +628,9 @@ const ProductForm = ({ product, onClose }: Props) => {
                       type="number"
                       className="pr-7"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      %
+                    </span>
                   </div>
                 </FormControl>
                 <FormMessage />
@@ -580,11 +644,10 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="unit"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-sm font-medium">Unidad <span className="text-red-500">*</span></FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                >
+                <FormLabel className="text-sm font-medium">
+                  Unidad <span className="text-red-500">*</span>
+                </FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar" />
@@ -609,12 +672,32 @@ const ProductForm = ({ product, onClose }: Props) => {
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-sm font-medium">Cantidad inicial <span className="text-red-500">*</span></FormLabel>
+                <FormLabel className="text-sm font-medium">
+                  Cantidad inicial <span className="text-red-500">*</span>
+                </FormLabel>
                 <FormControl>
-                  <Input
-                    type="number"
+                  <Input type="number" {...field} disabled={isPending} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="col-span-1 md:col-span-2 space-y-2">
+          <FormField
+            control={form.control}
+            name="details"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-medium">
+                  Detalles del producto
+                </FormLabel>
+                <FormControl>
+                  <Textarea
                     {...field}
+                    placeholder="Descripción detallada para el catálogo (opcional)"
                     disabled={isPending}
+                    className="resize-none h-24"
                   />
                 </FormControl>
                 <FormMessage />
@@ -622,17 +705,56 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
+        <div className="col-span-1 md:col-span-2">
+          <FormField
+            control={form.control}
+            name="catalog"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-sm font-medium">
+                    Visible en catálogo
+                  </FormLabel>
+                  <p className="text-xs text-muted-foreground">
+                    {field.value
+                      ? "El producto se mostrará en el catálogo público"
+                      : "El producto está oculto del catálogo público"}
+                  </p>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value || false}
+                    onCheckedChange={field.onChange}
+                    disabled={isPending}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
         <div className="col-span-1 md:col-span-2 mt-2">
-          <Button 
-            type="submit" 
-            disabled={isPending} 
+          <Button
+            type="submit"
+            disabled={isPending}
             className="w-full h-11 text-base font-medium bg-black dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
           >
             {isPending ? (
               <span className="flex items-center gap-2">
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
                 Guardando...
               </span>
@@ -655,13 +777,17 @@ const ProductForm = ({ product, onClose }: Props) => {
           >
             <X className="h-6 w-6" />
           </Button>
-          
+
           <div className="w-full max-w-sm">
             <div className="text-center mb-6">
-              <h3 className="text-white text-xl font-semibold">Escanear código</h3>
-              <p className="text-gray-400 text-sm mt-1">Apuntá la cámara al código de barras</p>
+              <h3 className="text-white text-xl font-semibold">
+                Escanear código
+              </h3>
+              <p className="text-gray-400 text-sm mt-1">
+                Apuntá la cámara al código de barras
+              </p>
             </div>
-            
+
             <div className="aspect-square bg-black rounded-2xl overflow-hidden relative border-2 border-white/20 shadow-2xl">
               <Scanner
                 formats={["code_128", "codabar", "qr_code", "ean_13", "ean_8"]}
@@ -702,6 +828,5 @@ const ProductForm = ({ product, onClose }: Props) => {
     </Form>
   );
 };
-
 
 export default ProductForm;

@@ -84,6 +84,8 @@ export const ProductSchema = z.object({
     invalid_type_error: "Debe ser un numero",
   }),
   unit: z.string(),
+  catalog: z.boolean().default(true).optional(),
+  details: z.string().optional().or(z.literal("")),
 });
 export const ClientSchema = z.object({
   id: z.string(),
