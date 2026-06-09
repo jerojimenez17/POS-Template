@@ -1,6 +1,7 @@
 "use client";
 
 import { useContext, useState, useMemo } from "react";
+import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { Input } from "../ui/input";
@@ -40,6 +41,8 @@ const ProductSelector = ({
   business,
 }: Props) => {
   const isCatalog = variant === "public-catalog";
+  const params = useParams();
+  const businessSlug = isCatalog ? (params?.business as string) : undefined;
   const [isLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("all");
@@ -163,7 +166,7 @@ const ProductSelector = ({
         </div>
       </div>
       <div
-        className="flex flex-wrap my-4 max-h-full overflow-auto max-w-full mx-auto justify-center z-10 gap-2"
+        className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] my-4 max-h-full overflow-auto max-w-5xl mx-auto z-10 gap-4 px-4"
         style={{ contentVisibility: "auto" }}
       >
         {isLoading ? (
@@ -190,6 +193,7 @@ const ProductSelector = ({
               onQuantityChange={handleQuantityChange}
               onAddToCart={handleAddToCart}
               ProductModal={ProductModal}
+              businessSlug={businessSlug}
             />
           ))
         )}
