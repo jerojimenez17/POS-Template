@@ -168,7 +168,9 @@ model Supplier {
   name          String
   email         String?
   phone         String?
-  bonus         Float    @default(0)
+  discount      Float    @default(0)
+  iva           Float    @default(0)
+  gain          Float    @default(0)
   creation_date DateTime @default(now())
 
   // Make optional for migration
@@ -218,6 +220,11 @@ model Product {
   rankings        ProductRanking[]
   stockMovements  StockMovement[]
   saleReturnItems SaleReturnItem[]
+
+  @@index([businessId])
+  @@index([businessId, description])
+  @@index([businessId, code])
+  @@index([businessId, categoryId])
 }
 
 model ProductRanking {

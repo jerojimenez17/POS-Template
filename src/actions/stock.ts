@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { auth } from "../../auth";
 import { pusherServer } from "@/lib/pusher-server";
-import { Product } from "@prisma/client";
+import { Product, Prisma } from "@prisma/client";
 
 // Supplier Actions
 
@@ -12,7 +12,9 @@ export const createSupplier = async (data: {
   name: string;
   email?: string;
   phone?: string;
-  bonus?: number;
+  discount?: number;
+  iva?: number;
+  gain?: number;
 }) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
@@ -23,7 +25,9 @@ export const createSupplier = async (data: {
         name: data.name,
         email: data.email,
         phone: data.phone,
-        bonus: data.bonus || 0,
+        discount: data.discount || 0,
+        iva: data.iva || 0,
+        gain: data.gain || 0,
         business: { connect: { id: session.user.businessId } },
       },
     });
@@ -106,6 +110,7 @@ export interface BulkProductInput {
   unit?: string;
   catalog?: boolean;
   details?: string;
+  supplierId?: string;
 }
 
 export interface PreviewProductItem extends BulkProductInput {
@@ -123,7 +128,15 @@ export interface PreviewProductsBulkResult {
   };
 }
 
-export const previewProductsBulk = async (productsData: BulkProductInput[], updateExisting?: boolean): Promise<PreviewProductsBulkResult> => {
+export const previewProductsBulk = async (
+  productsData: BulkProductInput[], 
+  updateExisting?: boolean,
+  updateOnly?: boolean,
+  discount?: number,
+  iva?: number,
+  gain?: number,
+  supplierId?: string
+): Promise<PreviewProductsBulkResult> => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
@@ -135,21 +148,49 @@ export const previewProductsBulk = async (productsData: BulkProductInput[], upda
         businessId: session.user.businessId,
         code: { in: codes }
       },
-      select: { code: true }
+      select: { code: true, price: true, salePrice: true, supplierId: true }
     });
     
-    const existingCodes = new Set(existingProducts.map(p => p.code));
+    const existingMap = new Map(existingProducts.map(p => [p.code, p]));
     
     let createdCount = 0;
     let updatedCount = 0;
     let ignoredCount = 0;
     
+    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
+    
     const items: PreviewProductItem[] = productsData.map(item => {
-      const exists = existingCodes.has(item.code.toString());
+      const existing = existingMap.get(item.code.toString());
+      const exists = !!existing;
       let status: "create" | "update" | "ignore" = "create";
       
       if (exists) {
-        if (updateExisting) {
+        const priceStr = item.price.toString().replace(',','.');
+        const filePrice = parseFloat(priceStr);
+        const isPriceValid = !isNaN(filePrice);
+        
+        let costPrice = filePrice;
+        let salePrice = filePrice;
+        
+        if (applyPriceFormula) {
+          const d = discount ?? 0;
+          const i = iva ?? 0;
+          const g = gain ?? 0;
+          costPrice = filePrice * (1 - d / 100) * (1 + i / 100);
+          salePrice = costPrice * (1 + g / 100);
+        }
+        
+        const priceSame = isPriceValid &&
+          Math.abs(costPrice - existing.price) < 0.001 &&
+          Math.abs(salePrice - existing.salePrice) < 0.001;
+        
+        const supplierSame =
+          (supplierId === undefined && existing.supplierId === null) ||
+          supplierId === existing.supplierId;
+        
+        const unchanged = priceSame && supplierSame;
+        
+        if (updateExisting && !unchanged) {
           status = "update";
           updatedCount++;
         } else {
@@ -157,8 +198,13 @@ export const previewProductsBulk = async (productsData: BulkProductInput[], upda
           ignoredCount++;
         }
       } else {
-        status = "create";
-        createdCount++;
+        if (updateOnly) {
+          status = "ignore";
+          ignoredCount++;
+        } else {
+          status = "create";
+          createdCount++;
+        }
       }
       
       return {
@@ -182,13 +228,23 @@ export const previewProductsBulk = async (productsData: BulkProductInput[], upda
   }
 };
 
-export const createProductsBulk = async (productsData: BulkProductInput[], updateExisting?: boolean) => {
+export const createProductsBulk = async (
+  productsData: BulkProductInput[],
+  updateExisting?: boolean,
+  updateOnly?: boolean,
+  discount?: number,
+  iva?: number,
+  gain?: number,
+  supplierId?: string
+) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
   try {
     let createdCount = 0;
     let updatedCount = 0;
+    
+    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
     
     // Process sequentially to handle dependent creations safely
     for (const item of productsData) {
@@ -243,11 +299,26 @@ export const createProductsBulk = async (productsData: BulkProductInput[], updat
       }
 
       const priceStr = item.price.toString().replace(',','.');
-      const parsedPrice = parseFloat(priceStr);
-      const isPriceValid = !isNaN(parsedPrice);
+      const filePrice = parseFloat(priceStr);
+      const isPriceValid = !isNaN(filePrice);
+
+      let costPrice = filePrice;
+      let salePrice = filePrice;
+      let gainValue = 0;
+      
+      if (applyPriceFormula) {
+        const d = discount ?? 0;
+        const i = iva ?? 0;
+        const g = gain ?? 0;
+        costPrice = filePrice * (1 - d / 100) * (1 + i / 100);
+        salePrice = costPrice * (1 + g / 100);
+        gainValue = g;
+      }
 
       const amountStr = item.amount?.toString().replace(',','.');
       const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
+      
+      const supplierConnect = supplierId ? { connect: { id: supplierId } } : undefined;
       
       // Check if product exists by code
       const existingProduct = await db.product.findFirst({
@@ -258,11 +329,24 @@ export const createProductsBulk = async (productsData: BulkProductInput[], updat
       });
 
       if (existingProduct) {
-        if (updateExisting) {
+        const priceSame = isPriceValid &&
+          Math.abs(costPrice - existingProduct.price) < 0.001 &&
+          Math.abs(salePrice - existingProduct.salePrice) < 0.001;
+
+        const supplierSame =
+          (supplierId === undefined && existingProduct.supplierId === null) ||
+          supplierId === existingProduct.supplierId;
+
+        if (supplierSame && priceSame) {
+          continue;
+        }
+
+        if (updateExisting || updateOnly) {
           const updateData: Parameters<typeof db.product.update>[0]["data"] = {
             description: item.description.toString(),
-            price: isPriceValid ? parsedPrice : 0,
-            salePrice: isPriceValid ? parsedPrice : 0,
+            price: isPriceValid ? costPrice : 0,
+            salePrice: isPriceValid ? salePrice : 0,
+            gain: applyPriceFormula ? gainValue : existingProduct.gain,
             unit: item.unit || "unidades",
             brand: brandId ? { connect: { id: brandId } } : { disconnect: true },
             category: categoryId ? { connect: { id: categoryId } } : { disconnect: true },
@@ -270,6 +354,7 @@ export const createProductsBulk = async (productsData: BulkProductInput[], updat
             last_update: new Date(),
             catalog: item.catalog !== undefined ? item.catalog : undefined,
             details: item.details !== undefined ? item.details : undefined,
+            supplier: supplierConnect,
           };
 
           if (item.amount !== null && item.amount !== undefined) {
@@ -284,16 +369,20 @@ export const createProductsBulk = async (productsData: BulkProductInput[], updat
           });
           updatedCount++;
         }
-        // If updateExisting is false and product exists, do nothing (ignore)
+        // If both updateExisting and updateOnly are false, do nothing (ignore)
       } else {
+        if (updateOnly) {
+          // Skip creation in updateOnly mode
+          continue;
+        }
         // Create new product
         await db.product.create({
           data: {
             code: item.code.toString(),
             description: item.description.toString(),
-            price: isPriceValid ? parsedPrice : 0,
-            salePrice: isPriceValid ? parsedPrice : 0,
-            gain: 0,
+            price: isPriceValid ? costPrice : 0,
+            salePrice: isPriceValid ? salePrice : 0,
+            gain: applyPriceFormula ? gainValue : 0,
             amount: isNaN(parsedAmount) ? 0 : parsedAmount,
             unit: item.unit || "unidades",
             brand: brandId ? { connect: { id: brandId } } : undefined,
@@ -302,14 +391,22 @@ export const createProductsBulk = async (productsData: BulkProductInput[], updat
             business: { connect: { id: session.user.businessId } },
             catalog: item.catalog !== undefined ? item.catalog : true,
             details: item.details || null,
+            supplier: supplierConnect,
           }
         });
         createdCount++;
       }
     }
 
-    const totalCount = updatedCount > 0 ? updatedCount : createdCount;
-    if (totalCount > 0) {
+    if (supplierId && applyPriceFormula) {
+      await db.supplier.update({
+        where: { id: supplierId },
+        data: { discount, iva, gain }
+      });
+    }
+
+    const totalCount = updatedCount > 0 || createdCount > 0;
+    if (totalCount) {
       try {
         await pusherServer.trigger(
           `movements-${session.user.businessId}`, 
@@ -459,6 +556,60 @@ export const getProducts = async () => {
         return [];
     }
 }
+
+export const getProductsPaginated = async (params: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  categoryId?: string;
+  brandId?: string;
+  unit?: string;
+}) => {
+  const session = await auth();
+  if (!session?.user?.businessId)
+    return { products: [], total: 0, page: 1, pageSize: 25, totalPages: 0 };
+
+  const page = Math.max(1, params.page || 1);
+  const pageSize = Math.min(100, Math.max(1, params.pageSize || 25));
+  const skip = (page - 1) * pageSize;
+
+  const where: Prisma.ProductWhereInput = {
+    businessId: session.user.businessId,
+    ...(params.search && {
+      OR: [
+        { code: { contains: params.search, mode: "insensitive" } },
+        { description: { contains: params.search, mode: "insensitive" } },
+      ],
+    }),
+    ...(params.categoryId && { categoryId: params.categoryId }),
+    ...(params.brandId && { brandId: params.brandId }),
+    ...(params.unit && { unit: params.unit }),
+  };
+
+  try {
+    const [products, total] = await db.$transaction([
+      db.product.findMany({
+        where,
+        include: { supplier: true, brand: true, category: true, subCategory: true },
+        orderBy: { description: "asc" },
+        skip,
+        take: pageSize,
+      }),
+      db.product.count({ where }),
+    ]);
+
+    return {
+      products,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  } catch (error) {
+    console.error("Error fetching paginated products:", error);
+    return { products: [], total: 0, page, pageSize, totalPages: 0 };
+  }
+};
 
 export const getProductByCode = async (code: string) => {
   const session = await auth();

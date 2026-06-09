@@ -38,7 +38,9 @@ export const SuplierSchema = z.object({
   name: z.string().min(1, { message: "Nombre es Obligatorio" }),
   phone: z.string(),
   email: z.string(),
-  bonus: z.coerce.number(),
+  discount: z.coerce.number(),
+  iva: z.coerce.number(),
+  gain: z.coerce.number(),
   creation_date: z.date(),
 });
 export const ProductSchema = z.object({

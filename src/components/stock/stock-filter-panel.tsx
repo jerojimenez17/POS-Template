@@ -8,14 +8,14 @@ import { ScanBarcode, Search, X, FileSpreadsheet, PackagePlus, CheckSquare } fro
 
 interface Props {
   handleOpenModal: () => void;
-  handleDescriptionFilter: (filter: string) => void;
+  onSearchChange: (filter: string) => void;
   handleOpenExcelModal?: () => void;
   handleOpenSelectionModal?: () => void;
 }
 
 const StockFilterPanel = ({
   handleOpenModal,
-  handleDescriptionFilter,
+  onSearchChange,
   handleOpenExcelModal,
 }: Props) => {
   const router = useRouter();
@@ -25,14 +25,12 @@ const StockFilterPanel = ({
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.currentTarget.value;
     setDescriptionFilterInput(value);
-    if (value === "") {
-      handleDescriptionFilter("");
-    }
+    onSearchChange(value);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      handleDescriptionFilter(descriptionFilterInput);
+      onSearchChange(descriptionFilterInput);
     }
   };
 
@@ -111,7 +109,7 @@ const StockFilterPanel = ({
                 if (result && result.length > 0) {
                   const rawValue = result[0].rawValue;
                   setDescriptionFilterInput(rawValue);
-                  handleDescriptionFilter(rawValue);
+                  onSearchChange(rawValue);
                   setScannerOpen(false);
                 }
               }}

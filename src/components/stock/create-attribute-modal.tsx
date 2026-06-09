@@ -55,7 +55,9 @@ const CreateAttributeModal = ({ type, parentId, onSuccess }: Props) => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [bonus, setBonus] = useState(0);
+  const [discount, setDiscount] = useState(0);
+  const [iva, setIva] = useState("0");
+  const [gain, setGain] = useState(0);
   const [isPending, setIsPending] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -63,7 +65,9 @@ const CreateAttributeModal = ({ type, parentId, onSuccess }: Props) => {
     setName("");
     setEmail("");
     setPhone("");
-    setBonus(0);
+    setDiscount(0);
+    setIva("0");
+    setGain(0);
   };
 
   const handleAdd = async () => {
@@ -103,7 +107,7 @@ const CreateAttributeModal = ({ type, parentId, onSuccess }: Props) => {
           break;
 
         case "supplier":
-          result = await createSupplier({ name, email, phone, bonus });
+          result = await createSupplier({ name, email, phone, discount, iva: parseFloat(iva), gain });
           if (result.success && result.supplier) {
             onSuccess({ id: result.supplier.id, name: result.supplier.name });
             toast.success("Proveedor creado");
@@ -191,18 +195,45 @@ const CreateAttributeModal = ({ type, parentId, onSuccess }: Props) => {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="bonus">Bonificación %</Label>
-              <Input
-                id="bonus"
-                type="number"
-                min={0}
-                max={100}
-                value={bonus !== 0 ? bonus : ""}
-                onChange={(e) => setBonus(Number(e.currentTarget.value))}
-                placeholder="0"
-                disabled={isPending}
-              />
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="discount">Descuento %</Label>
+                <Input
+                  id="discount"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={discount !== 0 ? discount : ""}
+                  onChange={(e) => setDiscount(Number(e.currentTarget.value))}
+                  disabled={isPending}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="iva">IVA %</Label>
+                <select
+                  id="iva"
+                  value={iva}
+                  onChange={(e) => setIva(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  disabled={isPending}
+                >
+                  <option value="0">0%</option>
+                  <option value="10.5">10.5%</option>
+                  <option value="21">21%</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="gain">Ganancia %</Label>
+                <Input
+                  id="gain"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  value={gain !== 0 ? gain : ""}
+                  onChange={(e) => setGain(Number(e.currentTarget.value))}
+                  disabled={isPending}
+                />
+              </div>
             </div>
           </div>
         ) : (
