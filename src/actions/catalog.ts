@@ -66,3 +66,51 @@ export const getPublicProductsByBusinessId = async (businessId: string): Promise
     return [];
   }
 };
+
+export const getPublicProductById = async (
+  businessId: string,
+  productId: string
+): Promise<PublicProduct | null> => {
+  try {
+    const product = await db.product.findFirst({
+      where: {
+        id: productId,
+        businessId: businessId,
+        salePrice: { gt: 0 },
+        catalog: true,
+      },
+      select: {
+        id: true,
+        code: true,
+        description: true,
+        salePrice: true,
+        unit: true,
+        image: true,
+        amount: true,
+        catalog: true,
+        details: true,
+        brand: { select: { name: true } },
+        category: { select: { name: true } },
+      },
+    });
+
+    if (!product) return null;
+
+    return {
+      id: product.id,
+      code: product.code,
+      description: product.description,
+      brand: product.brand?.name ?? null,
+      category: product.category?.name ?? null,
+      salePrice: product.salePrice,
+      unit: product.unit,
+      image: product.image,
+      amount: product.amount,
+      catalog: product.catalog,
+      details: product.details,
+    };
+  } catch (error) {
+    console.error("Error fetching public product:", error);
+    return null;
+  }
+};

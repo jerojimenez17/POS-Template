@@ -18,7 +18,7 @@ const INITIAL_STATE: Order = {
 };
 
 interface props {
-  children: JSX.Element | JSX.Element[];
+  children: React.ReactNode;
 }
 
 const CartProvider = ({ children }: props) => {
