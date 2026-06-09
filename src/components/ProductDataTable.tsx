@@ -6,7 +6,6 @@ import {
   getCoreRowModel,
   flexRender,
   ColumnDef,
-  getPaginationRowModel,
 } from "@tanstack/react-table";
 import Image from "next/image";
 import noImgPhoto from "../../public/no-image.svg";
@@ -27,40 +26,41 @@ import {
 import { deleteProduct } from "@/actions/stock";
 import { toast } from "sonner";
 import { ProductExtended } from "./stock/product-form";
-import { Package } from "lucide-react";
+import { Package, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface ProductDataTableProps {
   products: ProductExtended[];
-  descriptionFilter: string;
+  total: number;
+  page: number;
+  totalPages: number;
+  loading: boolean;
+  onPageChange: (page: number) => void;
   onRefresh?: () => void;
+  hasActiveFilter: boolean;
 }
 
 const ProductDataTable: React.FC<ProductDataTableProps> = ({
   products,
-  descriptionFilter,
+  total,
+  page,
+  totalPages,
+  loading,
+  onPageChange,
   onRefresh,
+  hasActiveFilter,
 }) => {
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);
   const [productToEdit, setProductToEdit] = useState<ProductExtended | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const filteredProducts = useMemo(() => {
-    return products
-      ?.filter((product) => {
-        const desc = product.description || "";
-        const code = product.code || "";
-        return (
-          desc.toLowerCase().includes(descriptionFilter.toLowerCase()) ||
-          code.toLowerCase().includes(descriptionFilter.toLowerCase())
-        );
-      })
-      .sort((a, b) => {
-        const timeA = new Date(a.creation_date).getTime();
-        const timeB = new Date(b.creation_date).getTime();
-        return timeB - timeA;
-      }) ?? [];
-  }, [products, descriptionFilter]);
+  const sortedProducts = useMemo(() => {
+    return [...products].sort((a, b) => {
+      const timeA = new Date(a.creation_date).getTime();
+      const timeB = new Date(b.creation_date).getTime();
+      return timeB - timeA;
+    });
+  }, [products]);
 
   const columns = useMemo<ColumnDef<ProductExtended>[]>(() => [
     {
@@ -211,12 +211,10 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
   ], []);
 
   const table = useReactTable({
-    data: filteredProducts,
+    data: sortedProducts,
     columns,
-    getPaginationRowModel: getPaginationRowModel(),
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
-    autoResetPageIndex: false,
   });
 
   const handleDelete = async () => {
@@ -233,8 +231,16 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
     });
   };
 
-  const hasProducts = filteredProducts.length > 0;
-  const hasFilter = descriptionFilter.trim().length > 0;
+  const from = total === 0 ? 0 : (page - 1) * 25 + 1;
+  const to = Math.min(page * 25, total);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-10">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full flex flex-col">
@@ -265,7 +271,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
             ))}
           </TableHeader>
           <TableBody>
-            {!hasProducts ? (
+            {products.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
@@ -277,12 +283,12 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                     </div>
                     <div className="space-y-1">
                       <p className="text-base font-medium text-gray-900 dark:text-gray-100">
-                        {hasFilter
+                        {hasActiveFilter
                           ? "No se encontraron productos"
                           : "No hay productos registrados"}
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {hasFilter
+                        {hasActiveFilter
                           ? "Probá con otros términos de búsqueda"
                           : "Agregá tu primer producto para comenzar"}
                       </p>
@@ -316,19 +322,19 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
 
       {/* Mobile Card View */}
       <div className="md:hidden space-y-3 pb-24">
-        {!hasProducts ? (
+        {products.length === 0 ? (
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-8 flex flex-col items-center gap-3 text-center">
             <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
               <Package className="w-8 h-8 text-gray-400" />
             </div>
             <div className="space-y-1">
               <p className="text-base font-medium text-gray-900 dark:text-gray-100">
-                {hasFilter
+                {hasActiveFilter
                   ? "No se encontraron productos"
                   : "No hay productos registrados"}
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                {hasFilter
+                {hasActiveFilter
                   ? "Probá con otros términos de búsqueda"
                   : "Agregá tu primer producto para comenzar"}
               </p>
@@ -452,30 +458,35 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         )}
       </div>
 
-      {/* Pagination */}
-      {hasProducts && (
+      {/* Server-side Pagination */}
+      {total > 0 && (
         <div className="flex items-center justify-between px-2 py-4">
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            Total: {filteredProducts.length} productos
+            {from}–{to} de {total.toLocaleString("es-AR")} productos
           </span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
+              onClick={() => onPageChange(page - 1)}
+              disabled={page <= 1}
               className="h-8 px-3"
             >
+              <ChevronLeft className="h-4 w-4 mr-1" />
               Anterior
             </Button>
+            <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
+              {page} / {totalPages}
+            </span>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
+              onClick={() => onPageChange(page + 1)}
+              disabled={page >= totalPages}
               className="h-8 px-3"
             >
               Siguiente
+              <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
         </div>

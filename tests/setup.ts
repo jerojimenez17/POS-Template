@@ -19,9 +19,16 @@ export const mockDb = {
   },
   product: {
     findFirst: vi.fn().mockResolvedValue(null),
+    findMany: vi.fn().mockResolvedValue([]),
     findUnique: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue({ id: 'product-1', code: 'PROD001' }),
     update: vi.fn().mockResolvedValue({ id: 'product-1' }),
+  },
+  supplier: {
+    findFirst: vi.fn().mockResolvedValue(null),
+    findMany: vi.fn().mockResolvedValue([]),
+    create: vi.fn().mockResolvedValue({ id: 'supplier-1', name: 'Test Supplier', discount: 0, iva: 0, gain: 0 }),
+    update: vi.fn().mockResolvedValue({ id: 'supplier-1' }),
   },
   client: {
     findUnique: vi.fn().mockResolvedValue(null),

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -11,6 +11,9 @@ import * as XLSX from 'xlsx';
 import { UploadCloud, CheckCircle2, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { getSuppliers, createSupplier as createSupplierAction } from "@/actions/stock";
+import type { Supplier } from "@prisma/client";
+import CreateAttributeModal from "./create-attribute-modal";
 
 interface Props {
   open: boolean;
@@ -28,7 +31,43 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [previewData, setPreviewData] = useState<PreviewProductsBulkResult["preview"] | null>(null);
   const [parsedProductsState, setParsedProductsState] = useState<BulkProductInput[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState("");
+  const [adjustmentDiscount, setAdjustmentDiscount] = useState(0);
+  const [adjustmentIva, setAdjustmentIva] = useState("0");
+  const [adjustmentGain, setAdjustmentGain] = useState(0);
+  const [updateOnly, setUpdateOnly] = useState(false);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      getSuppliers().then(setSuppliers);
+    }
+  }, [open]);
+
+  const handleSupplierSelect = (supplierId: string) => {
+    setSelectedSupplierId(supplierId);
+    const supplier = suppliers.find(s => s.id === supplierId);
+    if (supplier) {
+      setAdjustmentDiscount(supplier.discount ?? 0);
+      setAdjustmentIva(String(supplier.iva ?? 0));
+      setAdjustmentGain(supplier.gain ?? 0);
+    }
+  };
+
+  const handleSupplierCreated = (item: { id: string; name: string }) => {
+    setSelectedSupplierId(item.id);
+    getSuppliers().then(suppliers => {
+      setSuppliers(suppliers);
+      const supplier = suppliers.find(s => s.id === item.id);
+      if (supplier) {
+        setAdjustmentDiscount(supplier.discount ?? 0);
+        setAdjustmentIva(String(supplier.iva ?? 0));
+        setAdjustmentGain(supplier.gain ?? 0);
+      }
+    });
+  };
+
   // Column Mappings
   const [colCode, setColCode] = useState("A");
   const [colDescription, setColDescription] = useState("B");
@@ -159,7 +198,15 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
 
       toast.loading(`Generando vista previa de ${parsedProducts.length} productos...`, { id: "bulk-import" });
       
-      const result = await previewProductsBulk(parsedProducts, updateExisting);
+      const result = await previewProductsBulk(
+        parsedProducts, 
+        updateExisting, 
+        updateOnly, 
+        adjustmentDiscount, 
+        parseFloat(adjustmentIva), 
+        adjustmentGain, 
+        selectedSupplierId || undefined
+      );
       
       if (result.error) {
         setErrorMsg(result.error);
@@ -183,7 +230,15 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
     setLoading(true);
     toast.loading(`Importando ${parsedProductsState.length} productos...`, { id: "bulk-confirm" });
     try {
-      const result = await createProductsBulk(parsedProductsState, updateExisting);
+      const result = await createProductsBulk(
+        parsedProductsState, 
+        updateExisting, 
+        updateOnly, 
+        adjustmentDiscount, 
+        parseFloat(adjustmentIva), 
+        adjustmentGain, 
+        selectedSupplierId || undefined
+      );
       if (result.error) {
         toast.error(result.error, { id: "bulk-confirm" });
       } else {
@@ -310,6 +365,77 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
              </div>
            </div>
 
+           <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+             <div className="p-4 border-b">
+               <h3 className="font-semibold text-sm">Proveedor</h3>
+             </div>
+             <div className="p-4">
+               <div className="flex gap-2 items-end">
+                 <div className="flex-1 space-y-2">
+                   <Label htmlFor="supplier">Seleccionar proveedor</Label>
+                   <select
+                     id="supplier"
+                     value={selectedSupplierId}
+                     onChange={(e) => handleSupplierSelect(e.target.value)}
+                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                   >
+                     <option value="">Sin proveedor</option>
+                     {suppliers.map((s) => (
+                       <option key={s.id} value={s.id}>{s.name}</option>
+                     ))}
+                   </select>
+                 </div>
+                 <CreateAttributeModal
+                   type="supplier"
+                   onSuccess={handleSupplierCreated}
+                 />
+               </div>
+             </div>
+           </div>
+
+           <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+             <div className="p-4 border-b">
+               <h3 className="font-semibold text-sm">Ajustes de Precio</h3>
+             </div>
+             <div className="p-4 grid grid-cols-3 gap-4">
+               <div className="space-y-2">
+                 <Label htmlFor="discount">Descuento %</Label>
+                 <Input
+                   id="discount"
+                   type="number"
+                   min={0}
+                   max={100}
+                   value={adjustmentDiscount}
+                   onChange={(e) => setAdjustmentDiscount(Number(e.target.value))}
+                 />
+               </div>
+               <div className="space-y-2">
+                 <Label htmlFor="iva">IVA %</Label>
+                 <select
+                   id="iva"
+                   value={adjustmentIva}
+                   onChange={(e) => setAdjustmentIva(e.target.value)}
+                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                 >
+                   <option value="0">0%</option>
+                   <option value="10.5">10.5%</option>
+                   <option value="21">21%</option>
+                 </select>
+               </div>
+               <div className="space-y-2">
+                 <Label htmlFor="gain">Ganancia %</Label>
+                 <Input
+                   id="gain"
+                   type="number"
+                   min={0}
+                   max={1000}
+                   value={adjustmentGain}
+                   onChange={(e) => setAdjustmentGain(Number(e.target.value))}
+                 />
+               </div>
+             </div>
+           </div>
+
            <div className="flex items-center gap-2">
              <input
                type="checkbox"
@@ -320,6 +446,20 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
              />
              <Label htmlFor="updateExisting" className="text-sm font-normal cursor-pointer">
                Actualizar productos existentes si el código ya existe
+             </Label>
+           </div>
+
+           <div className="flex items-center gap-2">
+             <input
+               type="checkbox"
+               id="updateOnly"
+               checked={updateOnly}
+               onChange={(e) => setUpdateOnly(e.target.checked)}
+               disabled={!updateExisting}
+               className="h-4 w-4 rounded border-gray-300"
+             />
+             <Label htmlFor="updateOnly" className={`text-sm font-normal cursor-pointer ${!updateExisting ? 'text-muted-foreground' : ''}`}>
+               Solo actualizar (no crear nuevos productos)
              </Label>
            </div>
            
@@ -343,7 +483,8 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                     <TableHead>Estado</TableHead>
                     <TableHead>Código</TableHead>
                     <TableHead>Descripción</TableHead>
-                    <TableHead>Precio</TableHead>
+                    <TableHead>Precio Original</TableHead>
+                    <TableHead>Precio Ajustado</TableHead>
                     <TableHead>Stock</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -358,6 +499,14 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                       <TableCell>{item.code}</TableCell>
                       <TableCell>{item.description}</TableCell>
                       <TableCell>${item.price.toLocaleString("es-AR")}</TableCell>
+                      <TableCell>
+                        ${(() => {
+                          const withDiscount = item.price * (1 - adjustmentDiscount / 100);
+                          const withIva = withDiscount * (1 + parseFloat(adjustmentIva) / 100);
+                          const withGain = withIva * (1 + adjustmentGain / 100);
+                          return withGain.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        })()}
+                      </TableCell>
                       <TableCell>{item.amount ?? "-"}</TableCell>
                     </TableRow>
                   ))}

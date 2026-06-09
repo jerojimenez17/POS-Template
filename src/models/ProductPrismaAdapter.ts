@@ -39,7 +39,9 @@ export class ProductPrismaAdapter {
         name: prismaProduct.supplier.name,
         email: prismaProduct.supplier.email || "",
         phone: prismaProduct.supplier.phone || "",
-        bonus: prismaProduct.supplier.bonus,
+        discount: prismaProduct.supplier.discount,
+        iva: prismaProduct.supplier.iva,
+        gain: prismaProduct.supplier.gain,
         creation_date: prismaProduct.supplier.creation_date,
       };
     }

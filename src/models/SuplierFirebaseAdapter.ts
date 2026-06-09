@@ -15,7 +15,9 @@ export class SuplierFirebaseAdapter {
     const suplier = new Suplier();
     suplier.id = dataId;
     data.name ? (suplier.name = data.name) : (suplier.name = "");
-    data.bonus ? (suplier.bonus = data.bonus) : (suplier.bonus = 0);
+    data.discount ? (suplier.discount = data.discount) : (suplier.discount = 0);
+    data.iva ? (suplier.iva = data.iva) : (suplier.iva = 0);
+    data.gain ? (suplier.gain = data.gain) : (suplier.gain = 0);
     data.phone ? (suplier.phone = data.phone) : (suplier.phone = "");
     data.creation_date
       ? (suplier.creation_date = data.creation_date)

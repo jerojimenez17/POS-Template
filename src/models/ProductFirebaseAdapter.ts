@@ -50,14 +50,18 @@ export class ProductFirebaseAdapter {
           name: String(product.suplier.name || ""),
           email: String(product.suplier.email || ""),
           phone: String(product.suplier.phone || ""),
-          bonus: Number(product.suplier.bonus || 0),
+          discount: Number(product.suplier.discount || 0),
+          iva: Number(product.suplier.iva || 0),
+          gain: Number(product.suplier.gain || 0),
           creation_date: ProductFirebaseAdapter.toPlainDate(product.suplier.creation_date)
         } : {
           id: "",
           name: "",
           email: "",
           phone: "",
-          bonus: 0,
+          discount: 0,
+          iva: 0,
+          gain: 0,
           creation_date: new Date()
         }
       } as Product;
@@ -73,7 +77,9 @@ export class ProductFirebaseAdapter {
             name: String(data.suplier.name || ""),
             email: String(data.suplier.email || ""),
             phone: String(data.suplier.phone || ""),
-            bonus: Number(data.suplier.bonus || 0),
+            discount: Number(data.suplier.discount || 0),
+            iva: Number(data.suplier.iva || 0),
+            gain: Number(data.suplier.gain || 0),
             creation_date: ProductFirebaseAdapter.toPlainDate(data.suplier.creation_date)
           }
         : {
@@ -81,7 +87,9 @@ export class ProductFirebaseAdapter {
             name: "",
             email: "",
             phone: "",
-            bonus: 0,
+            discount: 0,
+            iva: 0,
+            gain: 0,
             creation_date: new Date()
           },
       description: data.description || "",
