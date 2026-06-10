@@ -11,6 +11,7 @@ export interface PublicProduct {
   salePrice: number;
   unit: string | null;
   image: string | null;
+  images: string[];
   amount: number;
   details: string | null;
   catalog?: boolean;
@@ -44,6 +45,7 @@ export const getPublicProductsByBusinessId = async (businessId: string): Promise
         details: true,
         brand: { select: { name: true } },
         category: { select: { name: true } },
+        images: { select: { url: true } },
       },
       orderBy: { description: "asc" },
     });
@@ -57,6 +59,7 @@ export const getPublicProductsByBusinessId = async (businessId: string): Promise
       salePrice: p.salePrice,
       unit: p.unit,
       image: p.image,
+      images: p.images.map((i) => i.url),
       amount: p.amount,
       catalog: p.catalog,
       details: p.details,
@@ -91,6 +94,7 @@ export const getPublicProductById = async (
         details: true,
         brand: { select: { name: true } },
         category: { select: { name: true } },
+        images: { select: { url: true } },
       },
     });
 
@@ -105,6 +109,7 @@ export const getPublicProductById = async (
       salePrice: product.salePrice,
       unit: product.unit,
       image: product.image,
+      images: product.images.map((i) => i.url),
       amount: product.amount,
       catalog: product.catalog,
       details: product.details,

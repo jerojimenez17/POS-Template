@@ -5,8 +5,15 @@ import { auth } from "../../../auth";
 import { ProductSchema } from "@/schemas";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "@/firebase/config";
+import { v4 } from "uuid";
 
-export const newProduct = async (values: z.infer<typeof ProductSchema>) => {
+type NewProductInput = z.infer<typeof ProductSchema> & {
+  newImages?: File[];
+};
+
+export const newProduct = async (values: NewProductInput) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
@@ -16,7 +23,7 @@ export const newProduct = async (values: z.infer<typeof ProductSchema>) => {
   }
 
   try {
-    await db.product.create({
+    const product = await db.product.create({
       data: {
         code: values.code,
         description: values.description,
@@ -35,6 +42,18 @@ export const newProduct = async (values: z.infer<typeof ProductSchema>) => {
         businessId: session.user.businessId,
       },
     });
+
+    if (values.newImages && values.newImages.length > 0) {
+      const imageRows: { productId: string; url: string }[] = [];
+      for (const file of values.newImages) {
+        const imageName = `${file.name}_${v4()}`;
+        const storageRef = ref(storage, `/productImage/${imageName}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        imageRows.push({ productId: product.id, url });
+      }
+      await db.productImage.createMany({ data: imageRows });
+    }
 
     revalidatePath("/stock");
     return { success: "Producto cargado con éxito" };

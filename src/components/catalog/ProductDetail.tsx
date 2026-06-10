@@ -22,9 +22,11 @@ export function ProductDetail({ product, businessSlug }: Props) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const { addItem } = useContext(CartContext);
 
-  const images = product.image && product.image.includes("https")
-    ? [product.image]
-    : [];
+  const images = product.images.length > 0
+    ? product.images
+    : product.image && product.image.includes("https")
+      ? [product.image]
+      : [];
 
   const handleAddToCart = () => {
     if (quantity <= 0) return;

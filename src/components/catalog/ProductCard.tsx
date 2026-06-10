@@ -29,11 +29,12 @@ interface ProductCardProps {
 }
 
 function ImageContent({ product }: { product: PublicProduct }) {
-  if (product.image && product.image.includes("https")) {
+  const imageUrl = product.images?.[0] || product.image;
+  if (imageUrl && imageUrl.includes("https")) {
     return (
       <Image
         className="object-cover motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover/image:scale-110"
-        src={product.image}
+        src={imageUrl}
         alt={`Imagen de ${product.description ?? "producto"}`}
         fill
         sizes="(max-width: 768px) 50vw, 25vw"

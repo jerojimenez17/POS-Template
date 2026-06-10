@@ -25,6 +25,7 @@ const mockProduct: PublicProduct = {
   salePrice: 150.5,
   unit: "un",
   image: "https://example.com/img.jpg",
+  images: [],
   amount: 10,
   details: "Detalles del producto",
 };

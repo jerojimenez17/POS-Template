@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache";
 import { auth } from "../../auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { Product, Prisma } from "@prisma/client";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { storage } from "@/firebase/config";
+import { v4 } from "uuid";
 
 // Supplier Actions
 
@@ -446,6 +449,8 @@ interface UpdateProductInput {
   supplierId?: string | null;
   catalog?: boolean;
   details?: string | null;
+  newImages?: File[];
+  imagesToDelete?: string[];
 }
 
 export const updateProduct = async (id: string, data: UpdateProductInput) => {
@@ -453,6 +458,19 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
   try {
+    if (data.imagesToDelete && data.imagesToDelete.length > 0) {
+      const imagesToDelete = await db.productImage.findMany({
+        where: { id: { in: data.imagesToDelete }, productId: id },
+      });
+      await db.productImage.deleteMany({
+        where: { id: { in: data.imagesToDelete }, productId: id },
+      });
+      for (const img of imagesToDelete) {
+        const imageRef = ref(storage, img.url);
+        deleteObject(imageRef).catch(() => {});
+      }
+    }
+
     const product = await db.product.update({
       where: { id },
       data: {
@@ -475,6 +493,18 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
         last_update: new Date(),
       },
     });
+
+    if (data.newImages && data.newImages.length > 0) {
+      const imageRows: { productId: string; url: string }[] = [];
+      for (const file of data.newImages) {
+        const imageName = `${file.name}_${v4()}`;
+        const storageRef = ref(storage, `/productImage/${imageName}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        imageRows.push({ productId: id, url });
+      }
+      await db.productImage.createMany({ data: imageRows });
+    }
 
     await pusherServer.trigger(
       `movements-${session.user.businessId}`, 

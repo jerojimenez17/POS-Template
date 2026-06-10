@@ -14,6 +14,7 @@ export default class Product {
   unit = "unidades";
   image = "";
   imageName = "";
+  images: string[] = [];
   // peso = "";
   // medidas = "";
   // color = "";

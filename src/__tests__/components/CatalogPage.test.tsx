@@ -12,7 +12,9 @@ describe("PublicProduct Interface", () => {
       salePrice: 99.99,
       unit: "units",
       image: "https://example.com/test.jpg",
+      images: [],
       amount: 10,
+      details: null,
     };
 
     expect(product.salePrice).toBe(99.99);
@@ -31,7 +33,9 @@ describe("PublicProduct Interface", () => {
       salePrice: 50.0,
       unit: null,
       image: null,
+      images: [],
       amount: 0,
+      details: null,
     };
 
     expect(product.code).toBeNull();
@@ -52,7 +56,9 @@ describe("PublicProduct Interface", () => {
       salePrice: 100.50,
       unit: null,
       image: null,
+      images: [],
       amount: 10,
+      details: null,
     };
 
     expect(typeof product.salePrice).toBe("number");
@@ -69,7 +75,9 @@ describe("PublicProduct Interface", () => {
       salePrice: 25.00,
       unit: null,
       image: null,
+      images: [],
       amount: 0,
+      details: null,
     };
 
     expect(product.amount).toBe(0);
@@ -79,9 +87,9 @@ describe("PublicProduct Interface", () => {
 describe("PublicProduct - Business Logic", () => {
   it("should filter products with salePrice > 0 for catalog display", () => {
     const allProducts: PublicProduct[] = [
-      { id: "1", code: null, description: "Has Price", brand: null, category: null, salePrice: 100, unit: null, image: null, amount: 10 },
-      { id: "2", code: null, description: "No Price", brand: null, category: null, salePrice: 0, unit: null, image: null, amount: 10 },
-      { id: "3", code: null, description: "Negative Price", brand: null, category: null, salePrice: -10, unit: null, image: null, amount: 10 },
+      { id: "1", code: null, description: "Has Price", brand: null, category: null, salePrice: 100, unit: null, image: null, images: [], amount: 10, details: null },
+      { id: "2", code: null, description: "No Price", brand: null, category: null, salePrice: 0, unit: null, image: null, images: [], amount: 10, details: null },
+      { id: "3", code: null, description: "Negative Price", brand: null, category: null, salePrice: -10, unit: null, image: null, images: [], amount: 10, details: null },
     ];
 
     const catalogProducts = allProducts.filter(p => p.salePrice > 0);
@@ -112,7 +120,9 @@ describe("PublicProduct - Business Logic", () => {
       salePrice: dbProduct.salePrice,
       unit: dbProduct.unit,
       image: dbProduct.image,
+      images: [],
       amount: dbProduct.amount,
+      details: null,
     };
 
     expect(publicProduct.brand).toBe("BrandX");
@@ -138,8 +148,8 @@ describe("ProductSelector Props Interface", () => {
     const props: ProductSelectorProps = {
       catalogo: true,
       products: [
-        { id: "1", code: "P1", description: "Product 1", brand: "B1", category: "C1", salePrice: 100, unit: "unidades", image: null, amount: 10 },
-        { id: "2", code: "P2", description: "Product 2", brand: "B2", category: "C1", salePrice: 200, unit: "kg", image: null, amount: 5 },
+        { id: "1", code: "P1", description: "Product 1", brand: "B1", category: "C1", salePrice: 100, unit: "unidades", image: null, images: [], amount: 10, details: null },
+        { id: "2", code: "P2", description: "Product 2", brand: "B2", category: "C1", salePrice: 200, unit: "kg", image: null, images: [], amount: 5, details: null },
       ],
       business: { name: "Test Business", logo: null },
     };
