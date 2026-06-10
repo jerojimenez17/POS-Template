@@ -25,18 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { storage } from "@/firebase/config";
-import {
-  getDownloadURL,
-  ref,
-  uploadBytes,
-  deleteObject,
-} from "firebase/storage";
 import { FormSuccess } from "../ui/form-success";
-import { v4 } from "uuid";
 import { FormError } from "../ui/form-error";
 import CreateAttributeModal from "./create-attribute-modal";
-import { ScanBarcode, X } from "lucide-react";
+import { ScanBarcode, X, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import { getCategories } from "@/actions/categories";
@@ -91,7 +83,9 @@ const ProductForm = ({ product, onClose }: Props) => {
     { id: string; name: string }[]
   >([]);
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
-  const [image, setImage] = useState<File | null>(null);
+  const [newImages, setNewImages] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<{ id: string; url: string }[]>([]);
+  const [imagesToDelete, setImagesToDelete] = useState<string[]>([]);
 
   const getInitialValues = (prod?: ProductExtended) => ({
     supplier: prod?.supplierId || prod?.supplier?.id || "",
@@ -208,6 +202,14 @@ const ProductForm = ({ product, onClose }: Props) => {
     };
   }, [selectedCategoryId, form]);
 
+  useEffect(() => {
+    if (product) {
+      setExistingImages(
+        (product as unknown as { images?: { id: string; url: string }[] }).images ?? []
+      );
+    }
+  }, [product]);
+
   const handleCategorySuccess = (item: { id: string; name: string }) => {
     setCategories((prev) =>
       [...prev, item].sort((a, b) => a.name.localeCompare(b.name)),
@@ -239,33 +241,6 @@ const ProductForm = ({ product, onClose }: Props) => {
   const onSubmit = async (values: z.infer<typeof ProductSchema>) => {
     startTransition(async () => {
       try {
-        let imageURL = product?.image || "";
-        let imageName = product?.imageName || "";
-
-        if (image) {
-          imageName = `${image.name}_${v4()}`;
-          const storageRef = ref(storage, `/productImage/${imageName}`);
-          await uploadBytes(storageRef, image);
-          imageURL = await getDownloadURL(storageRef);
-
-          if (
-            product?.image &&
-            product.imageName &&
-            imageURL !== product.image
-          ) {
-            const oldImageRef = ref(
-              storage,
-              `/productImage/${product.imageName}`,
-            );
-            await deleteObject(oldImageRef).catch(() => {
-              toast.error("La imagen anterior no se pudo eliminar.");
-            });
-          }
-
-          values.image = imageURL;
-          values.imageName = imageName;
-        }
-
         if (product) {
           // Relational mapping for updateProduct
           const updateData = {
@@ -274,6 +249,8 @@ const ProductForm = ({ product, onClose }: Props) => {
             categoryId: values.category,
             subCategoryId: values.subCategory,
             supplierId: values.supplier,
+            newImages: newImages.length > 0 ? newImages : undefined,
+            imagesToDelete: imagesToDelete.length > 0 ? imagesToDelete : undefined,
           };
 
           const result = await updateProduct(product.id, updateData);
@@ -291,6 +268,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             image: typeof values.image === "string" ? values.image : "",
             imageName:
               typeof values.imageName === "string" ? values.imageName : "",
+            newImages: newImages.length > 0 ? newImages : undefined,
           };
           const result = await newProduct(submissionValues);
           if (result.error) {
@@ -323,18 +301,23 @@ const ProductForm = ({ product, onClose }: Props) => {
             render={({}) => (
               <FormItem>
                 <FormLabel className="text-sm font-medium">
-                  Foto del producto
+                  Fotos del producto
                 </FormLabel>
                 <FormControl>
-                  <div className="flex items-center gap-4">
+                  <div className="space-y-3">
                     <label className="flex-1 cursor-pointer">
                       <input
                         type="file"
                         accept="image/*"
+                        multiple
                         className="hidden"
                         onChange={(e) => {
-                          if (e.currentTarget.files?.[0]) {
-                            setImage(e.currentTarget.files[0]);
+                          const files = e.currentTarget.files;
+                          if (files) {
+                            setNewImages((prev) => [
+                              ...prev,
+                              ...Array.from(files),
+                            ]);
                           }
                         }}
                         disabled={isPending}
@@ -342,7 +325,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                       <div className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors bg-gray-50 dark:bg-gray-800">
                         <div className="text-center">
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Click para subir imagen
+                            Click para agregar fotos
                           </p>
                           <p className="text-xs text-gray-400 dark:text-gray-500">
                             PNG, JPG hasta 5MB
@@ -350,9 +333,72 @@ const ProductForm = ({ product, onClose }: Props) => {
                         </div>
                       </div>
                     </label>
-                    {image && (
-                      <div className="text-sm text-green-600 dark:text-green-400">
-                        ✓ Imagen seleccionada
+                    {existingImages.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {existingImages.map((img) => {
+                          const markedForDeletion = imagesToDelete.includes(img.id);
+                          return (
+                            <div
+                              key={img.id}
+                              className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 ${markedForDeletion ? "border-red-500 opacity-50" : "border-gray-200"}`}
+                            >
+                              <img
+                                src={img.url}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (markedForDeletion) {
+                                    setImagesToDelete((prev) =>
+                                      prev.filter((id) => id !== img.id)
+                                    );
+                                  } else {
+                                    setImagesToDelete((prev) => [...prev, img.id]);
+                                  }
+                                }}
+                                className="absolute top-0.5 right-0.5 bg-white dark:bg-gray-900 rounded-full p-0.5 shadow"
+                              >
+                                {markedForDeletion ? (
+                                  <RotateCcw className="w-3 h-3" />
+                                ) : (
+                                  <X className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {newImages.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium">
+                          Nuevas fotos a subir
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {newImages.map((file, i) => (
+                            <div
+                              key={`new-${i}`}
+                              className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-green-300"
+                            >
+                              <img
+                                src={URL.createObjectURL(file)}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setNewImages((prev) => prev.filter((_, idx) => idx !== i))
+                                }
+                                className="absolute top-0.5 right-0.5 bg-white dark:bg-gray-900 rounded-full p-0.5 shadow"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

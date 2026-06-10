@@ -38,23 +38,26 @@ export function ProductModal({ product, children }: ProductModalProps) {
         </DialogHeader>
         <Card className="border-0 shadow-none">
           <CardHeader className="p-0">
-            {product.image && product.image.includes("https")  ? (
-              <Image
-                className="mx-auto rounded-lg max-h-64 object-contain"
-                src={product.image}
-                width={400}
-                height={300}
-                alt={product.description}
-              />
-            ) : (
-              <Image
-                className="mx-auto rounded-lg max-h-64 object-contain"
-                src={"/no-image.svg"}
-                width={400}
-                height={300}
-                alt="Sin imagen"
-              />
-            )}
+            {(() => {
+              const imageUrl = product.images?.[0] || product.image;
+              return imageUrl && imageUrl.includes("https") ? (
+                <Image
+                  className="mx-auto rounded-lg max-h-64 object-contain"
+                  src={imageUrl}
+                  width={400}
+                  height={300}
+                  alt={product.description}
+                />
+              ) : (
+                <Image
+                  className="mx-auto rounded-lg max-h-64 object-contain"
+                  src={"/no-image.svg"}
+                  width={400}
+                  height={300}
+                  alt="Sin imagen"
+                />
+              );
+            })()}
           </CardHeader>
           <CardContent className="p-0 mt-4 space-y-2">
             <CardDescription className="text-lg font-semibold">
