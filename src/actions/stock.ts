@@ -231,7 +231,7 @@ export const previewProductsBulk = async (
   }
 };
 
-export const createProductsBulk = async (
+export const processBulkProductBatch = async (
   productsData: BulkProductInput[],
   updateExisting?: boolean,
   updateOnly?: boolean,
@@ -239,7 +239,7 @@ export const createProductsBulk = async (
   iva?: number,
   gain?: number,
   supplierId?: string
-) => {
+): Promise<{ createdCount: number; updatedCount: number } | { error: string }> => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
@@ -249,9 +249,7 @@ export const createProductsBulk = async (
     
     const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
     
-    // Process sequentially to handle dependent creations safely
     for (const item of productsData) {
-      // Lookup brand
       let brandId = null;
       if (item.brandName && item.brandName.trim() !== "") {
         let brand = await db.brand.findFirst({
@@ -265,7 +263,6 @@ export const createProductsBulk = async (
         brandId = brand.id;
       }
 
-      // Lookup category
       let categoryId = null;
       if (item.categoryName && item.categoryName.trim() !== "") {
         let category = await db.category.findFirst({
@@ -279,7 +276,6 @@ export const createProductsBulk = async (
         categoryId = category.id;
       }
 
-      // Lookup subcategory (needs categoryId)
       let subCategoryId = null;
       if (item.subCategoryName && item.subCategoryName.trim() !== "" && categoryId) {
         let subCategory = await db.subcategory.findFirst({
@@ -323,7 +319,6 @@ export const createProductsBulk = async (
       
       const supplierConnect = supplierId ? { connect: { id: supplierId } } : undefined;
       
-      // Check if product exists by code
       const existingProduct = await db.product.findFirst({
         where: {
           code: item.code.toString(),
@@ -372,13 +367,10 @@ export const createProductsBulk = async (
           });
           updatedCount++;
         }
-        // If both updateExisting and updateOnly are false, do nothing (ignore)
       } else {
         if (updateOnly) {
-          // Skip creation in updateOnly mode
           continue;
         }
-        // Create new product
         await db.product.create({
           data: {
             code: item.code.toString(),
@@ -401,6 +393,25 @@ export const createProductsBulk = async (
       }
     }
 
+    return { createdCount, updatedCount };
+  } catch (error) {
+    console.error("Batch processing error:", error);
+    return { error: "Error al procesar lote de productos" };
+  }
+};
+
+export const finalizeBulkImport = async (
+  supplierId?: string,
+  discount?: number,
+  iva?: number,
+  gain?: number,
+): Promise<{ success?: string; error?: string }> => {
+  const session = await auth();
+  if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  try {
+    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
+
     if (supplierId && applyPriceFormula) {
       await db.supplier.update({
         where: { id: supplierId },
@@ -408,21 +419,48 @@ export const createProductsBulk = async (
       });
     }
 
-    const totalCount = updatedCount > 0 || createdCount > 0;
-    if (totalCount) {
-      try {
-        await pusherServer.trigger(
-          `movements-${session.user.businessId}`, 
-          "refresh", 
-          { type: "product-created" }
-        );
-      } catch {}
-    }
+    try {
+      await pusherServer.trigger(
+        `movements-${session.user.businessId}`, 
+        "refresh", 
+        { type: "product-created" }
+      );
+    } catch {}
 
     try {
       revalidatePath("/stock");
     } catch {}
-    
+
+    return { success: "Importación finalizada" };
+  } catch (error) {
+    console.error("Finalization error:", error);
+    return { error: "Error al finalizar importación" };
+  }
+};
+
+export const createProductsBulk = async (
+  productsData: BulkProductInput[],
+  updateExisting?: boolean,
+  updateOnly?: boolean,
+  discount?: number,
+  iva?: number,
+  gain?: number,
+  supplierId?: string
+) => {
+  const session = await auth();
+  if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  try {
+    const result = await processBulkProductBatch(
+      productsData, updateExisting, updateOnly, discount, iva, gain, supplierId
+    );
+
+    if ('error' in result) return { error: result.error };
+
+    await finalizeBulkImport(supplierId, discount, iva, gain);
+
+    const { createdCount, updatedCount } = result;
+
     if (updatedCount > 0) {
       return { success: `Se actualizaron ${updatedCount} productos y se crearon ${createdCount} productos exitosamente` };
     }

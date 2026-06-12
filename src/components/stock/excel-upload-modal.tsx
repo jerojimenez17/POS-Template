@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { createProductsBulk, BulkProductInput, previewProductsBulk, PreviewProductsBulkResult } from "@/actions/stock";
+import { BulkProductInput, previewProductsBulk, PreviewProductsBulkResult, processBulkProductBatch, finalizeBulkImport } from "@/actions/stock";
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
-import { UploadCloud, CheckCircle2, ArrowRight } from "lucide-react";
+import { UploadCloud, CheckCircle2, ArrowRight, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { getSuppliers, createSupplier as createSupplierAction } from "@/actions/stock";
@@ -38,6 +38,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [adjustmentGain, setAdjustmentGain] = useState(0);
   const [updateOnly, setUpdateOnly] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [progressPercent, setProgressPercent] = useState(0);
 
   useEffect(() => {
     if (open) {
@@ -228,27 +229,59 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
 
   const handleConfirm = async () => {
     setLoading(true);
-    toast.loading(`Importando ${parsedProductsState.length} productos...`, { id: "bulk-confirm" });
+    setProgressPercent(0);
+
+    const totalProducts = parsedProductsState.length;
+    const batchSize = 200;
+    let totalCreated = 0;
+    let totalUpdated = 0;
+
     try {
-      const result = await createProductsBulk(
-        parsedProductsState, 
-        updateExisting, 
-        updateOnly, 
-        adjustmentDiscount, 
-        parseFloat(adjustmentIva), 
-        adjustmentGain, 
-        selectedSupplierId || undefined
-      );
-      if (result.error) {
-        toast.error(result.error, { id: "bulk-confirm" });
-      } else {
-        toast.success(result.success, { id: "bulk-confirm" });
-        setStep("config");
-        setPreviewData(null);
-        setParsedProductsState([]);
-        onSuccess();
-        onOpenChange(false);
+      for (let i = 0; i < totalProducts; i += batchSize) {
+        const batch = parsedProductsState.slice(i, i + batchSize);
+        const result = await processBulkProductBatch(
+          batch,
+          updateExisting,
+          updateOnly,
+          adjustmentDiscount,
+          parseFloat(adjustmentIva),
+          adjustmentGain,
+          selectedSupplierId || undefined
+        );
+
+        if ('error' in result) {
+          toast.error(result.error, { id: "bulk-confirm" });
+          setLoading(false);
+          return;
+        }
+
+        totalCreated += result.createdCount;
+        totalUpdated += result.updatedCount;
+
+        const processed = Math.min(i + batchSize, totalProducts);
+        setProgressPercent(Math.round((processed / totalProducts) * 100));
       }
+
+      await finalizeBulkImport(
+        selectedSupplierId || undefined,
+        adjustmentDiscount,
+        parseFloat(adjustmentIva),
+        adjustmentGain
+      );
+
+      setProgressPercent(100);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const successMsg = totalUpdated > 0
+        ? `Se actualizaron ${totalUpdated} productos y se crearon ${totalCreated} productos exitosamente`
+        : `Se cargaron ${totalCreated} productos exitosamente`;
+
+      toast.success(successMsg, { id: "bulk-confirm" });
+      setStep("config");
+      setPreviewData(null);
+      setParsedProductsState([]);
+      onSuccess();
+      onOpenChange(false);
     } catch {
       toast.error("Error al importar.", { id: "bulk-confirm" });
     } finally {
@@ -282,7 +315,27 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
           </div>
         </DialogHeader>
 
-        {step === "config" ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-20">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {step === "config" ? "Procesando archivo..." : `Importando ${progressPercent}%`}
+            </p>
+            {step === "preview" && progressPercent > 0 && (
+              <div className="w-64 space-y-1">
+                <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-blue-600 transition-all duration-500 ease-out"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <p className="text-xs text-center text-muted-foreground">
+                  {parsedProductsState.length} productos
+                </p>
+              </div>
+            )}
+          </div>
+        ) : step === "config" ? (
         <div className="grid gap-6 py-4">
           <div className="grid gap-2">
             <Label htmlFor="file">Archivo Excel (.xlsx, .xls)</Label>
@@ -521,6 +574,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
           </div>
         )}
 
+        {!loading && (
         <DialogFooter>
           {step === "config" ? (
             <>
@@ -544,6 +598,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
             </>
           )}
         </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
