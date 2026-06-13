@@ -34,14 +34,16 @@ export default async function CashboxHistoryPage({
   }
 
   const cashboxesResult = await getCashboxes();
-  const cashbox = cashboxesResult.data?.find((c) => c.id === cashboxId);
+  const cashboxesData: { id: string; name: string; businessId: string; updatedAt: Date; total: number }[] =
+    'data' in cashboxesResult && Array.isArray(cashboxesResult.data) ? cashboxesResult.data : [];
+  const cashbox = cashboxesData.find((c) => c.id === cashboxId);
 
   if (!cashbox) {
     redirect("/admin/cashboxes");
   }
 
   const result = await getCashboxSessions(cashboxId);
-  const rawSessions = result.success ? (result.data ?? []) : [];
+  const rawSessions = 'data' in result && Array.isArray(result.data) ? result.data : [];
 
   const sessions = rawSessions.map((s) => ({
     ...s,

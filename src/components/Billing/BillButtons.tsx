@@ -166,8 +166,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     if (!checkConnection()) return;
     try {
       const result = await processSaleAction(billState);
-      if (result.error) {
-        toast.error(result.error);
+      if ('error' in result && result.error) {
+        toast.error(result.error as string);
         setSaveError(true);
       } else {
         setSaveError(false);

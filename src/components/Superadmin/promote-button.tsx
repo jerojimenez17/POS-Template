@@ -38,12 +38,11 @@ export const PromoteUserButton = ({ userId, currentRole, hasBusiness }: PromoteP
     startTransition(() => {
         promoteToAdmin(userId, businessName, slug)
             .then((data) => {
-                if (data.error) {
+                if ('error' in data && data.error) {
                     console.error(data.error);
                     // toast.error(data.error);
-                    alert(data.error); // Fallback
+                    alert(data.error as string); // Fallback
                 } else {
-                    // toast.success(data.success);
                     setOpen(false);
                 }
             });
