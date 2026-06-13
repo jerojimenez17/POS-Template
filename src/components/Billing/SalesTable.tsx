@@ -4,7 +4,6 @@ import BillState from "@/models/BillState";
 import SaleAccordion from "./SaleAccordion";
 import { FiltersContext } from "@/context/FiltersContext/FiltersContext";
 import PrintableTable from "./PrintableTable";
-import { useAuthContext } from "@/context/AuthContext";
 import {
   Select,
   SelectContent,
@@ -26,7 +25,7 @@ interface props {
 }
 
 const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) => {
-  const { user } = useAuthContext();
+  const user = session?.user;
   const [printTrigger, setPrintTrigger] = useState(0);
   const [externalState] = useState<BillState>();
 
@@ -39,8 +38,8 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
 
   const { filtersState, seller } = useContext(FiltersContext);
   useEffect(() => {
-    if (user?.email !== process.env.ADMIN_EMAIL && user && user.email) {
-      seller(user?.email);
+    if (user?.email !== process.env.ADMIN_EMAIL && user?.email) {
+      seller(user.email);
     }
   }, [user, seller]);
 
@@ -193,7 +192,6 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
             <div className="flex flex-col">
               {currentSales.map((sale) => (
                 <SaleAccordion
-                  user={user}
                   session={session}
                   key={sale.id}
                   sale={sale}

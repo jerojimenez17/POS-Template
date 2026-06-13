@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import getProductsRanking, {
-  RankedProduct,
-} from "@/firebase/stock/getProductsRanking";
+import { getProductRankingsAction } from "@/actions/stock/ranking";
+import type { RankedProduct } from "@/actions/stock/ranking";
 import {
   Table,
   TableBody,
@@ -24,7 +23,7 @@ const ProductRanking = () => {
     if (!month) return;
 
     const fetchRanking = async () => {
-      const data = await getProductsRanking(month);
+      const data = await getProductRankingsAction(month);
       setProducts(data);
     };
 
