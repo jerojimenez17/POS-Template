@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useOptimistic, startTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +76,19 @@ export default function EditableOrderDetail({
     }))
   );
   const [isLoading, setIsLoading] = useState(false);
+
+  type OptimisticAction =
+    | { type: "add"; item: OrderItem }
+    | { type: "remove"; itemId: string };
+
+  const [optimisticItems, addOptimisticAction] = useOptimistic(
+    items,
+    (state, action: OptimisticAction) => {
+      if (action.type === "add") return [...state, action.item];
+      if (action.type === "remove") return state.filter((item) => item.id !== action.itemId);
+      return state;
+    }
+  );
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -186,6 +199,10 @@ export default function EditableOrderDetail({
   };
 
   const handleRemoveItem = async (itemId: string) => {
+    startTransition(() => {
+      addOptimisticAction({ type: "remove", itemId });
+    });
+
     setIsLoading(true);
     try {
       const result = await removeOrderItem({
@@ -199,10 +216,12 @@ export default function EditableOrderDetail({
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al eliminar item");
+        setItems((prev) => [...prev]);
       }
     } catch (error) {
       console.error("Error removing item:", error);
       toast.error("Error al eliminar item");
+      setItems((prev) => [...prev]);
     } finally {
       setIsLoading(false);
     }
@@ -218,6 +237,21 @@ export default function EditableOrderDetail({
       toast.error("La cantidad debe ser mayor a 0");
       return;
     }
+
+    const newItem: OrderItem = {
+      id: Date.now().toString(),
+      productId: selectedProduct.id,
+      description: selectedProduct.description || "Producto",
+      code: selectedProduct.code,
+      price: selectedProduct.salePrice,
+      quantity: quantity,
+      subTotal: selectedProduct.salePrice * quantity,
+      addedAt: new Date(),
+    };
+
+    startTransition(() => {
+      addOptimisticAction({ type: "add", item: newItem });
+    });
 
     setIsLoading(true);
     try {
@@ -238,25 +272,17 @@ export default function EditableOrderDetail({
 
       if (result.success) {
         toast.success("Producto agregado");
-        const newItem: OrderItem = {
-          id: Date.now().toString(),
-          productId: selectedProduct.id,
-          description: selectedProduct.description || "Producto",
-          code: selectedProduct.code,
-          price: selectedProduct.salePrice,
-          quantity: quantity,
-          subTotal: selectedProduct.salePrice * quantity,
-          addedAt: new Date(),
-        };
         setItems((prev) => [...prev, newItem]);
         setIsAddProductOpen(false);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al agregar producto");
+        setItems((prev) => [...prev]);
       }
     } catch (error) {
       console.error("Error adding product:", error);
       toast.error("Error al agregar producto");
+      setItems((prev) => [...prev]);
     } finally {
       setIsLoading(false);
     }
@@ -276,7 +302,7 @@ export default function EditableOrderDetail({
       </div>
 
       <OrderItemsTable
-        items={items}
+        items={optimisticItems}
         isEditable={isEditing}
         onUpdateQuantity={isEditing ? handleUpdateQuantity : undefined}
         onUpdatePrice={isEditing ? handleUpdatePrice : undefined}
