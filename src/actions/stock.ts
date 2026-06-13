@@ -733,13 +733,17 @@ export const bulkUpdatePrices = async (
   try {
     const factor = (100 + percentage) / 100;
 
-    const products = await Promise.all(
-      productIds.map((id) => db.product.findUnique({ where: { id } }))
-    );
+    const products = await db.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, salePrice: true, price: true },
+    });
+
+    const productMap = new Map(products.map((p) => [p.id, p]));
 
     const updates: ReturnType<typeof db.product.update>[] = [];
 
-    products.forEach((product, index) => {
+    productIds.forEach((id) => {
+      const product = productMap.get(id);
       if (!product) return;
 
       const newSalePrice = product.salePrice * factor;
@@ -747,7 +751,7 @@ export const bulkUpdatePrices = async (
 
       updates.push(
         db.product.update({
-          where: { id: productIds[index] },
+          where: { id },
           data: {
             salePrice: { multiply: factor },
             gain: gain,
@@ -800,14 +804,17 @@ export const bulkUpdateAmounts = async (
   if (!session?.user?.businessId) return { success: false, error: "No autorizado" };
 
   try {
-    const products = await Promise.all(
-      productIds.map((id) => db.product.findUnique({ where: { id } }))
-    );
+    const products = await db.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true },
+    });
+
+    const existingIds = new Set(products.map((p) => p.id));
 
     const updates: ReturnType<typeof db.product.update>[] = [];
 
-    products.forEach((product, index) => {
-      if (!product) return;
+    productIds.forEach((id) => {
+      if (!existingIds.has(id)) return;
 
       let amountData: number | { decrement: number } | {increment: number};
 
@@ -825,7 +832,7 @@ export const bulkUpdateAmounts = async (
 
       updates.push(
         db.product.update({
-          where: { id: productIds[index] },
+          where: { id },
           data: {
             amount: amountData,
             last_update: new Date(),
