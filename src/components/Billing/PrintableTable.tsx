@@ -11,7 +11,7 @@ import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
 import { cn } from "@/lib/utils";
 import { Inter } from "next/font/google";
 import { getBusinessBillingInfoAction } from "@/actions/business";
-import moment from "moment";
+import { format } from "date-fns";
 import { QRCodeSVG } from "qrcode.react";
 import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES, type PrintOptions } from "@/lib/print";
 import { getBillTypeDisplay } from "@/lib/utils/bill-type";
@@ -472,7 +472,7 @@ const PrintableTable = ({
               <div>
                 {billingInfo.cuit && <p><span className="font-semibold">CUIT:</span> {billingInfo.cuit}</p>}
                 {billingInfo.condicionIva && <p><span className="font-semibold">Condición IVA:</span> {billingInfo.condicionIva.replace("_", " ")}</p>}
-                {billingInfo.inicioActividades && <p><span className="font-semibold">Inicio Actividades:</span> {moment(billingInfo.inicioActividades).format("DD/MM/YYYY")}</p>}
+                {billingInfo.inicioActividades && <p><span className="font-semibold">Inicio Actividades:</span> {format(new Date(billingInfo.inicioActividades!), "dd/MM/yyyy")}</p>}
                 {billingInfo.address && <p><span className="font-semibold">Dirección:</span> {billingInfo.address}</p>}
               </div>
             )}

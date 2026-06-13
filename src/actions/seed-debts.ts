@@ -3,7 +3,6 @@
 import { db } from "@/lib/db";
 import { auth } from "../../auth";
 import { revalidatePath } from "next/cache";
-import * as xlsx from "xlsx";
 import path from "path";
 import fs from "fs";
 
@@ -25,6 +24,7 @@ export async function seedDebtsFromExcel(filePath?: string, customBusinessId?: s
     }
 
     const fileBuffer = fs.readFileSync(targetPath);
+    const xlsx = await import("xlsx");
     const workbook = xlsx.read(fileBuffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];

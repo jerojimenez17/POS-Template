@@ -9,7 +9,7 @@ import {
 import { Input } from "../ui/input";
 import { addDoc, collection, getDocs, Timestamp } from "firebase/firestore";
 import { doc, runTransaction } from "firebase/firestore";
-import moment from "moment";
+import { format } from "date-fns";
 import { db } from "@/firebase/config";
 import BillState from "@/models/BillState";
 import {
@@ -89,26 +89,23 @@ const AccountLedgerModal = ({ billState }: props) => {
 
         // 2. Construimos los nuevos ProductAccount
         const newProducts = billState.products.map((product) => {
-          return new ProductAccount(product, product.amount, moment());
+          return new ProductAccount(product, product.amount, new Date());
         });
 
         // 3. Preparamos el array actualizado
         const updatedProductsAccount = [
           ...data.productsAccount,
-          ...newProducts.map((pa) => ({
-            ...pa,
-            date: pa.date.toDate(),
-          })),
+          ...newProducts,
         ];
 
         // 4. Hacemos update dentro de la transacción
         transaction.update(accountRef, {
           productsAccount: updatedProductsAccount,
-          last_update: moment().toDate(),
+          last_update: new Date(),
         });
       });
       const newProducts = billState.products.map((product) => {
-        return new ProductAccount(product, product.amount, moment());
+        return new ProductAccount(product, product.amount, new Date());
       });
       console.log(newProducts[0].amount);
       newProducts.forEach(async (product) => {
@@ -135,11 +132,11 @@ const AccountLedgerModal = ({ billState }: props) => {
               [
                 ...acc.productsAccount,
                 ...billState.products.map(
-                  (p) => new ProductAccount(p, p.amount, moment())
+                  (p) => new ProductAccount(p, p.amount, new Date())
                 ),
               ],
               acc.date,
-              moment()
+              new Date()
             )
             : acc
         )
@@ -154,16 +151,14 @@ const AccountLedgerModal = ({ billState }: props) => {
     try {
       const res = await addDoc(collection(db, "accountLedger"), {
         ...account,
-        date: account.date.toDate(),
-        last_update: account.last_update.toDate(),
-        ...{
-          productsAccount: account.productsAccount.map((productAccount) => {
-            return {
-              ...productAccount,
-              date: productAccount.date.toDate(),
-            };
-          }),
-        },
+        date: account.date,
+        last_update: account.last_update,
+        productsAccount: account.productsAccount.map((productAccount) => {
+          return {
+            ...productAccount,
+            date: productAccount.date,
+          };
+        }),
       });
       toast.success("Cuenta creada con éxito");
       setOpenConfirmModal(false);
@@ -190,8 +185,8 @@ const AccountLedgerModal = ({ billState }: props) => {
             data.clientEmail,
             data.clientPhone,
             data.productsAccount || [],
-            moment(data.date.toDate()),
-            moment(data.last_update.toDate())
+            data.date.toDate(),
+            data.last_update.toDate()
           );
           return ac;
         });
@@ -209,7 +204,7 @@ const AccountLedgerModal = ({ billState }: props) => {
     startTransition(async () => {
       try {
         const productsAccount = billState.products.map((product) => {
-          return new ProductAccount(product, product.amount, moment());
+          return new ProductAccount(product, product.amount, new Date());
         });
         const account = new Account(
           "",
@@ -217,8 +212,8 @@ const AccountLedgerModal = ({ billState }: props) => {
           values.clientEmail,
           values.clientPhone,
           productsAccount || [],
-          moment(),
-          moment()
+          new Date(),
+          new Date()
         );
         const resp = await addAccount(account);
 
@@ -299,8 +294,8 @@ const AccountLedgerModal = ({ billState }: props) => {
           >
             <p className="font-medium text-gray-900 dark:text-gray-100">{account.clientName}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Creado: {account.date.format("DD/MM/YYYY HH:mm")} – Última
-              edición: {account.last_update.format("DD/MM/YYYY HH:mm")}
+Creado: {format(account.date, "dd/MM/yyyy HH:mm")} – Última
+               edición: {format(account.last_update, "dd/MM/yyyy HH:mm")}
              </p>
           </div>
         ))}

@@ -1,5 +1,4 @@
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
+import type { jsPDF } from "jspdf";
 
 export interface PrintOptions {
   documentTitle?: string;
@@ -40,6 +39,7 @@ export async function captureElement(
   options: PrintOptions = {}
 ): Promise<HTMLCanvasElement> {
   const { scale = 2 } = options;
+  const html2canvas = (await import("html2canvas")).default;
 
   const canvas = await html2canvas(element, {
     scale,
@@ -70,6 +70,7 @@ export async function exportToPDF(
     orientation,
     margin,
   } = mergedOptions;
+  const { jsPDF } = await import("jspdf");
 
   const canvas = await captureElement(element, mergedOptions);
   
@@ -152,6 +153,7 @@ export async function downloadElementAsPDF(
   options: PrintOptions = {}
 ): Promise<void> {
   const mergedOptions = { ...DEFAULT_OPTIONS, ...options, filename };
+  const { jsPDF } = await import("jspdf");
   
   const canvas = await captureElement(element, mergedOptions);
   

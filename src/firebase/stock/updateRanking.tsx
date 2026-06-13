@@ -1,10 +1,10 @@
 import { db } from "../config";
 import { doc, runTransaction } from "firebase/firestore";
-import moment from "moment";
+import { format } from "date-fns";
 import Product from "@/models/Product";
 
 export const updateMonthlyRanking = async (products: Product[]) => {
-  const monthId = moment().format("YYYY-MM"); // ej. "2025-06"
+  const monthId = format(new Date(), "yyyy-MM"); // ej. "2025-06"
   const rankingRef = doc(db, "ranking", monthId);
 
   try {

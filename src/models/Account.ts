@@ -1,10 +1,9 @@
-import moment from "moment";
 import Product from "./Product";
 
 export class ProductAccount extends Product {
-  date: moment.Moment;
+  date: Date;
   amount: number;
-  constructor(product: Product, amount: number, date: moment.Moment) {
+  constructor(product: Product, amount: number, date: Date) {
     super();
     this.id = product.id;
     this.code = product.code;
@@ -35,8 +34,8 @@ export default class Account {
   clientPhone = "";
   productsAccount: ProductAccount[] = [];
   total = 0;
-  date = moment();
-  last_update = moment();
+  date = new Date();
+  last_update = new Date();
   status = "pending";
 
   constructor(
@@ -45,8 +44,8 @@ export default class Account {
     clientEmail?: string,
     clientPhone?: string,
     productsAccount?: ProductAccount[],
-    date?: moment.Moment,
-    last_update?: moment.Moment,
+    date?: Date,
+    last_update?: Date,
     status?: string
   ) {
     this.id = id || "";
@@ -54,8 +53,8 @@ export default class Account {
     this.clientEmail = clientEmail || "";
     this.productsAccount = productsAccount || [];
     this.clientPhone = clientPhone || "";
-    this.date = date || moment();
-    this.last_update = last_update || moment();
+    this.date = date || new Date();
+    this.last_update = last_update || new Date();
     this.status = status || "pending";
     this.total = productsAccount
       ? productsAccount.reduce((acc, p) => acc + p.amount * p.salePrice, 0)

@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { createProductsBulk, BulkProductInput, previewProductsBulk, PreviewProductsBulkResult } from "@/actions/stock";
 import { toast } from "sonner";
-import * as XLSX from 'xlsx';
 import { UploadCloud, CheckCircle2, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
@@ -110,6 +109,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
 
     try {
       const data = await file.arrayBuffer();
+      const XLSX = await import("xlsx");
       const workbook = XLSX.read(data);
       const sheetName = workbook.SheetNames[0];
       const firstSheet = workbook.Sheets[sheetName];

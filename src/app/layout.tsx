@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   description: "A SaaS for Point of Sales",
 };
 
-import { Toaster } from "react-hot-toast";
+import { Toaster } from "sonner";
 
 import { AuthProvider } from "@/components/auth/SessionProvider";
 
