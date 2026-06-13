@@ -2,7 +2,8 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { fail } from "@/lib/action-result";
 
 export const createClient = async (data: {
@@ -23,8 +24,8 @@ export const createClient = async (data: {
         businessId: session.user.businessId,
       },
     });
-    revalidatePath("/clients"); // Assuming /clients is the path
-    revalidatePath("/billing"); 
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
     return { success: "Cliente agregado", client };
   } catch (error) {
     console.error(error);

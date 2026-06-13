@@ -1,7 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
@@ -44,7 +45,7 @@ export const createProduct = async (data: Product) => {
       { type: "product-created" }
     );
 
-    revalidatePath("/stock");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: "Producto cargado", product };
   } catch (error) {
     console.error(error);
@@ -131,7 +132,7 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
       { type: "product-updated" }
     );
 
-    revalidatePath("/stock");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: "Producto actualizado", product };
   } catch (error) {
     console.error(error);
@@ -152,7 +153,7 @@ export const updateStockAmount = async (productId: string, discountValue: number
             data: { amount: newAmount, last_update: new Date() }
         });
         
-        revalidatePath("/stock");
+        revalidateTag(CACHE_TAGS.STOCK, "max");
         return { success: true };
     } catch (error) {
         console.error("Error updating stock amount:", error);
@@ -175,7 +176,7 @@ export const deleteProduct = async (id: string) => {
       { type: "product-deleted" }
     );
 
-    revalidatePath("/stock");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: "Producto eliminado" };
   } catch (error) {
     console.error(error);
@@ -342,7 +343,7 @@ export const toggleProductCatalogAction = async (productId: string, catalog: boo
       where: { id: productId },
       data: { catalog },
     });
-    revalidatePath("/stock");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: true };
   } catch (error) {
     console.error("Error toggling catalog:", error);

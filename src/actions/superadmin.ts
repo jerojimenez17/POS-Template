@@ -2,7 +2,8 @@
 
 import { db } from "@/lib/db";
 import { UserRole, Plan } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/lib/auth";
 import { fail } from "@/lib/action-result";
 
@@ -38,7 +39,7 @@ export const promoteToAdmin = async (userId: string, businessName: string, slug:
       });
     });
 
-    revalidatePath("/superadmin/dashboard");
+    revalidateTag(CACHE_TAGS.SUPERADMIN, "max");
     return { success: "User promoted and business created." };
   } catch (error) {
     console.error("Promote Error:", error);
@@ -90,7 +91,7 @@ export const deleteBusiness = async (businessId: string) => {
             }
         });
         
-        revalidatePath("/superadmin/dashboard");
+        revalidateTag(CACHE_TAGS.SUPERADMIN, "max");
         return { success: "Negocio eliminado" };
     } catch (error) {
         console.error("Error deleting business:", error);
@@ -149,7 +150,7 @@ export const updateBusinessFeaturesAction = async (payload: {
     });
 
     try {
-      revalidatePath("/superadmin/dashboard");
+      revalidateTag(CACHE_TAGS.SUPERADMIN, "max");
     } catch {
       // Ignore static generation store missing in test environments
     }

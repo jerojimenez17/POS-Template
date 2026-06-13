@@ -2,7 +2,8 @@
 
 import { db } from "@/lib/db";
 import { auth } from "../../auth";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { PaidStatus } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
@@ -185,10 +186,10 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
       return { success: true, data: order };
     });
 
-    revalidatePath("/orders");
-    revalidatePath("/stock");
-    revalidatePath("/clients");
-    revalidatePath("/account-ledger");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
   } catch (error) {
     console.error("Error creating unpaid order:", error);
@@ -248,10 +249,10 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
       return newMovement;
     });
 
-    revalidatePath("/orders");
-    revalidatePath("/clients");
-    revalidatePath("/cashRegister");
-    revalidatePath("/account-ledger");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
     await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
 
     return { success: true };
@@ -334,9 +335,9 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
       return { success: true };
     });
 
-    revalidatePath("/orders");
-    revalidatePath("/stock");
-    revalidatePath("/clients");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
   } catch (error) {
     console.error("Error canceling unpaid order:", error);
@@ -527,10 +528,10 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
         });
       }
 
-      revalidatePath("/orders");
-      revalidatePath("/stock");
-      revalidatePath("/clients");
-      revalidatePath("/account-ledger");
+      revalidateTag(CACHE_TAGS.ORDERS, "max");
+      revalidateTag(CACHE_TAGS.STOCK, "max");
+      revalidateTag(CACHE_TAGS.CLIENTS, "max");
+      revalidateTag(CACHE_TAGS.ORDERS, "max");
       await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
       return { success: true };
@@ -657,9 +658,9 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
         });
       }
 
-      revalidatePath("/orders");
-      revalidatePath("/stock");
-      revalidatePath("/clients");
+      revalidateTag(CACHE_TAGS.ORDERS, "max");
+      revalidateTag(CACHE_TAGS.STOCK, "max");
+      revalidateTag(CACHE_TAGS.CLIENTS, "max");
       await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
       return { success: true };
@@ -757,9 +758,9 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
         });
       }
 
-      revalidatePath("/orders");
-      revalidatePath("/stock");
-      revalidatePath("/clients");
+      revalidateTag(CACHE_TAGS.ORDERS, "max");
+      revalidateTag(CACHE_TAGS.STOCK, "max");
+      revalidateTag(CACHE_TAGS.CLIENTS, "max");
       await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
       return { success: true };

@@ -1,7 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/auth";
 import { pusherServer } from "@/lib/pusher-server";
 
@@ -383,7 +384,7 @@ export const createProductsBulk = async (
     }
 
     try {
-      revalidatePath("/stock");
+      revalidateTag(CACHE_TAGS.STOCK, "max");
     } catch {}
 
     if (updatedCount > 0) {
@@ -443,7 +444,7 @@ export const bulkUpdatePrices = async (
 
     await db.$transaction(updates);
 
-    revalidatePath("/stock");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: true };
   } catch (error) {
     console.error("Error updating prices:", error);
@@ -507,7 +508,7 @@ export const bulkUpdateAmounts = async (
 
     await db.$transaction(updates);
 
-    revalidatePath("/stock");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: true };
   } catch (error) {
     console.error("Error updating amounts:", error);

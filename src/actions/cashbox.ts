@@ -2,7 +2,8 @@
 
 import { db } from "@/lib/db";
 import { auth } from "../../auth";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 import { fail } from "@/lib/action-result";
 
@@ -47,7 +48,7 @@ export const createCashbox = async (name: string, initialTotal: number = 0) => {
         businessId,
       },
     });
-    revalidatePath("/admin/cashboxes");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true, data: cashbox };
   } catch (error) {
     console.error("Error creating cashbox:", error);
@@ -70,7 +71,7 @@ export const updateCashbox = async (id: string, name: string) => {
       where: { id, businessId },
       data: { name },
     });
-    revalidatePath("/admin/cashboxes");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true, data: cashbox };
   } catch (error) {
     console.error("Error updating cashbox:", error);
@@ -92,7 +93,7 @@ export const deleteCashbox = async (id: string) => {
     await db.cashBox.delete({
       where: { id, businessId },
     });
-    revalidatePath("/admin/cashboxes");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true };
   } catch (error) {
     console.error("Error deleting cashbox:", error);
@@ -171,7 +172,7 @@ export const openSession = async (initialBalance: number) => {
     });
     
     // We do not increment CashBox total directly here, CashBox total is a running total of deposits.
-    revalidatePath("/newBill");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true, session: newSession };
   } catch (error) {
     console.error("Error opening session:", error);
@@ -261,7 +262,7 @@ export const closeSession = async (finalBalanceInput?: number) => {
       },
     });
 
-    revalidatePath("/newBill");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true, session: closedSession, zReport };
   } catch (error) {
     console.error("Error closing session:", error);

@@ -1,7 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/auth";
 
 export const createSupplier = async (data: {
@@ -27,7 +28,7 @@ export const createSupplier = async (data: {
         business: { connect: { id: session.user.businessId } },
       },
     });
-    revalidatePath("/stock");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: "Proveedor creado", supplier };
   } catch (error) {
     console.error(error);

@@ -2,7 +2,8 @@
 
 import { db } from "@/lib/db";
 import { OrderStatus, PaidStatus } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 import { fail } from "@/lib/action-result";
 
@@ -105,9 +106,9 @@ const newOrder = await tx.order.create({
       return { success: "Orden creada", orderId: newOrder.id };
     });
     
-    revalidatePath("/orders");
-    revalidatePath("/stock");
-    revalidatePath("/clients"); // Client balance update
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
   } catch (error) {
     console.error("Transaction failed: ", error);
     return fail(error instanceof Error ? error.message : "Error al guardar Orden");
@@ -203,9 +204,9 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
             });
         });
 
-        revalidatePath("/orders");
-        revalidatePath("/stock");
-        revalidatePath("/clients");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CLIENTS, "max");
         return { success: true };
     } catch (error) {
         console.error(error);
@@ -253,7 +254,7 @@ export const updateOrderPaidStatus = async (orderId: string, newStatus: PaidStat
            });
         });
         
-        revalidatePath("/orders");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
         return { success: true };
     } catch (error) {
          console.error(error);

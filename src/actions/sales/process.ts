@@ -2,7 +2,8 @@
 
 import { db } from "@/lib/db";
 import { auth } from "@/auth";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
@@ -204,11 +205,11 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
     }
 
-    revalidatePath("/stock");
-    revalidatePath("/cashRegister");
-    revalidatePath("/account-ledger");
-    revalidatePath("/report");
-    revalidatePath("/searchBill");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.SALES, "max");
+    revalidateTag(CACHE_TAGS.SALES, "max");
     return { success: true, orderId: result.order.id };
   } catch (error) {
     console.error("Error processing sale:", error);
@@ -296,14 +297,11 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
     });
 
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-    revalidatePath("/stock");
-    revalidatePath("/cashRegister");
-    revalidatePath("/account-ledger");
-    revalidatePath("/report");
-    revalidatePath("/searchBill");
-
-    revalidatePath("/stock");
-    revalidatePath("/cashRegister");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.SALES, "max");
+    revalidateTag(CACHE_TAGS.SALES, "max");
     return { success: true, returnId: result.id };
   } catch (error) {
     console.error("Error processing return:", error);
@@ -472,12 +470,12 @@ export const updateOrderAction = async (
 
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
-    revalidatePath("/stock");
-    revalidatePath("/cashRegister");
-    revalidatePath("/account-ledger");
-    revalidatePath("/report");
-    revalidatePath("/searchBill");
-    revalidatePath(`/sales/${orderId}`);
+    revalidateTag(CACHE_TAGS.STOCK, "max");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.SALES, "max");
+    revalidateTag(CACHE_TAGS.SALES, "max");
+    revalidateTag(CACHE_TAGS.SALES, "max");
 
     return result;
   } catch (error) {
