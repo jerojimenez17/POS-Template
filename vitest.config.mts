@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   plugins: [react()],
   test: {
-    environment: 'happy-dom',
+    environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
   },

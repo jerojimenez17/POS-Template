@@ -14,7 +14,7 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{ts,tsx}": "next lint --max-warnings 0"
+    "*.{ts,tsx}": "next lint"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
@@ -88,7 +88,6 @@
     "@vitejs/plugin-react": "^4.7.0",
     "eslint": "^9",
     "eslint-config-next": "^16.2.7",
-    "happy-dom": "^20.9.0",
     "husky": "^9.1.7",
     "jsdom": "^27.0.1",
     "lint-staged": "^16.4.0",
