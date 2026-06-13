@@ -312,8 +312,9 @@ describe("Billing Fields - getSalesAction", () => {
 
     const result = await getSalesAction();
 
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBe(2);
+    expect(Array.isArray(result.sales)).toBe(true);
+    expect(result.sales).toHaveLength(2);
+    expect(result.nextCursor).toBeNull();
     expect(db.order.findMany).toHaveBeenCalled();
   });
 
@@ -344,7 +345,8 @@ describe("Billing Fields - getSalesAction", () => {
 
     const result = await getSalesAction();
 
-    expect(result.length).toBe(1);
+    expect(result.sales).toHaveLength(1);
+    expect(result.nextCursor).toBeNull();
     expect(db.order.findMany).toHaveBeenCalled();
   });
 
@@ -355,8 +357,9 @@ describe("Billing Fields - getSalesAction", () => {
 
     const result = await getSalesAction();
 
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBe(0);
+    expect(Array.isArray(result.sales)).toBe(true);
+    expect(result.sales).toEqual([]);
+    expect(result.nextCursor).toBeNull();
     expect(db.order.findMany).toHaveBeenCalled();
   });
 });

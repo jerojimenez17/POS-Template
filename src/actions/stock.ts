@@ -9,6 +9,7 @@ import { Product, Prisma } from "@prisma/client";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "@/firebase/config";
 import { v4 } from "uuid";
+import { PAGINATION } from "@/lib/pagination";
 
 // Supplier Actions
 
@@ -594,7 +595,7 @@ export const getProductsPaginated = async (params: {
     return { products: [], total: 0, page: 1, pageSize: 25, totalPages: 0 };
 
   const page = Math.max(1, params.page || 1);
-  const pageSize = Math.min(100, Math.max(1, params.pageSize || 25));
+  const pageSize = Math.min(PAGINATION.MAX_PAGE_SIZE, Math.max(1, params.pageSize || PAGINATION.DEFAULT_PAGE_SIZE));
   const skip = (page - 1) * pageSize;
 
   const where: Prisma.ProductWhereInput = {
@@ -669,7 +670,7 @@ export const getProductsBySearch = async (query: string) => {
         ],
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },
-      take: 20, // Limit results for performance
+      take: PAGINATION.PRODUCTS_SEARCH_MAX,
     });
 
     return products;

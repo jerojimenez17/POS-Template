@@ -7,6 +7,7 @@ import type BillState from "@/models/BillState";
 import { pusherServer } from "@/lib/pusher-server";
 import { StockActivityItem } from "@/components/StockActivityModal";
 import { fail } from "@/lib/action-result";
+import { PAGINATION } from "@/lib/pagination";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -407,12 +408,16 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
   }
 };
 
-export const getSalesAction = async (): Promise<BillState[]> => {
+export const getSalesAction = async (params?: {
+  cursor?: string;
+  take?: number;
+}): Promise<{ sales: BillState[]; nextCursor: string | null }> => {
   const session = await auth();
   const businessId = session?.user?.businessId;
-  if (!businessId) return [];
+  if (!businessId) return { sales: [], nextCursor: null };
 
   try {
+    const take = params?.take ?? PAGINATION.SALES_MAX;
     const orders = await db.order.findMany({
       where: { businessId, paidStatus: "pago" },
       include: {
@@ -420,10 +425,15 @@ export const getSalesAction = async (): Promise<BillState[]> => {
         client: true,
       },
       orderBy: { date: "desc" },
-      take: 1100,
+      take: take + 1,
+      ...(params?.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
     });
 
-    const parsedSales = orders.map((order) => {
+    const hasMore = orders.length > take;
+    const results = hasMore ? orders.slice(0, take) : orders;
+    const nextCursor = hasMore ? results[results.length - 1].id : null;
+
+    const parsedSales = results.map((order) => {
       return {
         id: order.id,
         products: order.items.map((item) => ({
@@ -455,10 +465,10 @@ export const getSalesAction = async (): Promise<BillState[]> => {
       };
     });
 
-    return parsedSales as unknown as BillState[];
+    return { sales: parsedSales as unknown as BillState[], nextCursor };
   } catch (error) {
     console.error("Error fetching sales:", error);
-    return [];
+    return { sales: [], nextCursor: null };
   }
 };
 

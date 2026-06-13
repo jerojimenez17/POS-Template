@@ -1,0 +1,6 @@
+export const PAGINATION = {
+  PRODUCTS_SEARCH_MAX: 20,
+  SALES_MAX: 100,
+  DEFAULT_PAGE_SIZE: 25,
+  MAX_PAGE_SIZE: 100,
+} as const;
