@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limiter";
 
 export interface PublicProduct {
   id: string;
@@ -18,6 +19,12 @@ export interface PublicProduct {
 }
 
 export const getPublicProductsByBusinessId = async (businessId: string): Promise<PublicProduct[]> => {
+  const { allowed } = checkRateLimit(`catalog:${businessId}`, RATE_LIMITS.catalog);
+  if (!allowed) {
+    console.warn(`Rate limit exceeded for catalog: ${businessId}`);
+    return [];
+  }
+
   const features = await db.businessFeatures.findUnique({
     where: { businessId: businessId },
   });
@@ -74,6 +81,12 @@ export const getPublicProductById = async (
   businessId: string,
   productId: string
 ): Promise<PublicProduct | null> => {
+  const { allowed } = checkRateLimit(`catalog:${businessId}:${productId}`, RATE_LIMITS.catalogSearch);
+  if (!allowed) {
+    console.warn(`Rate limit exceeded for catalog product: ${businessId}:${productId}`);
+    return null;
+  }
+
   try {
     const product = await db.product.findFirst({
       where: {
