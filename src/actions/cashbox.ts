@@ -125,7 +125,6 @@ export const openSession = async (initialBalance: number) => {
     const session = await auth();
     const userId = session?.user?.id;
     const businessId = session?.user?.businessId;
-    // @ts-expect-error - NextAuth types might need update
     const cashboxId = session?.user?.cashboxId;
 
     if (!userId || !businessId) return fail("No autorizado");

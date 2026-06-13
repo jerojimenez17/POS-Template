@@ -8,6 +8,8 @@ import { pusherServer } from "@/lib/pusher-server";
 import { StockActivityItem } from "@/components/StockActivityModal";
 import { fail } from "@/lib/action-result";
 import { PAGINATION } from "@/lib/pagination";
+import { Prisma } from "@prisma/client";
+import { parseCAE } from "@/lib/cae";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -37,6 +39,56 @@ interface ProcessSaleInput {
     vencimiento: string;
     nroComprobante: number;
     qrData: string;
+  };
+}
+
+type OrderWithItems = Prisma.OrderGetPayload<{
+  include: { items: true; client: true };
+}>;
+
+function mapOrderToBillState(order: OrderWithItems): BillState {
+  return {
+    id: order.id,
+    products: order.items.map((item) => ({
+      id: item.productId || item.id,
+      code: item.code || "",
+      description: item.description || "",
+      price: item.costPrice,
+      salePrice: item.price,
+      amount: item.quantity,
+      unit: "unidades",
+      // Remaining fields to satisfy Product type
+      brand: "",
+      subCategory: "",
+      gain: 0,
+      suplier: { id: "", name: "", email: "", phone: "", discount: 0, iva: 0, gain: 0, creation_date: new Date() },
+      client_bonus: 0,
+      image: "",
+      imageName: "",
+      images: [],
+      last_update: new Date(),
+      creation_date: new Date(),
+      category: "",
+      catalog: true,
+      details: "",
+    })),
+    total: order.total + order.discountAmount,
+    totalWithDiscount: order.total,
+    client: order.client?.name || undefined,
+    clientId: order.clientId || undefined,
+    seller: order.seller || "",
+    discount: order.discountPercentage,
+    date: order.date,
+    typeDocument: order.clientIvaCondition || "DNI",
+    documentNumber: order.clientDocumentNumber ? Number(order.clientDocumentNumber) : 0,
+    secondPaidMethod: order.paymentMethod2 || undefined,
+    totalSecondMethod: order.totalMethod2 || undefined,
+    IVACondition: order.clientIvaCondition || "Consumidor Final",
+    clientIvaCondition: order.clientIvaCondition || undefined,
+    clientDocumentNumber: order.clientDocumentNumber || undefined,
+    CAE: parseCAE(order.CAE),
+    twoMethods: !!order.paymentMethod2 && order.totalMethod2 !== null && order.totalMethod2 > 0,
+    paidMethod: order.paymentMethod || "Efectivo",
   };
 }
 
@@ -433,39 +485,9 @@ export const getSalesAction = async (params?: {
     const results = hasMore ? orders.slice(0, take) : orders;
     const nextCursor = hasMore ? results[results.length - 1].id : null;
 
-    const parsedSales = results.map((order) => {
-      return {
-        id: order.id,
-        products: order.items.map((item) => ({
-          id: item.productId || item.id,
-          code: item.code || "",
-          description: item.description || "",
-          price: item.costPrice,
-          salePrice: item.price,
-          amount: item.quantity,
-          unit: "unidades",
-        })),
-        total: order.total + order.discountAmount,
-        totalWithDiscount: order.total,
-        client: order.client?.name || undefined,
-        clientId: order.clientId || undefined,
-        seller: order.seller || "",
-        discount: order.discountPercentage,
-        date: order.date,
-        typeDocument: order.clientIvaCondition || "DNI",
-        documentNumber: order.clientDocumentNumber ? Number(order.clientDocumentNumber) : 0,
-        secondPaidMethod: order.paymentMethod2 || undefined,
-        totalSecondMethod: order.totalMethod2 || undefined,
-        IVACondition: order.clientIvaCondition || "Consumidor Final",
-        clientIvaCondition: order.clientIvaCondition || undefined,
-        clientDocumentNumber: order.clientDocumentNumber || undefined,
-        CAE: order.CAE ? (order.CAE as unknown as CAE) : undefined,
-        twoMethods: !!order.paymentMethod2 && order.totalMethod2 !== null && order.totalMethod2 > 0,
-        paidMethod: order.paymentMethod || "Efectivo",
-      };
-    });
+    const parsedSales = results.map(mapOrderToBillState);
 
-    return { sales: parsedSales as unknown as BillState[], nextCursor };
+    return { sales: parsedSales, nextCursor };
   } catch (error) {
     console.error("Error fetching sales:", error);
     return { sales: [], nextCursor: null };
@@ -488,35 +510,7 @@ export const getSaleByIdAction = async (id: string): Promise<BillState | null> =
 
     if (!order) return null;
 
-    return {
-      id: order.id,
-      products: order.items.map((item) => ({
-        id: item.productId || item.id,
-        code: item.code || "",
-        description: item.description || "",
-        price: item.costPrice,
-        salePrice: item.price,
-        amount: item.quantity,
-        unit: "unidades",
-      })),
-      total: order.total + order.discountAmount,
-      totalWithDiscount: order.total,
-      client: order.client?.name || undefined,
-      clientId: order.clientId || undefined,
-      seller: order.seller || "",
-      discount: order.discountPercentage,
-      date: order.date,
-      typeDocument: order.clientIvaCondition || "DNI",
-      documentNumber: order.clientDocumentNumber ? Number(order.clientDocumentNumber) : 0,
-      secondPaidMethod: order.paymentMethod2 || undefined,
-      totalSecondMethod: order.totalMethod2 || undefined,
-      IVACondition: order.clientIvaCondition || "Consumidor Final",
-      clientIvaCondition: order.clientIvaCondition || undefined,
-      clientDocumentNumber: order.clientDocumentNumber || undefined,
-      CAE: order.CAE ? (order.CAE as unknown as CAE) : undefined,
-      twoMethods: !!order.paymentMethod2 && order.totalMethod2 !== null && order.totalMethod2 > 0,
-      paidMethod: order.paymentMethod || "Efectivo",
-    } as unknown as BillState;
+    return mapOrderToBillState(order);
   } catch (error) {
     console.error("Error fetching sale:", error);
     return null;
@@ -743,10 +737,8 @@ export const getSaleHistoryAction = async (orderId: string) => {
     return [];
   }
 };
-import { Prisma } from "@prisma/client";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
-import CAE from "@/models/CAE";
 
 export type OrderUpdateWithUser = Prisma.OrderUpdateGetPayload<{
   include: {
