@@ -71,26 +71,7 @@ const createMockBillState = (overrides: Partial<BillState> = {}): BillState => (
 
 const mockContextValue = {
   BillState: createMockBillState(),
-  addItem: vi.fn(),
-  removeUnit: vi.fn(),
-  removeAll: vi.fn(),
-  removeItem: vi.fn(),
-  changePrice: vi.fn(),
-  changeUnit: vi.fn(),
-  total: vi.fn(),
-  discount: vi.fn(),
-  sellerName: vi.fn(),
-  typeDocument: vi.fn(),
-  documentNumber: vi.fn(),
-  entrega: vi.fn(),
-  nroAsociado: vi.fn(),
-  IVACondition: vi.fn(),
-  paidMethod: vi.fn(),
-  billType: vi.fn(),
-  date: vi.fn(),
-  CAE: vi.fn(),
-  setState: vi.fn(),
-  addUnit: vi.fn(),
+  dispatch: vi.fn(),
   onOrderResetRef: { current: null },
   printMode: "thermal" as const,
   setPrintMode: vi.fn(),
@@ -287,12 +268,13 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(300);
 
       await vi.waitFor(() => {
-        expect(mockContextValue.addItem).toHaveBeenCalled();
+        expect(mockContextValue.dispatch).toHaveBeenCalled();
       });
 
-      const addedProduct = mockContextValue.addItem.mock.calls[0][0];
-      expect(addedProduct.code).toBe("12345");
-      expect(addedProduct.amount).toBe(1);
+      const call = mockContextValue.dispatch.mock.calls[0][0];
+      expect(call.type).toBe("addItem");
+      expect(call.payload.code).toBe("12345");
+      expect(call.payload.amount).toBe(1);
     });
   });
 

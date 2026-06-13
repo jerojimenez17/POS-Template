@@ -56,7 +56,7 @@ const PrintableTable = ({
   forceCae,
   targetWindowRef,
 }: Props) => {
-  const { BillState, addItem, removeItem, printMode, qzTrayActive } = React.useContext(BillContext);
+  const { BillState, dispatch, printMode, qzTrayActive } = React.useContext(BillContext);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchCode, setSearchCode] = useState("");
   const searchCodeRef = useRef(""); // Ref to track current value for timeouts
@@ -238,8 +238,8 @@ const PrintableTable = ({
     if (!product) return;
 
     const updatedProduct = { ...product, amount: newAmount };
-    removeItem(product);
-    addItem(updatedProduct);
+    dispatch({ type: "removeItem", payload: { id: product.id } });
+    dispatch({ type: "addItem", payload: updatedProduct });
   };
 
   const handleAddProduct = async (code: string) => {
@@ -255,7 +255,7 @@ const PrintableTable = ({
     }
 
     const adaptedProduct = ProductPrismaAdapter.toDomain(product);
-    addItem({ ...adaptedProduct, amount: 1 });
+    dispatch({ type: "addItem", payload: { ...adaptedProduct, amount: 1 } });
     setSearchCode("");
     setSuggestions([]);
     setSelectedIndex(-1);
@@ -323,7 +323,7 @@ const PrintableTable = ({
       setSuggestions([]);
     } else {
       const adaptedProduct = ProductPrismaAdapter.toDomain(product);
-      addItem({ ...adaptedProduct, amount: 1 });
+      dispatch({ type: "addItem", payload: { ...adaptedProduct, amount: 1 } });
       setSearchCode("");
       setSuggestions([]);
       setSelectedIndex(-1);
@@ -405,7 +405,7 @@ const PrintableTable = ({
       </td>
       <td className="px-4 py-3 print:hidden">
         <button 
-          onClick={() => removeItem(product)}
+          onClick={() => dispatch({ type: "removeItem", payload: { id: product.id } })}
           className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
           aria-label={`Eliminar ${product.description}`}
         >

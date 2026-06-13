@@ -3,8 +3,6 @@ import React, { ReactElement, useEffect, useReducer, useRef } from "react";
 import { BillContext } from "./BillContext";
 import { BillReducer } from "./BillReducer";
 import BillState from "@/models/BillState";
-import Product from "@/models/Product";
-import CAE from "@/models/CAE";
 import { PrintMode } from "./BillContext";
 
 const INITIAL_STATE: BillState = {
@@ -53,149 +51,9 @@ const BillProvider = ({ children }: props) => {
     dispatch({ type: "date", payload: new Date() });
   }, []);
 
-  const addItem = (product: Product) => {
-    dispatch({
-      type: "addItem",
-      payload: product,
-    });
-  };
-  const addUnit = (product: Product) => {
-    dispatch({
-      type: "addUnit",
-      payload: product,
-    });
-  };
-  const removeUnit = (product: Product) => {
-    dispatch({
-      type: "removeUnit",
-      payload: product,
-    });
-  };
-  const removeItem = (product: Product) => {
-    dispatch({
-      type: "removeItem",
-      payload: product,
-    });
-  };
-  const setState = (BillState: BillState) => {
-    dispatch({
-      type: "setState",
-      payload: BillState,
-    });
-  };
-  const removeAll = () => {
-    dispatch({
-      type: "removeAll",
-      payload: null,
-    });
-  };
-  const changePrice = (product: Product) => {
-    dispatch({
-      type: "changePrice",
-      payload: product,
-    });
-  };
-  const changeUnit = (product: Product) => {
-    dispatch({
-      type: "changeUnit",
-      payload: product,
-    });
-  };
-  const total = () => {
-    dispatch({
-      type: "total",
-      payload: null,
-    });
-  };
-  const discount = (disc: number) => {
-    dispatch({
-      type: "discount",
-      payload: disc,
-    });
-  };
-  const sellerName = (name: string) => {
-    dispatch({
-      type: "sellerName",
-      payload: name,
-    });
-  };
-  const typeDocument = (type: string) => {
-    dispatch({
-      type: "typeDocument",
-      payload: type,
-    });
-  };
-  const billType = (tipoFactura: string) => {
-    dispatch({
-      type: "billType",
-      payload: tipoFactura,
-    });
-  };
-  const documentNumber = (number: number) => {
-    dispatch({
-      type: "documentNumber",
-      payload: number,
-    });
-  };
-  const nroAsociado = (number: number) => {
-    dispatch({
-      type: "nroAsociado",
-      payload: number,
-    });
-  };
-  const IVACondition = (condition: string) => {
-    dispatch({
-      type: "IVACondition",
-      payload: condition,
-    });
-  };
-  const paidMethod = (method: string) => {
-    dispatch({
-      type: "paidMethod",
-      payload: method,
-    });
-  };
-  const entrega = (entrega: number) => {
-    dispatch({
-      type: "entrega",
-      payload: entrega,
-    });
-  };
-  const date = (newDate: Date) => {
-    dispatch({
-      type: "date",
-      payload: newDate,
-    });
-  };
-  const CAE = (CAE: CAE) => {
-    dispatch({
-      type: "CAE",
-      payload: CAE,
-    });
-  };
-
   const values = {
     BillState: BillState,
-    addItem: addItem,
-    addUnit: addUnit,
-    date: date,
-    removeUnit: removeUnit,
-    removeItem: removeItem,
-    removeAll: removeAll,
-    changePrice: changePrice,
-    changeUnit: changeUnit,
-    total: total,
-    discount: discount,
-    sellerName: sellerName,
-    typeDocument: typeDocument,
-    documentNumber: documentNumber,
-    IVACondition: IVACondition,
-    CAE: CAE,
-    billType: billType,
-    entrega: entrega,
-    nroAsociado: nroAsociado,
-    setState: setState,
-    paidMethod: paidMethod,
+    dispatch: dispatch,
     onOrderResetRef: onOrderResetRef,
     printMode: printMode,
     setPrintMode: setPrintMode,

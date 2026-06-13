@@ -42,7 +42,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [respAfip, setRespAfip] = useState<CAE | undefined>();
   const [localCAE, setLocalCAE] = useState<CAE>({ CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" });
   const [openRemitoModal, setOpenRemitoModal] = useState(false);
-  const { BillState, billType, CAE, sellerName, removeAll, onOrderResetRef, printMode } =
+  const { BillState, dispatch, onOrderResetRef, printMode } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
@@ -84,7 +84,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         e.preventDefault();
         if (!checkSession()) return;
         if (session?.user.email) {
-          sellerName(session.user.email || "");
+          dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
         setOpenFacturaModal(true);
       }
@@ -92,7 +92,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         e.preventDefault();
         if (!checkSession()) return;
         if (session?.user.email) {
-          sellerName(session.user.email || "");
+          dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
         setOpenRemitoModal(true);
       }
@@ -107,7 +107,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, sellerName, BillState.products?.length, isEditing]);
+  }, [session, dispatch, BillState.products?.length, isEditing]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {
@@ -139,7 +139,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           nroComprobante: resp.data.nroCbte || afipData.nroCbte || 0,
           qrData: resp.data.qrData || afipData.qrData || "",
         };
-        CAE(newCAE);
+        dispatch({ type: "CAE", payload: newCAE });
         setLocalCAE(newCAE);
         toast.success("Factura generada correctamente");
         setBlockButton(false);
@@ -264,7 +264,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           <Button
             onClick={() => {
               if (session?.user.email) {
-                sellerName(session.user.email || "");
+                dispatch({ type: "sellerName", payload: session.user.email || "" });
               }
               setOpenEditModal(true);
             }}
@@ -292,7 +292,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
             onClick={() => {
               if (!checkSession()) return;
               if (session?.user.email) {
-                sellerName(session.user.email || "");
+                dispatch({ type: "sellerName", payload: session.user.email || "" });
               }
               setOpenFacturaModal(true);
             }}
@@ -322,7 +322,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
             onClick={() => {
               if (!checkSession()) return;
               if (session?.user.email) {
-                sellerName(session.user.email || "");
+                dispatch({ type: "sellerName", payload: session.user.email || "" });
               }
               setOpenRemitoModal(true);
             }}
@@ -386,7 +386,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
             total={BillState.total}
             businessId={session?.user?.businessId || ""}
             onSuccess={() => {
-              removeAll();
+              dispatch({ type: "removeAll", payload: null });
               if (onOrderResetRef.current) {
                 onOrderResetRef.current();
               }
@@ -430,7 +430,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                     if (!openErrorModal && BillState.total > 0) {
                       handlePrint(caeResult, targetWin);
                       setTimeout(() => {
-                        removeAll();
+                        dispatch({ type: "removeAll", payload: null });
                         if (onOrderResetRef.current) {
                           onOrderResetRef.current();
                         }
@@ -536,7 +536,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                     if (!openErrorModal && BillState.total > 0) {
                       handlePrint(caeResult, targetWin);
                       setTimeout(() => {
-                        removeAll();
+                        dispatch({ type: "removeAll", payload: null });
                         if (onOrderResetRef.current) {
                           onOrderResetRef.current();
                         }

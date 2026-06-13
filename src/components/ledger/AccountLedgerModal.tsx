@@ -59,7 +59,7 @@ const AccountLedgerModal = ({ billState }: props) => {
     useState(false);
   const [account, setAccount] = useState<Account>(new Account());
   const [search, setSearch] = useState("");
-  const { removeAll } = useContext(BillContext);
+  const { dispatch } = useContext(BillContext);
   const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
   const [isPending, startTransition] = useTransition();
   // … otros imports …
@@ -118,7 +118,7 @@ const AccountLedgerModal = ({ billState }: props) => {
 
       await updateMonthlyRanking(billState.products);
       toast.success("Productos añadidos correctamente");
-      removeAll();
+      dispatch({ type: "removeAll", payload: null });
       setOpenCofirmAddProductModal(false);
 
       setAccounts((prev) =>
