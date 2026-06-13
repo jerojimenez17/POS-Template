@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { OrderStatus, PaidStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
+import { fail } from "@/lib/action-result";
 
 // Type definitions for input to avoid circular dependencies with models
 interface OrderProductInput {
@@ -32,9 +33,12 @@ interface OrderInput {
 
 export const createOrder = async (order: OrderInput) => {
   try {
-    await assertWritePermission();
+    const permissionResult = await assertWritePermission();
+    if (!permissionResult.success) return { error: permissionResult.error };
+
     if (order.paidStatus === "inpago") {
-      await requireFeature("hasClientLedger");
+      const featureResult = await requireFeature("hasClientLedger");
+      if (!featureResult.success) return { error: featureResult.error };
     }
 
     return await db.$transaction(async (tx) => {
@@ -106,13 +110,14 @@ const newOrder = await tx.order.create({
     revalidatePath("/clients"); // Client balance update
   } catch (error) {
     console.error("Transaction failed: ", error);
-    return { error: "Error al guardar Orden: " + (error instanceof Error ? error.message : "Unknown error") };
+    return fail(error instanceof Error ? error.message : "Error al guardar Orden");
   }
 };
 
 export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-        await assertWritePermission();
+        const permissionResult = await assertWritePermission();
+        if (!permissionResult.success) return { error: permissionResult.error };
         await db.$transaction(async (tx) => {
             const order = await tx.order.findUnique({
                 where: { id: orderId },
@@ -204,15 +209,18 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
         return { success: true };
     } catch (error) {
         console.error(error);
-        return { error: "Error actualizando estado: " + (error instanceof Error ? error.message : "") };
+        return fail(error instanceof Error ? error.message : "Error actualizando estado");
     }
 }
 
 export const updateOrderPaidStatus = async (orderId: string, newStatus: PaidStatus) => {
     try {
-        await assertWritePermission();
+        const permissionResult = await assertWritePermission();
+        if (!permissionResult.success) return { error: permissionResult.error };
+
         if (newStatus === "inpago") {
-            await requireFeature("hasClientLedger");
+            const featureResult = await requireFeature("hasClientLedger");
+            if (!featureResult.success) return { error: featureResult.error };
         }
         await db.$transaction(async (tx) => {
            const order = await tx.order.findUnique({ where: { id: orderId } });
@@ -249,6 +257,6 @@ export const updateOrderPaidStatus = async (orderId: string, newStatus: PaidStat
         return { success: true };
     } catch (error) {
          console.error(error);
-        return { error: "Error actualizando estado de pago" };
+        return fail("Error actualizando estado de pago");
     }
 }

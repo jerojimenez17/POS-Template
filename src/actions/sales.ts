@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import type BillState from "@/models/BillState";
 import { pusherServer } from "@/lib/pusher-server";
 import { StockActivityItem } from "@/components/StockActivityModal";
+import { fail } from "@/lib/action-result";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -211,7 +212,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
     return { success: true, orderId: result.order.id };
   } catch (error) {
     console.error("Error processing sale:", error);
-    return { error: "Error al procesar la venta" };
+    return fail("Error al procesar la venta");
   }
 };
 
@@ -306,7 +307,7 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
     return { success: true, returnId: result.id };
   } catch (error) {
     console.error("Error processing return:", error);
-    return { error: "Error al procesar la devolución" };
+    return fail("Error al procesar la devolución");
   }
 };
 
@@ -402,7 +403,7 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
     };
   } catch (error) {
     console.error("Error fetching daily report:", error);
-    return { error: "Error al generar el reporte" };
+    return fail("Error al generar el reporte");
   }
 };
 
@@ -706,7 +707,7 @@ export const updateOrderAction = async (
     return result;
   } catch (error) {
     console.error("Error updating sale:", error);
-    return { error: "Error al actualizar la venta" };
+    return fail("Error al actualizar la venta");
   }
 };
 

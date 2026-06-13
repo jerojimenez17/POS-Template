@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { auth } from "../../auth";
 import { pusherServer } from "@/lib/pusher-server";
+import { fail } from "@/lib/action-result";
 import { Product, Prisma } from "@prisma/client";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "@/firebase/config";
@@ -523,28 +524,21 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
 export const updateStockAmount = async (productId: string, discountValue: number) => {
     try {
         const product = await db.product.findUnique({ where: { id: productId } });
-        if (!product) throw new Error("Producto no encontrado");
+        if (!product) return fail("Producto no encontrado", "NOT_FOUND");
         
         const newAmount = product.amount - discountValue;
-        if (newAmount < 0) throw new Error("Stock insuficiente");
+        if (newAmount < 0) return fail("Stock insuficiente", "VALIDATION_ERROR");
 
         await db.product.update({
             where: { id: productId },
             data: { amount: newAmount, last_update: new Date() }
         });
         
-
-        
-        // Cannot trigger pusher here easily without session, maybe pass businessId?
-        // Assuming updateStockAmount is called from client where we might not have session easily available if it was a pure background task, 
-        // but here it is a server action called from client.
-        // For now, let's skip pusher here unless we fetch session or pass businessId.
-        // Actually this seems to be used after sale.
-        
         revalidatePath("/stock");
         return { success: true };
     } catch (error) {
-        throw error;
+        console.error("Error updating stock amount:", error);
+        return fail("Error al actualizar stock");
     }
 }
 

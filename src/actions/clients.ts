@@ -3,6 +3,7 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { fail } from "@/lib/action-result";
 
 export const createClient = async (data: {
   name: string;
@@ -45,7 +46,7 @@ export const getClients = async () => {
 export const updateClientBalance = async (clientId: string, amountToAdd: number) => {
     try {
         const client = await db.client.findUnique({ where: { id: clientId } });
-        if (!client) throw new Error("Cliente no encontrado");
+        if (!client) return fail("Cliente no encontrado", "NOT_FOUND");
         
         await db.client.update({
             where: { id: clientId },
@@ -56,6 +57,7 @@ export const updateClientBalance = async (clientId: string, amountToAdd: number)
         });
         return { success: true };
     } catch (error) {
-        throw error;
+        console.error("Error updating client balance:", error);
+        return fail("Error al actualizar saldo del cliente");
     }
 }

@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { requireFeature, assertWritePermission, assertLimit, FeatureAccessError } from "@/lib/auth-gates";
+import { requireFeature, assertWritePermission, assertLimit } from "@/lib/auth-gates";
 import { auth } from "@/lib/auth";
 import { createAfipVoucherAction } from "@/actions/afip";
 import { createOrder } from "@/actions/orders";
 import { createCashbox, openSession } from "@/actions/cashbox";
 import { getPublicProductsByBusinessId } from "@/actions/catalog";
 import { db } from "@/lib/db";
+import type { ActionResult } from "@/lib/action-result";
 
 const mockAuth = vi.hoisted(() => vi.fn());
 
@@ -45,9 +46,12 @@ describe("Server-Side Action Security Gates Test Suite", () => {
   it("should fail validation if user is unauthenticated", async () => {
     vi.mocked(auth).mockResolvedValue(null);
 
-    await expect(assertWritePermission()).rejects.toThrowError(
-      new FeatureAccessError("Debes iniciar sesión para realizar esta acción.", "UNAUTHENTICATED")
-    );
+    const result = await assertWritePermission();
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBe("Debes iniciar sesión para realizar esta acción.");
+      expect(result.code).toBe("UNAUTHENTICATED");
+    }
   });
 
   it("should fail validation with DELINQUENT if business status is MOROSO", async () => {
@@ -60,9 +64,12 @@ describe("Server-Side Action Security Gates Test Suite", () => {
       },
     } as any);
 
-    await expect(assertWritePermission()).rejects.toThrowError(
-      new FeatureAccessError("Acción bloqueada. Tu cuenta posee facturas vencidas impagas.", "DELINQUENT")
-    );
+    const result = await assertWritePermission();
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBe("Acción bloqueada. Tu cuenta posee facturas vencidas impagas.");
+      expect(result.code).toBe("DELINQUENT");
+    }
   });
 
   it("should fail module gate with FORBIDDEN if specific feature toggle is disabled", async () => {
@@ -78,9 +85,12 @@ describe("Server-Side Action Security Gates Test Suite", () => {
       },
     } as any);
 
-    await expect(requireFeature("hasAfipBilling")).rejects.toThrowError(
-      new FeatureAccessError("Esta función no está habilitada en tu plan actual.", "FORBIDDEN")
-    );
+    const result = await requireFeature("hasAfipBilling");
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBe("Esta función no está habilitada en tu plan actual.");
+      expect(result.code).toBe("FORBIDDEN");
+    }
   });
 
   it("should pass module gate if specific feature toggle is enabled", async () => {
@@ -96,8 +106,11 @@ describe("Server-Side Action Security Gates Test Suite", () => {
       },
     } as any);
 
-    const user = await requireFeature("hasAfipBilling");
-    expect(user.businessId).toBe("business_123");
+    const result = await requireFeature("hasAfipBilling");
+    expect(result.success).toBe(true);
+    if (result.success && result.data) {
+      expect(result.data.businessId).toBe("business_123");
+    }
   });
 
   it("should block user limit checks if threshold is exceeded", async () => {
@@ -113,9 +126,12 @@ describe("Server-Side Action Security Gates Test Suite", () => {
       },
     } as any);
 
-    await expect(assertLimit("maxProducts", 100)).rejects.toThrowError(
-      new FeatureAccessError("Has superado el límite permitido de maxProducts (100). Mejora tu plan.", "LIMIT_EXCEEDED")
-    );
+    const result = await assertLimit("maxProducts", 100);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain("Has superado el límite permitido");
+      expect(result.code).toBe("LIMIT_EXCEEDED");
+    }
   });
 
   describe("Phase 4: Server Action Gated Scenarios", () => {
@@ -134,7 +150,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
         } as any);
 
         const result = await createAfipVoucherAction({} as any);
-        expect(result.error).toContain("Esta función no está habilitada");
+        expect((result as any).error).toContain("Esta función no está habilitada");
       });
     });
 
@@ -160,7 +176,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
           paidStatus: "inpago",
         });
 
-        expect(result.error).toContain("Esta función no está habilitada");
+        expect((result as any).error).toContain("Esta función no está habilitada");
       });
 
       it("should allow creating order with paidStatus: inpago if hasClientLedger is true", async () => {
@@ -189,7 +205,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
           paidStatus: "inpago",
         });
 
-        expect(result.success).toBe("Orden creada");
+        expect((result as any).success).toBe("Orden creada");
       });
     });
 
@@ -211,7 +227,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
         vi.spyOn(db.cashBox, "count").mockResolvedValue(1);
 
         const result = await createCashbox("Caja Secundaria", 0);
-        expect(result.error).toContain("Esta función no está habilitada");
+        expect((result as any).error).toContain("Esta función no está habilitada");
       });
 
       it("should reject opening session if another session is already open and hasMultiCashbox is false", async () => {
@@ -232,7 +248,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
         vi.spyOn(db.cashboxSession, "count").mockResolvedValue(1);
 
         const result = await openSession(0);
-        expect(result.error).toContain("Esta función no está habilitada");
+        expect((result as any).error).toContain("Esta función no está habilitada");
       });
     });
 
@@ -250,4 +266,3 @@ describe("Server-Side Action Security Gates Test Suite", () => {
     });
   });
 });
-

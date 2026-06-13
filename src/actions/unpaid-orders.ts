@@ -85,7 +85,8 @@ const getClientUnpaidOrderSchema = z.object({
 
 export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<ActionResult> => {
   try {
-    await requireFeature("hasClientLedger");
+    const featureResult = await requireFeature("hasClientLedger");
+    if (!featureResult.success) return { success: false, error: featureResult.error };
     const session = await auth();
     const businessId = session?.user?.businessId || input.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
