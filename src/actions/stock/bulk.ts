@@ -146,72 +146,125 @@ export const createProductsBulk = async (
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
+  const businessId = session.user.businessId;
+
   try {
     let createdCount = 0;
     let updatedCount = 0;
-    
+
     const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
-    
-    // Process sequentially to handle dependent creations safely
+
+    // ── Step 1: Pre-load ALL reference data in 3 parallel queries ──
+    const [allBrands, allCategories, allSubCategories] = await Promise.all([
+      db.brand.findMany({ where: { businessId } }),
+      db.category.findMany({ where: { businessId } }),
+      db.subcategory.findMany({ where: { businessId } }),
+    ]);
+
+    // Build O(1) lookup maps
+    const brandMap = new Map(allBrands.map(b => [b.name.toLowerCase(), b]));
+    const categoryMap = new Map(allCategories.map(c => [c.name.toLowerCase(), c]));
+    const subCategoryMap = new Map(
+      allSubCategories.map(s => [`${s.name.toLowerCase()}|${s.categoryId}`, s])
+    );
+
+    // Pre-load ALL existing products by code in 1 query
+    const allCodes = productsData.map(p => p.code.toString());
+    const existingProducts = await db.product.findMany({
+      where: { businessId, code: { in: allCodes } },
+      select: { id: true, code: true, price: true, salePrice: true, gain: true, amount: true, supplierId: true },
+    });
+    const existingByCode = new Map(existingProducts.map(p => [p.code, p]));
+
+    // ── Step 2: Batch create missing reference data ──
+
+    // Brands (no dependencies)
+    const missingBrandNames = [...new Set(
+      productsData
+        .map(p => p.brandName?.trim())
+        .filter((name): name is string => !!name && !brandMap.has(name.toLowerCase()))
+    )];
+    if (missingBrandNames.length > 0) {
+      const createdBrands = await db.$transaction(
+        missingBrandNames.map(name => db.brand.create({ data: { name, businessId } }))
+      );
+      createdBrands.forEach(b => brandMap.set(b.name.toLowerCase(), b));
+    }
+
+    // Categories (no dependencies)
+    const missingCategoryNames = [...new Set(
+      productsData
+        .map(p => p.categoryName?.trim())
+        .filter((name): name is string => !!name && !categoryMap.has(name.toLowerCase()))
+    )];
+    if (missingCategoryNames.length > 0) {
+      const createdCategories = await db.$transaction(
+        missingCategoryNames.map(name => db.category.create({ data: { name, businessId } }))
+      );
+      createdCategories.forEach(c => categoryMap.set(c.name.toLowerCase(), c));
+    }
+
+    // SubCategories (depends on categories being fully populated)
+    const subCategoryEntries = [
+      ...new Map(
+        productsData
+          .filter(p => p.subCategoryName?.trim() && p.categoryName?.trim())
+          .map(p => {
+            const cat = categoryMap.get(p.categoryName!.trim().toLowerCase());
+            if (!cat) return null;
+            const key = `${p.subCategoryName!.trim().toLowerCase()}|${cat.id}`;
+            return [key, { name: p.subCategoryName!.trim(), categoryId: cat.id }] as const;
+          })
+          .filter((e): e is readonly [string, { name: string; categoryId: string }] => e !== null)
+      ).values()
+    ]
+      .filter(e => !subCategoryMap.has(`${e.name.toLowerCase()}|${e.categoryId}`));
+
+    if (subCategoryEntries.length > 0) {
+      const createdSubCategories = await db.$transaction(
+        subCategoryEntries.map(e =>
+          db.subcategory.create({ data: { name: e.name, categoryId: e.categoryId, businessId } })
+        )
+      );
+      createdSubCategories.forEach(s =>
+        subCategoryMap.set(`${s.name.toLowerCase()}|${s.categoryId}`, s)
+      );
+    }
+
+    // ── Step 3: Process products in chunks of 100 ──
+    const CHUNK_SIZE = 100;
+    const bulkOps: any[] = [];
+    const processedCodes = new Set<string>();
+
     for (const item of productsData) {
-      // Lookup brand
-      let brandId = null;
-      if (item.brandName && item.brandName.trim() !== "") {
-        let brand = await db.brand.findFirst({
-          where: { name: { equals: item.brandName.trim(), mode: "insensitive" }, businessId: session.user.businessId }
-        });
-        if (!brand) {
-          brand = await db.brand.create({
-            data: { name: item.brandName.trim(), businessId: session.user.businessId }
-          });
-        }
-        brandId = brand.id;
-      }
+      const code = item.code.toString();
 
-      // Lookup category
-      let categoryId = null;
-      if (item.categoryName && item.categoryName.trim() !== "") {
-        let category = await db.category.findFirst({
-          where: { name: { equals: item.categoryName.trim(), mode: "insensitive" }, businessId: session.user.businessId }
-        });
-        if (!category) {
-          category = await db.category.create({
-            data: { name: item.categoryName.trim(), businessId: session.user.businessId }
-          });
-        }
-        categoryId = category.id;
-      }
+      // Skip duplicate codes within the same chunk to avoid unique constraint violations
+      if (processedCodes.has(code)) continue;
+      processedCodes.add(code);
 
-      // Lookup subcategory (needs categoryId)
-      let subCategoryId = null;
-      if (item.subCategoryName && item.subCategoryName.trim() !== "" && categoryId) {
-        let subCategory = await db.subcategory.findFirst({
-          where: { 
-            name: { equals: item.subCategoryName.trim(), mode: "insensitive" }, 
-            categoryId: categoryId,
-            businessId: session.user.businessId 
-          }
-        });
-        if (!subCategory) {
-          subCategory = await db.subcategory.create({
-            data: { 
-              name: item.subCategoryName.trim(), 
-              categoryId: categoryId,
-              businessId: session.user.businessId 
-            }
-          });
-        }
-        subCategoryId = subCategory.id;
-      }
+      // Resolve reference IDs from pre-loaded maps (O(1))
+      const brandId = item.brandName?.trim()
+        ? brandMap.get(item.brandName.trim().toLowerCase())?.id
+        : undefined;
 
-      const priceStr = item.price.toString().replace(',','.');
+      const categoryId = item.categoryName?.trim()
+        ? categoryMap.get(item.categoryName.trim().toLowerCase())?.id
+        : undefined;
+
+      const subCategoryId = item.subCategoryName?.trim() && categoryId
+        ? subCategoryMap.get(`${item.subCategoryName.trim().toLowerCase()}|${categoryId}`)?.id
+        : undefined;
+
+      // Price calculations (unchanged)
+      const priceStr = item.price.toString().replace(',', '.');
       const filePrice = parseFloat(priceStr);
       const isPriceValid = !isNaN(filePrice);
 
       let costPrice = filePrice;
       let salePrice = filePrice;
       let gainValue = 0;
-      
+
       if (applyPriceFormula) {
         const d = discount ?? 0;
         const i = iva ?? 0;
@@ -221,18 +274,12 @@ export const createProductsBulk = async (
         gainValue = g;
       }
 
-      const amountStr = item.amount?.toString().replace(',','.');
+      const amountStr = item.amount?.toString().replace(',', '.');
       const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
-      
+
       const supplierConnect = supplierId ? { connect: { id: supplierId } } : undefined;
-      
-      // Check if product exists by code
-      const existingProduct = await db.product.findFirst({
-        where: {
-          code: item.code.toString(),
-          businessId: session.user.businessId,
-        },
-      });
+
+      const existingProduct = existingByCode.get(code);
 
       if (existingProduct) {
         const priceSame = isPriceValid &&
@@ -243,9 +290,7 @@ export const createProductsBulk = async (
           (supplierId === undefined && existingProduct.supplierId === null) ||
           supplierId === existingProduct.supplierId;
 
-        if (supplierSame && priceSame) {
-          continue;
-        }
+        if (supplierSame && priceSame) continue;
 
         if (updateExisting || updateOnly) {
           const updateData: Parameters<typeof db.product.update>[0]["data"] = {
@@ -269,20 +314,16 @@ export const createProductsBulk = async (
             updateData.amount = existingProduct.amount;
           }
 
-          await db.product.update({
+          bulkOps.push(db.product.update({
             where: { id: existingProduct.id },
             data: updateData,
-          });
+          }));
           updatedCount++;
         }
-        // If both updateExisting and updateOnly are false, do nothing (ignore)
       } else {
-        if (updateOnly) {
-          // Skip creation in updateOnly mode
-          continue;
-        }
-        // Create new product
-        await db.product.create({
+        if (updateOnly) continue;
+
+        bulkOps.push(db.product.create({
           data: {
             code: item.code.toString(),
             description: item.description.toString(),
@@ -294,13 +335,32 @@ export const createProductsBulk = async (
             brand: brandId ? { connect: { id: brandId } } : undefined,
             category: categoryId ? { connect: { id: categoryId } } : undefined,
             subCategory: subCategoryId ? { connect: { id: subCategoryId } } : undefined,
-            business: { connect: { id: session.user.businessId } },
+            business: { connect: { id: businessId } },
             catalog: item.catalog !== undefined ? item.catalog : true,
             details: item.details || null,
             supplier: supplierConnect,
           }
-        });
+        }));
         createdCount++;
+      }
+
+      // Flush operations in chunks
+      if (bulkOps.length >= CHUNK_SIZE) {
+        const results = await db.$transaction(bulkOps);
+        // Update existingByCode so subsequent chunks see newly created products
+        for (const result of results) {
+          if (result.code) existingByCode.set(result.code, result);
+        }
+        bulkOps.length = 0;
+        processedCodes.clear();
+      }
+    }
+
+    // Flush remaining operations
+    if (bulkOps.length > 0) {
+      const results = await db.$transaction(bulkOps);
+      for (const result of results) {
+        if (result.code) existingByCode.set(result.code, result);
       }
     }
 
@@ -315,8 +375,8 @@ export const createProductsBulk = async (
     if (totalCount) {
       try {
         await pusherServer.trigger(
-          `movements-${session.user.businessId}`, 
-          "refresh", 
+          `movements-${businessId}`,
+          "refresh",
           { type: "product-created" }
         );
       } catch {}
@@ -325,7 +385,7 @@ export const createProductsBulk = async (
     try {
       revalidatePath("/stock");
     } catch {}
-    
+
     if (updatedCount > 0) {
       return { success: `Se actualizaron ${updatedCount} productos y se crearon ${createdCount} productos exitosamente` };
     }
