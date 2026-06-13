@@ -1,5 +1,5 @@
 export type ActionResult<T = void> =
-  | { success: true; data?: T; message?: string }
+  | { success: true; data: T; message?: string }
   | { success: false; error: string; code?: ErrorCode };
 
 export type ErrorCode =
@@ -11,7 +11,7 @@ export type ErrorCode =
   | "VALIDATION_ERROR"
   | "INTERNAL_ERROR";
 
-export const ok = <T>(data?: T, message?: string): ActionResult<T> => ({
+export const ok = <T>(data: T, message?: string): ActionResult<T> => ({
   success: true,
   data,
   message,
