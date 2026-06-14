@@ -30,6 +30,7 @@ export const metadata: Metadata = {
 import { Toaster } from "sonner";
 
 import { AuthProvider } from "@/components/auth/SessionProvider";
+import { WebVitals } from "@/components/WebVitals";
 
 export default function RootLayout({
   children,
@@ -53,6 +54,7 @@ export default function RootLayout({
             <NavigationMenuHeader />
             <PaymentStatusGuard />
             {children}
+            <WebVitals />
             <Toaster position="bottom-right" />
                 </div>
         </FiltersProvider>

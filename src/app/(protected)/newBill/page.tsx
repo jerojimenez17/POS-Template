@@ -8,8 +8,10 @@ import Spinner from "@/components/ui/Spinner";
 import { getActiveSession } from "@/actions/cashbox";
 import { SessionManager } from "@/components/cashbox/SessionManager";
 const NewBillPage = async () => {
-  const session = await auth();
-  const activeSessionResult = await getActiveSession();
+  const [session, activeSessionResult] = await Promise.all([
+    auth(),
+    getActiveSession(),
+  ]);
   const hasActiveSession = activeSessionResult.success && activeSessionResult.data !== null;
 
   let ptoVentas: number[] = [];
