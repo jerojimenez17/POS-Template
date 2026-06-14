@@ -25,6 +25,15 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "Stock.ia",
   description: "A SaaS for Point of Sales",
+  other: {
+    "theme-color": "#0f172a",
+  },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 import { Toaster } from "sonner";
@@ -41,6 +50,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className="dark">
       <head>
         <meta name="color-scheme" content="dark light" />
+        <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
+        <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
         <link rel="icon" type="image/png" href="/LOGO.png" />
       </head>
           <body
