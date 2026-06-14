@@ -170,3 +170,15 @@
     @apply bg-background text-foreground;
   }
 }
+
+@utility prose-heading {
+  @apply font-semibold tracking-tight;
+}
+
+@utility page-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+@utility card-grid {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4;
+}
