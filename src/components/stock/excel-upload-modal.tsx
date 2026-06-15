@@ -112,87 +112,112 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      const sheetName = workbook.SheetNames[0];
-      const firstSheet = workbook.Sheets[sheetName];
       
-      console.log("Leyendo hoja:", sheetName);
-      
-      const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as unknown[][];
-      console.log("Filas encontradas en el archivo:", jsonData.length);
-      
-      if (jsonData.length === 0) {
-        toast.error("El archivo Excel parece estar vacío");
-        setLoading(false);
-        return;
-      }
+      console.log("Hojas encontradas:", workbook.SheetNames.join(", "));
+
+      // Auto-detect column index from header text
+      const headerKeywords: Record<string, string[]> = {
+        code: ["código", "codigo", "cod", "code", "artículo", "articulo", "art", "sku"],
+        description: ["descripción", "descripcion", "desc", "producto", "detalle", "nombre", "name"],
+        price: ["precio", "price", "costo", "cost", "valor", "lista", "neto"],
+        amount: ["cantidad", "cant", "stock", "qty", "unidades"],
+        brand: ["marca", "brand"],
+        category: ["categoría", "categoria", "cat", "rubro"],
+        subCategory: ["subcategoría", "subcategoria", "sub", "subrubro"],
+      };
+
+      const detectColumns = (headerRow: unknown[]) => {
+        const detected: Record<string, number> = {
+          code: -1, description: -1, price: -1,
+          amount: -1, brand: -1, category: -1, subCategory: -1,
+        };
+        for (let col = 0; col < headerRow.length; col++) {
+          const cell = String(headerRow[col] ?? "").trim().toLowerCase();
+          if (!cell) continue;
+          for (const [field, keywords] of Object.entries(headerKeywords)) {
+            if (detected[field] === -1 && keywords.some(kw => cell.includes(kw))) {
+              detected[field] = col;
+              break;
+            }
+          }
+        }
+        return detected;
+      };
+
+      // Fallback: user-configured column indices
+      const fallbackIndices = {
+        code: getColIndex(colCode),
+        description: getColIndex(colDescription),
+        price: getColIndex(colPrice),
+        amount: getColIndex(colAmount),
+        brand: getColIndex(colBrand),
+        category: getColIndex(colCategory),
+        subCategory: getColIndex(colSubCategory),
+      };
 
       const parsedProducts: BulkProductInput[] = [];
-      
-      const sRow = Math.max(0, startRow - 1);
-      const eRow = endRow !== "" ? Math.min(jsonData.length, Number(endRow)) : jsonData.length;
 
-      const idxCode = getColIndex(colCode);
-      const idxDesc = getColIndex(colDescription);
-      const idxPrice = getColIndex(colPrice);
-      const idxAmount = getColIndex(colAmount);
-      const idxBrand = getColIndex(colBrand);
-      const idxCategory = getColIndex(colCategory);
-      const idxSubCategory = getColIndex(colSubCategory);
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
 
-      console.log("Mapeo de columnas (Indices):", { 
-        code: idxCode, 
-        desc: idxDesc, 
-        price: idxPrice, 
-        amount: idxAmount 
-      });
+        if (sheetRows.length === 0) {
+          console.log(`Hoja "${sheetName}" está vacía, saltando.`);
+          continue;
+        }
 
-      for (let i = sRow; i < eRow; i++) {
-        const row = jsonData[i];
-        if (!row || row.length === 0) {
-            console.log(`Fila ${i + 1} está vacía, saltando.`);
+        // Try auto-detecting columns from the first row of this sheet
+        const headerRow = sheetRows[0] || [];
+        const detected = detectColumns(headerRow);
+        const hasAutoDetect = detected.code !== -1 && detected.description !== -1 && detected.price !== -1;
+
+        const indices = hasAutoDetect ? detected : fallbackIndices;
+        const dataStartRow = hasAutoDetect ? 1 : Math.max(0, startRow - 1);
+
+        console.log(`Hoja "${sheetName}": ${sheetRows.length} filas, ` +
+          `columnas ${hasAutoDetect ? "auto-detectadas" : "manuales"}: ` +
+          `cod=${indices.code}, desc=${indices.description}, precio=${indices.price}`);
+
+        const eRow = endRow !== "" && !hasAutoDetect
+          ? Math.min(sheetRows.length, Number(endRow))
+          : sheetRows.length;
+
+        for (let i = dataStartRow; i < eRow; i++) {
+          const row = sheetRows[i];
+          if (!row || row.length === 0) continue;
+
+          const codeVal = row[indices.code];
+          const descVal = row[indices.description];
+          const priceVal = row[indices.price];
+
+          if (codeVal === undefined || descVal === undefined || priceVal === undefined ||
+              codeVal === "" || descVal === "") {
             continue;
+          }
+
+          const amountVal = indices.amount >= 0 ? row[indices.amount] : null;
+          let parsedAmount: number | null = null;
+          
+          if (amountVal !== undefined && amountVal !== null && amountVal !== '') {
+            parsedAmount = typeof amountVal === 'number' 
+              ? (amountVal as number) 
+              : parseFloat(String(amountVal).replace(',', '.'));
+          }
+
+          parsedProducts.push({
+            code: String(codeVal),
+            description: String(descVal),
+            price: typeof priceVal === 'number' ? (priceVal as number) : parseFloat(String(priceVal).replace(',', '.')),
+            amount: parsedAmount,
+            brandName: indices.brand >= 0 ? String(row[indices.brand] || "") : undefined,
+            categoryName: indices.category >= 0 ? String(row[indices.category] || "") : undefined,
+            subCategoryName: indices.subCategory >= 0 ? String(row[indices.subCategory] || "") : undefined,
+          });
         }
-
-        const codeVal = row[idxCode];
-        const descVal = row[idxDesc];
-        const priceVal = row[idxPrice];
-
-        // Debugging first few rows
-        if (i < sRow + 5) {
-            console.log(`Fila ${i + 1} data:`, { codeVal, descVal, priceVal });
-        }
-
-        if (codeVal === undefined || descVal === undefined || priceVal === undefined || 
-            codeVal === "" || descVal === "") {
-           // Skip invalid rows missing mandatory fields
-           continue; 
-        }
-
-        parsedProducts.push({
-          code: String(codeVal),
-          description: String(descVal),
-          price: typeof priceVal === 'number' ? priceVal : parseFloat(String(priceVal).replace(',', '.')),
-          amount: idxAmount >= 0 ? (row[idxAmount] !== undefined && row[idxAmount] !== null && row[idxAmount] !== '' ? (typeof row[idxAmount] === 'number' ? row[idxAmount] : parseFloat(String(row[idxAmount]).replace(',', '.'))) : null) : null,
-          brandName: idxBrand >= 0 ? String(row[idxBrand] || "") : undefined,
-          categoryName: idxCategory >= 0 ? String(row[idxCategory] || "") : undefined,
-          subCategoryName: idxSubCategory >= 0 ? String(row[idxSubCategory] || "") : undefined,
-        });
       }
 
       if (parsedProducts.length === 0) {
-        // Find the first non-empty row to give a helpful error
-        let sampleRow = "";
-        for (let i = sRow; i < eRow; i++) {
-          const row = jsonData[i];
-          if (row && row.length > 0) {
-             const c = row[idxCode];
-             const d = row[idxDesc];
-             const p = row[idxPrice];
-             sampleRow = `Ejemplo fila ${i+1}: Código=${c ?? 'vacío'}, Desc=${d ?? 'vacío'}, Precio=${p ?? 'vacío'}.`;
-             break;
-          }
-        }
-        setErrorMsg(`No se encontraron productos válidos. Verifique las letras de las columnas. ${sampleRow}`);
+        setErrorMsg("No se encontraron productos válidos en ninguna hoja. Verifique las columnas o los encabezados del archivo.");
         setLoading(false);
         return;
       }
@@ -232,7 +257,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
     setProgressPercent(0);
 
     const totalProducts = parsedProductsState.length;
-    const batchSize = 200;
+    const batchSize = 1000;
     let totalCreated = 0;
     let totalUpdated = 0;
 

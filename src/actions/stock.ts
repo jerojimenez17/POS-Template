@@ -243,58 +243,130 @@ export const processBulkProductBatch = async (
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
+  const generateCuid = () => {
+    return "c" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  };
+
   try {
+    const businessId = session.user.businessId;
     let createdCount = 0;
     let updatedCount = 0;
-    
-    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
-    
+
+    // 1. Gather all unique names for Brands, Categories, and Subcategories
+    const brandNames = Array.from(new Set(productsData.map(p => p.brandName?.trim()).filter(Boolean))) as string[];
+    const categoryNames = Array.from(new Set(productsData.map(p => p.categoryName?.trim()).filter(Boolean))) as string[];
+    const subCategoryNames = Array.from(new Set(productsData.map(p => p.subCategoryName?.trim()).filter(Boolean))) as string[];
+
+    // 2. Resolve Brands
+    const existingBrands = await db.brand.findMany({
+      where: { businessId, name: { in: brandNames, mode: "insensitive" } }
+    });
+    const existingBrandNamesLower = new Set(existingBrands.map(b => b.name.trim().toLowerCase()));
+    const missingBrandNames = brandNames.filter(name => !existingBrandNamesLower.has(name.toLowerCase()));
+
+    if (missingBrandNames.length > 0) {
+      await db.brand.createMany({
+        data: missingBrandNames.map(name => ({ name: name.trim(), businessId })),
+        skipDuplicates: true
+      });
+    }
+
+    const allBrands = await db.brand.findMany({
+      where: { businessId, name: { in: brandNames, mode: "insensitive" } }
+    });
+    const brandMap = new Map(allBrands.map(b => [b.name.trim().toLowerCase(), b.id]));
+
+    // 3. Resolve Categories
+    const existingCategories = await db.category.findMany({
+      where: { businessId, name: { in: categoryNames, mode: "insensitive" } }
+    });
+    const existingCategoryNamesLower = new Set(existingCategories.map(c => c.name.trim().toLowerCase()));
+    const missingCategoryNames = categoryNames.filter(name => !existingCategoryNamesLower.has(name.toLowerCase()));
+
+    if (missingCategoryNames.length > 0) {
+      await db.category.createMany({
+        data: missingCategoryNames.map(name => ({ name: name.trim(), businessId })),
+        skipDuplicates: true
+      });
+    }
+
+    const allCategories = await db.category.findMany({
+      where: { businessId, name: { in: categoryNames, mode: "insensitive" } }
+    });
+    const categoryMap = new Map(allCategories.map(c => [c.name.trim().toLowerCase(), c.id]));
+
+    // 4. Resolve Subcategories
+    const existingSubcategories = await db.subcategory.findMany({
+      where: { businessId, name: { in: subCategoryNames, mode: "insensitive" } }
+    });
+    const subcategoryMap = new Map(existingSubcategories.map(sc => [`${sc.categoryId}:${sc.name.trim().toLowerCase()}`, sc.id]));
+
+    const missingSubcategoriesData: { name: string; categoryId: string; businessId: string }[] = [];
+    const seenSubcategoryKeys = new Set<string>();
+
     for (const item of productsData) {
-      let brandId = null;
-      if (item.brandName && item.brandName.trim() !== "") {
-        let brand = await db.brand.findFirst({
-          where: { name: { equals: item.brandName.trim(), mode: "insensitive" }, businessId: session.user.businessId }
-        });
-        if (!brand) {
-          brand = await db.brand.create({
-            data: { name: item.brandName.trim(), businessId: session.user.businessId }
-          });
-        }
-        brandId = brand.id;
-      }
-
-      let categoryId = null;
-      if (item.categoryName && item.categoryName.trim() !== "") {
-        let category = await db.category.findFirst({
-          where: { name: { equals: item.categoryName.trim(), mode: "insensitive" }, businessId: session.user.businessId }
-        });
-        if (!category) {
-          category = await db.category.create({
-            data: { name: item.categoryName.trim(), businessId: session.user.businessId }
-          });
-        }
-        categoryId = category.id;
-      }
-
-      let subCategoryId = null;
-      if (item.subCategoryName && item.subCategoryName.trim() !== "" && categoryId) {
-        let subCategory = await db.subcategory.findFirst({
-          where: { 
-            name: { equals: item.subCategoryName.trim(), mode: "insensitive" }, 
-            categoryId: categoryId,
-            businessId: session.user.businessId 
+      if (item.categoryName && item.categoryName.trim() !== "" && item.subCategoryName && item.subCategoryName.trim() !== "") {
+        const catNameLower = item.categoryName.trim().toLowerCase();
+        const subNameTrimmed = item.subCategoryName.trim();
+        const subNameLower = subNameTrimmed.toLowerCase();
+        const categoryId = categoryMap.get(catNameLower);
+        if (categoryId) {
+          const key = `${categoryId}:${subNameLower}`;
+          if (!subcategoryMap.has(key) && !seenSubcategoryKeys.has(key)) {
+            seenSubcategoryKeys.add(key);
+            missingSubcategoriesData.push({
+              name: subNameTrimmed,
+              categoryId,
+              businessId
+            });
           }
-        });
-        if (!subCategory) {
-          subCategory = await db.subcategory.create({
-            data: { 
-              name: item.subCategoryName.trim(), 
-              categoryId: categoryId,
-              businessId: session.user.businessId 
-            }
-          });
         }
-        subCategoryId = subCategory.id;
+      }
+    }
+
+    if (missingSubcategoriesData.length > 0) {
+      await db.subcategory.createMany({
+        data: missingSubcategoriesData,
+        skipDuplicates: true
+      });
+    }
+
+    const allSubcategories = await db.subcategory.findMany({
+      where: { businessId, name: { in: subCategoryNames, mode: "insensitive" } }
+    });
+    const subcategoryMapUpdated = new Map(allSubcategories.map(sc => [`${sc.categoryId}:${sc.name.trim().toLowerCase()}`, sc.id]));
+
+    // 5. Fetch Existing Products
+    const codes = productsData.map(p => p.code.toString());
+    const existingProducts = await db.product.findMany({
+      where: { businessId, code: { in: codes } }
+    });
+    const existingProductMap = new Map<string, typeof existingProducts[number]>();
+    for (const p of existingProducts) {
+      if (p.code !== null && p.code !== undefined) {
+        existingProductMap.set(p.code.toString(), p);
+      }
+    }
+
+    // 6. Partition Products to Create/Update
+    const toCreate: Prisma.ProductCreateManyInput[] = [];
+    const updatePromises: any[] = [];
+    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
+
+    for (const item of productsData) {
+      let resolvedBrandId: string | null = null;
+      if (item.brandName && item.brandName.trim() !== "") {
+        resolvedBrandId = brandMap.get(item.brandName.trim().toLowerCase()) || null;
+      }
+
+      let resolvedCategoryId: string | null = null;
+      let resolvedSubCategoryId: string | null = null;
+      if (item.categoryName && item.categoryName.trim() !== "") {
+        resolvedCategoryId = categoryMap.get(item.categoryName.trim().toLowerCase()) || null;
+        if (resolvedCategoryId && item.subCategoryName && item.subCategoryName.trim() !== "") {
+          const subKey = `${resolvedCategoryId}:${item.subCategoryName.trim().toLowerCase()}`;
+          resolvedSubCategoryId = subcategoryMapUpdated.get(subKey) || null;
+        }
       }
 
       const priceStr = item.price.toString().replace(',','.');
@@ -316,15 +388,8 @@ export const processBulkProductBatch = async (
 
       const amountStr = item.amount?.toString().replace(',','.');
       const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
-      
-      const supplierConnect = supplierId ? { connect: { id: supplierId } } : undefined;
-      
-      const existingProduct = await db.product.findFirst({
-        where: {
-          code: item.code.toString(),
-          businessId: session.user.businessId,
-        },
-      });
+
+      const existingProduct = existingProductMap.get(item.code.toString());
 
       if (existingProduct) {
         const priceSame = isPriceValid &&
@@ -340,19 +405,19 @@ export const processBulkProductBatch = async (
         }
 
         if (updateExisting || updateOnly) {
-          const updateData: Parameters<typeof db.product.update>[0]["data"] = {
+          const updateData: Prisma.ProductUpdateInput = {
             description: item.description.toString(),
             price: isPriceValid ? costPrice : 0,
             salePrice: isPriceValid ? salePrice : 0,
             gain: applyPriceFormula ? gainValue : existingProduct.gain,
             unit: item.unit || "unidades",
-            brand: brandId ? { connect: { id: brandId } } : { disconnect: true },
-            category: categoryId ? { connect: { id: categoryId } } : { disconnect: true },
-            subCategory: subCategoryId ? { connect: { id: subCategoryId } } : { disconnect: true },
+            brand: resolvedBrandId ? { connect: { id: resolvedBrandId } } : { disconnect: true },
+            category: resolvedCategoryId ? { connect: { id: resolvedCategoryId } } : { disconnect: true },
+            subCategory: resolvedSubCategoryId ? { connect: { id: resolvedSubCategoryId } } : { disconnect: true },
             last_update: new Date(),
             catalog: item.catalog !== undefined ? item.catalog : undefined,
             details: item.details !== undefined ? item.details : undefined,
-            supplier: supplierConnect,
+            supplier: supplierId ? { connect: { id: supplierId } } : { disconnect: true },
           };
 
           if (item.amount !== null && item.amount !== undefined) {
@@ -361,36 +426,49 @@ export const processBulkProductBatch = async (
             updateData.amount = existingProduct.amount;
           }
 
-          await db.product.update({
+          updatePromises.push(db.product.update({
             where: { id: existingProduct.id },
             data: updateData,
-          });
+          }));
           updatedCount++;
         }
       } else {
         if (updateOnly) {
           continue;
         }
-        await db.product.create({
-          data: {
-            code: item.code.toString(),
-            description: item.description.toString(),
-            price: isPriceValid ? costPrice : 0,
-            salePrice: isPriceValid ? salePrice : 0,
-            gain: applyPriceFormula ? gainValue : 0,
-            amount: isNaN(parsedAmount) ? 0 : parsedAmount,
-            unit: item.unit || "unidades",
-            brand: brandId ? { connect: { id: brandId } } : undefined,
-            category: categoryId ? { connect: { id: categoryId } } : undefined,
-            subCategory: subCategoryId ? { connect: { id: subCategoryId } } : undefined,
-            business: { connect: { id: session.user.businessId } },
-            catalog: item.catalog !== undefined ? item.catalog : true,
-            details: item.details || null,
-            supplier: supplierConnect,
-          }
+
+        toCreate.push({
+          id: generateCuid(),
+          code: item.code.toString(),
+          description: item.description.toString(),
+          price: isPriceValid ? costPrice : 0,
+          salePrice: isPriceValid ? salePrice : 0,
+          gain: applyPriceFormula ? gainValue : 0,
+          amount: isNaN(parsedAmount) ? 0 : parsedAmount,
+          unit: item.unit || "unidades",
+          brandId: resolvedBrandId,
+          categoryId: resolvedCategoryId,
+          subCategoryId: resolvedSubCategoryId,
+          businessId: businessId,
+          catalog: item.catalog !== undefined ? item.catalog : true,
+          details: item.details || null,
+          supplierId: supplierId || null,
+          creation_date: new Date(),
+          last_update: new Date(),
         });
         createdCount++;
       }
+    }
+
+    // 7. Write to database in bulk
+    if (toCreate.length > 0) {
+      await db.product.createMany({
+        data: toCreate,
+      });
+    }
+
+    if (updatePromises.length > 0) {
+      await db.$transaction(updatePromises);
     }
 
     return { createdCount, updatedCount };
