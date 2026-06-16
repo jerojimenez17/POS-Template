@@ -736,7 +736,7 @@ export const getProductsPaginated = async (params: {
     const [products, total] = await db.$transaction([
       db.product.findMany({
         where,
-        include: { supplier: true, brand: true, category: true, subCategory: true },
+        include: { brand: { select: { id: true, name: true } } },
         orderBy: { description: "asc" },
         skip,
         take: pageSize,
