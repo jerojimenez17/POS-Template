@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { CheckSquare, Square, Printer, Percent, ArrowLeft, Filter, X } from "lucide-react";
-import { getProductsFiltered, bulkUpdatePrices } from "@/actions/stock";
+import { getProductsFiltered, bulkUpdatePrices, getSuppliersForFilter } from "@/actions/stock";
 import { getCategories } from "@/actions/categories";
 import { getBrands } from "@/actions/brands";
 import { ProductExtended } from "@/components/stock/product-form";
@@ -16,6 +16,7 @@ interface FilterState {
   categoryId: string;
   brandId: string;
   unit: string;
+  supplierId: string;
 }
 
 const BulkUpdatePage = () => {
@@ -24,11 +25,14 @@ const BulkUpdatePage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     search: "",
     categoryId: "",
     brandId: "",
     unit: "",
+    supplierId: "",
   });
   const [loading, setLoading] = useState(false);
   const [percentage, setPercentage] = useState<string>("");
@@ -43,6 +47,7 @@ const BulkUpdatePage = () => {
         categoryId: filters.categoryId || undefined,
         brandId: filters.brandId || undefined,
         unit: filters.unit || undefined,
+        supplierId: filters.supplierId || undefined,
       });
       setFilteredProducts(data as ProductExtended[]);
       setSelectedIds(new Set(data.map((p: ProductExtended) => p.id)));
@@ -55,17 +60,18 @@ const BulkUpdatePage = () => {
 
   useEffect(() => {
     loadFiltersData();
-    fetchProducts();
-  }, [fetchProducts]);
+  }, []);
 
   const loadFiltersData = async () => {
     try {
-      const [cats, brnds] = await Promise.all([
+      const [cats, brnds, supps] = await Promise.all([
         getCategories(),
         getBrands(),
+        getSuppliersForFilter(),
       ]);
       setCategories(cats as { id: string; name: string }[]);
       setBrands(brnds as { id: string; name: string }[]);
+      setSuppliers(supps as { id: string; name: string }[]);
     } catch (error) {
       console.error("Error loading filter data:", error);
     }
@@ -217,7 +223,22 @@ const BulkUpdatePage = () => {
                   </select>
                 </div>
 
-                <Button onClick={() => { fetchProducts(); setIsFiltersOpen(false); }} variant="default" className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                <div className="space-y-1.5">
+                  <label htmlFor="supplier-filter" className="text-sm font-medium">Proveedor</label>
+                  <select
+                    id="supplier-filter"
+                    value={filters.supplierId}
+                    onChange={(e) => setFilters({ ...filters, supplierId: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-800 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none transition-all"
+                  >
+                    <option value="">Todos los proveedores</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <Button onClick={() => { setHasLoaded(true); fetchProducts(); setIsFiltersOpen(false); }} variant="default" className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
                   Aplicar Filtros
                 </Button>
               </div>
@@ -307,6 +328,16 @@ const BulkUpdatePage = () => {
               <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-500">
                 <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
                 <p className="font-medium">Cargando productos…</p>
+              </div>
+            ) : !hasLoaded ? (
+              <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-500">
+                <div className="p-6 bg-gray-50 dark:bg-gray-800 rounded-full">
+                  <Filter className="h-12 w-12 opacity-20" />
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">Seleccioná filtros para comenzar</p>
+                  <p className="text-sm">Aplicá filtros en el panel lateral para cargar productos.</p>
+                </div>
               </div>
             ) : filteredProducts.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-500">

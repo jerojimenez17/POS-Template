@@ -824,6 +824,7 @@ export const getProductsFiltered = async (filters: {
   categoryId?: string;
   brandId?: string;
   unit?: string;
+  supplierId?: string;
 }) => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
@@ -843,6 +844,7 @@ export const getProductsFiltered = async (filters: {
         ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
         ...(filters.brandId ? { brandId: filters.brandId } : {}),
         ...(filters.unit ? { unit: filters.unit } : {}),
+        ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },
       orderBy: { description: "asc" },
