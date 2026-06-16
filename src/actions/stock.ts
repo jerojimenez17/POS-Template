@@ -863,27 +863,18 @@ export const bulkUpdatePrices = async (
   try {
     const factor = (100 + percentage) / 100;
 
-    const products = await Promise.all(
-      productIds.map((id) => db.product.findUnique({ where: { id } }))
-    );
+    const products = await db.product.findMany({
+      where: { id: { in: productIds }, businessId: session.user.businessId },
+      select: { id: true, price: true, salePrice: true },
+    });
 
-    const updates: ReturnType<typeof db.product.update>[] = [];
-
-    products.forEach((product, index) => {
-      if (!product) return;
-
+    const updates = products.map((product) => {
       const newSalePrice = product.salePrice * factor;
       const gain = product.price === 0 ? 0 : ((newSalePrice - product.price) / product.price) * 100;
-
-      updates.push(
-        db.product.update({
-          where: { id: productIds[index] },
-          data: {
-            salePrice: { multiply: factor },
-            gain: gain,
-          },
-        })
-      );
+      return db.product.update({
+        where: { id: product.id },
+        data: { salePrice: newSalePrice, gain },
+      });
     });
 
     await db.$transaction(updates);
@@ -930,41 +921,23 @@ export const bulkUpdateAmounts = async (
   if (!session?.user?.businessId) return { success: false, error: "No autorizado" };
 
   try {
-    const products = await Promise.all(
-      productIds.map((id) => db.product.findUnique({ where: { id } }))
-    );
+    let amountData: number | { increment: number } | { decrement: number };
+    switch (mode) {
+      case 'set':
+        amountData = amountChange;
+        break;
+      case 'add':
+        amountData = { increment: amountChange };
+        break;
+      case 'subtract':
+        amountData = { decrement: amountChange };
+        break;
+    }
 
-    const updates: ReturnType<typeof db.product.update>[] = [];
-
-    products.forEach((product, index) => {
-      if (!product) return;
-
-      let amountData: number | { decrement: number } | { increment: number };
-
-      switch (mode) {
-        case 'set':
-          amountData = amountChange;
-          break;
-        case 'add':
-          amountData = { increment: amountChange };
-          break;
-        case 'subtract':
-          amountData = { decrement: amountChange };
-          break;
-      }
-
-      updates.push(
-        db.product.update({
-          where: { id: productIds[index] },
-          data: {
-            amount: amountData,
-            last_update: new Date(),
-          },
-        })
-      );
+    await db.product.updateMany({
+      where: { id: { in: productIds }, businessId: session.user.businessId },
+      data: { amount: amountData, last_update: new Date() },
     });
-
-    await db.$transaction(updates);
 
     revalidatePath("/stock");
     return { success: true };
