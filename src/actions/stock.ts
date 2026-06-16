@@ -5,9 +5,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "../../auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { Product, Prisma } from "@prisma/client";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { storage } from "@/firebase/config";
-import { v4 } from "uuid";
+
 
 // Supplier Actions
 
@@ -565,7 +563,7 @@ interface UpdateProductInput {
   supplierId?: string | null;
   catalog?: boolean;
   details?: string | null;
-  newImages?: File[];
+  imageUrls?: string[];
   imagesToDelete?: string[];
 }
 
@@ -575,16 +573,9 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
 
   try {
     if (data.imagesToDelete && data.imagesToDelete.length > 0) {
-      const imagesToDelete = await db.productImage.findMany({
-        where: { id: { in: data.imagesToDelete }, productId: id },
-      });
       await db.productImage.deleteMany({
         where: { id: { in: data.imagesToDelete }, productId: id },
       });
-      for (const img of imagesToDelete) {
-        const imageRef = ref(storage, img.url);
-        deleteObject(imageRef).catch(() => { });
-      }
     }
 
     const product = await db.product.update({
@@ -610,16 +601,10 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
       },
     });
 
-    if (data.newImages && data.newImages.length > 0) {
-      const imageRows: { productId: string; url: string }[] = [];
-      for (const file of data.newImages) {
-        const imageName = `${file.name}_${v4()}`;
-        const storageRef = ref(storage, `/productImage/${imageName}`);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        imageRows.push({ productId: id, url });
-      }
-      await db.productImage.createMany({ data: imageRows });
+    if (data.imageUrls && data.imageUrls.length > 0) {
+      await db.productImage.createMany({
+        data: data.imageUrls.map((url) => ({ productId: id, url })),
+      });
     }
 
     await pusherServer.trigger(
@@ -694,7 +679,7 @@ export const getProducts = async () => {
   try {
     return await db.product.findMany({
       where: { businessId: session.user.businessId },
-      include: { supplier: true, brand: true, category: true, subCategory: true },
+      include: { supplier: true, brand: true, category: true, subCategory: true, images: { select: { id: true, url: true } } },
       orderBy: { description: 'asc' }
     });
   } catch (error) {
@@ -736,7 +721,10 @@ export const getProductsPaginated = async (params: {
     const [products, total] = await db.$transaction([
       db.product.findMany({
         where,
-        include: { brand: { select: { id: true, name: true } } },
+        include: {
+          brand: { select: { id: true, name: true } },
+          images: { select: { id: true, url: true } },
+        },
         orderBy: { description: "asc" },
         skip,
         take: pageSize,
