@@ -22,26 +22,12 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-vi.mock("firebase/storage", () => ({
-  ref: vi.fn().mockReturnValue("mock-ref"),
-  uploadBytes: vi.fn().mockResolvedValue({}),
-  getDownloadURL: vi.fn().mockResolvedValue("https://firebase.com/image.jpg"),
-  deleteObject: vi.fn().mockResolvedValue({}),
-}));
-
-vi.mock("@/firebase/config", () => ({
-  storage: {},
-}));
-
-const createMockFile = (name: string): File =>
-  new File(["dummy"], name, { type: "image/jpeg" });
-
 describe("newProduct — multi-image support", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("should create ProductImage rows when newImages are provided", async () => {
+  it("should create ProductImage rows when imageUrls are provided", async () => {
     const { db } = await import("@/lib/db");
 
     const payload = {
@@ -62,7 +48,7 @@ describe("newProduct — multi-image support", () => {
       salePrice: 120,
       catalog: true,
       details: "",
-      newImages: [createMockFile("photo1.jpg"), createMockFile("photo2.jpg")],
+      imageUrls: ["https://firebase.com/photo1.jpg", "https://firebase.com/photo2.jpg"],
     };
 
     const result = await newProduct(payload);
@@ -70,13 +56,13 @@ describe("newProduct — multi-image support", () => {
     expect(result).toEqual({ success: "Producto cargado con éxito" });
     expect(db.productImage.createMany).toHaveBeenCalledWith({
       data: [
-        { productId: "product-1", url: "https://firebase.com/image.jpg" },
-        { productId: "product-1", url: "https://firebase.com/image.jpg" },
+        { productId: "product-1", url: "https://firebase.com/photo1.jpg" },
+        { productId: "product-1", url: "https://firebase.com/photo2.jpg" },
       ],
     });
   });
 
-  it("should create product without images when newImages is empty", async () => {
+  it("should create product without images when imageUrls is empty", async () => {
     const { db } = await import("@/lib/db");
 
     const payload = {
@@ -97,7 +83,7 @@ describe("newProduct — multi-image support", () => {
       salePrice: 55,
       catalog: true,
       details: "",
-      newImages: [],
+      imageUrls: [],
     };
 
     const result = await newProduct(payload);
@@ -106,7 +92,7 @@ describe("newProduct — multi-image support", () => {
     expect(db.productImage.createMany).not.toHaveBeenCalled();
   });
 
-  it("should preserve legacy image when no newImages provided", async () => {
+  it("should preserve legacy image when no imageUrls provided", async () => {
     const { db } = await import("@/lib/db");
 
     const payload = {
@@ -162,25 +148,25 @@ describe("updateProduct — multi-image support", () => {
     });
   });
 
-  it("should create ProductImage rows when newImages are provided on update", async () => {
+  it("should create ProductImage rows when imageUrls are provided on update", async () => {
     const { db } = await import("@/lib/db");
 
     await updateProduct("product-1", {
-      newImages: [createMockFile("new1.jpg")],
+      imageUrls: ["https://firebase.com/new1.jpg"],
     });
 
     expect(db.productImage.createMany).toHaveBeenCalledWith({
       data: [
-        { productId: "product-1", url: "https://firebase.com/image.jpg" },
+        { productId: "product-1", url: "https://firebase.com/new1.jpg" },
       ],
     });
   });
 
-  it("should handle both newImages and imagesToDelete in the same call", async () => {
+  it("should handle both imageUrls and imagesToDelete in the same call", async () => {
     const { db } = await import("@/lib/db");
 
     await updateProduct("product-1", {
-      newImages: [createMockFile("new1.jpg")],
+      imageUrls: ["https://firebase.com/new1.jpg"],
       imagesToDelete: ["old-img-id"],
     });
 
