@@ -736,7 +736,7 @@ export const getProductsPaginated = async (params: {
     const [products, total] = await db.$transaction([
       db.product.findMany({
         where,
-        include: { supplier: true, brand: true, category: true, subCategory: true },
+        include: { brand: { select: { id: true, name: true } } },
         orderBy: { description: "asc" },
         skip,
         take: pageSize,
@@ -824,6 +824,7 @@ export const getProductsFiltered = async (filters: {
   categoryId?: string;
   brandId?: string;
   unit?: string;
+  supplierId?: string;
 }) => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
@@ -843,6 +844,7 @@ export const getProductsFiltered = async (filters: {
         ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
         ...(filters.brandId ? { brandId: filters.brandId } : {}),
         ...(filters.unit ? { unit: filters.unit } : {}),
+        ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },
       orderBy: { description: "asc" },

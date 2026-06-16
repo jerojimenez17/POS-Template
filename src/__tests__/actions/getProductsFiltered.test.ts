@@ -140,6 +140,38 @@ describe("getProductsFiltered Server Action", () => {
     );
   });
 
+  it("should return products filtered by supplierId", async () => {
+    const { db } = await import("@/lib/db");
+
+    const mockProducts = [
+      {
+        id: "product-1",
+        code: "P001",
+        description: "Product A",
+        salePrice: 100,
+        price: 60,
+        unit: "unidades",
+        supplier: { id: "supplier-1", name: "Proveedor A" },
+        brand: null,
+        category: null,
+        subCategory: null,
+      },
+    ];
+
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
+
+    const result = await getProductsFiltered({ supplierId: "supplier-1" });
+
+    expect(result).toHaveLength(1);
+    expect(db.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          supplierId: "supplier-1",
+        }),
+      })
+    );
+  });
+
   it("should return products filtered by unit", async () => {
     const { db } = await import("@/lib/db");
 
