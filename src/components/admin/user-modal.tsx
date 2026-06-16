@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -62,25 +62,25 @@ export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalPr
   });
 
   // Effect to reset form when user prop changes
-  useState(() => {
-     if (user) {
-         form.reset({
-             name: user.name || "",
-             email: user.email || "",
-             password: "",
-             role: user.role || "USER",
-             cashboxId: user.cashboxId || "",
-         })
-     } else {
-         form.reset({
-             name: "",
-             email: "",
-             password: "",
-             role: "USER",
-             cashboxId: "",
-         })
-     }
-  });
+  useEffect(() => {
+    if (user) {
+      form.reset({
+        name: user.name || "",
+        email: user.email || "",
+        password: "",
+        role: user.role || "USER",
+        cashboxId: user.cashboxId || "",
+      })
+    } else {
+      form.reset({
+        name: "",
+        email: "",
+        password: "",
+        role: "USER",
+        cashboxId: "",
+      })
+    }
+  }, [user, form]);
 
 
   const onSubmit = (values: z.infer<typeof BusinessUserSchema>) => {
@@ -111,10 +111,10 @@ export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalPr
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-        if (!open) {
-             onClose();
-             form.reset();
-        }
+      if (!open) {
+        onClose();
+        form.reset();
+      }
     }}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
@@ -158,7 +158,7 @@ export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalPr
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Contraseña {isEditing && "(Opcional)"}</FormLabel>
+                  <FormLabel>Contraseña {isEditing && "(No ingresar si inicia con Google)"}</FormLabel>
                   <FormControl>
                     <Input {...field} type="password" disabled={isPending} placeholder="******" />
                   </FormControl>
