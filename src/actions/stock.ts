@@ -792,7 +792,7 @@ export const getProductsBySearch = async (query: string, supplierId?: string) =>
         ...(supplierId ? { supplierId } : {}),
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },
-      take: 40, // Limit results for performance
+      take: 300, // Limit results for performance
     });
 
     return products;
