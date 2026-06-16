@@ -39,6 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+nul
 .opencode/skills/vercel-composition-patterns/AGENTS.md
 .opencode/skills/vercel-composition-patterns/SKILL.md
 .opencode/skills/vercel-composition-patterns/rules/architecture-avoid-boolean-props.md

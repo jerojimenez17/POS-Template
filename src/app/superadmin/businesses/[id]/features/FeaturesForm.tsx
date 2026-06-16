@@ -37,6 +37,7 @@ interface FeaturesFormProps {
     hasPublicCatalog: boolean;
     hasClientLedger: boolean;
     hasMultiCashbox: boolean;
+    hasSupplierFilter: boolean;
     maxUsers: number;
     maxProducts: number;
   };
@@ -52,6 +53,7 @@ interface PlanPreset {
   hasPublicCatalog: boolean;
   hasClientLedger: boolean;
   hasMultiCashbox: boolean;
+  hasSupplierFilter: boolean;
   maxUsers: number;
   maxProducts: number;
   featuresList: { text: string; included: boolean }[];
@@ -70,6 +72,7 @@ const PRESETS: PlanPreset[] = [
     hasPublicCatalog: false,
     hasClientLedger: false,
     hasMultiCashbox: false,
+    hasSupplierFilter: false,
     maxUsers: 1,
     maxProducts: 100,
     accentColor: "from-blue-500/10 to-indigo-500/5 text-blue-500 border-blue-200/50 dark:border-blue-800/40",
@@ -81,6 +84,7 @@ const PRESETS: PlanPreset[] = [
       { text: "Catálogo Público Web", included: false },
       { text: "Cuentas Corrientes (Ledger)", included: false },
       { text: "Múltiples Cajas de Venta", included: false },
+      { text: "Filtro por Proveedor", included: false },
     ],
   },
   {
@@ -93,6 +97,7 @@ const PRESETS: PlanPreset[] = [
     hasPublicCatalog: true,
     hasClientLedger: false,
     hasMultiCashbox: false,
+    hasSupplierFilter: false,
     maxUsers: 5,
     maxProducts: 1000,
     accentColor: "from-amber-500/10 to-orange-500/5 text-amber-600 dark:text-amber-400 border-amber-200/50 dark:border-amber-800/40",
@@ -104,6 +109,7 @@ const PRESETS: PlanPreset[] = [
       { text: "Catálogo Público en Web", included: true },
       { text: "Cuentas Corrientes (Ledger)", included: false },
       { text: "Múltiples Cajas de Venta", included: false },
+      { text: "Filtro por Proveedor", included: false },
     ],
   },
   {
@@ -116,6 +122,7 @@ const PRESETS: PlanPreset[] = [
     hasPublicCatalog: true,
     hasClientLedger: true,
     hasMultiCashbox: true,
+    hasSupplierFilter: true,
     maxUsers: 999,
     maxProducts: 99999,
     accentColor: "from-purple-500/10 to-pink-500/5 text-purple-500 border-purple-200/50 dark:border-purple-800/40",
@@ -127,6 +134,7 @@ const PRESETS: PlanPreset[] = [
       { text: "Catálogo Público en Web", included: true },
       { text: "Cuentas Corrientes (Ledger)", included: true },
       { text: "Múltiples Cajas Operativas", included: true },
+      { text: "Filtro por Proveedor", included: true },
     ],
   },
 ];
@@ -141,6 +149,7 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
   const [hasPublicCatalog, setHasPublicCatalog] = useState(initialFeatures.hasPublicCatalog);
   const [hasClientLedger, setHasClientLedger] = useState(initialFeatures.hasClientLedger);
   const [hasMultiCashbox, setHasMultiCashbox] = useState(initialFeatures.hasMultiCashbox);
+  const [hasSupplierFilter, setHasSupplierFilter] = useState(initialFeatures.hasSupplierFilter);
   const [maxUsers, setMaxUsers] = useState(initialFeatures.maxUsers);
   const [maxProducts, setMaxProducts] = useState(initialFeatures.maxProducts);
 
@@ -155,11 +164,12 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
         p.hasPublicCatalog === hasPublicCatalog &&
         p.hasClientLedger === hasClientLedger &&
         p.hasMultiCashbox === hasMultiCashbox &&
+        p.hasSupplierFilter === hasSupplierFilter &&
         p.maxUsers === maxUsers &&
         p.maxProducts === maxProducts
     );
     setIsCustomOverride(!matchingPreset);
-  }, [selectedPlan, hasAfipBilling, hasPublicCatalog, hasClientLedger, hasMultiCashbox, maxUsers, maxProducts]);
+  }, [selectedPlan, hasAfipBilling, hasPublicCatalog, hasClientLedger, hasMultiCashbox, hasSupplierFilter, maxUsers, maxProducts]);
 
   // Handle preset selection
   const handlePresetSelect = (preset: PlanPreset) => {
@@ -168,6 +178,7 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
     setHasPublicCatalog(preset.hasPublicCatalog);
     setHasClientLedger(preset.hasClientLedger);
     setHasMultiCashbox(preset.hasMultiCashbox);
+    setHasSupplierFilter(preset.hasSupplierFilter);
     setMaxUsers(preset.maxUsers);
     setMaxProducts(preset.maxProducts);
     toast.success(`Preset "${preset.name}" aplicado automáticamente.`);
@@ -183,6 +194,7 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
         hasPublicCatalog,
         hasClientLedger,
         hasMultiCashbox,
+        hasSupplierFilter,
         maxUsers,
         maxProducts,
       };
@@ -383,6 +395,22 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
               </div>
               <Switch checked={hasMultiCashbox} onCheckedChange={setHasMultiCashbox} />
             </div>
+
+            {/* Supplier Filter Toggle */}
+            <div className="flex items-start justify-between py-4 gap-4">
+              <div className="flex gap-3">
+                <div className="p-2 rounded-lg bg-teal-500/10 text-teal-600 shrink-0 mt-0.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Filtro por Proveedor</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Habilita el filtro por proveedor en la pantalla de facturación para buscar productos de un proveedor específico.
+                  </p>
+                </div>
+              </div>
+              <Switch checked={hasSupplierFilter} onCheckedChange={setHasSupplierFilter} />
+            </div>
           </CardContent>
         </Card>
 
@@ -515,6 +543,7 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
                   setHasPublicCatalog(initialFeatures.hasPublicCatalog);
                   setHasClientLedger(initialFeatures.hasClientLedger);
                   setHasMultiCashbox(initialFeatures.hasMultiCashbox);
+                  setHasSupplierFilter(initialFeatures.hasSupplierFilter);
                   setMaxUsers(initialFeatures.maxUsers);
                   setMaxProducts(initialFeatures.maxProducts);
                   toast.info("Configuración revertida a los valores guardados.");

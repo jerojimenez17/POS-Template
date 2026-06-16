@@ -99,7 +99,7 @@ const ProductSelector = ({
     <div className="flex w-full h-full flex-col bg-slate-50/50 dark:bg-gray-950/50 min-h-screen relative">
       {/* Decorative background elements */}
       <div className="absolute top-0 left-0 w-full h-64 bg-linear-to-b from-primary/5 to-transparent pointer-events-none" />
-      
+
       {isCatalog ? (
         <div className="w-full py-8 text-center relative z-10">
           {business?.logo ? (
@@ -143,7 +143,7 @@ const ProductSelector = ({
                 className="pl-12 h-14 bg-gray-50/50 dark:bg-gray-800/50 border-none rounded-3xl focus-visible:ring-2 focus-visible:ring-primary text-base"
               />
             </div>
-            
+
             <div className="flex gap-2 w-full md:w-auto">
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger className="h-14 w-full md:w-[220px] bg-gray-50/50 dark:bg-gray-800/50 border-none rounded-3xl focus-visible:ring-2 focus-visible:ring-primary px-6">

@@ -74,7 +74,7 @@ export const createProduct = async (data: Product) => {
         category: data.categoryId ? { connect: { id: data.categoryId } } : undefined,
         subCategory: data.subCategoryId ? { connect: { id: data.subCategoryId } } : undefined,
         price: data.price ? parseFloat(data.price.toString()) : 0,
-        salePrice: data.salePrice ? parseFloat(data.price.toString())*(1+data.gain*0.01) : 0,
+        salePrice: data.salePrice ? parseFloat(data.price.toString()) * (1 + data.gain * 0.01) : 0,
         gain: data.gain ? parseFloat(data.gain.toString()) : 0,
         amount: data.amount ? parseFloat(data.amount.toString()) : 0,
         unit: data.unit,
@@ -87,10 +87,10 @@ export const createProduct = async (data: Product) => {
         details: data.details || null,
       },
     });
-    
+
     await pusherServer.trigger(
-      `movements-${session.user.businessId}`, 
-      "refresh", 
+      `movements-${session.user.businessId}`,
+      "refresh",
       { type: "product-created" }
     );
 
@@ -132,7 +132,7 @@ export interface PreviewProductsBulkResult {
 }
 
 export const previewProductsBulk = async (
-  productsData: BulkProductInput[], 
+  productsData: BulkProductInput[],
   updateExisting?: boolean,
   updateOnly?: boolean,
   discount?: number,
@@ -145,7 +145,7 @@ export const previewProductsBulk = async (
 
   try {
     const codes = productsData.map(p => p.code.toString());
-    
+
     const existingProducts = await db.product.findMany({
       where: {
         businessId: session.user.businessId,
@@ -153,28 +153,28 @@ export const previewProductsBulk = async (
       },
       select: { code: true, price: true, salePrice: true, supplierId: true }
     });
-    
+
     const existingMap = new Map(existingProducts.map(p => [p.code, p]));
-    
+
     let createdCount = 0;
     let updatedCount = 0;
     let ignoredCount = 0;
-    
+
     const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
-    
+
     const items: PreviewProductItem[] = productsData.map(item => {
       const existing = existingMap.get(item.code.toString());
       const exists = !!existing;
       let status: "create" | "update" | "ignore" = "create";
-      
+
       if (exists) {
-        const priceStr = item.price.toString().replace(',','.');
+        const priceStr = item.price.toString().replace(',', '.');
         const filePrice = parseFloat(priceStr);
         const isPriceValid = !isNaN(filePrice);
-        
+
         let costPrice = filePrice;
         let salePrice = filePrice;
-        
+
         if (applyPriceFormula) {
           const d = discount ?? 0;
           const i = iva ?? 0;
@@ -182,17 +182,17 @@ export const previewProductsBulk = async (
           costPrice = filePrice * (1 - d / 100) * (1 + i / 100);
           salePrice = costPrice * (1 + g / 100);
         }
-        
+
         const priceSame = isPriceValid &&
           Math.abs(costPrice - existing.price) < 0.001 &&
           Math.abs(salePrice - existing.salePrice) < 0.001;
-        
+
         const supplierSame =
           (supplierId === undefined && existing.supplierId === null) ||
           supplierId === existing.supplierId;
-        
+
         const unchanged = priceSame && supplierSame;
-        
+
         if (updateExisting && !unchanged) {
           status = "update";
           updatedCount++;
@@ -209,13 +209,13 @@ export const previewProductsBulk = async (
           createdCount++;
         }
       }
-      
+
       return {
         ...item,
         status
       };
     });
-    
+
     return {
       success: true,
       preview: {
@@ -243,68 +243,140 @@ export const processBulkProductBatch = async (
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
+  const generateCuid = () => {
+    return "c" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  };
+
   try {
+    const businessId = session.user.businessId;
     let createdCount = 0;
     let updatedCount = 0;
-    
-    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
-    
+
+    // 1. Gather all unique names for Brands, Categories, and Subcategories
+    const brandNames = Array.from(new Set(productsData.map(p => p.brandName?.trim()).filter(Boolean))) as string[];
+    const categoryNames = Array.from(new Set(productsData.map(p => p.categoryName?.trim()).filter(Boolean))) as string[];
+    const subCategoryNames = Array.from(new Set(productsData.map(p => p.subCategoryName?.trim()).filter(Boolean))) as string[];
+
+    // 2. Resolve Brands
+    const existingBrands = await db.brand.findMany({
+      where: { businessId, name: { in: brandNames, mode: "insensitive" } }
+    });
+    const existingBrandNamesLower = new Set(existingBrands.map(b => b.name.trim().toLowerCase()));
+    const missingBrandNames = brandNames.filter(name => !existingBrandNamesLower.has(name.toLowerCase()));
+
+    if (missingBrandNames.length > 0) {
+      await db.brand.createMany({
+        data: missingBrandNames.map(name => ({ name: name.trim(), businessId })),
+        skipDuplicates: true
+      });
+    }
+
+    const allBrands = await db.brand.findMany({
+      where: { businessId, name: { in: brandNames, mode: "insensitive" } }
+    });
+    const brandMap = new Map(allBrands.map(b => [b.name.trim().toLowerCase(), b.id]));
+
+    // 3. Resolve Categories
+    const existingCategories = await db.category.findMany({
+      where: { businessId, name: { in: categoryNames, mode: "insensitive" } }
+    });
+    const existingCategoryNamesLower = new Set(existingCategories.map(c => c.name.trim().toLowerCase()));
+    const missingCategoryNames = categoryNames.filter(name => !existingCategoryNamesLower.has(name.toLowerCase()));
+
+    if (missingCategoryNames.length > 0) {
+      await db.category.createMany({
+        data: missingCategoryNames.map(name => ({ name: name.trim(), businessId })),
+        skipDuplicates: true
+      });
+    }
+
+    const allCategories = await db.category.findMany({
+      where: { businessId, name: { in: categoryNames, mode: "insensitive" } }
+    });
+    const categoryMap = new Map(allCategories.map(c => [c.name.trim().toLowerCase(), c.id]));
+
+    // 4. Resolve Subcategories
+    const existingSubcategories = await db.subcategory.findMany({
+      where: { businessId, name: { in: subCategoryNames, mode: "insensitive" } }
+    });
+    const subcategoryMap = new Map(existingSubcategories.map(sc => [`${sc.categoryId}:${sc.name.trim().toLowerCase()}`, sc.id]));
+
+    const missingSubcategoriesData: { name: string; categoryId: string; businessId: string }[] = [];
+    const seenSubcategoryKeys = new Set<string>();
+
     for (const item of productsData) {
-      let brandId = null;
-      if (item.brandName && item.brandName.trim() !== "") {
-        let brand = await db.brand.findFirst({
-          where: { name: { equals: item.brandName.trim(), mode: "insensitive" }, businessId: session.user.businessId }
-        });
-        if (!brand) {
-          brand = await db.brand.create({
-            data: { name: item.brandName.trim(), businessId: session.user.businessId }
-          });
-        }
-        brandId = brand.id;
-      }
-
-      let categoryId = null;
-      if (item.categoryName && item.categoryName.trim() !== "") {
-        let category = await db.category.findFirst({
-          where: { name: { equals: item.categoryName.trim(), mode: "insensitive" }, businessId: session.user.businessId }
-        });
-        if (!category) {
-          category = await db.category.create({
-            data: { name: item.categoryName.trim(), businessId: session.user.businessId }
-          });
-        }
-        categoryId = category.id;
-      }
-
-      let subCategoryId = null;
-      if (item.subCategoryName && item.subCategoryName.trim() !== "" && categoryId) {
-        let subCategory = await db.subcategory.findFirst({
-          where: { 
-            name: { equals: item.subCategoryName.trim(), mode: "insensitive" }, 
-            categoryId: categoryId,
-            businessId: session.user.businessId 
+      if (item.categoryName && item.categoryName.trim() !== "" && item.subCategoryName && item.subCategoryName.trim() !== "") {
+        const catNameLower = item.categoryName.trim().toLowerCase();
+        const subNameTrimmed = item.subCategoryName.trim();
+        const subNameLower = subNameTrimmed.toLowerCase();
+        const categoryId = categoryMap.get(catNameLower);
+        if (categoryId) {
+          const key = `${categoryId}:${subNameLower}`;
+          if (!subcategoryMap.has(key) && !seenSubcategoryKeys.has(key)) {
+            seenSubcategoryKeys.add(key);
+            missingSubcategoriesData.push({
+              name: subNameTrimmed,
+              categoryId,
+              businessId
+            });
           }
-        });
-        if (!subCategory) {
-          subCategory = await db.subcategory.create({
-            data: { 
-              name: item.subCategoryName.trim(), 
-              categoryId: categoryId,
-              businessId: session.user.businessId 
-            }
-          });
         }
-        subCategoryId = subCategory.id;
+      }
+    }
+
+    if (missingSubcategoriesData.length > 0) {
+      await db.subcategory.createMany({
+        data: missingSubcategoriesData,
+        skipDuplicates: true
+      });
+    }
+
+    const allSubcategories = await db.subcategory.findMany({
+      where: { businessId, name: { in: subCategoryNames, mode: "insensitive" } }
+    });
+    const subcategoryMapUpdated = new Map(allSubcategories.map(sc => [`${sc.categoryId}:${sc.name.trim().toLowerCase()}`, sc.id]));
+
+    // 5. Fetch Existing Products
+    const codes = productsData.map(p => p.code.toString());
+    const existingProducts = await db.product.findMany({
+      where: { businessId, code: { in: codes } }
+    });
+    const existingProductMap = new Map<string, typeof existingProducts[number]>();
+    for (const p of existingProducts) {
+      if (p.code !== null && p.code !== undefined) {
+        existingProductMap.set(p.code.toString(), p);
+      }
+    }
+
+    // 6. Partition Products to Create/Update
+    const toCreate: Prisma.ProductCreateManyInput[] = [];
+    const updatePromises: any[] = [];
+    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
+
+    for (const item of productsData) {
+      let resolvedBrandId: string | null = null;
+      if (item.brandName && item.brandName.trim() !== "") {
+        resolvedBrandId = brandMap.get(item.brandName.trim().toLowerCase()) || null;
       }
 
-      const priceStr = item.price.toString().replace(',','.');
+      let resolvedCategoryId: string | null = null;
+      let resolvedSubCategoryId: string | null = null;
+      if (item.categoryName && item.categoryName.trim() !== "") {
+        resolvedCategoryId = categoryMap.get(item.categoryName.trim().toLowerCase()) || null;
+        if (resolvedCategoryId && item.subCategoryName && item.subCategoryName.trim() !== "") {
+          const subKey = `${resolvedCategoryId}:${item.subCategoryName.trim().toLowerCase()}`;
+          resolvedSubCategoryId = subcategoryMapUpdated.get(subKey) || null;
+        }
+      }
+
+      const priceStr = item.price.toString().replace(',', '.');
       const filePrice = parseFloat(priceStr);
       const isPriceValid = !isNaN(filePrice);
 
       let costPrice = filePrice;
       let salePrice = filePrice;
       let gainValue = 0;
-      
+
       if (applyPriceFormula) {
         const d = discount ?? 0;
         const i = iva ?? 0;
@@ -314,17 +386,10 @@ export const processBulkProductBatch = async (
         gainValue = g;
       }
 
-      const amountStr = item.amount?.toString().replace(',','.');
+      const amountStr = item.amount?.toString().replace(',', '.');
       const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
-      
-      const supplierConnect = supplierId ? { connect: { id: supplierId } } : undefined;
-      
-      const existingProduct = await db.product.findFirst({
-        where: {
-          code: item.code.toString(),
-          businessId: session.user.businessId,
-        },
-      });
+
+      const existingProduct = existingProductMap.get(item.code.toString());
 
       if (existingProduct) {
         const priceSame = isPriceValid &&
@@ -340,19 +405,19 @@ export const processBulkProductBatch = async (
         }
 
         if (updateExisting || updateOnly) {
-          const updateData: Parameters<typeof db.product.update>[0]["data"] = {
+          const updateData: Prisma.ProductUpdateInput = {
             description: item.description.toString(),
             price: isPriceValid ? costPrice : 0,
             salePrice: isPriceValid ? salePrice : 0,
             gain: applyPriceFormula ? gainValue : existingProduct.gain,
             unit: item.unit || "unidades",
-            brand: brandId ? { connect: { id: brandId } } : { disconnect: true },
-            category: categoryId ? { connect: { id: categoryId } } : { disconnect: true },
-            subCategory: subCategoryId ? { connect: { id: subCategoryId } } : { disconnect: true },
+            brand: resolvedBrandId ? { connect: { id: resolvedBrandId } } : { disconnect: true },
+            category: resolvedCategoryId ? { connect: { id: resolvedCategoryId } } : { disconnect: true },
+            subCategory: resolvedSubCategoryId ? { connect: { id: resolvedSubCategoryId } } : { disconnect: true },
             last_update: new Date(),
             catalog: item.catalog !== undefined ? item.catalog : undefined,
             details: item.details !== undefined ? item.details : undefined,
-            supplier: supplierConnect,
+            supplier: supplierId ? { connect: { id: supplierId } } : { disconnect: true },
           };
 
           if (item.amount !== null && item.amount !== undefined) {
@@ -361,36 +426,49 @@ export const processBulkProductBatch = async (
             updateData.amount = existingProduct.amount;
           }
 
-          await db.product.update({
+          updatePromises.push(db.product.update({
             where: { id: existingProduct.id },
             data: updateData,
-          });
+          }));
           updatedCount++;
         }
       } else {
         if (updateOnly) {
           continue;
         }
-        await db.product.create({
-          data: {
-            code: item.code.toString(),
-            description: item.description.toString(),
-            price: isPriceValid ? costPrice : 0,
-            salePrice: isPriceValid ? salePrice : 0,
-            gain: applyPriceFormula ? gainValue : 0,
-            amount: isNaN(parsedAmount) ? 0 : parsedAmount,
-            unit: item.unit || "unidades",
-            brand: brandId ? { connect: { id: brandId } } : undefined,
-            category: categoryId ? { connect: { id: categoryId } } : undefined,
-            subCategory: subCategoryId ? { connect: { id: subCategoryId } } : undefined,
-            business: { connect: { id: session.user.businessId } },
-            catalog: item.catalog !== undefined ? item.catalog : true,
-            details: item.details || null,
-            supplier: supplierConnect,
-          }
+
+        toCreate.push({
+          id: generateCuid(),
+          code: item.code.toString(),
+          description: item.description.toString(),
+          price: isPriceValid ? costPrice : 0,
+          salePrice: isPriceValid ? salePrice : 0,
+          gain: applyPriceFormula ? gainValue : 0,
+          amount: isNaN(parsedAmount) ? 0 : parsedAmount,
+          unit: item.unit || "unidades",
+          brandId: resolvedBrandId,
+          categoryId: resolvedCategoryId,
+          subCategoryId: resolvedSubCategoryId,
+          businessId: businessId,
+          catalog: item.catalog !== undefined ? item.catalog : true,
+          details: item.details || null,
+          supplierId: supplierId || null,
+          creation_date: new Date(),
+          last_update: new Date(),
         });
         createdCount++;
       }
+    }
+
+    // 7. Write to database in bulk
+    if (toCreate.length > 0) {
+      await db.product.createMany({
+        data: toCreate,
+      });
+    }
+
+    if (updatePromises.length > 0) {
+      await db.$transaction(updatePromises);
     }
 
     return { createdCount, updatedCount };
@@ -421,15 +499,15 @@ export const finalizeBulkImport = async (
 
     try {
       await pusherServer.trigger(
-        `movements-${session.user.businessId}`, 
-        "refresh", 
+        `movements-${session.user.businessId}`,
+        "refresh",
         { type: "product-created" }
       );
-    } catch {}
+    } catch { }
 
     try {
       revalidatePath("/stock");
-    } catch {}
+    } catch { }
 
     return { success: "Importación finalizada" };
   } catch (error) {
@@ -505,7 +583,7 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
       });
       for (const img of imagesToDelete) {
         const imageRef = ref(storage, img.url);
-        deleteObject(imageRef).catch(() => {});
+        deleteObject(imageRef).catch(() => { });
       }
     }
 
@@ -518,7 +596,7 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
         category: data.categoryId ? { connect: { id: data.categoryId } } : { disconnect: true },
         subCategory: data.subCategoryId ? { connect: { id: data.subCategoryId } } : { disconnect: true },
         price: data.price !== undefined ? parseFloat(data.price.toString()) : undefined,
-        salePrice: data.price !== undefined && data.gain !== undefined ? parseFloat(data.price.toString())*(1+parseFloat(data.gain.toString())*0.01) : undefined,
+        salePrice: data.price !== undefined && data.gain !== undefined ? parseFloat(data.price.toString()) * (1 + parseFloat(data.gain.toString()) * 0.01) : undefined,
         gain: data.gain !== undefined ? parseFloat(data.gain.toString()) : undefined,
         amount: data.amount !== undefined ? parseFloat(data.amount.toString()) : undefined,
         unit: data.unit,
@@ -545,8 +623,8 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
     }
 
     await pusherServer.trigger(
-      `movements-${session.user.businessId}`, 
-      "refresh", 
+      `movements-${session.user.businessId}`,
+      "refresh",
       { type: "product-updated" }
     );
 
@@ -559,31 +637,31 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
 };
 
 export const updateStockAmount = async (productId: string, discountValue: number) => {
-    try {
-        const product = await db.product.findUnique({ where: { id: productId } });
-        if (!product) throw new Error("Producto no encontrado");
-        
-        const newAmount = product.amount - discountValue;
-        if (newAmount < 0) throw new Error("Stock insuficiente");
+  try {
+    const product = await db.product.findUnique({ where: { id: productId } });
+    if (!product) throw new Error("Producto no encontrado");
 
-        await db.product.update({
-            where: { id: productId },
-            data: { amount: newAmount, last_update: new Date() }
-        });
-        
+    const newAmount = product.amount - discountValue;
+    if (newAmount < 0) throw new Error("Stock insuficiente");
 
-        
-        // Cannot trigger pusher here easily without session, maybe pass businessId?
-        // Assuming updateStockAmount is called from client where we might not have session easily available if it was a pure background task, 
-        // but here it is a server action called from client.
-        // For now, let's skip pusher here unless we fetch session or pass businessId.
-        // Actually this seems to be used after sale.
-        
-        revalidatePath("/stock");
-        return { success: true };
-    } catch (error) {
-        throw error;
-    }
+    await db.product.update({
+      where: { id: productId },
+      data: { amount: newAmount, last_update: new Date() }
+    });
+
+
+
+    // Cannot trigger pusher here easily without session, maybe pass businessId?
+    // Assuming updateStockAmount is called from client where we might not have session easily available if it was a pure background task, 
+    // but here it is a server action called from client.
+    // For now, let's skip pusher here unless we fetch session or pass businessId.
+    // Actually this seems to be used after sale.
+
+    revalidatePath("/stock");
+    return { success: true };
+  } catch (error) {
+    throw error;
+  }
 }
 
 export const deleteProduct = async (id: string) => {
@@ -596,8 +674,8 @@ export const deleteProduct = async (id: string) => {
     });
 
     await pusherServer.trigger(
-      `movements-${session.user.businessId}`, 
-      "refresh", 
+      `movements-${session.user.businessId}`,
+      "refresh",
       { type: "product-deleted" }
     );
 
@@ -610,19 +688,19 @@ export const deleteProduct = async (id: string) => {
 };
 
 export const getProducts = async () => {
-    const session = await auth();
-    if (!session?.user?.businessId) return [];
+  const session = await auth();
+  if (!session?.user?.businessId) return [];
 
-    try {
-        return await db.product.findMany({
-            where: { businessId: session.user.businessId },
-            include: { supplier: true, brand: true, category: true, subCategory: true },
-            orderBy: { description: 'asc' }
-        });
-    } catch (error) {
-        console.error(error);
-        return [];
-    }
+  try {
+    return await db.product.findMany({
+      where: { businessId: session.user.businessId },
+      include: { supplier: true, brand: true, category: true, subCategory: true },
+      orderBy: { description: 'asc' }
+    });
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
 }
 
 export const getProductsPaginated = async (params: {
@@ -685,13 +763,13 @@ export const getProductByCode = async (code: string) => {
 
   try {
     const product = await db.product.findFirst({
-      where: { 
+      where: {
         businessId: session.user.businessId,
         code: code
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },
     });
-    
+
     return product;
   } catch (error) {
     console.error(error);
@@ -699,7 +777,7 @@ export const getProductByCode = async (code: string) => {
   }
 };
 
-export const getProductsBySearch = async (query: string) => {
+export const getProductsBySearch = async (query: string, supplierId?: string) => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
 
@@ -711,12 +789,30 @@ export const getProductsBySearch = async (query: string) => {
           { code: { contains: query, mode: "insensitive" } },
           { description: { contains: query, mode: "insensitive" } },
         ],
+        ...(supplierId ? { supplierId } : {}),
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },
-      take: 20, // Limit results for performance
+      take: 40, // Limit results for performance
     });
 
     return products;
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
+};
+
+export const getSuppliersForFilter = async () => {
+  const session = await auth();
+  if (!session?.user?.businessId) return [];
+
+  try {
+    const suppliers = await db.supplier.findMany({
+      where: { businessId: session.user.businessId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return suppliers;
   } catch (error) {
     console.error(error);
     return [];
@@ -738,11 +834,11 @@ export const getProductsFiltered = async (filters: {
         businessId: session.user.businessId,
         ...(filters.search
           ? {
-              OR: [
-                { code: { contains: filters.search, mode: "insensitive" } },
-                { description: { contains: filters.search, mode: "insensitive" } },
-              ],
-            }
+            OR: [
+              { code: { contains: filters.search, mode: "insensitive" } },
+              { description: { contains: filters.search, mode: "insensitive" } },
+            ],
+          }
           : {}),
         ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
         ...(filters.brandId ? { brandId: filters.brandId } : {}),
@@ -853,7 +949,7 @@ export const bulkUpdateAmounts = async (
     products.forEach((product, index) => {
       if (!product) return;
 
-      let amountData: number | { decrement: number } | {increment: number};
+      let amountData: number | { decrement: number } | { increment: number };
 
       switch (mode) {
         case 'set':
@@ -884,9 +980,9 @@ export const bulkUpdateAmounts = async (
     return { success: true };
   } catch (error) {
     console.error("Error updating amounts:", error);
-    return { 
-      success: false, 
-      error: "Error al actualizar stock" 
+    return {
+      success: false,
+      error: "Error al actualizar stock"
     };
   }
 };

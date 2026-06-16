@@ -2,26 +2,36 @@ import { vi } from 'vitest';
 import '@testing-library/jest-dom';
 
 export const mockDb = {
-  $transaction: vi.fn().mockImplementation(async (callback) => {
-    return callback(mockDb);
+  $transaction: vi.fn().mockImplementation(async (arg) => {
+    if (typeof arg === 'function') {
+      return arg(mockDb);
+    }
+    return Promise.all(arg);
   }),
   brand: {
     findFirst: vi.fn().mockResolvedValue(null),
+    findMany: vi.fn().mockResolvedValue([]),
     create: vi.fn().mockResolvedValue({ id: 'brand-1' }),
+    createMany: vi.fn().mockResolvedValue({ count: 0 }),
   },
   category: {
     findFirst: vi.fn().mockResolvedValue(null),
+    findMany: vi.fn().mockResolvedValue([]),
     create: vi.fn().mockResolvedValue({ id: 'category-1' }),
+    createMany: vi.fn().mockResolvedValue({ count: 0 }),
   },
   subcategory: {
     findFirst: vi.fn().mockResolvedValue(null),
+    findMany: vi.fn().mockResolvedValue([]),
     create: vi.fn().mockResolvedValue({ id: 'subcategory-1' }),
+    createMany: vi.fn().mockResolvedValue({ count: 0 }),
   },
   product: {
     findFirst: vi.fn().mockResolvedValue(null),
     findMany: vi.fn().mockResolvedValue([]),
     findUnique: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue({ id: 'product-1', code: 'PROD001' }),
+    createMany: vi.fn().mockResolvedValue({ count: 0 }),
     update: vi.fn().mockResolvedValue({ id: 'product-1' }),
   },
   supplier: {

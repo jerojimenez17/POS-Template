@@ -104,6 +104,7 @@ export const updateBusinessFeaturesAction = async (payload: {
   hasPublicCatalog: boolean;
   hasClientLedger: boolean;
   hasMultiCashbox: boolean;
+  hasSupplierFilter: boolean;
   maxUsers: number;
   maxProducts: number;
 }) => {
@@ -131,6 +132,7 @@ export const updateBusinessFeaturesAction = async (payload: {
           hasPublicCatalog: payload.hasPublicCatalog,
           hasClientLedger: payload.hasClientLedger,
           hasMultiCashbox: payload.hasMultiCashbox,
+          hasSupplierFilter: payload.hasSupplierFilter,
           maxUsers: payload.maxUsers,
           maxProducts: payload.maxProducts,
         },
@@ -141,6 +143,7 @@ export const updateBusinessFeaturesAction = async (payload: {
           hasPublicCatalog: payload.hasPublicCatalog,
           hasClientLedger: payload.hasClientLedger,
           hasMultiCashbox: payload.hasMultiCashbox,
+          hasSupplierFilter: payload.hasSupplierFilter,
           maxUsers: payload.maxUsers,
           maxProducts: payload.maxProducts,
         },
@@ -149,6 +152,7 @@ export const updateBusinessFeaturesAction = async (payload: {
 
     try {
       revalidatePath("/superadmin/dashboard");
+      revalidatePath("/superadmin/businesses/[id]/features");
     } catch {
       // Ignore static generation store missing in test environments
     }
