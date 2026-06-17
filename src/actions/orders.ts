@@ -44,13 +44,17 @@ export const createOrder = async (order: OrderInput) => {
 
     return await db.$transaction(async (tx) => {
       // 1. Validate and Update Stock
+      const productIds = order.products.map(p => p.id).filter(Boolean);
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, amount: true },
+      });
+      const productMap = new Map(products.map(p => [p.id, p]));
+
       for (const product of order.products) {
         if (!product.id) continue;
         
-        const dbProduct = await tx.product.findUnique({
-          where: { id: product.id },
-        });
-
+        const dbProduct = productMap.get(product.id);
         if (!dbProduct) {
           throw new Error(`Producto ${product.description || product.id} no encontrado`);
         }
@@ -145,12 +149,16 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                 const month = now.getMonth() + 1;
                 const year = now.getFullYear();
 
+                const orderItemProductIds = order.items.map(i => i.productId).filter((id): id is string => id !== null);
+                const existingProducts = await tx.product.findMany({
+                    where: { id: { in: orderItemProductIds } },
+                    select: { id: true, amount: true },
+                });
+                const existingProductMap = new Map(existingProducts.map(p => [p.id, p]));
+
                 for (const item of order.items) {
                     if (item.productId) {
-                        const product = await tx.product.findUnique({
-                            where: { id: item.productId }
-                        });
-
+                        const product = existingProductMap.get(item.productId);
                         if (!product || product.amount < item.quantity) {
                             throw new Error(`Stock insuficiente para el producto ${item.description || item.productId}`);
                         }

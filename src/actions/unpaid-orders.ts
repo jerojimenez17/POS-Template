@@ -98,10 +98,15 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
       });
       if (!client) throw new Error("Cliente no encontrado");
 
+      const productIds = input.items.map(i => i.productId);
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, amount: true },
+      });
+      const productMap = new Map(products.map(p => [p.id, p]));
+
       for (const item of input.items) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-        });
+        const product = productMap.get(item.productId);
         if (!product) {
           throw new Error(`Producto ${item.description || item.productId} no encontrado`);
         }
