@@ -1,0 +1,25 @@
+status: archived
+phase: 1
+branch: 1-error-handling-unification
+base: 1-dead-code-removal
+commits:
+  - 2e10432 feat(lib): add ActionResult<T> type and helpers
+  - 18cb386 refactor(actions): migrate error handling to ActionResult pattern
+  - 82a8e1c refactor(components): update consumers for ActionResult
+  - 0d131e1 fix(lib): make ActionResult.data required on success
+completed_at: 2026-06-13
+artifacts:
+  - proposal.md
+  - spec.md
+  - design.md
+  - tasks.md
+verification:
+  build: pass
+  tsc: pass (pre-existing errors unchanged)
+  tests: 314 passed, 54 failed (pre-existing)
+files_touched: 21
+  - src/lib/action-result.ts (created)
+  - src/lib/auth-gates.ts
+  - src/actions/*.ts (12 files)
+  - src/components/* (6 files)
+  - tests/* (2 files)
