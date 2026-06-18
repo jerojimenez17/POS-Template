@@ -367,13 +367,22 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         ) : step === "config" ? (
         <div className="grid gap-6 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="file">Archivo Excel (.xlsx, .xls)</Label>
-            <Input
-              id="file"
+            <Label htmlFor="file-upload">Archivo Excel (.xlsx, .xls)</Label>
+            <label
+              htmlFor="file-upload"
+              className="flex items-center gap-3 cursor-pointer border border-input rounded-md px-4 py-3 hover:bg-accent transition-colors"
+            >
+              <UploadCloud className="h-5 w-5 text-muted-foreground shrink-0" />
+              <span className="text-sm text-muted-foreground truncate">
+                {file ? file.name : "Seleccionar archivo Excel"}
+              </span>
+            </label>
+            <input
+              id="file-upload"
               type="file"
               accept=".xlsx,.xls"
               onChange={handleFileChange}
-              className="cursor-pointer"
+              className="hidden"
             />
           </div>
 

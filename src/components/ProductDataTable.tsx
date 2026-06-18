@@ -9,13 +9,12 @@ import {
 } from "@tanstack/react-table";
 import Image from "next/image";
 import noImgPhoto from "../../public/no-image.svg";
-import Modal from "@/components/Modal";
 import ProductForm from "./stock/product-form";
 import { Button } from "./ui/button";
 import DeleteButton from "./DeleteButton";
 import CodeBarModal from "./stock/code-bar-modal";
 import SetCodebarModal from "./stock/set-codebar-modal";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import {
   Table,
   TableBody,
@@ -503,22 +502,30 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
         </div>
       )}
 
-      {productToEdit && openDeleteModal && (
-        <Modal
-          className="z-50 absolute"
-          blockButton={isPending}
-          onCancel={() => setOpenDeleteModal(false)}
-          visible={openDeleteModal}
-          key={productToEdit.id}
-          onClose={() => setOpenDeleteModal(false)}
-          onAcept={handleDelete}
-          message="¿Seguro que desea eliminar este producto?"
-        />
+      {productToEdit && (
+        <Dialog open={openDeleteModal} onOpenChange={setOpenDeleteModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Eliminar producto</DialogTitle>
+              <DialogDescription>
+                ¿Estás seguro de que deseas eliminar <strong>{productToEdit.description}</strong>? Esta acción no se puede deshacer.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setOpenDeleteModal(false)} disabled={isPending}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={isPending}>
+                {isPending ? "Eliminando..." : "Eliminar"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {productToEdit && openEditModal && (
         <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
-          <DialogContent className="sm:max-w-lg overflow-auto h-full max-h-[90vh]">
+          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Editar producto</DialogTitle>
             </DialogHeader>
