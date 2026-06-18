@@ -6,10 +6,10 @@ export const Header = ({ label }: HeaderProps) => {
   return (
     <div className="w-full flex flex-col gap-y-4 items-center justify-center">
       {label === "Stock" ? (
-        <h1 className="text-3xl font-semibold">🛍️ Nuevo Producto</h1>
+        <h1 className="text-3xl font-semibold">Nuevo Producto</h1>
       ) : (
         <h1 className={cn("text-3xl font-semibold")}>
-          🔐Stock.ia
+          Stock.ia
         </h1>
       )}
       {label !== "Stock" && (
