@@ -28,11 +28,14 @@ import {
 import { FormSuccess } from "../ui/form-success";
 import { FormError } from "../ui/form-error";
 import CreateAttributeModal from "./create-attribute-modal";
-import { ScanBarcode, X, RotateCcw } from "lucide-react";
+import { ScanBarcode, X, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { getCategories } from "@/actions/categories";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { storage } from "@/firebase/config";
+import { v4 as uuidv4 } from "uuid";
 
 const Scanner = dynamic(
   () => import("@yudiel/react-qr-scanner").then((m) => m.Scanner),
@@ -62,6 +65,7 @@ export type ProductExtended = Product & {
   brand?: Brand | null;
   category?: Category | null;
   subCategory?: Subcategory | null;
+  images?: { id: string; url: string }[];
 };
 
 interface Props {
@@ -85,6 +89,7 @@ const ProductForm = ({ product, onClose }: Props) => {
   >([]);
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
   const [newImages, setNewImages] = useState<File[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [existingImages, setExistingImages] = useState<{ id: string; url: string }[]>([]);
   const [imagesToDelete, setImagesToDelete] = useState<string[]>([]);
 
@@ -205,9 +210,7 @@ const ProductForm = ({ product, onClose }: Props) => {
 
   useEffect(() => {
     if (product) {
-      setExistingImages(
-        (product as unknown as { images?: { id: string; url: string }[] }).images ?? []
-      );
+      setExistingImages(product.images ?? []);
     }
   }, [product]);
 
@@ -239,18 +242,60 @@ const ProductForm = ({ product, onClose }: Props) => {
     form.setValue("supplier", item.id);
   };
 
+  const uploadFilesToFirebase = async (files: File[]): Promise<string[]> => {
+    const urls: string[] = [];
+    for (const file of files) {
+      const imageName = `${file.name}_${uuidv4()}`;
+      const storageRef = ref(storage, `/productImage/${imageName}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      urls.push(url);
+    }
+    return urls;
+  };
+
+  const deleteFilesFromFirebase = async (urls: string[]) => {
+    for (const url of urls) {
+      const imageRef = ref(storage, url);
+      deleteObject(imageRef).catch(() => {});
+    }
+  };
+
   const onSubmit = async (values: z.infer<typeof ProductSchema>) => {
+    setErrorMessages([]);
+    setUploadMessages([]);
+    setUploadingImages(true);
+
+    let imageUrls: string[] = [];
+
+    try {
+      if (newImages.length > 0) {
+        imageUrls = await uploadFilesToFirebase(newImages);
+      }
+
+      if (imagesToDelete.length > 0) {
+        const urlsToDelete = existingImages
+          .filter((img) => imagesToDelete.includes(img.id))
+          .map((img) => img.url);
+        deleteFilesFromFirebase(urlsToDelete);
+      }
+    } catch (err) {
+      console.error("Error uploading images:", err);
+      toast.error("Error al subir las imágenes");
+      setUploadingImages(false);
+      return;
+    }
+
     startTransition(async () => {
       try {
         if (product) {
-          // Relational mapping for updateProduct
           const updateData = {
             ...values,
             brandId: values.brand,
             categoryId: values.category,
             subCategoryId: values.subCategory,
             supplierId: values.supplier,
-            newImages: newImages.length > 0 ? newImages : undefined,
+            imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
             imagesToDelete: imagesToDelete.length > 0 ? imagesToDelete : undefined,
           };
 
@@ -263,13 +308,12 @@ const ProductForm = ({ product, onClose }: Props) => {
             setTimeout(() => onClose(), 800);
           }
         } else {
-          // Ensure image and imageName are strings for the server action
           const submissionValues = {
             ...values,
             image: typeof values.image === "string" ? values.image : "",
             imageName:
               typeof values.imageName === "string" ? values.imageName : "",
-            newImages: newImages.length > 0 ? newImages : undefined,
+            imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
           };
           const result = await newProduct(submissionValues);
           if (result.error) {
@@ -285,6 +329,8 @@ const ProductForm = ({ product, onClose }: Props) => {
       } catch (error) {
         console.error(error);
         toast.error("Ha ocurrido un error inesperado");
+      } finally {
+        setUploadingImages(false);
       }
     });
   };
@@ -785,27 +831,17 @@ const ProductForm = ({ product, onClose }: Props) => {
         <div className="col-span-1 md:col-span-2 mt-2">
           <Button
             type="submit"
-            disabled={isPending}
+            disabled={isPending || uploadingImages}
             className="w-full h-11 text-base font-medium bg-black dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
           >
-            {isPending ? (
+            {uploadingImages ? (
               <span className="flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    fill="none"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
+                <Loader2 className="animate-spin h-4 w-4" />
+                Subiendo imágenes...
+              </span>
+            ) : isPending ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="animate-spin h-4 w-4" />
                 Guardando...
               </span>
             ) : product ? (

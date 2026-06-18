@@ -5,12 +5,9 @@ import { auth } from "../../../auth";
 import { ProductSchema } from "@/schemas";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "@/firebase/config";
-import { v4 } from "uuid";
 
 type NewProductInput = z.infer<typeof ProductSchema> & {
-  newImages?: File[];
+  imageUrls?: string[];
 };
 
 export const newProduct = async (values: NewProductInput) => {
@@ -43,16 +40,10 @@ export const newProduct = async (values: NewProductInput) => {
       },
     });
 
-    if (values.newImages && values.newImages.length > 0) {
-      const imageRows: { productId: string; url: string }[] = [];
-      for (const file of values.newImages) {
-        const imageName = `${file.name}_${v4()}`;
-        const storageRef = ref(storage, `/productImage/${imageName}`);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        imageRows.push({ productId: product.id, url });
-      }
-      await db.productImage.createMany({ data: imageRows });
+    if (values.imageUrls && values.imageUrls.length > 0) {
+      await db.productImage.createMany({
+        data: values.imageUrls.map((url) => ({ productId: product.id, url })),
+      });
     }
 
     revalidatePath("/stock");

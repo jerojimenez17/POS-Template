@@ -538,10 +538,11 @@ model BusinessFeatures {
   plan Plan @default(BASIC)
 
   // Feature Toggles
-  hasAfipBilling   Boolean @default(false)
-  hasPublicCatalog Boolean @default(false)
-  hasClientLedger  Boolean @default(false)
-  hasMultiCashbox  Boolean @default(false)
+  hasAfipBilling    Boolean @default(false)
+  hasPublicCatalog  Boolean @default(false)
+  hasClientLedger   Boolean @default(false)
+  hasMultiCashbox   Boolean @default(false)
+  hasSupplierFilter Boolean @default(false)
 
   // Operational Limits
   maxUsers    Int @default(1)

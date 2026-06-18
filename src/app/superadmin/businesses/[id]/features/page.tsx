@@ -53,6 +53,7 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
     hasPublicCatalog: false,
     hasClientLedger: false,
     hasMultiCashbox: false,
+    hasSupplierFilter: false,
     maxUsers: 1,
     maxProducts: 100,
   };
