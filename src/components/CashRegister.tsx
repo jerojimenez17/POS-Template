@@ -24,7 +24,7 @@ interface props {
 const CashRegister = ({ session }: props) => {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [refreshTotal, setRefreshTotal] = useState(0);
-  const [showOnlyCash, setShowOnlyCash] = useState(true);
+  const [showOnlyCash, setShowOnlyCash] = useState(false);
 
   useEffect(() => {
     const fetchMovements = async () => {
