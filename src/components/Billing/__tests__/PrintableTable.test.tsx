@@ -77,6 +77,8 @@ const createMockCAE = (): CAE => ({
 const mockContextValue = {
   BillState: createMockBillState(),
   dispatch: vi.fn(),
+  addItem: vi.fn(),
+  removeItem: vi.fn(),
   onOrderResetRef: { current: null },
   printMode: "thermal" as const,
   setPrintMode: vi.fn(),

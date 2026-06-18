@@ -153,8 +153,7 @@ export const updateBusinessFeaturesAction = async (payload: {
     });
 
     try {
-      revalidatePath("/superadmin/dashboard");
-      revalidatePath("/superadmin/businesses/[id]/features");
+      revalidateTag(CACHE_TAGS.SUPERADMIN, "max");
     } catch {
       // Ignore static generation store missing in test environments
     }

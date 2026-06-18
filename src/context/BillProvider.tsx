@@ -3,6 +3,7 @@ import React, { ReactElement, useEffect, useReducer, useRef } from "react";
 import { BillContext } from "./BillContext";
 import { BillReducer } from "./BillReducer";
 import BillState from "@/models/BillState";
+import Product from "@/models/Product";
 import { PrintMode } from "./BillContext";
 
 const INITIAL_STATE: BillState = {
@@ -32,15 +33,11 @@ interface props {
 const BillProvider = ({ children }: props) => {
   const [BillState, dispatch] = useReducer(BillReducer, INITIAL_STATE);
   const [printMode, setPrintMode] = React.useState<PrintMode>("thermal");
-  const [qzTrayActive, setQzTrayActive] = React.useState<boolean>(true);
-  const onOrderResetRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
+  const [qzTrayActive, setQzTrayActive] = React.useState<boolean>(() => {
     const saved = localStorage.getItem("qzTrayActive");
-    if (saved !== null) {
-      setQzTrayActive(saved === "true");
-    }
-  }, []);
+    return saved !== null ? saved === "true" : true;
+  });
+  const onOrderResetRef = useRef<(() => void) | null>(null);
 
   const handleSetQzTrayActive = (active: boolean) => {
     setQzTrayActive(active);
@@ -51,9 +48,19 @@ const BillProvider = ({ children }: props) => {
     dispatch({ type: "date", payload: new Date() });
   }, []);
 
+  const addItem = (product: Product) => {
+    dispatch({ type: "addItem", payload: product });
+  };
+
+  const removeItem = (product: Product) => {
+    dispatch({ type: "removeItem", payload: { id: product.id } });
+  };
+
   const values = {
     BillState: BillState,
     dispatch: dispatch,
+    addItem: addItem,
+    removeItem: removeItem,
     onOrderResetRef: onOrderResetRef,
     printMode: printMode,
     setPrintMode: setPrintMode,

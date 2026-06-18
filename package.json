@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "postinstall": "prisma generate",
-    "lint": "next lint",
+    "lint": "eslint src/",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
@@ -16,7 +16,7 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{ts,tsx}": "next lint"
+    "*.{ts,tsx}": "eslint"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
