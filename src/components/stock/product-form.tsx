@@ -341,7 +341,7 @@ const ProductForm = ({ product, onClose }: Props) => {
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
+        className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4"
       >
         <div className="col-span-1 md:col-span-2 space-y-2">
           <FormField
@@ -599,7 +599,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
-        <div className="flex flex-row items-end gap-2">
+        <div className="flex flex-row items-center gap-2">
           <FormField
             control={form.control}
             name="category"
@@ -625,15 +625,15 @@ const ProductForm = ({ product, onClose }: Props) => {
                 <FormMessage />
               </FormItem>
             )}
-          />
-          <div className="pt-1.5">
+            />
+          <div>
             <CreateAttributeModal
               type="category"
               onSuccess={handleCategorySuccess}
             />
           </div>
         </div>
-        <div className="flex flex-row items-end gap-2">
+        <div className="flex flex-row items-center gap-2">
           <FormField
             control={form.control}
             name="subCategory"
@@ -661,8 +661,8 @@ const ProductForm = ({ product, onClose }: Props) => {
                 <FormMessage />
               </FormItem>
             )}
-          />
-          <div className="pt-1.5">
+            />
+          <div>
             <CreateAttributeModal
               type="subcategory"
               parentId={selectedCategoryId}
@@ -670,7 +670,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             />
           </div>
         </div>
-        <div className="flex flex-row items-end gap-2">
+        <div className="flex flex-row items-center gap-2">
           <FormField
             control={form.control}
             name="brand"
@@ -696,12 +696,12 @@ const ProductForm = ({ product, onClose }: Props) => {
                 <FormMessage />
               </FormItem>
             )}
-          />
-          <div className="pt-1.5">
+                      />
+          <div>
             <CreateAttributeModal type="brand" onSuccess={handleBrandSuccess} />
           </div>
         </div>
-        <div className="flex flex-row items-end gap-2">
+        <div className="flex flex-row items-center gap-2">
           <FormField
             control={form.control}
             name="supplier"
@@ -725,8 +725,8 @@ const ProductForm = ({ product, onClose }: Props) => {
                 <FormMessage />
               </FormItem>
             )}
-          />
-          <div className="pt-1.5">
+            />
+          <div>
             <CreateAttributeModal
               type="supplier"
               onSuccess={handleSupplierSuccess}
