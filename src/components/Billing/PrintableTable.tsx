@@ -7,6 +7,7 @@ import DecimalInput from "./DecimalInput";
 import ProductSearchBar from "./ProductSearchBar";
 import { Session } from "next-auth";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { Inter } from "next/font/google";
 import { getBusinessBillingInfoAction } from "@/actions/business";
 import moment from "moment";
@@ -71,6 +72,8 @@ const PrintableTable = ({
     address?: string | null;
   } | null>(null);
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>("");
   const contentRef = useRef<HTMLDivElement>(null);
   const lastPrintTrigger = useRef(0);
 
@@ -184,6 +187,11 @@ const PrintableTable = ({
   }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, forceCae, state.CAE, state.CAE?.qrData]);
 
   const handleProductAdd = useCallback((product: Product) => {
+    if (product.amount <= 0) {
+      toast.error("Cantidad corregida a 1 (mínimo permitido)");
+      addItem({ ...product, amount: 1 });
+      return;
+    }
     addItem(product);
   }, [addItem]);
 
@@ -304,13 +312,49 @@ const PrintableTable = ({
                       {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
                         <>
                           <button
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
                             onClick={() => updateProductAmount(product.id, product.amount - 1)}
+                            disabled={product.amount <= 1}
                             aria-label="Disminuir cantidad"
                           >
                             −
                           </button>
-                          <span className="w-12 text-center font-medium tabular-nums">{product.amount}</span>
+                          {editingProductId === product.id ? (
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              autoFocus
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onBlur={() => {
+                                const val = Math.max(1, Number(editValue) || 1);
+                                if (val !== product.amount) {
+                                  updateProductAmount(product.id, val);
+                                }
+                                setEditingProductId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  (e.target as HTMLInputElement).blur();
+                                } else if (e.key === "Escape") {
+                                  setEditingProductId(null);
+                                }
+                              }}
+                              className="w-16 text-center font-medium tabular-nums border rounded-md px-1 py-0.5"
+                            />
+                          ) : (
+                            <span
+                              className="w-12 text-center font-medium tabular-nums cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1 py-0.5"
+                              onClick={() => {
+                                setEditingProductId(product.id);
+                                setEditValue(String(product.amount));
+                              }}
+                              title="Click para editar cantidad"
+                            >
+                              {product.amount}
+                            </span>
+                          )}
                           <button
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
                             onClick={() => updateProductAmount(product.id, product.amount + 1)}

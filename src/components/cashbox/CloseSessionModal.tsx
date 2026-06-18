@@ -170,16 +170,10 @@ export const CloseSessionModal = ({
         <DialogHeader>
           <DialogTitle>Cierre de Caja</DialogTitle>
           <DialogDescription>
-            Confirme los montos finales y cierre la sesión de caja.
+            ¿Estás seguro de que deseas cerrar la sesión de caja? Confirme los montos finales y cierre la sesión de caja.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleCloseSession} className="space-y-4 pt-4">
-          <div className="py-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              ¿Estás seguro de que deseas cerrar la sesión de caja?
-            </p>
-          </div>
-
           <div className="space-y-2 px-4">
             <Label htmlFor="finalBalance" className="text-xs text-muted-foreground uppercase font-bold">
               Monto en efectivo (Opcional)

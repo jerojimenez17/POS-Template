@@ -184,6 +184,12 @@ export default function ClientSelectionModal({
       return;
     }
 
+    const calculatedTotal = items.reduce((sum, item) => sum + item.salePrice * item.amount, 0);
+    if (Math.abs(calculatedTotal - total) > 0.01) {
+      toast.error("El total no coincide con los productos agregados");
+      return;
+    }
+
     setIsCheckingExistingOrder(true);
     try {
       const result = await getClientUnpaidOrder(selectedClientId, businessId);
