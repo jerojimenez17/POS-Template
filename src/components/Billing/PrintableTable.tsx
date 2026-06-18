@@ -8,6 +8,7 @@ import InlineAmountInput from "./InlineAmountInput";
 import ProductSearchBar from "./ProductSearchBar";
 import { Session } from "next-auth";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { Inter } from "next/font/google";
 import { getBusinessBillingInfoAction } from "@/actions/business";
 import moment from "moment";
@@ -73,6 +74,8 @@ const PrintableTable = ({
     address?: string | null;
   } | null>(null);
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>("");
   const contentRef = useRef<HTMLDivElement>(null);
   const lastPrintTrigger = useRef(0);
 
@@ -197,6 +200,11 @@ const PrintableTable = ({
   }, []);
 
   const handleProductAdd = useCallback((product: Product) => {
+    if (product.amount <= 0) {
+      toast.error("Cantidad corregida a 1 (mínimo permitido)");
+      addItem({ ...product, amount: 1 });
+      return;
+    }
     addItem(product);
   }, [addItem]);
 
@@ -319,8 +327,9 @@ const PrintableTable = ({
                       {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
                         <>
                           <button
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
                             onClick={() => updateProductAmount(product.id, product.amount - 1)}
+                            disabled={product.amount <= 1}
                             aria-label="Disminuir cantidad"
                           >
                             −

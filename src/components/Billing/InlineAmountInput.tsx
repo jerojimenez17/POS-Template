@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 
 interface InlineAmountInputProps {
   /** Current product amount */
@@ -37,10 +38,8 @@ const InlineAmountInput = ({
   const parseValue = (value: string): number | null => {
     const normalized = value.replace(",", ".");
     const parsed = parseFloat(normalized);
-    if (!isNaN(parsed) && parsed > 0) {
-      return parsed;
-    }
-    return null;
+    if (isNaN(parsed)) return null;
+    return Math.max(1, parsed);
   };
 
   const handleSave = () => {
@@ -65,28 +64,60 @@ const InlineAmountInput = ({
 
   if (isEditing) {
     return (
-      <input
-        ref={inputRef}
-        type="text"
-        inputMode="numeric"
-        value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={handleSave}
-        className="w-12 text-center font-medium tabular-nums focus-visible:ring-2 focus-visible:ring-blue-500 outline-none border border-gray-300 rounded"
-        aria-label="Editar cantidad"
-        autoComplete="off"
-      />
+      <Tooltip.Provider>
+        <Tooltip.Root open={isEditing}>
+          <Tooltip.Trigger asChild>
+            <input
+              ref={inputRef}
+              type="text"
+              inputMode="numeric"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={handleSave}
+              className="w-12 text-center font-medium tabular-nums focus-visible:ring-2 focus-visible:ring-blue-500 outline-none border border-gray-300 rounded"
+              aria-label="Editar cantidad"
+              autoComplete="off"
+            />
+          </Tooltip.Trigger>
+          <Tooltip.Portal>
+            <Tooltip.Content
+              side="top"
+              sideOffset={4}
+              className="z-50 rounded-md bg-gray-900 px-2.5 py-1.5 text-xs text-white shadow-sm"
+            >
+              Enter confirma · Escape cancela
+              <Tooltip.Arrow className="fill-gray-900" />
+            </Tooltip.Content>
+          </Tooltip.Portal>
+        </Tooltip.Root>
+      </Tooltip.Provider>
     );
   }
 
   return (
-    <span
-      className="w-12 text-center font-medium tabular-nums"
-      onDoubleClick={handleDoubleClick}
-    >
-      {amount}
-    </span>
+    <Tooltip.Provider>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <span
+            className="w-12 text-center font-medium tabular-nums cursor-pointer"
+            onDoubleClick={handleDoubleClick}
+          >
+            {amount}
+          </span>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content
+            side="top"
+            sideOffset={4}
+            className="z-50 rounded-md bg-gray-900 px-2.5 py-1.5 text-xs text-white shadow-sm"
+          >
+            Doble click para editar cantidad
+            <Tooltip.Arrow className="fill-gray-900" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
   );
 };
 

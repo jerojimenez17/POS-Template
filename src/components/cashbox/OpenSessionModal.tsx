@@ -42,6 +42,7 @@ export const OpenSessionModal = ({
       toast.error(result.error as string);
     } else {
       toast.success("Sesión de caja abierta exitosamente");
+      onClose();
       router.refresh();
     }
     
