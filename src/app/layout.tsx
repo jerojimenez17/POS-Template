@@ -68,7 +68,7 @@ export default function RootLayout({
             <PaymentStatusGuard />
             {children}
             <WebVitals />
-            <Toaster position="bottom-right" />
+            <Toaster position="bottom-right" richColors />
                 </div>
         </FiltersProvider>
       </ThemeProvider>

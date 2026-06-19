@@ -25,6 +25,8 @@ type BillAction =
   | { type: "paidMethod"; payload: string }
   | { type: "billType"; payload: string }
   | { type: "CAE"; payload: CAE }
+  | { type: "clientId"; payload: string }
+  | { type: "client"; payload: string }
   | { type: "setState"; payload: BillState };
 
 export const BillReducer = (
@@ -218,6 +220,18 @@ export const BillReducer = (
       return {
         ...state,
         date: action.payload,
+      };
+    }
+    case "clientId": {
+      return {
+        ...state,
+        clientId: action.payload,
+      };
+    }
+    case "client": {
+      return {
+        ...state,
+        client: action.payload,
       };
     }
     case "setState": {

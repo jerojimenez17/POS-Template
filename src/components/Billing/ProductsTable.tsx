@@ -9,8 +9,9 @@ interface props {
   session: Session | null;
   isEditing?: boolean;
   orderId?: string;
+  ptoVentas?: number[];
 }
-const ProductsTable = ({ session, isEditing, orderId }: props) => {
+const ProductsTable = ({ session, isEditing, orderId, ptoVentas }: props) => {
   const [printTrigger, setPrintTrigger] = useState<{count: number, cae?: CAE}>({count: 0});
   const printWindowRef = useRef<Window | null>(null);
 
@@ -39,6 +40,7 @@ const ProductsTable = ({ session, isEditing, orderId }: props) => {
            handlePrint={handlePrint} 
            isEditing={isEditing}
            orderId={orderId}
+           ptoVentas={ptoVentas}
         />
       </div>
     </div>
