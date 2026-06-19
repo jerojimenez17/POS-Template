@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Printer, FileText, Download } from "lucide-react";
+import { Printer, FileText } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -137,8 +137,8 @@ export default function PrintOptionsPopover({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Download className="h-4 w-4 text-gray-500" />
+        <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir">
+          <Printer className="h-4 w-4 text-gray-500" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
