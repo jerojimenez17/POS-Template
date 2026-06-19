@@ -1,18 +1,17 @@
 "use client";
 import { CalendarIcon } from "lucide-react";
-import moment from "moment";
+import { format } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import DatePicker from "react-datetime";
 import "react-datetime/css/react-datetime.css";
 
-moment.locale("es");
 const PickDateStockRanking = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const handleChange = (e: moment.Moment | string) => {
-    const date = moment(e.toLocaleString());
-    const year = date.year();
-    const month = date.format("MM");
+  const handleChange = (e: unknown) => {
+    const date = new Date(String(e));
+    const year = date.getFullYear();
+    const month = format(date, "MM");
     const params = new URLSearchParams(searchParams);
     params.set("month", `${year}-${month}`);
     router.push(`?${params.toString()}`);

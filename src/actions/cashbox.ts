@@ -2,13 +2,15 @@
 
 import { db } from "@/lib/db";
 import { auth } from "../../auth";
-import { revalidatePath } from "next/cache";
-import { requireFeature, assertWritePermission, FeatureAccessError } from "@/lib/auth-gates";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
+import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
+import { fail } from "@/lib/action-result";
 
 export const getCashboxes = async () => {
   const session = await auth();
   const businessId = session?.user?.businessId;
-  if (!businessId) return { error: "No autorizado" };
+  if (!businessId) return fail("No autorizado");
 
   try {
     const cashboxes = await db.cashBox.findMany({
@@ -18,22 +20,25 @@ export const getCashboxes = async () => {
     return { success: true, data: cashboxes };
   } catch (error) {
     console.error("Error fetching cashboxes:", error);
-    return { error: "Error al obtener cajas" };
+    return fail("Error al obtener cajas");
   }
 };
 
 export const createCashbox = async (name: string, initialTotal: number = 0) => {
   try {
-    await assertWritePermission();
+    const permissionResult = await assertWritePermission();
+    if (!permissionResult.success) return fail(permissionResult.error);
+
     const session = await auth();
     const businessId = session?.user?.businessId;
     const role = session?.user?.role;
     
-    if (!businessId || role !== "ADMIN") return { error: "No autorizado" };
+    if (!businessId || role !== "ADMIN") return fail("No autorizado");
 
     const count = await db.cashBox.count({ where: { businessId } });
     if (count >= 1) {
-      await requireFeature("hasMultiCashbox");
+      const featureResult = await requireFeature("hasMultiCashbox");
+      if (!featureResult.success) return fail(featureResult.error);
     }
 
     const cashbox = await db.cashBox.create({
@@ -43,68 +48,63 @@ export const createCashbox = async (name: string, initialTotal: number = 0) => {
         businessId,
       },
     });
-    revalidatePath("/admin/cashboxes");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true, data: cashbox };
   } catch (error) {
-    if (error instanceof FeatureAccessError || (error instanceof Error && error.name === "FeatureAccessError")) {
-      return { error: error.message };
-    }
     console.error("Error creating cashbox:", error);
-    return { error: "Error al crear caja" };
+    return fail("Error al crear caja");
   }
 };
 
 export const updateCashbox = async (id: string, name: string) => {
   try {
-    await assertWritePermission();
+    const permissionResult = await assertWritePermission();
+    if (!permissionResult.success) return fail(permissionResult.error);
+
     const session = await auth();
     const businessId = session?.user?.businessId;
     const role = session?.user?.role;
     
-    if (!businessId || role !== "ADMIN") return { error: "No autorizado" };
+    if (!businessId || role !== "ADMIN") return fail("No autorizado");
 
     const cashbox = await db.cashBox.update({
       where: { id, businessId },
       data: { name },
     });
-    revalidatePath("/admin/cashboxes");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true, data: cashbox };
   } catch (error) {
-    if (error instanceof FeatureAccessError || (error instanceof Error && error.name === "FeatureAccessError")) {
-      return { error: error.message };
-    }
     console.error("Error updating cashbox:", error);
-    return { error: "Error al actualizar caja" };
+    return fail("Error al actualizar caja");
   }
 };
 
 export const deleteCashbox = async (id: string) => {
   try {
-    await assertWritePermission();
+    const permissionResult = await assertWritePermission();
+    if (!permissionResult.success) return fail(permissionResult.error);
+
     const session = await auth();
     const businessId = session?.user?.businessId;
     const role = session?.user?.role;
     
-    if (!businessId || role !== "ADMIN") return { error: "No autorizado" };
+    if (!businessId || role !== "ADMIN") return fail("No autorizado");
 
     await db.cashBox.delete({
       where: { id, businessId },
     });
-    revalidatePath("/admin/cashboxes");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true };
   } catch (error) {
-    if (error instanceof FeatureAccessError || (error instanceof Error && error.name === "FeatureAccessError")) {
-      return { error: error.message };
-    }
     console.error("Error deleting cashbox:", error);
-    return { error: "Error al eliminar caja" };
+    return fail("Error al eliminar caja");
   }
 };
 
 export const getActiveSession = async () => {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) return { error: "No autorizado" };
+  if (!userId) return fail("No autorizado");
 
   try {
     const activeSession = await db.cashboxSession.findFirst({
@@ -114,27 +114,29 @@ export const getActiveSession = async () => {
     return { success: true, data: activeSession };
   } catch (error) {
     console.error("Error getting active session:", error);
-    return { error: "Error al obtener sesión activa" };
+    return fail("Error al obtener sesión activa");
   }
 };
 
 export const openSession = async (initialBalance: number) => {
   try {
-    await assertWritePermission();
+    const permissionResult = await assertWritePermission();
+    if (!permissionResult.success) return fail(permissionResult.error);
+
     const session = await auth();
     const userId = session?.user?.id;
     const businessId = session?.user?.businessId;
-    // @ts-expect-error - NextAuth types might need update
     const cashboxId = session?.user?.cashboxId;
 
-    if (!userId || !businessId) return { error: "No autorizado" };
+    if (!userId || !businessId) return fail("No autorizado");
 
     // Phase 4 Protection Gates: check if multiple sessions active
     const activeSessionsCount = await db.cashboxSession.count({
       where: { businessId, status: "OPEN" }
     });
     if (activeSessionsCount >= 1) {
-      await requireFeature("hasMultiCashbox");
+      const featureResult = await requireFeature("hasMultiCashbox");
+      if (!featureResult.success) return fail(featureResult.error);
     }
 
     // 1. Verify user has a cashbox assigned
@@ -170,25 +172,24 @@ export const openSession = async (initialBalance: number) => {
     });
     
     // We do not increment CashBox total directly here, CashBox total is a running total of deposits.
-    revalidatePath("/newBill");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true, session: newSession };
   } catch (error) {
-    if (error instanceof FeatureAccessError || (error instanceof Error && error.name === "FeatureAccessError")) {
-      return { error: error.message };
-    }
     console.error("Error opening session:", error);
-    return { error: "Error al abrir sesión" };
+    return fail("Error al abrir sesión");
   }
 };
 
 export const closeSession = async (finalBalanceInput?: number) => {
   try {
-    await assertWritePermission();
+    const permissionResult = await assertWritePermission();
+    if (!permissionResult.success) return fail(permissionResult.error);
+
     const session = await auth();
     const userId = session?.user?.id;
     const businessId = session?.user?.businessId;
 
-    if (!userId || !businessId) return { error: "No autorizado" };
+    if (!userId || !businessId) return fail("No autorizado");
     // 1. Find active session
     const activeSession = await db.cashboxSession.findFirst({
       where: { userId, status: "OPEN" },
@@ -261,21 +262,18 @@ export const closeSession = async (finalBalanceInput?: number) => {
       },
     });
 
-    revalidatePath("/newBill");
+    revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true, session: closedSession, zReport };
   } catch (error) {
-    if (error instanceof FeatureAccessError || (error instanceof Error && error.name === "FeatureAccessError")) {
-      return { error: error.message };
-    }
     console.error("Error closing session:", error);
-    return { error: "Error al cerrar sesión" };
+    return fail("Error al cerrar sesión");
   }
 };
 
 export const getCashboxSessions = async (cashboxId: string) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
-  if (!businessId) return { error: "No autorizado" };
+  if (!businessId) return fail("No autorizado");
 
   try {
     const sessions = await db.cashboxSession.findMany({
@@ -285,6 +283,6 @@ export const getCashboxSessions = async (cashboxId: string) => {
     return { success: true, data: sessions };
   } catch (error) {
     console.error("Error fetching cashbox sessions:", error);
-    return { error: "Error al obtener sesiones" };
+    return fail("Error al obtener sesiones");
   }
 };

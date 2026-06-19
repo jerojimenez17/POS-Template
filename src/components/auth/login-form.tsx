@@ -18,7 +18,7 @@ import { useState, useTransition } from "react";
 import { FormError } from "../ui/form-error";
 import { login } from "../actions/login";
 import { useSearchParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+
 
 export const LoginForm = () => {
   const [isPending, startTransition] = useTransition();
@@ -63,11 +63,7 @@ export const LoginForm = () => {
               control={form.control}
               name="email"
               render={({ field }) => (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 }}
-                >
+                <div>
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
@@ -82,18 +78,14 @@ export const LoginForm = () => {
                     </FormControl>
                     <FormMessage />
                   </FormItem>
-                </motion.div>
+                </div>
               )}
             />
             <FormField
               control={form.control}
               name="password"
               render={({ field }) => (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
+                <div>
                   <FormItem>
                     <FormLabel>Contraseña</FormLabel>
                     <FormControl>
@@ -108,46 +100,30 @@ export const LoginForm = () => {
                     </FormControl>
                     <FormMessage />
                   </FormItem>
-                </motion.div>
+                </div>
               )}
             />
           </div>
-          <AnimatePresence mode="wait">
-            {(error || urlError) && (
-              <motion.div
-                initial={{ opacity: 0, y: -10, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: "auto" }}
-                exit={{ opacity: 0, y: -10, height: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <FormError message={error || urlError} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
+          {(error || urlError) && (
+            <div className="transition-opacity duration-200">
+              <FormError message={error || urlError} />
+            </div>
+          )}
+          <div>
             <Button
               type="submit"
               disabled={isPending}
-              className="w-full transition-all duration-200"
+              className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             >
               {isPending ? (
-                <motion.span
-                  animate={{ opacity: [1, 0.5, 1] }}
-                  transition={{ repeat: Infinity, duration: 1.5 }}
-                >
+                <span className="animate-pulse">
                   Iniciando sesión...
-                </motion.span>
+                </span>
               ) : (
                 "Iniciar sesión"
               )}
             </Button>
-          </motion.div>
+          </div>
         </form>
       </Form>
     </CardWrapper>

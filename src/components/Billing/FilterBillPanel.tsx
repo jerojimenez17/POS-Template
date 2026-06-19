@@ -2,8 +2,6 @@
 import React, { useContext, useEffect, useState } from "react";
 import FilterSwitch from "./FilterSwitch";
 import { FiltersContext } from "@/context/FiltersContext/FiltersContext";
-import moment from "moment";
-import "moment/locale/es";
 import DatePicker from "react-datetime";
 import "react-datetime/css/react-datetime.css";
 import CalendarIcon from "./CalendarIcon";
@@ -125,7 +123,7 @@ const FilterBillPanel = () => {
                 onChange={(e) => {
                   endDate(new Date(e.toString()));
                 }}
-                value={moment(filtersState.endDate.date)}
+                value={new Date(filtersState.endDate.date)}
                 input={true}
                 className="w-full bg-transparent outline-none grow"
               />

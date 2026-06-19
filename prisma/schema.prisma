@@ -76,6 +76,18 @@ model Business {
   // Arca Fileds Ends
   accountStatus     BusinessStatus    @default(ACTIVO)
   lastPaymentDate   DateTime?
+
+  // Branding fields
+  brandLogo             String?   // URL to uploaded logo
+  brandPrimaryColor     String?   @default("#2563eb") // hex color
+  brandSecondaryColor   String?   @default("#f59e0b") // hex color
+
+  // Settings
+  defaultInvoiceDueDays       Int?      @default(30)
+  enableCustomerNotifications Boolean?  @default(false)
+  enableLowStockAlerts        Boolean?  @default(false)
+  lowStockThreshold           Int?      @default(10)
+  timezone                    String?   @default("America/Argentina/Buenos_Aires")
   orderUpdates      OrderUpdate[]
   features          BusinessFeatures?
 }

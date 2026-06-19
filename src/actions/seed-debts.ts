@@ -2,8 +2,8 @@
 
 import { db } from "@/lib/db";
 import { auth } from "../../auth";
-import { revalidatePath } from "next/cache";
-import * as xlsx from "xlsx";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import path from "path";
 import fs from "fs";
 
@@ -25,6 +25,7 @@ export async function seedDebtsFromExcel(filePath?: string, customBusinessId?: s
     }
 
     const fileBuffer = fs.readFileSync(targetPath);
+    const xlsx = await import("xlsx");
     const workbook = xlsx.read(fileBuffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
@@ -172,9 +173,9 @@ export async function seedDebtsFromExcel(filePath?: string, customBusinessId?: s
       }
     }, { maxWait: 10000, timeout: 600000 });
 
-    revalidatePath("/orders");
-    revalidatePath("/clients");
-    revalidatePath("/account-ledger");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
 
     return { success: true, processed, message: `Se procesaron ${processed} cuentas exitosamente.` };
   } catch (error) {

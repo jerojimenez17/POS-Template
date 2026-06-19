@@ -17,10 +17,10 @@ export const DeleteBusinessButton = ({ businessId }: DeleteBusinessButtonProps) 
         startTransition(() => {
             deleteBusiness(businessId)
                 .then((data) => {
-                    if (data.error) {
-                        alert(data.error);
+                    if ('error' in data && data.error) {
+                        alert(data.error as string);
                     }
-                    if (data.success) {
+                    if ('success' in data && data.success) {
                        // Toast or refresh handled by server action revalidatePath, but visual feedback nice
                     }
                 })

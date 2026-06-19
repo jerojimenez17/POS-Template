@@ -4,7 +4,7 @@ import { updateBusinessBalance } from "@/actions/billing";
 import { createMovement } from "@/actions/movements";
 import { Input } from "./ui/input";
 import { Session } from "next-auth";
-import { toast } from "react-hot-toast";
+import { toast } from "sonner";
 
 interface props {
   session: Session | null;

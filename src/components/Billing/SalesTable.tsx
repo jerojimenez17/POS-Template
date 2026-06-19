@@ -4,7 +4,6 @@ import BillState from "@/models/BillState";
 import SaleAccordion from "./SaleAccordion";
 import { FiltersContext } from "@/context/FiltersContext/FiltersContext";
 import PrintableTable from "./PrintableTable";
-import { useAuthContext } from "@/context/AuthContext";
 import {
   Select,
   SelectContent,
@@ -13,7 +12,7 @@ import {
   SelectValue,
 } from "./../ui/select";
 import { Button } from "./../ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { pusherClient } from "@/lib/pusher-client";
 import { getSalesAction } from "@/actions/sales";
 
@@ -21,28 +20,34 @@ import { Session } from "next-auth";
 
 interface props {
   sales: BillState[];
+  nextCursor: string | null;
   session: Session | null;
 }
 
-const SalesTable = ({ sales = [], session }: props) => {
-  const { user } = useAuthContext();
+const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) => {
+  const user = session?.user;
   const [printTrigger, setPrintTrigger] = useState(0);
   const [externalState] = useState<BillState>();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [liveSales, setLiveSales] = useState<BillState[]>(sales);
+  const [cursor, setCursor] = useState<string | null>(initialCursor);
+  const [hasMore, setHasMore] = useState(initialCursor !== null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const { filtersState, seller } = useContext(FiltersContext);
   useEffect(() => {
-    if (user?.email !== process.env.ADMIN_EMAIL && user && user.email) {
-      seller(user?.email);
+    if (user?.email !== process.env.ADMIN_EMAIL && user?.email) {
+      seller(user.email);
     }
   }, [user, seller]);
 
   useEffect(() => {
     setLiveSales(sales);
-  }, [sales]);
+    setCursor(initialCursor);
+    setHasMore(initialCursor !== null);
+  }, [sales, initialCursor]);
 
   useEffect(() => {
     if (session?.user?.businessId) {
@@ -52,7 +57,7 @@ const SalesTable = ({ sales = [], session }: props) => {
       const handleUpdate = async () => {
         const result = await getSalesAction();
         if (result) {
-          setLiveSales(result);
+          setLiveSales(result.sales);
         }
       };
 
@@ -63,6 +68,25 @@ const SalesTable = ({ sales = [], session }: props) => {
       };
     }
   }, [session?.user?.businessId]);
+
+  const handleLoadMore = async () => {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const result = await getSalesAction({ cursor });
+      if (result.sales.length > 0) {
+        setLiveSales((prev) => [...prev, ...result.sales]);
+        setCursor(result.nextCursor);
+        setHasMore(result.nextCursor !== null);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Error loading more sales:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const filteredSales = React.useMemo(() => {
     return liveSales
@@ -168,7 +192,6 @@ const SalesTable = ({ sales = [], session }: props) => {
             <div className="flex flex-col">
               {currentSales.map((sale) => (
                 <SaleAccordion
-                  user={user}
                   session={session}
                   key={sale.id}
                   sale={sale}
@@ -182,6 +205,20 @@ const SalesTable = ({ sales = [], session }: props) => {
             </div>
           </div>
         </div>
+
+        {hasMore && (
+          <div className="flex justify-center py-4">
+            <Button
+              variant="outline"
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="gap-2"
+            >
+              <ChevronDown className={`h-4 w-4 ${loadingMore ? "animate-bounce" : ""}`} />
+              {loadingMore ? "Cargando..." : "Cargar más"}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-4 bg-white bg-opacity-50 gap-4 mt-auto rounded-lg shadow-sm">

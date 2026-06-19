@@ -2,7 +2,8 @@
 
 import { db } from "@/lib/db";
 import { auth } from "../../auth";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 export const getBusinessBySlug = async (slug: string) => {
   try {
@@ -91,7 +92,7 @@ export const updateBusinessStatusAction = async (businessId: string, status: "AC
       where: { id: businessId },
       data: { accountStatus: status },
     });
-    revalidatePath("/admin/businesses");
+    revalidateTag(CACHE_TAGS.BUSINESS, "max");
     return { success: true };
   } catch {
     return { error: "Error al actualizar estado" };
@@ -110,7 +111,7 @@ export const registerPaymentAction = async (businessId: string) => {
         accountStatus: "ACTIVO"
       },
     });
-    revalidatePath("/admin/businesses");
+    revalidateTag(CACHE_TAGS.BUSINESS, "max");
     return { success: true };
   } catch {
     return { error: "Error al registrar pago" };

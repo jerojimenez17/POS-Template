@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limiter";
 
 const createPublicOrderSchema = z.object({
   businessId: z.string(),
@@ -30,6 +31,12 @@ const createPublicOrderSchema = z.object({
 });
 
 export const createPublicOrder = async (input: z.infer<typeof createPublicOrderSchema>) => {
+  const ip = "public-order-global";
+  const { allowed } = checkRateLimit(`public-order:${ip}`, RATE_LIMITS.publicOrders);
+  if (!allowed) {
+    return { error: "Demasiadas solicitudes. Intente nuevamente en un minuto." };
+  }
+
   try {
     const validatedInput = createPublicOrderSchema.parse(input);
     const { businessId, client, items, total } = validatedInput;

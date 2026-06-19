@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
         hostname: "firebasestorage.googleapis.com",
       },
     ],
+    formats: ["image/avif", "image/webp"],
   },
 };
 

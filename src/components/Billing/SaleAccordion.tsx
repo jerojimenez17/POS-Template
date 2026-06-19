@@ -4,23 +4,35 @@ import BillState from "@/models/BillState";
 import BillingModal from "./BillingModal";
 import React, { useState } from "react";
 import PrintOptionsPopover from "./PrintOptionsPopover";
-import { deleteDoc, doc } from "firebase/firestore";
-import { User } from "firebase/auth";
+import { deleteOrderAction } from "@/actions/sales/update";
 import DeleteButton from "../DeleteButton";
 import Modal from "../Modal";
-import { db } from "@/firebase/config";
 import { Session } from "next-auth";
 import { formatLocalDate } from "@/utils/date";
+import { toast } from "sonner";
 
 interface props {
   sale: BillState;
-  user: User | null;
   session: Session | null;
 }
-const SaleAccordion = ({ sale, user, session }: props) => {
+const SaleAccordion = ({ sale, session }: props) => {
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteSale, setDeleteSale] = useState<BillState>();
   const [openBilling, setOpenBilling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteSale) return;
+    setDeleting(true);
+    const result = await deleteOrderAction(deleteSale.id);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Venta eliminada");
+    }
+    setDeleting(false);
+    setOpenDelete(false);
+  };
 
   return (
     <div className="rounded p-4 bg-white shadow-sm hover:shadow-md transition-shadow m-1 border border-gray-100 dark:border-gray-800 text-xs sm:text-sm md:text-base w-175 sm:w-full min-w-max">
@@ -84,7 +96,7 @@ const SaleAccordion = ({ sale, user, session }: props) => {
         {/* Action: Delete */}
         <div className="flex justify-center items-center p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
           <DeleteButton
-            disable={user?.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL}
+            disable={session?.user?.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL}
             onClick={(e) => {
               e.stopPropagation();
               setDeleteSale(sale);
@@ -98,13 +110,8 @@ const SaleAccordion = ({ sale, user, session }: props) => {
         onCancel={() => {
           setOpenDelete(false);
         }}
-        onAcept={async () => {
-          if (deleteSale) {
-            await deleteDoc(doc(db, "sales", deleteSale?.id));
-            setOpenDelete(false);
-          }
-        }}
-        blockButton={false}
+        onAcept={handleDelete}
+        blockButton={deleting}
         onClose={() => {
           setOpenDelete(false);
         }}

@@ -8,24 +8,43 @@ export default auth((req) => {
   const isApiAuthRoute = nextUrl.pathname.startsWith(apiAuthPrefix);
   const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
   const isAuthRoute = authRoutes.includes(nextUrl.pathname);
+  const isPublicCatalog = nextUrl.pathname.includes("/catalogo");
+  const isApiRoute = nextUrl.pathname.startsWith("/api/");
+
+  // 1. Allow NextAuth API routes (they handle authentication internally)
   if (isApiAuthRoute) {
     return;
   }
-  if (nextUrl.pathname.includes("/catalogo")) {
+
+  // 2. Allow public catalog pages: /[business]/catalogo/*
+  // These are business-facing public product pages that don't require login
+  if (isPublicCatalog) {
     return;
   }
+
+  // 3. Protect non-public API routes
+  // /api/auth is handled above; all other API routes require authentication
+  // /api/catalog (future) is intentionally public for catalog data fetching
+  if (isApiRoute && !nextUrl.pathname.startsWith("/api/catalog")) {
+    if (!isLoggedIn) {
+      return Response.redirect(new URL("/auth/login", nextUrl));
+    }
+    return;
+  }
+
+  // 4. Auth routes (login, register, error): redirect authenticated users to home
   if (isAuthRoute) {
     if (isLoggedIn) {
-      // return NextResponse.redirect(new URL("/settings", nextUrl).toString());
-      // return NextResponse.rewrite(new URL("/settings", nextUrl).toString());
       return Response.redirect(new URL("/", nextUrl));
     }
     return;
   }
+
+  // 5. Protected routes: redirect unauthenticated users to login
   if (!isLoggedIn && !isPublicRoute) {
-    // return NextResponse.rewrite(new URL("/auth/login", nextUrl).toString());
     return Response.redirect(new URL("/auth/login", nextUrl));
   }
+
   return;
 });
 

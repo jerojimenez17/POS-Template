@@ -10,11 +10,9 @@ import { getArcaCredentialsForBilling } from "./arca";
  * This action validates the user session and uses a shared secret for authentication.
  */
 export const createAfipVoucherAction = async (billState: BillState) => {
-  try {
-    await requireFeature("hasBilling");
-  } catch (error) {
-    const err = error as Error;
-    return { error: err.message || "No autorizado" };
+  const featureResult = await requireFeature("hasBilling");
+  if (!featureResult.success) {
+    return { error: featureResult.error };
   }
 
   // 1. Get encrypted business credentials

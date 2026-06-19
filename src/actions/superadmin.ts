@@ -2,8 +2,10 @@
 
 import { db } from "@/lib/db";
 import { UserRole, Plan } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/lib/auth";
+import { fail } from "@/lib/action-result";
 
 export const promoteToAdmin = async (userId: string, businessName: string, slug: string) => {
   try {
@@ -37,11 +39,11 @@ export const promoteToAdmin = async (userId: string, businessName: string, slug:
       });
     });
 
-    revalidatePath("/superadmin/dashboard");
+    revalidateTag(CACHE_TAGS.SUPERADMIN, "max");
     return { success: "User promoted and business created." };
   } catch (error) {
     console.error("Promote Error:", error);
-    return { error: "Failed to promote user." };
+    return fail("Failed to promote user.");
   }
 };
 
@@ -71,7 +73,7 @@ export const getAllBusinesses = async () => {
         return { success: businesses };
     } catch (error) {
         console.error("Error fetching businesses:", error);
-        return { error: "Error al obtener negocios" };
+        return fail("Error al obtener negocios");
     }
 };
 
@@ -89,11 +91,11 @@ export const deleteBusiness = async (businessId: string) => {
             }
         });
         
-        revalidatePath("/superadmin/dashboard");
+        revalidateTag(CACHE_TAGS.SUPERADMIN, "max");
         return { success: "Negocio eliminado" };
     } catch (error) {
         console.error("Error deleting business:", error);
-        return { error: "Error al eliminar negocio" };
+        return fail("Error al eliminar negocio");
     }
 };
 
@@ -151,8 +153,7 @@ export const updateBusinessFeaturesAction = async (payload: {
     });
 
     try {
-      revalidatePath("/superadmin/dashboard");
-      revalidatePath("/superadmin/businesses/[id]/features");
+      revalidateTag(CACHE_TAGS.SUPERADMIN, "max");
     } catch {
       // Ignore static generation store missing in test environments
     }
@@ -160,7 +161,7 @@ export const updateBusinessFeaturesAction = async (payload: {
   } catch (error) {
     const err = error as Error;
     console.error("Error updating business features:", error);
-    return { success: false, error: err.message || "Error al actualizar características del negocio" };
+    return fail(err.message || "Error al actualizar características del negocio");
   }
 };
 

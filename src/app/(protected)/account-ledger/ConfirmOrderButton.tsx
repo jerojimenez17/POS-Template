@@ -13,8 +13,8 @@ export default function ConfirmOrderButton({ orderId }: { orderId: string }) {
     setIsConfirming(true);
     try {
       const result = await updateOrderStatus(orderId, "confirmado");
-      if (result?.error) {
-        toast.error(result.error);
+      if (result && 'error' in result && result.error) {
+        toast.error(result.error as string);
       } else {
         toast.success("Pedido confirmado");
       }

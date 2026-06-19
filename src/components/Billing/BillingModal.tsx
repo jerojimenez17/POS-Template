@@ -13,7 +13,7 @@ import Select from "./Select";
 import BillState from "@/models/BillState";
 import { toast } from "sonner";
 import { createAfipVoucherAction } from "@/actions/afip";
-import { updateSale } from "@/services/firebaseService";
+import { updateOrderCaeAction } from "@/actions/sales/update";
 import { Input } from "../ui/input";
 import { paidMethods } from "@/utils/PaidMethods";
 import { Button } from "../ui/button";
@@ -74,18 +74,22 @@ const BillingModal = ({
 
       if (resp.success && resp.data.afip) {
         // Success
-        await updateSale(sale.id, {
+        const caeResult = await updateOrderCaeAction(sale.id, {
           CAE: {
             CAE: resp.data.afip.CAE,
             vencimiento: resp.data.afip.CAEFchVto,
             nroComprobante: resp.data.nroCbte || resp.data.afip.nroCbte,
             qrData: resp.data.qrData || resp.data.afip.qrData,
           },
-          // Also update these fields in case they changed
           IVACondition: ivaCondition,
           documentNumber: Number(documentNumber),
           paidMethod: paymentMethod,
         });
+
+        if (caeResult.error) {
+          toast.error("Error al actualizar CAE: " + caeResult.error);
+          return;
+        }
 
         toast.success("Factura creada exitosamente");
         onSuccess();

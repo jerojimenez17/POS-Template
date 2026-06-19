@@ -2,8 +2,10 @@
 
 import { db } from "@/lib/db";
 import { OrderStatus, PaidStatus } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
+import { fail } from "@/lib/action-result";
 
 // Type definitions for input to avoid circular dependencies with models
 interface OrderProductInput {
@@ -32,20 +34,27 @@ interface OrderInput {
 
 export const createOrder = async (order: OrderInput) => {
   try {
-    await assertWritePermission();
+    const permissionResult = await assertWritePermission();
+    if (!permissionResult.success) return { error: permissionResult.error };
+
     if (order.paidStatus === "inpago") {
-      await requireFeature("hasClientLedger");
+      const featureResult = await requireFeature("hasClientLedger");
+      if (!featureResult.success) return { error: featureResult.error };
     }
 
     return await db.$transaction(async (tx) => {
       // 1. Validate and Update Stock
+      const productIds = order.products.map(p => p.id).filter(Boolean);
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, amount: true },
+      });
+      const productMap = new Map(products.map(p => [p.id, p]));
+
       for (const product of order.products) {
         if (!product.id) continue;
         
-        const dbProduct = await tx.product.findUnique({
-          where: { id: product.id },
-        });
-
+        const dbProduct = productMap.get(product.id);
         if (!dbProduct) {
           throw new Error(`Producto ${product.description || product.id} no encontrado`);
         }
@@ -101,18 +110,19 @@ const newOrder = await tx.order.create({
       return { success: "Orden creada", orderId: newOrder.id };
     });
     
-    revalidatePath("/orders");
-    revalidatePath("/stock");
-    revalidatePath("/clients"); // Client balance update
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
   } catch (error) {
     console.error("Transaction failed: ", error);
-    return { error: "Error al guardar Orden: " + (error instanceof Error ? error.message : "Unknown error") };
+    return fail(error instanceof Error ? error.message : "Error al guardar Orden");
   }
 };
 
 export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-        await assertWritePermission();
+        const permissionResult = await assertWritePermission();
+        if (!permissionResult.success) return { error: permissionResult.error };
         await db.$transaction(async (tx) => {
             const order = await tx.order.findUnique({
                 where: { id: orderId },
@@ -139,12 +149,16 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                 const month = now.getMonth() + 1;
                 const year = now.getFullYear();
 
+                const orderItemProductIds = order.items.map(i => i.productId).filter((id): id is string => id !== null);
+                const existingProducts = await tx.product.findMany({
+                    where: { id: { in: orderItemProductIds } },
+                    select: { id: true, amount: true },
+                });
+                const existingProductMap = new Map(existingProducts.map(p => [p.id, p]));
+
                 for (const item of order.items) {
                     if (item.productId) {
-                        const product = await tx.product.findUnique({
-                            where: { id: item.productId }
-                        });
-
+                        const product = existingProductMap.get(item.productId);
                         if (!product || product.amount < item.quantity) {
                             throw new Error(`Stock insuficiente para el producto ${item.description || item.productId}`);
                         }
@@ -198,21 +212,24 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
             });
         });
 
-        revalidatePath("/orders");
-        revalidatePath("/stock");
-        revalidatePath("/clients");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CLIENTS, "max");
         return { success: true };
     } catch (error) {
         console.error(error);
-        return { error: "Error actualizando estado: " + (error instanceof Error ? error.message : "") };
+        return fail(error instanceof Error ? error.message : "Error actualizando estado");
     }
 }
 
 export const updateOrderPaidStatus = async (orderId: string, newStatus: PaidStatus) => {
     try {
-        await assertWritePermission();
+        const permissionResult = await assertWritePermission();
+        if (!permissionResult.success) return { error: permissionResult.error };
+
         if (newStatus === "inpago") {
-            await requireFeature("hasClientLedger");
+            const featureResult = await requireFeature("hasClientLedger");
+            if (!featureResult.success) return { error: featureResult.error };
         }
         await db.$transaction(async (tx) => {
            const order = await tx.order.findUnique({ where: { id: orderId } });
@@ -245,10 +262,10 @@ export const updateOrderPaidStatus = async (orderId: string, newStatus: PaidStat
            });
         });
         
-        revalidatePath("/orders");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
         return { success: true };
     } catch (error) {
          console.error(error);
-        return { error: "Error actualizando estado de pago" };
+        return fail("Error actualizando estado de pago");
     }
 }

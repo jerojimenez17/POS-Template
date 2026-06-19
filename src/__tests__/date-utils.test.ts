@@ -7,7 +7,7 @@ import { formatLocalDate } from '../utils/date';
  */
 describe('formatLocalDate', () => {
   // Pattern: 2 digits for day, month, 4 for year, space, 2 for hour, colon, 2 for minute
-  const dateRegex = /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/;
+  const dateRegex = /^\d{2}\/\d{2}\/\d{4},? \d{2}:\d{2}$/;
 
   it('should format a Date object consistently with the required pattern', () => {
     const date = new Date('2024-05-20T15:30:00Z');
@@ -27,13 +27,17 @@ describe('formatLocalDate', () => {
     const result = formatLocalDate(date);
 
     expect(result).toMatch(dateRegex);
-    expect(result.length).toBe(16); // "DD/MM/YYYY HH:mm" is always 16 chars
 
-    // Verify specific separator positions
+    // Structure: DD/MM/YYYY[,] HH:mm (comma depends on runtime locale)
+    expect(result.length).toBeGreaterThanOrEqual(16);
+    expect(result.length).toBeLessThanOrEqual(17);
     expect(result.charAt(2)).toBe('/');
     expect(result.charAt(5)).toBe('/');
-    expect(result.charAt(10)).toBe(' ');
-    expect(result.charAt(13)).toBe(':');
+    // ':; is at position 13 (no comma) or 14 (with comma)
+    const colonPos = result.indexOf(':'); // position 13 or 14
+    expect(colonPos).toBeGreaterThanOrEqual(13);
+    expect(colonPos).toBeLessThanOrEqual(14);
+    expect(result.charAt(colonPos)).toBe(':');
   });
 
   it('should handle edge cases like midnight and noon', () => {

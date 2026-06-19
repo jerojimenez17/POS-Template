@@ -2,7 +2,8 @@
 
 import { db } from "@/lib/db";
 import { auth } from "../../auth";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 export const getBrands = async () => {
   const session = await auth();
@@ -30,7 +31,7 @@ export const createBrand = async (name: string) => {
         business: { connect: { id: session.user.businessId } },
       },
     });
-    revalidatePath("/stock");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: "Marca creada", brand };
   } catch (error) {
     console.error(error);

@@ -1,0 +1,12 @@
+status: archived
+phase: 1
+branch: 1-test-dom-unification
+base: 1-pre-commit-hooks
+commits:
+  - 31c6570 chore: unify test DOM environment to jsdom
+completed_at: 2026-06-13
+artifacts:
+  - proposal.md
+verification:
+  build: pass
+  tests: 317 passed, 51 failed (3 pre-existing failures eliminated vs happy-dom)

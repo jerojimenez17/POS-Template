@@ -25,11 +25,21 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "Stock.ia",
   description: "A SaaS for Point of Sales",
+  other: {
+    "theme-color": "#0f172a",
+  },
 };
 
-import { Toaster } from "react-hot-toast";
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
+import { Toaster } from "sonner";
 
 import { AuthProvider } from "@/components/auth/SessionProvider";
+import { WebVitals } from "@/components/WebVitals";
 
 export default function RootLayout({
   children,
@@ -40,6 +50,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className="dark">
       <head>
         <meta name="color-scheme" content="dark light" />
+        <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
+        <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
         <link rel="icon" type="image/png" href="/LOGO.png" />
       </head>
           <body
@@ -53,6 +65,7 @@ export default function RootLayout({
             <NavigationMenuHeader />
             <PaymentStatusGuard />
             {children}
+            <WebVitals />
             <Toaster position="bottom-right" />
                 </div>
         </FiltersProvider>

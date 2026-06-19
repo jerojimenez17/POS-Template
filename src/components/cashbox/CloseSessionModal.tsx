@@ -51,10 +51,10 @@ export const CloseSessionModal = ({
     const balance = finalBalance === "" ? undefined : parseFloat(finalBalance);
     const result = await closeSession(balance);
 
-    if (result.error) {
-      toast.error(result.error);
+    if ('error' in result && result.error) {
+      toast.error(result.error as string);
       onClosingChange?.(false);
-    } else if (result.zReport) {
+    } else if ('zReport' in result && result.zReport) {
       setZReport(result.zReport as ZReport);
       toast.success("Sesión cerrada exitosamente");
     }

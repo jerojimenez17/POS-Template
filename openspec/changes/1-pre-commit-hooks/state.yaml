@@ -1,0 +1,14 @@
+status: archived
+phase: 1
+branch: 1-pre-commit-hooks
+base: 1-error-handling-unification
+commits:
+  - 2502be3 chore: add husky and lint-staged pre-commit hooks
+completed_at: 2026-06-13
+artifacts:
+  - proposal.md
+  - spec.md
+  - design.md
+verification:
+  build: pass
+  tests: unchanged

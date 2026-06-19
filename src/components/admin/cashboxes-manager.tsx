@@ -83,8 +83,8 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
     setIsDeleteDialogOpen(false);
     setCashboxToDelete(null);
 
-    if (result.error) {
-      toast.error(result.error);
+    if ('error' in result && result.error) {
+      toast.error(result.error as string);
     } else {
       toast.success("Caja eliminada");
       router.refresh();
@@ -101,8 +101,8 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
 
     if (editingCashbox) {
       const result = await updateCashbox(editingCashbox.id, cashboxName.trim());
-      if (result.error) {
-        toast.error(result.error);
+      if ('error' in result && result.error) {
+        toast.error(result.error as string);
       } else {
         toast.success("Caja actualizada");
         setIsModalOpen(false);
@@ -110,8 +110,8 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
       }
     } else {
       const result = await createCashbox(cashboxName.trim());
-      if (result.error) {
-        toast.error(result.error);
+      if ('error' in result && result.error) {
+        toast.error(result.error as string);
       } else {
         toast.success("Caja creada");
         setIsModalOpen(false);

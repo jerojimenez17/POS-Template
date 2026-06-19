@@ -1,7 +1,7 @@
 import { auth } from "../../../../../auth";
 import { getSaleByIdAction } from "@/actions/sales";
 import SaleHistory from "@/components/Billing/SaleHistory";
-import moment from "moment";
+import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -52,7 +52,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                 <span className="text-xs text-slate-500 uppercase font-semibold">Fecha</span>
                 <div className="flex items-center gap-2 text-slate-700 font-medium">
                   <Calendar className="h-4 w-4 text-slate-400" />
-                  {moment(sale.date).format("DD/MM/YYYY HH:mm")}
+                  {format(sale.date, "dd/MM/yyyy HH:mm")}
                 </div>
               </div>
               <div className="space-y-1">

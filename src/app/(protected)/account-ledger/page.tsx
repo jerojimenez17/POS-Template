@@ -27,6 +27,7 @@ import { PusherListener } from "./PusherListener";
 import ConfirmOrderButton from "./ConfirmOrderButton";
 import { LocalDate } from "@/components/ui/LocalDate";
 import SearchLedger from "./SearchLedger";
+import type { Session } from "next-auth";
 
 type StatusFilter = "all" | "inpago" | "pago" | "cancelado" | "pendiente";
 
@@ -43,10 +44,10 @@ type OrderWithClient = {
 interface OrdersTableProps {
   status: StatusFilter;
   search?: string;
+  session: Session | null;
 }
 
-async function OrdersTable({ status, search }: OrdersTableProps) {
-  const session = await auth();
+async function OrdersTable({ status, search, session }: OrdersTableProps) {
   if (!session?.user?.businessId) {
     redirect("/");
   }
@@ -181,10 +182,12 @@ export default async function AccountLedgerPage({
 }: {
   searchParams: Promise<{ status?: string; search?: string }>;
 }) {
-  const params = await searchParams;
+  const [session, params] = await Promise.all([
+    auth(),
+    searchParams,
+  ]);
   const status = (params.status as StatusFilter) || "inpago";
   const search = params.search;
-  const session = await auth();
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
@@ -218,7 +221,7 @@ export default async function AccountLedgerPage({
             </div>
           }
         >
-          <OrdersTable status={status} search={search} />
+          <OrdersTable status={status} search={search} session={session} />
         </Suspense>
       </div>
     </div>

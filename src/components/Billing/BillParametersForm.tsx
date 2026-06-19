@@ -29,7 +29,7 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
   const [editParamters, setEditParameters] = useState(false);
   const [lastVoucherNum, setLastVoucherNum] = useState<number | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(false);
-  const { setState, BillState, onOrderResetRef } = useContext(BillContext);
+  const { dispatch, BillState, onOrderResetRef } = useContext(BillContext);
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
     resolver: zodResolver(BillParametersSchema),
@@ -95,21 +95,24 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
     const clientCondition = form.getValues().clientCondition;
     const documentNumber = form.getValues().documentNumber ?? 0;
     
-    setState({
-      ...form.getValues(),
-      id: "",
-      products: BillState.products,
-      total: BillState.total,
-      totalWithDiscount: BillState.totalWithDiscount,
-      seller: BillState.seller,
-      billType: form.getValues().billType,
-      date: currentDate,
-      typeDocument: clientCondition,
-      documentNumber,
-      IVACondition: clientCondition,
-      clientIvaCondition: clientCondition,
-      clientDocumentNumber: String(documentNumber),
-      ptoVenta: form.getValues().ptoVenta,
+    dispatch({
+      type: "setState",
+      payload: {
+        ...form.getValues(),
+        id: "",
+        products: BillState.products,
+        total: BillState.total,
+        totalWithDiscount: BillState.totalWithDiscount,
+        seller: BillState.seller,
+        billType: form.getValues().billType,
+        date: currentDate,
+        typeDocument: clientCondition,
+        documentNumber,
+        IVACondition: clientCondition,
+        clientIvaCondition: clientCondition,
+        clientDocumentNumber: String(documentNumber),
+        ptoVenta: form.getValues().ptoVenta,
+      },
     });
     
     setEditParameters(false);

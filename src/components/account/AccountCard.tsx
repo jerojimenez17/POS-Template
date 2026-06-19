@@ -1,4 +1,5 @@
 import Account from "@/models/Account";
+import { format } from "date-fns";
 
 interface Props {
   account: Account;
@@ -24,7 +25,7 @@ const AccountCard = ({ account, onClick }: Props) => {
         </strong>
       </p>
       <p className="text-xs text-gray-500 mt-1">
-        Última actualización: {account.last_update.format("DD/MM/YYYY HH:mm")}
+        Última actualización: {format(account.last_update, "dd/MM/yyyy HH:mm")}
       </p>
     </div>
   );

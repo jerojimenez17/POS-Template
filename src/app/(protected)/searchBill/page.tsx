@@ -9,13 +9,13 @@ export const dynamic = 'force-dynamic';
 
 const SearchBillContent = async () => {
   const session = await auth();
-  const sales = await getSalesAction();
+  const { sales, nextCursor } = await getSalesAction();
 
   return (
     <div className="flex flex-col items-center w-full max-w-7xl mx-auto px-4 py-8 space-y-6 overflow-auto mb-10">
       <FilterBillPanel />
       <div className="w-full">
-        <SalesTable sales={sales} session={session} />
+        <SalesTable sales={sales} nextCursor={nextCursor} session={session} />
       </div>
     </div>
   );
