@@ -15,20 +15,21 @@ import {
 } from "../ui/select";
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
-import { Button } from "../ui/button";
-import { useContext, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { BillContext } from "@/context/BillContext";
 import BillTypes from "@/models/billType";
 import { getVoucherNumberAction } from "@/actions/voucher";
+import { cn } from "@/lib/utils";
+import { Settings2, X } from "lucide-react";
 
 interface BillParametersFormProps {
   ptoVentas?: number[];
 }
 
 const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
-  const [editParamters, setEditParameters] = useState(false);
-  const [lastVoucherNum, setLastVoucherNum] = useState<number | null>(null);
-  const [loadingVoucher, setLoadingVoucher] = useState(false);
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [lastVoucherNum, setLastVoucherNum] = React.useState<number | null>(null);
+  const [loadingVoucher, setLoadingVoucher] = React.useState(false);
   const { dispatch, BillState, onOrderResetRef } = useContext(BillContext);
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
@@ -47,29 +48,24 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
 
   const watchBillType = form.watch("billType");
   const watchPtoVenta = form.watch("ptoVenta");
+  const watchClientCondition = form.watch("clientCondition");
+  const watchDiscount = form.watch("discount");
+  const watchTwoMethods = form.watch("twoMethods");
+  const watchPaidMethod = form.watch("paidMethod");
 
   useEffect(() => {
     const fetchVoucher = async () => {
       if (!watchPtoVenta) return;
       setLoadingVoucher(true);
-      
       let tipoFactura = 11;
       const billTypeStr = String(watchBillType).toLowerCase();
-      if (billTypeStr.includes("factura a")) {
-        tipoFactura = 1; // Simplificado para comprobante normal
-      } else if (billTypeStr.includes("factura b")) {
-        tipoFactura = 6;
-      }
-
+      if (billTypeStr.includes("factura a")) tipoFactura = 1;
+      else if (billTypeStr.includes("factura b")) tipoFactura = 6;
       const res = await getVoucherNumberAction(watchPtoVenta, tipoFactura);
-      if (res.success !== undefined) {
-        setLastVoucherNum(res.success);
-      } else {
-        setLastVoucherNum(null);
-      }
+      if (res.success !== undefined) setLastVoucherNum(res.success);
+      else setLastVoucherNum(null);
       setLoadingVoucher(false);
     };
-
     fetchVoucher();
   }, [watchBillType, watchPtoVenta]);
 
@@ -85,98 +81,97 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
         secondPaidMethod: PaidMethods.DEBITO,
         ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
       });
-      setEditParameters(false);
     };
   }, [form, onOrderResetRef]);
 
   const currentDate = useMemo(() => new Date(), []);
+  const billStateRef = useRef(BillState);
+  billStateRef.current = BillState;
 
-  const onSubmit = () => {
-    const clientCondition = form.getValues().clientCondition;
-    const documentNumber = form.getValues().documentNumber ?? 0;
-    
+  const pushToContext = useCallback(() => {
+    const values = form.getValues();
+    const clientCondition = values.clientCondition;
+    const documentNumber = values.documentNumber ?? 0;
+    const bs = billStateRef.current;
     dispatch({
       type: "setState",
       payload: {
-        ...form.getValues(),
-        id: "",
-        products: BillState.products,
-        total: BillState.total,
-        totalWithDiscount: BillState.totalWithDiscount,
-        seller: BillState.seller,
-        billType: form.getValues().billType,
+        ...values,
+        id: bs.id || "",
+        products: bs.products,
+        total: bs.total,
+        totalWithDiscount: bs.totalWithDiscount,
+        seller: bs.seller,
         date: currentDate,
         typeDocument: clientCondition,
         documentNumber,
         IVACondition: clientCondition,
         clientIvaCondition: clientCondition,
         clientDocumentNumber: String(documentNumber),
-        ptoVenta: form.getValues().ptoVenta,
+        ptoVenta: values.ptoVenta,
       },
     });
-    
-    setEditParameters(false);
-  };
-  return editParamters ? (
+  }, [dispatch, currentDate, form]);
+
+  const watchDocumentNumber = form.watch("documentNumber");
+  const watchBillTypeField = form.watch("billType");
+  const watchTotalSecondMethod = form.watch("totalSecondMethod");
+  const watchSecondPaidMethod = form.watch("secondPaidMethod");
+  const watchPtoVentaField = form.watch("ptoVenta");
+
+  useEffect(() => {
+    const timer = setTimeout(pushToContext, 150);
+    return () => clearTimeout(timer);
+  }, [watchPaidMethod, watchClientCondition, watchDiscount, watchTwoMethods,
+      watchBillTypeField, watchTotalSecondMethod, watchSecondPaidMethod,
+      watchPtoVentaField, watchDocumentNumber, pushToContext]);
+
+  // Shared: document number input (appears on non-CF conditions)
+  const showDocInput = watchClientCondition !== ClientConditions.CONSUMIDOR_FINAL;
+
+  // Shared: split payment fields
+  const showSplit = watchTwoMethods;
+
+  const formContent = (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Grid de 3 columnas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Comprobante */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-              </svg>
-              Comprobante
-            </div>
-            
-            <div className="space-y-3">
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] gap-4">
+          {/* COL 1: Comprobante */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 flex-wrap">
               <FormField
                 control={form.control}
-                name={"billType"}
+                name="billType"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Tipo</FormLabel>
+                  <FormItem className="min-w-[140px]">
+                    <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo</FormLabel>
                     <Select {...field} onValueChange={field.onChange}>
-                      <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                        <SelectValue placeholder={field.value} />
+                      <SelectTrigger className="h-8 text-sm rounded-md">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.values(BillTypes).map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
+                        {Object.values(BillTypes).map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </FormItem>
                 )}
               />
-
               {ptoVentas.length > 0 && (
                 <FormField
                   control={form.control}
                   name="ptoVenta"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Pto. Venta</FormLabel>
-                      <Select 
-                        value={field.value ? String(field.value) : undefined} 
-                        onValueChange={(val) => field.onChange(Number(val))}
-                      >
-                        <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                          <SelectValue placeholder="Seleccione" />
+                    <FormItem className="min-w-[90px]">
+                      <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pto.</FormLabel>
+                      <Select value={field.value ? String(field.value) : undefined} onValueChange={(v) => field.onChange(Number(v))}>
+                        <SelectTrigger className="h-8 text-sm rounded-md">
+                          <SelectValue placeholder="-" />
                         </SelectTrigger>
                         <SelectContent>
-                          {ptoVentas.map((pto) => (
-                            <SelectItem key={pto} value={String(pto)}>
-                              {String(pto).padStart(3, '0')}
-                            </SelectItem>
+                          {ptoVentas.map((p) => (
+                            <SelectItem key={p} value={String(p)}>{String(p).padStart(3, '0')}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -184,42 +179,45 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
                   )}
                 />
               )}
-
+              {watchPtoVenta && (
+                <div className="self-end pb-1.5">
+                  <span className="text-[11px] font-mono text-gray-400">
+                    {loadingVoucher ? "..." : `${String(watchPtoVenta).padStart(3, '0')}-${String((lastVoucherNum || 0) + 1).padStart(4, '0')}`}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
               <FormField
                 control={form.control}
-                name={"clientCondition"}
+                name="clientCondition"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Condición IVA</FormLabel>
+                  <FormItem className="min-w-[150px]">
+                    <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cond. IVA</FormLabel>
                     <Select {...field} onValueChange={field.onChange}>
-                      <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                        <SelectValue placeholder={field.value} />
+                      <SelectTrigger className="h-8 text-sm rounded-md">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.values(ClientConditions).map((condition) => (
-                          <SelectItem key={condition} value={condition}>
-                            {condition}
-                          </SelectItem>
+                        {Object.values(ClientConditions).map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </FormItem>
                 )}
               />
-
-              {form.watch("clientCondition") !== ClientConditions.CONSUMIDOR_FINAL && (
+              {showDocInput && (
                 <FormField
                   control={form.control}
                   name="documentNumber"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm text-gray-600 dark:text-gray-300">
-                        {form.watch("clientCondition") === ClientConditions.CUIT
-                          ? "CUIT"
-                          : "DNI"}
+                    <FormItem className="min-w-[130px]">
+                      <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                        {watchClientCondition === ClientConditions.CUIT ? "CUIT" : "DNI"}
                       </FormLabel>
                       <Input
-                        className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
+                        className="h-8 text-sm rounded-md"
                         type="number"
                         name={field.name}
                         value={field.value || ""}
@@ -234,246 +232,162 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
             </div>
           </div>
 
-          {/* Pago */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-500">
-                <rect width="20" height="14" x="2" y="5" rx="2"/>
-                <line x1="2" y1="10" x2="22" y2="10"/>
-              </svg>
-              Pago
-            </div>
-            
-            <div className="space-y-3">
+          {/* COL 2: Pago */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 flex-wrap">
               <FormField
                 control={form.control}
-                name={"paidMethod"}
+                name="paidMethod"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Medio</FormLabel>
+                  <FormItem className="min-w-[140px]">
+                    <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pago</FormLabel>
                     <Select {...field} onValueChange={field.onChange}>
-                      <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                        <SelectValue placeholder={field.value} />
+                      <SelectTrigger className="h-8 text-sm rounded-md">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.values(PaidMethods).map((method) => (
-                          <SelectItem key={method} value={method}>
-                            {method}
-                          </SelectItem>
+                        {Object.values(PaidMethods).map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
-                name={"twoMethods"}
+                name="twoMethods"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
-                      Dividir pago
-                    </FormLabel>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormItem>
-                )}
-              />
-
-              {form.watch("twoMethods") && (
-                <div className="space-y-3 pl-2 border-l-2 border-gray-200 dark:border-gray-600">
-                  <FormField
-                    control={form.control}
-                    name={"secondPaidMethod"}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Segundo medio</FormLabel>
-                        <Select {...field} onValueChange={field.onChange}>
-                          <SelectTrigger className="h-10 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                            <SelectValue placeholder={field.value} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.values(PaidMethods).map((method) => (
-                              <SelectItem key={method} value={method}>
-                                {method}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="totalSecondMethod"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Monto</FormLabel>
-                        <Input
-                          className="h-10 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
-                          placeholder="0"
-                          {...field}
-                          onChange={field.onChange}
-                        />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Descuento */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-              </svg>
-              Descuento
-            </div>
-            
-            <div className="space-y-3">
-              <FormField
-                control={form.control}
-                name="discount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Porcentaje (%)</FormLabel>
-                    <div className="relative">
-                      <Input
-                        className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 pr-10"
-                        {...field}
-                        value={field.value === 0 ? "" : field.value}
-                        placeholder="0"
+                  <FormItem className="self-end pb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Checkbox
+                        id="twoMethods"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        className="h-3.5 w-3.5"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
+                      <label htmlFor="twoMethods" className="text-[11px] font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                        Dividir
+                      </label>
                     </div>
                   </FormItem>
                 )}
               />
-
-              {/* Preview del descuento */}
-              {form.watch("discount") > 0 && (
-                <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500">
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="12" y1="8" x2="12" y2="12"/>
-                      <line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
-                    <span className="text-orange-700 dark:text-orange-400 font-medium">
-                      -{form.watch("discount")}% de descuento aplicado
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
+            {showSplit && (
+              <div className="flex items-center gap-3 flex-wrap pl-1 border-l-2 border-gray-200 dark:border-gray-700">
+                <FormField
+                  control={form.control}
+                  name="secondPaidMethod"
+                  render={({ field }) => (
+                    <FormItem className="min-w-[130px]">
+                      <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">2do medio</FormLabel>
+                      <Select {...field} onValueChange={field.onChange}>
+                        <SelectTrigger className="h-8 text-sm rounded-md">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.values(PaidMethods).map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="totalSecondMethod"
+                  render={({ field }) => (
+                    <FormItem className="min-w-[100px]">
+                      <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Monto</FormLabel>
+                      <Input
+                        className="h-8 text-sm rounded-md"
+                        placeholder="0"
+                        {...field}
+                        onChange={field.onChange}
+                      />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* COL 3: Descuento (compact) */}
+          <div className="space-y-2 self-start">
+            <FormField
+              control={form.control}
+              name="discount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Desc.</FormLabel>
+                  <div className="relative min-w-[90px]">
+                    <Input
+                      className="h-8 text-sm rounded-md pr-7"
+                      {...field}
+                      value={field.value === 0 ? "" : field.value}
+                      placeholder="0"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">%</span>
+                  </div>
+                </FormItem>
+              )}
+            />
+            {watchDiscount > 0 && (
+              <div className="rounded-md bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 px-2.5 py-1.5">
+                <span className="text-[11px] font-medium text-orange-700 dark:text-orange-400">
+                  -{watchDiscount}%
+                </span>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Botones de acción */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <Button
-            type="button"
-            className="h-10 rounded-lg font-medium px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 dark:border-gray-600"
-            onClick={() => setEditParameters(false)}
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            className="h-10 rounded-lg font-medium px-6 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-          >
-            Guardar cambios
-          </Button>
-        </div>
-      </form>
+      </div>
     </Form>
-  ) : (
-    <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm">
-      {/* Comprobante y Pto Venta */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => setEditParameters(true)}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <span className="font-semibold text-gray-700 dark:text-gray-300">
-            {form.getValues().billType}
-          </span>
-          {form.getValues().ptoVenta && (
-            <span className="ml-1 text-gray-600 dark:text-gray-400 font-mono text-xs">
-              | {String(form.getValues().ptoVenta).padStart(3, '0')}-
-              {loadingVoucher ? "..." : String((lastVoucherNum || 0) + 1).padStart(4, '0')}
-            </span>
+  );
+
+  return (
+    <>
+      {/* Desktop: always visible */}
+      <div className="hidden md:block bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 md:px-6 py-3">
+        <div className="max-w-7xl mx-auto">
+          {formContent}
+        </div>
+      </div>
+
+      {/* Mobile: toggle button */}
+      <div className="md:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors w-full",
+            mobileOpen
+              ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+              : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
           )}
-        </div>
+        >
+          {mobileOpen ? <X className="h-4 w-4" /> : <Settings2 className="h-4 w-4" />}
+          <span>Parámetros de venta</span>
+          <div className="ml-auto flex items-center gap-2 text-[11px] text-gray-400">
+            <span>{watchBillTypeField}</span>
+            <span>·</span>
+            <span>{watchPaidMethod}</span>
+            {watchDiscount > 0 && (
+              <>
+                <span>·</span>
+                <span>-{watchDiscount}%</span>
+              </>
+            )}
+          </div>
+        </button>
+        {mobileOpen && (
+          <div className="pt-3 pb-1">
+            {formContent}
+          </div>
+        )}
       </div>
-
-      {/* Condición IVA */}
-      <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-        <span>IVA:</span>
-        <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().clientCondition}</span>
-      </div>
-
-      {/* CUIT/DNI */}
-      {form.watch("clientCondition") === ClientConditions.CUIT && form.getValues().documentNumber > 0 && (
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-          <span>CUIT:</span>
-          <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>
-        </div>
-      )}
-
-      {form.watch("clientCondition") === ClientConditions.DNI && form.getValues().documentNumber > 0 && (
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-          <span>DNI:</span>
-          <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>
-        </div>
-      )}
-
-      {/* Pago */}
-      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-50 dark:bg-green-900/20">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-600 dark:text-green-400">
-          <rect width="20" height="14" x="2" y="5" rx="2"/>
-          <line x1="2" y1="10" x2="22" y2="10"/>
-        </svg>
-        <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().paidMethod}</span>
-      </div>
-
-      {/* Segundo medio */}
-      {form.getValues().twoMethods && (
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-          <span>+</span>
-          <span className="font-medium">{form.getValues().secondPaidMethod}</span>
-        </div>
-      )}
-
-      {/* Descuento */}
-      {form.getValues().discount > 0 && (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-50 dark:bg-orange-900/20">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500">
-            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-          <span className="font-semibold text-orange-600 dark:text-orange-400">-{form.getValues().discount}%</span>
-        </div>
-      )}
-
-      {/* Botón editar */}
-      <Button 
-        variant="outline" 
-        size="sm" 
-        onClick={() => setEditParameters(true)} 
-        className="ml-2 rounded-lg h-8 px-3 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-        </svg>
-        Editar
-      </Button>
-    </div>
+    </>
   );
 };
 
