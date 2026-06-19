@@ -1,25 +1,6 @@
 "use client";
-// const NavBar = () => {
-//   return (
-//     <div className="flex mx-auto opacity-90 shadow-sm h-14 w-full justify-between px-4 py-5">
-//       <section className="flex justify-between">
-//         <span className="text-white font-bold text-2xl">Genesis</span>
-//       </section>
-//       <ul className="justify-center flex grow">
-//         <li className="justify-center items-center hover:shadow-inner hover:shadow-white py-2 align-baseline">
-//           <Link href="/stock">
-//             <p className="text-center text-white font-semibold ">Stock</p>
-//           </Link>
-//         </li>
-//       </ul>
-//     </div>
-//   );
-// };
-
-// export default NavBar;
 
 import { cn } from "@/lib/utils";
-import { NavigationMenuLink } from "@/components/ui/navigation-menu";
 import { Poppins } from "next/font/google";
 import React from "react";
 import Link from "next/link";
@@ -28,96 +9,46 @@ import { UserButton } from "../auth/user-button";
 import { useSession } from "next-auth/react";
 import { Button } from "./button";
 import { LoginButton } from "../auth/login-button";
-
-//   {
-//     title: "Pedidos",
-//     href: "/orders",
-//     description: "Chequea y administra tus pedidos",
-//   },
-// ];
+import { useMobileNav } from "@/context/MobileNavContext";
+import { Menu, X } from "lucide-react";
 
 const font = Poppins({
   subsets: ["latin"],
   weight: ["600"],
 });
+
 export function NavigationMenuHeader() {
   const { data: session } = useSession();
+  const { open: mobileOpen, setOpen: setMobileOpen } = useMobileNav();
   const businessName = session?.user?.businessName || "Stock.ia";
 
   return (
     <div
       className={cn(
-        `w-full items-center h-12 shadow-md shadow-gray-400 relative flex justify-center align-middle`,
+        "w-full items-center h-12 shadow-md shadow-gray-400 relative flex px-4",
         font.className
       )}
     >
-      <div className="flex grow w-full text-center">
-        <span
-          className={cn(
-            `text-center text-2xl font-semibold text-gray-800 mx-auto my-2`,
-            font.className
-          )}
-        >
-          <Link href="/">
-            <h1 className="mx-auto dark:text-gray-50">{businessName}</h1>
-          </Link>
-          {/* <Image
-            className={`w-32 h-12 antialiased`}
-            height={100}
-            style={{ objectFit: "none" }}
-            width={100}
-            src={
-              "https://firebasestorage.googleapis.com/v0/b/vcda-app.appspot.com/o/logoRoot2.png?alt=media&token=428dc1cd-26b0-4516-8f5b-f656b89d028b"
-            }
-            alt="VCD"
-          /> */}
-        </span>
+      {/* Left spacer (keeps title centered) */}
+      <div className="w-12 md:w-0">
+        {session && (
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300"
+            aria-label={mobileOpen ? "Cerrar menú" : "Abrir menú"}
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        )}
       </div>
-      {/* <NavigationMenu className="my-1 p-1 h-10 z-50 w-18">
-        <NavigationMenuList>
-          {true && (
-            <NavigationMenuItem className="">
-              <NavigationMenuTrigger className="backdrop-filter backdrop-blur-xl bg-gray font-bold text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-sm ">
-                Stock
-              </NavigationMenuTrigger>
-              <NavigationMenuContent>
-                <ul className="grid w-52 gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
-                  {components.map((component) => (
-                    <ListItem
-                      className="font-semibold"
-                      key={component.title}
-                      title={component.title}
-                      href={component.href}
-                    >
-                      {component.description}
-                    </ListItem>
-                  ))}
-                </ul>
-              </NavigationMenuContent>
-            </NavigationMenuItem>
-          )}
-          <NavigationMenuItem>
-            <NavigationMenuTrigger className="bg-gray backdrop-filter backdrop-blur-xl font-bold text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-lg">
-              Pedidos
-            </NavigationMenuTrigger>
-            <NavigationMenuContent>
-              <ul className="grid w-52 gap-3 p-4 md:w-[500px] z-50 md:grid-cols-2 lg:w-[600px] ">
-                {componentsPedidos.map((component) => (
-                  <ListItem
-                    className="font-bold text-lg"
-                    key={component.title}
-                    title={component.title}
-                    href={component.href}
-                  >
-                    {component.description}
-                  </ListItem>
-                ))}
-              </ul>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
-        </NavigationMenuList>
-      </NavigationMenu> */}
-      <div className="mr-4 my-auto flex items-center gap-x-4">
+
+      {/* Center: business name */}
+      <Link href="/" className="flex-1 text-center">
+        <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-50">{businessName}</h1>
+      </Link>
+
+      {/* Right: controls */}
+      <div className="flex items-center justify-end gap-x-4 w-12">
         <ThemeToggle />
         {session ? (
           <UserButton />
@@ -132,29 +63,3 @@ export function NavigationMenuHeader() {
     </div>
   );
 }
-
-const ListItem = React.forwardRef<
-  React.ElementRef<"a">,
-  React.ComponentPropsWithoutRef<"a">
->(({ className, title, children, ...props }, ref) => {
-  return (
-    <li>
-      <NavigationMenuLink asChild>
-        <a
-          ref={ref}
-          className={cn(
-            "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-            className
-          )}
-          {...props}
-        >
-          <div className="text-sm font-medium leading-none">{title}</div>
-          <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-            {children}
-          </p>
-        </a>
-      </NavigationMenuLink>
-    </li>
-  );
-});
-ListItem.displayName = "ListItem";

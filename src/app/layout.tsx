@@ -40,6 +40,7 @@ import { Toaster } from "sonner";
 
 import { AuthProvider } from "@/components/auth/SessionProvider";
 import { WebVitals } from "@/components/WebVitals";
+import { MobileNavProvider } from "@/context/MobileNavContext";
 
 export default function RootLayout({
   children,
@@ -58,6 +59,7 @@ export default function RootLayout({
             className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased min-h-screen overflow-x-hidden`}
             >
             <AuthProvider>
+            <MobileNavProvider>
             <CashboxProvider>
             <ThemeProvider>
               <FiltersProvider>
@@ -71,6 +73,7 @@ export default function RootLayout({
         </FiltersProvider>
       </ThemeProvider>
             </CashboxProvider>
+            </MobileNavProvider>
             </AuthProvider>
           </body>
     </html>
