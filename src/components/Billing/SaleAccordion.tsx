@@ -1,25 +1,30 @@
-import { Eye } from "lucide-react";
-import Link from "next/link";
+"use client";
+import React, { useState } from "react";
 import BillState from "@/models/BillState";
 import BillingModal from "./BillingModal";
-import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import PrintOptionsPopover from "./PrintOptionsPopover";
 import { deleteOrderAction } from "@/actions/sales/update";
-import DeleteButton from "../DeleteButton";
 import Modal from "../Modal";
 import { Session } from "next-auth";
 import { formatLocalDate } from "@/utils/date";
 import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface props {
   sale: BillState;
   session: Session | null;
 }
+
 const SaleAccordion = ({ sale, session }: props) => {
+  const router = useRouter();
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteSale, setDeleteSale] = useState<BillState>();
   const [openBilling, setOpenBilling] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const isAdmin = session?.user?.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 
   const handleDelete = async () => {
     if (!deleteSale) return;
@@ -35,22 +40,34 @@ const SaleAccordion = ({ sale, session }: props) => {
   };
 
   return (
-    <div className="rounded p-4 bg-white shadow-sm hover:shadow-md transition-shadow m-1 border border-gray-100 dark:border-gray-800 text-xs sm:text-sm md:text-base w-175 sm:w-full min-w-max">
-      <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px_40px] items-center gap-4 text-gray-700 dark:text-gray-300">
+    <>
+      <div
+        className={cn(
+          "grid grid-cols-[2fr_2fr_2fr_3fr_2fr_90px] items-center gap-4",
+          "px-5 py-3.5 w-[700px] sm:w-full min-w-max",
+          "cursor-pointer transition-colors duration-100",
+          "hover:bg-gray-50 dark:hover:bg-gray-800/30",
+          "text-sm text-gray-700 dark:text-gray-300"
+        )}
+        onClick={() => router.push(`/sales/${sale.id}`)}
+      >
         {/* Date */}
         <div className="font-medium text-gray-900 dark:text-gray-100">
           {sale.date ? formatLocalDate(sale.date) : ""}
         </div>
 
         {/* Invoice / CAE */}
-        <div>
+        <div onClick={(e) => e.stopPropagation()}>
           {sale.CAE?.CAE && sale.CAE.CAE !== "" ? (
             <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">
               {sale.CAE.CAE}
             </span>
           ) : (
             <button
-              onClick={() => setOpenBilling(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenBilling(true);
+              }}
               className="px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors text-xs font-semibold whitespace-nowrap"
             >
               Facturar
@@ -79,42 +96,34 @@ const SaleAccordion = ({ sale, session }: props) => {
             : sale.total}
         </div>
 
-        {/* Action: Detail */}
-        <Link
-          href={`/sales/${sale.id}`}
-          className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-          title="Ver Detalle"
+        {/* Actions */}
+        <div
+          className="flex items-center justify-center gap-0.5"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Eye className="h-4 w-4 text-gray-500" />
-        </Link>
-
-        {/* Action: Print */}
-        <div className="flex justify-center items-center">
           <PrintOptionsPopover sale={sale} session={session} />
-        </div>
 
-        {/* Action: Delete */}
-        <div className="flex justify-center items-center p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
-          <DeleteButton
-            disable={session?.user?.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL}
+          <button
+            disabled={!isAdmin}
             onClick={(e) => {
               e.stopPropagation();
               setDeleteSale(sale);
               setOpenDelete(true);
             }}
-          />
+            className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Eliminar venta"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         </div>
       </div>
+
       <Modal
         message="Desea eliminar la venta?"
-        onCancel={() => {
-          setOpenDelete(false);
-        }}
+        onCancel={() => setOpenDelete(false)}
         onAcept={handleDelete}
         blockButton={deleting}
-        onClose={() => {
-          setOpenDelete(false);
-        }}
+        onClose={() => setOpenDelete(false)}
         visible={openDelete}
       />
 
@@ -122,11 +131,9 @@ const SaleAccordion = ({ sale, session }: props) => {
         open={openBilling}
         onOpenChange={setOpenBilling}
         sale={sale}
-        onSuccess={() => {
-          setOpenBilling(false);
-        }}
+        onSuccess={() => setOpenBilling(false)}
       />
-    </div>
+    </>
   );
 };
 
