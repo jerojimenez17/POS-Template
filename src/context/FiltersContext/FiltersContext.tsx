@@ -17,6 +17,7 @@ export default interface FiltersContextProps {
   seller: (seller: string) => void;
   endDate: (date: Date) => void;
   disableSeller: () => void;
+  resetFilters: () => void;
 }
 
 export const FiltersContext = createContext<FiltersContextProps>(

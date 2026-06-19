@@ -47,11 +47,11 @@ const INITIAL_STATE: FilterState = {
     filter: "cuentaDNI",
   } as FilterField,
   startDate: {
-    active: false,
+    active: true,
     date: new Date(),
   },
   endDate: {
-    active: false,
+    active: true,
     date: new Date(),
   },
 };
@@ -153,6 +153,10 @@ const FiltersProvider = ({ children }: props) => {
       payload: null,
     });
   }, []);
+
+  const resetFilters = useCallback(() => {
+    dispatch({ type: "reset", payload: null });
+  }, []);
   
   const values = useMemo(() => ({
     filtersState: filtersState,
@@ -171,11 +175,12 @@ const FiltersProvider = ({ children }: props) => {
     disableStartDate: disableStartDate,
     seller: seller,
     disableSeller: disableSeller,
+    resetFilters: resetFilters,
   }), [
-    filtersState, switchRemito, switchFacturaC, switchDebito, switchEfectivo, 
-    switchUnPago, switchAhora3, switchAhora6, switchCuentaDNI, 
-    switchTransferencia, startDate, endDate, disableEndDate, 
-    disableStartDate, seller, disableSeller
+    filtersState, switchRemito, switchFacturaC, switchDebito, switchEfectivo,
+    switchUnPago, switchAhora3, switchAhora6, switchCuentaDNI,
+    switchTransferencia, startDate, endDate, disableEndDate,
+    disableStartDate, seller, disableSeller, resetFilters
   ]);
 
   return (

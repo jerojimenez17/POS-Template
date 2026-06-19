@@ -15,7 +15,8 @@ type FiltersAction =
   | { type: "disableStartDate"; payload: null }
   | { type: "seller"; payload: string }
   | { type: "disableSeller"; payload: null }
-  | { type: "disableEndDate"; payload: null };
+  | { type: "disableEndDate"; payload: null }
+  | { type: "reset"; payload: null };
 
 export const FiltersReducer = (
   state: FiltersState,
@@ -149,5 +150,21 @@ export const FiltersReducer = (
       };
     default:
       return state;
+
+    case "reset":
+      return {
+        Remito: { active: true, filter: "remito" },
+        Seller: { active: false, filter: "Seleccionar Vendedor" },
+        FacturaC: { active: false, filter: "facturac" },
+        Debito: { active: false, filter: "debito" },
+        UnPago: { active: false, filter: "Credito 1 pago" },
+        Ahora3: { active: false, filter: "ahora 3" },
+        Ahora6: { active: false, filter: "ahora 6" },
+        Transferencia: { active: false, filter: "transferencia" },
+        Efectivo: { active: true, filter: "efectivo" },
+        CuentaDNI: { active: false, filter: "cuentaDNI" },
+        startDate: { active: true, date: new Date() },
+        endDate: { active: true, date: new Date() },
+      };
   }
 };
