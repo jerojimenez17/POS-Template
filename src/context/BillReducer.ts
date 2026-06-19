@@ -227,6 +227,18 @@ export const BillReducer = (
         date: action.payload,
       };
     }
+    case "clientId": {
+      return {
+        ...state,
+        clientId: action.payload,
+      };
+    }
+    case "client": {
+      return {
+        ...state,
+        client: action.payload,
+      };
+    }
     case "setState": {
       state = action.payload;
       return {
