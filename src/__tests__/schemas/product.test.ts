@@ -26,6 +26,22 @@ describe("ProductSchema validation", () => {
     expect(result.success).toBe(true);
   });
 
+  it("should validate product with codebar", () => {
+    const result = ProductSchema.safeParse({
+      ...baseValidProduct,
+      codebar: "9876543210123",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("should validate product with empty codebar", () => {
+    const result = ProductSchema.safeParse({
+      ...baseValidProduct,
+      codebar: "",
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("should parse and retain the details property when provided", () => {
     const parsed = ProductSchema.parse({
       ...baseValidProduct,

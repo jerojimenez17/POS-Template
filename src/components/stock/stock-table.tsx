@@ -14,6 +14,7 @@ import DeleteButton from "../DeleteButton";
 import Modal from "../Modal";
 import ProductForm from "./product-form";
 import CodeBarModal from "./code-bar-modal";
+import SetCodebarModal from "./set-codebar-modal";
 import { Session } from "next-auth";
 import { getProducts, deleteProduct, toggleProductCatalogAction } from "@/actions/stock";
 import { ProductExtended } from "./product-form";
@@ -92,12 +93,14 @@ const StockTable = ({ descriptionFilter }: props) => {
 
           <TableBody className="">
             {products
-              ?.filter((product) => {
+              .filter((product) => {
                 const desc = product.description || "";
                 const code = product.code || "";
+                const codebar = product.codebar || "";
                 return (
                   desc.toLowerCase().includes(descriptionFilter.toLowerCase()) ||
-                  code.toLowerCase().includes(descriptionFilter.toLowerCase())
+                  code.toLowerCase().includes(descriptionFilter.toLowerCase()) ||
+                  codebar.toLowerCase().includes(descriptionFilter.toLowerCase())
                 );
               })
               .sort((a, b) => {
@@ -192,11 +195,23 @@ const StockTable = ({ descriptionFilter }: props) => {
                           setOpenDeleteModal(true);
                         } } disable={false}                      />
                       <CodeBarModal 
-                      code={product.code || ""} 
+                      code={product.code || ""}
+                      codebar={product.codebar || undefined}
                       description={product.description || ""}
                       salePrice={product.salePrice}
                       unit={product.unit ?? undefined}
                     />
+                      <SetCodebarModal
+                        productId={product.id}
+                        currentCodebar={product.codebar || undefined}
+                        onSuccess={(newCodebar) => {
+                          setProducts((prev) =>
+                            prev.map((p) =>
+                              p.id === product.id ? { ...p, codebar: newCodebar } : p
+                            )
+                          );
+                        }}
+                      />
                     </TableCell>
                   </TableRow>
                 );

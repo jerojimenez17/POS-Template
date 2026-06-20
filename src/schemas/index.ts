@@ -46,6 +46,7 @@ export const SuplierSchema = z.object({
 export const ProductSchema = z.object({
   id: z.string(),
   code: z.string().min(1, { message: "Codigo es obligatorio" }),
+  codebar: z.string().optional(),
   description: z.string().min(1, {
     message: "Descripcion es obligatoria",
   }),

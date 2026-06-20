@@ -30,6 +30,7 @@ export class ProductFirebaseAdapter {
       return {
         id: String(product.id || ""),
         code: String(product.code || ""),
+        codebar: String(product.codebar || ""),
         description: String(product.description || ""),
         brand: String(product.brand || ""),
         subCategory: String(product.subCategory || ""),
@@ -71,6 +72,7 @@ export class ProductFirebaseAdapter {
     const product = {
       id: dataId,
       code: data.code || "",
+      codebar: data.codebar || "",
       suplier: data.suplier
         ? {
             id: String(data.suplier.id || ""),

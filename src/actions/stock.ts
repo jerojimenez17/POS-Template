@@ -64,9 +64,21 @@ export const createProduct = async (data: Product) => {
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
   try {
+    let finalCode = data.code;
+    if (data.supplierId && data.code) {
+      const supplier = await db.supplier.findUnique({ where: { id: data.supplierId } });
+      if (supplier) {
+        const prefix = supplier.name.toLowerCase().replace(/\s+/g, '').slice(0, 3);
+        if (!data.code.startsWith(`${prefix}-`)) {
+          finalCode = `${prefix}-${data.code}`;
+        }
+      }
+    }
+
     const product = await db.product.create({
       data: {
-        code: data.code,
+        code: finalCode,
+        codebar: data.codebar || null,
         description: data.description,
         brand: data.brandId ? { connect: { id: data.brandId } } : undefined,
         category: data.categoryId ? { connect: { id: data.categoryId } } : undefined,
@@ -102,6 +114,7 @@ export const createProduct = async (data: Product) => {
 
 export interface BulkProductInput {
   code: string;
+  codebar?: string;
   description: string;
   price: number;
   amount?: number | null;
@@ -438,6 +451,7 @@ export const processBulkProductBatch = async (
         toCreate.push({
           id: generateCuid(),
           code: item.code.toString(),
+          codebar: item.codebar ? item.codebar.toString() : null,
           description: item.description.toString(),
           price: isPriceValid ? costPrice : 0,
           salePrice: isPriceValid ? salePrice : 0,
@@ -549,6 +563,7 @@ export const createProductsBulk = async (
 
 interface UpdateProductInput {
   code?: string;
+  codebar?: string;
   description?: string;
   brandId?: string | null;
   categoryId?: string | null;
@@ -569,9 +584,20 @@ interface UpdateProductInput {
 
 export const updateProduct = async (id: string, data: UpdateProductInput) => {
   const session = await auth();
-  if (!session?.user?.businessId) return { error: "No autorizado" };
+  if (!session?.user?.businessId) return { error: "No authorized" };
 
   try {
+    let finalCode = data.code;
+    if (data.supplierId && data.code) {
+      const supplier = await db.supplier.findUnique({ where: { id: data.supplierId } });
+      if (supplier) {
+        const prefix = supplier.name.toLowerCase().replace(/\s+/g, '').slice(0, 3);
+        if (!data.code.startsWith(`${prefix}-`)) {
+          finalCode = `${prefix}-${data.code}`;
+        }
+      }
+    }
+
     if (data.imagesToDelete && data.imagesToDelete.length > 0) {
       await db.productImage.deleteMany({
         where: { id: { in: data.imagesToDelete }, productId: id },
@@ -581,7 +607,8 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
     const product = await db.product.update({
       where: { id },
       data: {
-        code: data.code,
+        code: finalCode,
+        codebar: data.codebar !== undefined ? (data.codebar || null) : undefined,
         description: data.description,
         brand: data.brandId ? { connect: { id: data.brandId } } : { disconnect: true },
         category: data.categoryId ? { connect: { id: data.categoryId } } : { disconnect: true },
@@ -709,6 +736,7 @@ export const getProductsPaginated = async (params: {
     ...(params.search && {
       OR: [
         { code: { contains: params.search, mode: "insensitive" } },
+        { codebar: { contains: params.search, mode: "insensitive" } },
         { description: { contains: params.search, mode: "insensitive" } },
       ],
     }),
@@ -753,7 +781,10 @@ export const getProductByCode = async (code: string) => {
     const product = await db.product.findFirst({
       where: {
         businessId: session.user.businessId,
-        code: code
+        OR: [
+          { code: code },
+          { codebar: code },
+        ],
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },
     });
@@ -775,6 +806,7 @@ export const getProductsBySearch = async (query: string, supplierId?: string) =>
         businessId: session.user.businessId,
         OR: [
           { code: { contains: query, mode: "insensitive" } },
+          { codebar: { contains: query, mode: "insensitive" } },
           { description: { contains: query, mode: "insensitive" } },
         ],
         ...(supplierId ? { supplierId } : {}),
@@ -825,6 +857,7 @@ export const getProductsFiltered = async (filters: {
           ? {
             OR: [
               { code: { contains: filters.search, mode: "insensitive" } },
+              { codebar: { contains: filters.search, mode: "insensitive" } },
               { description: { contains: filters.search, mode: "insensitive" } },
             ],
           }

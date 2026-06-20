@@ -14,6 +14,7 @@ import ProductForm from "./stock/product-form";
 import { Button } from "./ui/button";
 import DeleteButton from "./DeleteButton";
 import CodeBarModal from "./stock/code-bar-modal";
+import SetCodebarModal from "./stock/set-codebar-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import {
   Table,
@@ -198,11 +199,16 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
               disable={false}
             />
             <CodeBarModal 
-                      code={product.code || ""} 
+                      code={product.code || ""}
+                      codebar={product.codebar || undefined}
                       description={product.description || ""}
                       salePrice={product.salePrice}
                       unit={product.unit ?? undefined}
                     />
+            <SetCodebarModal
+              productId={product.id}
+              currentCodebar={product.codebar || undefined}
+            />
           </div>
         );
       },
@@ -446,11 +452,16 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                     disable={false}
                   />
 <CodeBarModal 
-                      code={product.code || ""} 
+                      code={product.code || ""}
+                      codebar={product.codebar || undefined}
                       description={product.description || ""}
                       salePrice={product.salePrice}
                       unit={product.unit ?? undefined}
                     />
+                  <SetCodebarModal
+                    productId={product.id}
+                    currentCodebar={product.codebar || undefined}
+                  />
                 </div>
               </div>
             );

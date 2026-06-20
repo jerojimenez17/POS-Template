@@ -3,6 +3,7 @@ import { Suplier } from "./Suplier";
 export default class Product {
   id = "";
   code = "";
+  codebar = "";
   description = "";
   brand = "";
   subCategory = "";
