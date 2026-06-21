@@ -51,10 +51,14 @@ export const register = async (values: z.infer<typeof RegisterSchema>) => {
       });
     });
 
-    const verificationToken = await generateVerificationToken(email);
-    await sendVerificationEmail(verificationToken.email, verificationToken.token);
+    try {
+      const verificationToken = await generateVerificationToken(email);
+      await sendVerificationEmail(verificationToken.email, verificationToken.token);
+    } catch {
+      console.error("Failed to send verification email, but registration succeeded");
+    }
 
-    return { success: "Email enviado a " + verificationToken.email };
+    return { success: "Cuenta creada correctamente" };
   } catch (error) {
     console.error("Registration error:", error);
     return { error: "Error al crear la cuenta" };
