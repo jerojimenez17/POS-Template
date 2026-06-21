@@ -19,7 +19,7 @@ import { register } from "../actions/register";
 import { useRouter } from "next/navigation";
 import { FormError } from "../ui/form-error";
 import { FormSuccess } from "../ui/form-success";
-import { motion, AnimatePresence } from "framer-motion";
+
 
 export const RegisterForm = () => {
   const router = useRouter();
@@ -59,11 +59,7 @@ export const RegisterForm = () => {
               control={form.control}
               name="registerName"
               render={({ field }) => (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 }}
-                >
+                <div>
                   <FormItem>
                     <FormLabel>Nombre</FormLabel>
                     <FormControl>
@@ -77,18 +73,14 @@ export const RegisterForm = () => {
                     </FormControl>
                     <FormMessage />
                   </FormItem>
-                </motion.div>
+                </div>
               )}
             />
             <FormField
               control={form.control}
               name="businessName"
               render={({ field }) => (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.15 }}
-                >
+                <div>
                   <FormItem>
                     <FormLabel>Nombre del Negocio</FormLabel>
                     <FormControl>
@@ -101,18 +93,14 @@ export const RegisterForm = () => {
                     </FormControl>
                     <FormMessage />
                   </FormItem>
-                </motion.div>
+                </div>
               )}
             />
             <FormField
               control={form.control}
               name="email"
               render={({ field }) => (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
+                <div>
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
@@ -127,18 +115,14 @@ export const RegisterForm = () => {
                     </FormControl>
                     <FormMessage />
                   </FormItem>
-                </motion.div>
+                </div>
               )}
             />
             <FormField
               control={form.control}
               name="password"
               render={({ field }) => (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
+                <div>
                   <FormItem>
                     <FormLabel>Contraseña</FormLabel>
                     <FormControl>
@@ -153,56 +137,35 @@ export const RegisterForm = () => {
                     </FormControl>
                     <FormMessage />
                   </FormItem>
-                </motion.div>
+                </div>
               )}
             />
           </div>
-          <AnimatePresence mode="wait">
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: "auto" }}
-                exit={{ opacity: 0, y: -10, height: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <FormError message={error} />
-              </motion.div>
-            )}
-            {success && (
-              <motion.div
-                initial={{ opacity: 0, y: -10, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: "auto" }}
-                exit={{ opacity: 0, y: -10, height: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <FormSuccess message={success} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
+          {error && (
+            <div className="transition-opacity duration-200">
+              <FormError message={error} />
+            </div>
+          )}
+          {success && (
+            <div className="transition-opacity duration-200">
+              <FormSuccess message={success} />
+            </div>
+          )}
+          <div>
             <Button
               type="submit"
               disabled={isPending}
-              className="w-full transition-all duration-200"
+              className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             >
               {isPending ? (
-                <motion.span
-                  animate={{ opacity: [1, 0.5, 1] }}
-                  transition={{ repeat: Infinity, duration: 1.5 }}
-                >
+                <span className="animate-pulse">
                   Creando cuenta...
-                </motion.span>
+                </span>
               ) : (
                 "Crear cuenta"
               )}
             </Button>
-          </motion.div>
+          </div>
         </form>
       </Form>
     </CardWrapper>

@@ -3,7 +3,8 @@
 import { db } from "@/lib/db";
 import { UserRole } from "@prisma/client";
 import { auth } from "../../auth";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { encrypt } from "@/lib/encryption";
 import * as z from "zod";
 import { ArcaFieldsSchema } from "@/schemas";
@@ -53,8 +54,8 @@ export const updateBusinessArcaData = async (
       data: updateData,
     });
 
-    revalidatePath(`/superadmin/businesses/${businessId}/arca`);
-    revalidatePath("/superadmin/businesses");
+    revalidateTag(CACHE_TAGS.ARCA, "max");
+    revalidateTag(CACHE_TAGS.ARCA, "max");
     
     return { success: "Datos de ARCA actualizados" };
   } catch (error) {

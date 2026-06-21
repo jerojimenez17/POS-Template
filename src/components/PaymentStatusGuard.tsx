@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getBusinessStatusAction } from "@/actions/business";
-import { toast } from "react-hot-toast";
+import { toast } from "sonner";
 import { AlertTriangle, Lock } from "lucide-react";
 
 export const PaymentStatusGuard = () => {

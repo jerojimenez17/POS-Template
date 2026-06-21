@@ -2,7 +2,8 @@
 
 import { db } from "@/lib/db";
 import { auth } from "../../auth";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 /**
  * Updates the business balance in the CashBox model.
@@ -69,7 +70,7 @@ export const updateProductsStock = async (items: { id: string; amount: number }[
         })
       )
     );
-    revalidatePath("/stock");
+    revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: true };
   } catch (error) {
     console.error("Error updating products stock:", error);

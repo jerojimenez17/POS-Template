@@ -1,17 +1,12 @@
 "use client";
 import {
   useCallback,
-  useContext,
   useEffect,
   useState,
   useTransition,
 } from "react";
 import { Input } from "../ui/input";
-import { addDoc, collection, getDocs, Timestamp } from "firebase/firestore";
-import { doc, runTransaction } from "firebase/firestore";
-import moment from "moment";
-import { db } from "@/firebase/config";
-import BillState from "@/models/BillState";
+import { format } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +16,7 @@ import {
   DialogFooter,
 } from "../ui/dialog";
 import Account, { ProductAccount } from "@/models/Account";
+import Product from "@/models/Product";
 import { DialogDescription } from "@radix-ui/react-dialog";
 import { Button } from "../ui/button";
 import {
@@ -36,9 +32,12 @@ import { AccountSchema } from "@/schemas";
 import z from "zod";
 import { toast } from "sonner";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { BillContext } from "@/context/BillContext";
-import { discountStock } from "@/firebase/orders/newOrder";
-import { updateMonthlyRanking } from "@/firebase/stock/updateRanking";
+import {
+  createLedgerAccountAction,
+  getLedgerAccountsAction,
+  addProductsToLedgerAction,
+} from "@/actions/ledger";
+import BillState from "@/models/BillState";
 
 interface props {
   billState: BillState;
@@ -53,16 +52,13 @@ const AccountLedgerModal = ({ billState }: props) => {
   });
 
   const [accounts, setAccounts] = useState<Account[]>([]);
-
   const [openConfirmModal, setOpenConfirmModal] = useState(false);
   const [openCofirmAddProductModal, setOpenCofirmAddProductModal] =
     useState(false);
   const [account, setAccount] = useState<Account>(new Account());
   const [search, setSearch] = useState("");
-  const { removeAll } = useContext(BillContext);
   const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
   const [isPending, startTransition] = useTransition();
-  // … otros imports …
 
   const addProductToAccount = async () => {
     if (!account.id) {
@@ -70,77 +66,43 @@ const AccountLedgerModal = ({ billState }: props) => {
       return;
     }
 
-    const accountRef = doc(db, "accountLedger", account.id);
-
     try {
-      await runTransaction(db, async (transaction) => {
-        // 1. Leemos el snapshot actual de la cuenta
-        const snapshot = await transaction.get(accountRef);
+      const products = billState.products.map((product) => ({
+        id: product.id,
+        code: product.code,
+        description: product.description,
+        price: product.price,
+        salePrice: product.salePrice,
+        amount: product.amount,
+      }));
 
-        if (!snapshot.exists()) {
-          throw new Error("La cuenta no existe");
-        }
+      const result = await addProductsToLedgerAction(account.id, products);
 
-        const data = snapshot.data() as {
-          productsAccount: ProductAccount[];
-          last_update: Timestamp;
-          // otros campos…
-        };
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
 
-        // 2. Construimos los nuevos ProductAccount
-        const newProducts = billState.products.map((product) => {
-          return new ProductAccount(product, product.amount, moment());
-        });
-
-        // 3. Preparamos el array actualizado
-        const updatedProductsAccount = [
-          ...data.productsAccount,
-          ...newProducts.map((pa) => ({
-            ...pa,
-            date: pa.date.toDate(),
-          })),
-        ];
-
-        // 4. Hacemos update dentro de la transacción
-        transaction.update(accountRef, {
-          productsAccount: updatedProductsAccount,
-          last_update: moment().toDate(),
-        });
-      });
-      const newProducts = billState.products.map((product) => {
-        return new ProductAccount(product, product.amount, moment());
-      });
-      console.log(newProducts[0].amount);
-      newProducts.forEach(async (product) => {
-        try {
-          await discountStock(product.id, product.amount);
-        } catch (err) {
-          toast.error("Error al actualizar stock" + err);
-        }
-      });
-
-      await updateMonthlyRanking(billState.products);
       toast.success("Productos añadidos correctamente");
-      removeAll();
       setOpenCofirmAddProductModal(false);
 
       setAccounts((prev) =>
         prev.map((acc) =>
           acc.id === account.id
             ? new Account(
-              acc.id,
-              acc.clientName,
-              acc.clientEmail,
-              acc.clientPhone,
-              [
-                ...acc.productsAccount,
-                ...billState.products.map(
-                  (p) => new ProductAccount(p, p.amount, moment())
-                ),
-              ],
-              acc.date,
-              moment()
-            )
+                acc.id,
+                acc.clientName,
+                acc.clientEmail,
+                acc.clientPhone,
+                [
+                  ...acc.productsAccount,
+                  ...billState.products.map(
+                    (p) => new ProductAccount(p, p.amount, new Date())
+                  ),
+                ],
+                acc.date,
+                new Date()
+              )
             : acc
         )
       );
@@ -150,48 +112,64 @@ const AccountLedgerModal = ({ billState }: props) => {
     }
   };
 
-  const addAccount = useCallback(async (account: Account) => {
+  const addAccount = useCallback(async (accountData: Account) => {
     try {
-      const res = await addDoc(collection(db, "accountLedger"), {
-        ...account,
-        date: account.date.toDate(),
-        last_update: account.last_update.toDate(),
-        ...{
-          productsAccount: account.productsAccount.map((productAccount) => {
-            return {
-              ...productAccount,
-              date: productAccount.date.toDate(),
-            };
-          }),
-        },
+      const products = billState.products.map((product) => ({
+        id: product.id,
+        code: product.code,
+        description: product.description,
+        price: product.price,
+        salePrice: product.salePrice,
+        amount: product.amount,
+      }));
+
+      const result = await createLedgerAccountAction({
+        clientName: accountData.clientName,
+        clientEmail: accountData.clientEmail,
+        clientPhone: accountData.clientPhone,
+        products,
       });
+
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
       toast.success("Cuenta creada con éxito");
       setOpenConfirmModal(false);
-      await updateMonthlyRanking(billState.products);
       setTimeout(() => {
         setOpenConfirmModal(false);
       }, 300);
-      return res;
+      return result;
     } catch (error) {
       console.error(error);
-
       toast.error("Error al crear cuenta");
     }
   }, [billState.products]);
+
   useEffect(() => {
     const fetchAccounts = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "accountLedger"));
-        const docs: Account[] = querySnapshot.docs.map((doc) => {
-          const data = doc.data();
+        const data = await getLedgerAccountsAction();
+        const docs: Account[] = data.map((d) => {
           const ac = new Account(
-            doc.id,
-            data.clientName,
-            data.clientEmail,
-            data.clientPhone,
-            data.productsAccount || [],
-            moment(data.date.toDate()),
-            moment(data.last_update.toDate())
+            d.id,
+            d.clientName,
+            d.clientEmail,
+            d.clientPhone,
+            d.productsAccount.map(
+              (p) => {
+                const prod = new Product();
+                prod.id = p.id;
+                prod.code = p.code;
+                prod.description = p.description;
+                prod.price = p.price;
+                prod.salePrice = p.salePrice;
+                return new ProductAccount(prod, p.amount, p.date);
+              }
+            ),
+            d.date,
+            d.last_update
           );
           return ac;
         });
@@ -208,26 +186,23 @@ const AccountLedgerModal = ({ billState }: props) => {
   const onSubmit = async (values: z.infer<typeof AccountSchema>) => {
     startTransition(async () => {
       try {
-        const productsAccount = billState.products.map((product) => {
-          return new ProductAccount(product, product.amount, moment());
-        });
-        const account = new Account(
+        const accountData = new Account(
           "",
           values.clientName || "",
           values.clientEmail,
           values.clientPhone,
-          productsAccount || [],
-          moment(),
-          moment()
+          [],
+          new Date(),
+          new Date()
         );
-        const resp = await addAccount(account);
+        const resp = await addAccount(accountData);
 
         if (resp) {
           toast.success("Cuenta creada con éxito");
           setOpenConfirmModal(false);
           setTimeout(() => {
             setOpenConfirmModal(false);
-          }, 800); // Cerrar el modal o hacer cualquier acción posterior
+          }, 800);
         }
       } catch (error) {
         console.error(error);
@@ -239,6 +214,7 @@ const AccountLedgerModal = ({ billState }: props) => {
       }
     });
   };
+
   useEffect(() => {
     const results = accounts.filter((account) =>
       account.clientName.toLowerCase().includes(search.toLowerCase())
@@ -299,8 +275,8 @@ const AccountLedgerModal = ({ billState }: props) => {
           >
             <p className="font-medium text-gray-900 dark:text-gray-100">{account.clientName}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Creado: {account.date.format("DD/MM/YYYY HH:mm")} – Última
-              edición: {account.last_update.format("DD/MM/YYYY HH:mm")}
+Creado: {format(account.date, "dd/MM/yyyy HH:mm")} – Última
+               edición: {format(account.last_update, "dd/MM/yyyy HH:mm")}
              </p>
           </div>
         ))}

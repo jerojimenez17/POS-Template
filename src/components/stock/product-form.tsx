@@ -31,6 +31,7 @@ import CreateAttributeModal from "./create-attribute-modal";
 import { ScanBarcode, X, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { getCategories } from "@/actions/categories";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "@/firebase/config";
@@ -390,10 +391,12 @@ const ProductForm = ({ product, onClose }: Props) => {
                               key={img.id}
                               className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 ${markedForDeletion ? "border-red-500 opacity-50" : "border-gray-200"}`}
                             >
-                              <img
+                              <Image
                                 src={img.url}
                                 alt=""
-                                className="w-full h-full object-cover"
+                                fill
+                                sizes="80px"
+                                className="object-cover"
                               />
                               <button
                                 type="button"
@@ -433,6 +436,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                               <img
                                 src={URL.createObjectURL(file)}
                                 alt=""
+                                loading="lazy"
                                 className="w-full h-full object-cover"
                               />
                               <button

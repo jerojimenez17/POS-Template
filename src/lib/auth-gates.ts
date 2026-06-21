@@ -1,60 +1,60 @@
 import { auth } from "@/lib/auth";
+import { ok, fail, type ActionResult } from "@/lib/action-result";
 
-export class FeatureAccessError extends Error {
-  constructor(message: string, public code: "UNAUTHENTICATED" | "DELINQUENT" | "FORBIDDEN" | "LIMIT_EXCEEDED") {
-    super(message);
-    this.name = "FeatureAccessError";
-  }
-}
-
-export const assertWritePermission = async () => {
+export const assertWritePermission = async (): Promise<ActionResult<{ id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null }>> => {
   const session = await auth();
   if (!session || !session.user) {
-    throw new FeatureAccessError("Debes iniciar sesión para realizar esta acción.", "UNAUTHENTICATED");
+    return fail("Debes iniciar sesión para realizar esta acción.", "UNAUTHENTICATED");
   }
 
   const business = session.user.business;
   if (business && business.accountStatus === "MOROSO") {
-    throw new FeatureAccessError("Acción bloqueada. Tu cuenta posee facturas vencidas impagas.", "DELINQUENT");
+    return fail("Acción bloqueada. Tu cuenta posee facturas vencidas impagas.", "DELINQUENT");
   }
 
-  return session.user;
+  return ok(session.user as { id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null });
 };
 
-export const requireFeature = async (featureName: string) => {
-  const user = await assertWritePermission();
+export const requireFeature = async (featureName: string): Promise<ActionResult<{ id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null }>> => {
+  const userResult = await assertWritePermission();
+  if (!userResult.success) return userResult;
+
+  const user = userResult.data!;
   const business = user.business;
 
   // Fallback for test/barebones sessions where business is not fully loaded
   if (!business || !business.features) {
-    return user;
+    return ok(user);
   }
 
   const features = business.features;
   if (!(features as Record<string, unknown>)[featureName]) {
-    throw new FeatureAccessError("Esta función no está habilitada en tu plan actual.", "FORBIDDEN");
+    return fail("Esta función no está habilitada en tu plan actual.", "FORBIDDEN");
   }
 
-  return user;
+  return ok(user);
 };
 
-export const assertLimit = async (limitName: string, value: number) => {
-  const user = await assertWritePermission();
+export const assertLimit = async (limitName: string, value: number): Promise<ActionResult<{ id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null }>> => {
+  const userResult = await assertWritePermission();
+  if (!userResult.success) return userResult;
+
+  const user = userResult.data!;
   const business = user.business;
 
   // Fallback for test/barebones sessions where business is not fully loaded
   if (!business || !business.features) {
-    return user;
+    return ok(user);
   }
 
   const features = business.features;
   const limit = (features as Record<string, unknown>)[limitName] as number;
   if (limit !== null && limit !== undefined && value >= limit) {
-    throw new FeatureAccessError(
+    return fail(
       `Has superado el límite permitido de ${limitName} (${limit}). Mejora tu plan.`,
       "LIMIT_EXCEEDED"
     );
   }
 
-  return user;
+  return ok(user);
 };

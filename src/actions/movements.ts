@@ -1,7 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "../../auth";
 
 import { pusherServer } from "@/lib/pusher-server";
@@ -32,7 +33,7 @@ export const createMovement = async (data: {
       movement
     );
 
-    revalidatePath("/movements"); 
+    revalidateTag(CACHE_TAGS.MOVEMENTS, "max"); 
     return { success: "Movimiento registrado", movement };
   } catch (error) {
     console.error(error);

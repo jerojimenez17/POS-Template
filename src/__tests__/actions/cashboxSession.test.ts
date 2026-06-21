@@ -61,7 +61,7 @@ describe("Cashbox Sessions - Server Actions", () => {
       const result = await openSession(1000);
 
       expect(result.success).toBe(true);
-      expect(result.session?.id).toBe("session-1");
+      expect((result as any).session?.id).toBe("session-1");
       expect(db.cashboxSession.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -80,7 +80,7 @@ describe("Cashbox Sessions - Server Actions", () => {
 
       const result = await openSession(1000);
 
-      expect(result.error).toBe("Ya existe una sesión abierta.");
+      expect((result as any).error).toBe("Ya existe una sesión abierta.");
       expect(db.cashboxSession.create).not.toHaveBeenCalled();
     });
 
@@ -96,7 +96,7 @@ describe("Cashbox Sessions - Server Actions", () => {
 
       const result = await openSession(1000);
 
-      expect(result.error).toBe("No tienes una caja asignada.");
+      expect((result as any).error).toBe("No tienes una caja asignada.");
     });
   });
 
@@ -150,7 +150,7 @@ describe("Cashbox Sessions - Server Actions", () => {
 
       const result = await closeSession(1000);
 
-      expect(result.error).toBe("No hay ninguna sesión abierta.");
+      expect((result as any).error).toBe("No hay ninguna sesión abierta.");
       expect(db.cashboxSession.update).not.toHaveBeenCalled();
     });
   });

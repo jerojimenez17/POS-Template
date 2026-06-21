@@ -1,0 +1,16 @@
+status: archived
+phase: 1
+branch: 1-dead-code-removal
+base: main
+commit: 13f0858c1c9c0a44e5dad73c6ee64b8c7b872985
+completed_at: 2026-06-13
+artifacts:
+  - proposal.md
+  - spec.md
+  - design.md
+  - tasks.md
+verification:
+  build: pass
+  tsc: pass (pre-existing errors unchanged)
+  tests: 314 passed, 54 failed (pre-existing)
+  lint: not run

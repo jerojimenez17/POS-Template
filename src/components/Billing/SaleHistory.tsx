@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSaleHistoryAction, OrderUpdateWithUser } from "@/actions/sales";
-import moment from "moment";
+import { format } from "date-fns";
 import { History, User as UserIcon, Calendar, Package, Plus, Minus, RefreshCw, Tag, UserPlus, Info } from "lucide-react";
 import Spinner from "@/components/ui/Spinner";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
@@ -242,7 +242,7 @@ const SaleHistory = ({ saleId }: Props) => {
                 <div className="flex items-center gap-4 text-sm">
                   <span className="flex items-center gap-1.5 text-slate-500">
                     <Calendar className="h-4 w-4" />
-                    {moment(update.date).format("DD/MM/YYYY HH:mm")}
+                    {format(update.date, "dd/MM/yyyy HH:mm")}
                   </span>
                   <span className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
                     <UserIcon className="h-4 w-4" />

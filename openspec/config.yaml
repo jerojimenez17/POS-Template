@@ -1,0 +1,69 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: Next.js 15 App Router, React 19, TypeScript strict, Tailwind CSS v4, Prisma 6 + PostgreSQL, NextAuth.js v5
+  Architecture: Server Actions, RSC by default, Context + useReducer for cart, Pusher WebSockets, Multi-tenant by businessId
+  Testing: Vitest + @testing-library/react + happy-dom + jsdom (unit + integration), no E2E
+  Style: ESLint flat config (next/core-web-vitals + next/typescript), Tailwind CSS v4, Radix UI primitives
+
+strict_tdd: false
+
+rules:
+  proposal:
+    - Include problem statement referencing C-## or F# from enhancements analysis
+    - Include rollback plan for risky changes
+    - Identify affected modules and files
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Include current behavior vs expected behavior
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+    - Reference existing patterns to maintain consistency
+  tasks:
+    - Group by phase (infrastructure, implementation, testing, cleanup)
+    - Use hierarchical numbering (1.1, 1.2, etc.)
+    - Keep tasks small enough to complete in one session
+    - Mark estimated effort (hours/days)
+  apply:
+    - Follow existing patterns (Server Actions pattern, error contract)
+    - Use conventional commits (feat:, fix:, refactor:, chore:, test:, docs:)
+    - Create changes in feature branches named {phase}/{change-name}
+  verify:
+    - Run vitest tests after each change
+    - Verify no TS errors (npx tsc --noEmit)
+    - Compare implementation against every spec scenario
+  archive:
+    - Warn before merging destructive deltas (large removals)
+    - Summarize diff of main specs merged
+
+testing:
+  capabilities:
+    runner:
+      command: vitest run
+      framework: vitest 4
+    layers:
+      unit:
+        available: true
+        tool: vitest + @testing-library/react
+      integration:
+        available: true
+        tool: @testing-library/react + vitest
+      e2e:
+        available: false
+        tool: none
+    coverage:
+      available: false
+      command: vitest --coverage
+    quality:
+      linter:
+        available: true
+        command: next lint
+      type_checker:
+        available: true
+        command: npx tsc --noEmit
+      formatter:
+        available: false
+        command: none

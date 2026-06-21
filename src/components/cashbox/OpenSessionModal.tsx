@@ -38,8 +38,8 @@ export const OpenSessionModal = ({
 
     const result = await openSession(amount);
     
-    if (result.error) {
-      toast.error(result.error);
+    if ('error' in result && result.error) {
+      toast.error(result.error as string);
     } else {
       toast.success("Sesión de caja abierta exitosamente");
       router.refresh();

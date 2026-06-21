@@ -76,29 +76,14 @@ const createMockCAE = (): CAE => ({
 
 const mockContextValue = {
   BillState: createMockBillState(),
+  dispatch: vi.fn(),
   addItem: vi.fn(),
-  removeUnit: vi.fn(),
-  removeAll: vi.fn(),
   removeItem: vi.fn(),
-  changePrice: vi.fn(),
-  changeUnit: vi.fn(),
-  total: vi.fn(),
-  discount: vi.fn(),
-  sellerName: vi.fn(),
-  typeDocument: vi.fn(),
-  documentNumber: vi.fn(),
-  entrega: vi.fn(),
-  nroAsociado: vi.fn(),
-  IVACondition: vi.fn(),
-  paidMethod: vi.fn(),
-  billType: vi.fn(),
-  date: vi.fn(),
-  CAE: vi.fn(),
-  setState: vi.fn(),
-  addUnit: vi.fn(),
   onOrderResetRef: { current: null },
   printMode: "thermal" as const,
   setPrintMode: vi.fn(),
+  qzTrayActive: true,
+  setQzTrayActive: vi.fn(),
 };
 
 const renderWithContext = (ui: React.ReactElement, contextValue = mockContextValue) => {

@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useTransition } from "react";
+import React, { useEffect, useState, useTransition, useCallback } from "react";
 import {
   Table,
   TableBody,
@@ -15,11 +15,13 @@ import Modal from "../Modal";
 import ProductForm from "./product-form";
 import CodeBarModal from "./code-bar-modal";
 import SetCodebarModal from "./set-codebar-modal";
+import { Button } from "../ui/button";
 import { Session } from "next-auth";
-import { getProducts, deleteProduct, toggleProductCatalogAction } from "@/actions/stock";
+import { getProductsPaginated, deleteProduct, toggleProductCatalogAction } from "@/actions/stock";
 import { ProductExtended } from "./product-form";
 import { toast } from "sonner";
 import { Switch } from "../ui/switch";
+import { PAGINATION } from "@/lib/pagination";
 
 interface props {
   descriptionFilter: string;
@@ -28,23 +30,40 @@ interface props {
 
 const StockTable = ({ descriptionFilter }: props) => {
   const [products, setProducts] = useState<ProductExtended[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
   const [productToEdit, setProductToEdit] = useState<ProductExtended>();
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);
   const [, startTransition] = useTransition();
 
-  const fetchProducts = async () => {
-    const data = await getProducts();
-    setProducts(data as ProductExtended[]);
-  };
+  const fetchProducts = useCallback(async (pageNum: number) => {
+    try {
+      const result = await getProductsPaginated({
+        page: pageNum,
+        pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
+        search: descriptionFilter || undefined,
+      });
+      setProducts(result.products as ProductExtended[]);
+      setTotalPages(result.totalPages);
+      setPage(result.page);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+    }
+  }, [descriptionFilter]);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    fetchProducts(1);
+  }, [fetchProducts]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || (totalPages > 0 && newPage > totalPages)) return;
+    fetchProducts(newPage);
+  };
 
   const handleDelete = async () => {
     if (!productToEdit) return;
-    
+
     startTransition(async () => {
       const result = await deleteProduct(productToEdit.id);
       if (result.success) {
@@ -127,9 +146,8 @@ const StockTable = ({ descriptionFilter }: props) => {
                       {product.description}
                     </TableCell>
                     <TableCell
-                      className={`font-medium ${
-                        product.amount <= 0 ? "text-red-500" : ""
-                      }`}
+                      className={`font-medium ${product.amount <= 0 ? "text-red-500" : ""
+                        }`}
                     >
                       {product.amount}
                     </TableCell>
@@ -193,14 +211,14 @@ const StockTable = ({ descriptionFilter }: props) => {
                           e.stopPropagation();
                           setProductToEdit(product);
                           setOpenDeleteModal(true);
-                        } } disable={false}                      />
-                      <CodeBarModal 
-                      code={product.code || ""}
-                      codebar={product.codebar || undefined}
-                      description={product.description || ""}
-                      salePrice={product.salePrice}
-                      unit={product.unit ?? undefined}
-                    />
+                        }} disable={false} />
+                      <CodeBarModal
+                        code={product.code || ""}
+                        codebar={product.codebar || undefined}
+                        description={product.description || ""}
+                        salePrice={product.salePrice}
+                        unit={product.unit ?? undefined}
+                      />
                       <SetCodebarModal
                         productId={product.id}
                         currentCodebar={product.codebar || undefined}
@@ -218,6 +236,33 @@ const StockTable = ({ descriptionFilter }: props) => {
               })}
           </TableBody>
         </Table>
+
+        {/* Pagination controls */}
+        {totalPages > 0 && (
+          <div className="flex items-center justify-between px-6 py-4 bg-white bg-opacity-20 border-t border-gray-200">
+            <span className="text-sm text-gray-700 font-medium">
+              Página {page} de {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page <= 1}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page >= totalPages}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
       {productToEdit && openDeleteModal && (
         <Modal
@@ -240,7 +285,7 @@ const StockTable = ({ descriptionFilter }: props) => {
           <ProductForm
             onClose={() => {
               setOpenEditModal(false);
-              fetchProducts(); // Refresh after edit
+              fetchProducts(page); // Refresh after edit
             }}
             product={productToEdit}
           />

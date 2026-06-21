@@ -2,7 +2,9 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
+import { fail } from "@/lib/action-result";
 
 export const createClient = async (data: {
   name: string;
@@ -22,8 +24,8 @@ export const createClient = async (data: {
         businessId: session.user.businessId,
       },
     });
-    revalidatePath("/clients"); // Assuming /clients is the path
-    revalidatePath("/billing"); 
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
     return { success: "Cliente agregado", client };
   } catch (error) {
     console.error(error);
@@ -45,7 +47,7 @@ export const getClients = async () => {
 export const updateClientBalance = async (clientId: string, amountToAdd: number) => {
     try {
         const client = await db.client.findUnique({ where: { id: clientId } });
-        if (!client) throw new Error("Cliente no encontrado");
+        if (!client) return fail("Cliente no encontrado", "NOT_FOUND");
         
         await db.client.update({
             where: { id: clientId },
@@ -56,6 +58,7 @@ export const updateClientBalance = async (clientId: string, amountToAdd: number)
         });
         return { success: true };
     } catch (error) {
-        throw error;
+        console.error("Error updating client balance:", error);
+        return fail("Error al actualizar saldo del cliente");
     }
 }

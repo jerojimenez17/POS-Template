@@ -1,0 +1,48 @@
+change: enhancements-plan
+phase: proposal
+artifact_store: hybrid
+phases:
+  - phase: 1-quick-wins
+    status: defined
+    changes:
+      - dead-code-removal
+      - error-handling-unification
+      - pre-commit-hooks
+      - test-dom-unification
+  - phase: 2-bundle-performance
+    status: defined
+    changes:
+      - bundle-optimization
+      - n-plus-one-fixes
+      - billprovider-refactor
+  - phase: 3-data-architecture
+    status: defined
+    changes:
+      - pagination-strategy
+      - type-safety
+      - action-files-split
+      - bulk-upload-performance
+  - phase: 4-caching-images
+    status: defined
+    changes:
+      - server-actions-caching
+      - image-optimization
+  - phase: 5-quality-security
+    status: defined
+    changes:
+      - middleware-review
+      - rate-limiting
+      - e2e-tests
+  - phase: 6-legacy-ux
+    status: defined
+    changes:
+      - firebase-migration
+      - optimistic-updates
+  - phase: 7-new-features
+    status: defined
+    changes:
+      - ui-enhancements
+      - business-configuration
+      - fetching-performance
+      - overall-performance
+last_updated: 2026-06-10T20:15:00-03:00

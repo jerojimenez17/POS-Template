@@ -4,6 +4,7 @@ import { type DefaultSession } from "next-auth";
 export type ExtendedUser = DefaultSession["user"] & {
   role: UserRole;
   businessId: string | null;
+  cashboxId?: string | null;
   businessName: string | null;
   businessSlug: string | null;
   business: {

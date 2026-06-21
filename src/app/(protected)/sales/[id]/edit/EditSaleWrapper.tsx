@@ -14,13 +14,13 @@ interface EditSaleWrapperProps {
 }
 
 const EditSaleWrapper = ({ sale, session }: EditSaleWrapperProps) => {
-  const { setState } = useContext(BillContext);
+  const { dispatch } = useContext(BillContext);
   const [isInitializing, setIsInitializing] = useState(true);
   const initialized = useRef(false);
 
   useEffect(() => {
     if (sale && !initialized.current) {
-      setState(sale);
+      dispatch({ type: "setState", payload: sale });
       initialized.current = true;
       // Allow a brief moment for the context to update before rendering
       setTimeout(() => setIsInitializing(false), 50);

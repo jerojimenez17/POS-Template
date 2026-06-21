@@ -39,7 +39,9 @@ describe("Superadmin Actions Test Suite", () => {
 
     const result = await updateBusinessFeaturesAction(payload);
     expect(result.success).toBe(false);
-    expect(result.error).toContain("No autorizado");
+    if (!result.success) {
+      expect(result.error).toContain("No autorizado");
+    }
   });
 
   it("should execute updates successfully inside a transaction for valid payload and role", async () => {
