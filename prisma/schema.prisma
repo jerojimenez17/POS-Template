@@ -195,6 +195,7 @@ model Supplier {
 model Product {
   id          String  @id @default(cuid())
   code        String?
+  codebar     String?
   description String?
 
   brandId String?
@@ -237,6 +238,7 @@ model Product {
   @@index([businessId])
   @@index([businessId, description])
   @@index([businessId, code])
+  @@index([businessId, codebar])
   @@index([businessId, categoryId])
 }
 

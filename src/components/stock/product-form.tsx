@@ -81,6 +81,7 @@ const ProductForm = ({ product, onClose }: Props) => {
     [],
   );
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerTarget, setScannerTarget] = useState<"code" | "codebar">("codebar");
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>(
     [],
   );
@@ -96,6 +97,7 @@ const ProductForm = ({ product, onClose }: Props) => {
   const getInitialValues = (prod?: ProductExtended) => ({
     supplier: prod?.supplierId || prod?.supplier?.id || "",
     code: prod?.code || "",
+    codebar: prod?.codebar || "",
     description: prod?.description || "",
     price: prod?.price || 0,
     id: prod?.id || "",
@@ -465,24 +467,47 @@ const ProductForm = ({ product, onClose }: Props) => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Codigo <span className="text-red-500">*</span>
+                  Código Interno <span className="text-red-500">*</span>
                 </FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    placeholder=""
+                    type="text"
+                    className="border-black"
+                    autoComplete="code"
+                    disabled={isPending}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="space-y-2">
+          <FormField
+            control={form.control}
+            name="codebar"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Código de Barras</FormLabel>
                 <FormControl>
                   <div className="flex gap-2">
                     <Input
                       {...field}
-                      placeholder=""
+                      placeholder="Ej: 7790001234567"
                       type="text"
-                      className="border-black"
-                      autoComplete="code"
                       disabled={isPending}
                     />
                     <Button
                       type="button"
                       variant="outline"
                       size="icon"
-                      onClick={() => setScannerOpen(true)}
-                      className="h-10 w-10 border-black text-gray-500 hover:text-black"
+                      onClick={() => {
+                        setScannerTarget("codebar");
+                        setScannerOpen(true);
+                      }}
+                      className="h-10 w-10 text-gray-500 hover:text-black"
                       title="Escanear código de barras"
                     >
                       <ScanBarcode className="h-5 w-5" />
@@ -880,7 +905,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                 onScan={(result) => {
                   if (result && result.length > 0) {
                     const rawValue = result[0].rawValue;
-                    form.setValue("code", rawValue);
+                    form.setValue(scannerTarget, rawValue);
                     setScannerOpen(false);
                     toast.success(`Código escaneado: ${rawValue}`);
                   }

@@ -18,6 +18,7 @@ import CodeBarButton from "./codebarButton";
 
 interface Props {
   code: string;
+  codebar?: string;
   description: string;
   salePrice: number;
   unit?: string;
@@ -40,7 +41,8 @@ function formatPrice(price: number, unitSuffix: string): string {
   return `$${price.toFixed(2)}${unitSuffix}`;
 }
 
-const CodeBarModal = ({ code, description, salePrice, unit }: Props) => {
+const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) => {
+  const barcodeValue = codebar || code;
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
   const [copies, setCopies] = useState(1);
@@ -52,7 +54,7 @@ const CodeBarModal = ({ code, description, salePrice, unit }: Props) => {
   const generateBarcodes = useCallback(() => {
     barcodeRefs.current.forEach((barcodeEl) => {
       if (barcodeEl) {
-        JsBarcode(barcodeEl, code, {
+        JsBarcode(barcodeEl, barcodeValue, {
           format: "CODE128",
           lineColor: "#000000",
           width: 2,
@@ -63,11 +65,11 @@ const CodeBarModal = ({ code, description, salePrice, unit }: Props) => {
         });
       }
     });
-  }, [code]);
+  }, [barcodeValue]);
 
   useEffect(() => {
     generateBarcodes();
-  }, [key, code, generateBarcodes]);
+  }, [key, barcodeValue, generateBarcodes]);
 
   const handleCopiesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value, 10);
@@ -79,7 +81,7 @@ const CodeBarModal = ({ code, description, salePrice, unit }: Props) => {
   const handlePrint = async () => {
     if (printRef.current) {
       await printElement(printRef.current, {
-        documentTitle: `CodigoBarras_${code}`,
+        documentTitle: `CodigoBarras_${barcodeValue}`,
         pageStyle: `
           @page { size: 80mm auto; margin: 0; }
           @media print {

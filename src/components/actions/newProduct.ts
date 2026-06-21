@@ -20,9 +20,21 @@ export const newProduct = async (values: NewProductInput) => {
   }
 
   try {
+    let finalCode = values.code;
+    if (values.supplier && values.code) {
+      const supplier = await db.supplier.findUnique({ where: { id: values.supplier } });
+      if (supplier) {
+        const prefix = supplier.name.toLowerCase().replace(/\s+/g, '').slice(0, 3);
+        if (!finalCode.startsWith(`${prefix}-`)) {
+          finalCode = `${prefix}-${finalCode}`;
+        }
+      }
+    }
+
     const product = await db.product.create({
       data: {
-        code: values.code,
+        code: finalCode,
+        codebar: values.codebar || null,
         description: values.description,
         brandId: values.brand || undefined,
         categoryId: values.category || undefined,

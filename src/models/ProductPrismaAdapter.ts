@@ -14,6 +14,7 @@ export class ProductPrismaAdapter {
     
     product.id = prismaProduct.id;
     product.code = prismaProduct.code || "";
+    product.codebar = prismaProduct.codebar || "";
     product.description = prismaProduct.description || "";
     product.price = prismaProduct.price;
     product.salePrice = prismaProduct.salePrice;

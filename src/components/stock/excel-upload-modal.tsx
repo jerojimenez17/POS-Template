@@ -77,6 +77,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [colBrand, setColBrand] = useState("");
   const [colCategory, setColCategory] = useState("");
   const [colSubCategory, setColSubCategory] = useState("");
+  const [colCodebar, setColCodebar] = useState("");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -124,12 +125,13 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         brand: ["marca", "brand"],
         category: ["categoría", "categoria", "cat", "rubro"],
         subCategory: ["subcategoría", "subcategoria", "sub", "subrubro"],
+        codebar: ["codebar", "ean", "barcode", "upc", "código de barras", "cod barras"],
       };
 
       const detectColumns = (headerRow: unknown[]) => {
         const detected: Record<string, number> = {
           code: -1, description: -1, price: -1,
-          amount: -1, brand: -1, category: -1, subCategory: -1,
+          amount: -1, brand: -1, category: -1, subCategory: -1, codebar: -1,
         };
         for (let col = 0; col < headerRow.length; col++) {
           const cell = String(headerRow[col] ?? "").trim().toLowerCase();
@@ -153,6 +155,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         brand: getColIndex(colBrand),
         category: getColIndex(colCategory),
         subCategory: getColIndex(colSubCategory),
+        codebar: getColIndex(colCodebar),
       };
 
       const parsedProducts: BulkProductInput[] = [];
@@ -212,6 +215,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
             brandName: indices.brand >= 0 ? String(row[indices.brand] || "") : undefined,
             categoryName: indices.category >= 0 ? String(row[indices.category] || "") : undefined,
             subCategoryName: indices.subCategory >= 0 ? String(row[indices.subCategory] || "") : undefined,
+            codebar: indices.codebar >= 0 && row[indices.codebar] ? String(row[indices.codebar]) : undefined,
           });
         }
       }
@@ -439,6 +443,10 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                 <div className="grid gap-2">
                   <Label>Subcategoría</Label>
                   <Input value={colSubCategory} onChange={e => setColSubCategory(e.target.value)} placeholder="Ej: G" />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Código de Barras (EAN/UPC)</Label>
+                  <Input value={colCodebar} onChange={e => setColCodebar(e.target.value)} placeholder="Ej: H" />
                 </div>
              </div>
            </div>

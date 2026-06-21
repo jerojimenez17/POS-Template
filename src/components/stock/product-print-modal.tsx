@@ -47,7 +47,7 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
   const generateBarcodes = useCallback(() => {
     products.forEach((product, index) => {
       const barcodeEl = barcodeRefs.current[index];
-      const code = product.code;
+      const code = product.codebar || product.code;
       if (barcodeEl && code) {
         JsBarcode(barcodeEl, code, {
           format: "CODE128",
@@ -190,7 +190,7 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
                     <div className="label-price">
                       {formattedPrice}
                     </div>
-                    {product.code && (
+                    {(product.codebar || product.code) && (
                       <div className="label-barcode">
                         <svg
                           ref={(el) => {

@@ -20,6 +20,7 @@ function mapOrderToBillState(order: OrderWithItems): BillState {
     products: order.items.map((item) => ({
       id: item.productId || item.id,
       code: item.code || "",
+      codebar: "",
       description: item.description || "",
       price: item.costPrice,
       salePrice: item.price,
@@ -101,7 +102,7 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
     const totalSales = orders.reduce((acc: number, o: ReportOrder) => acc + o.total, 0);
     const totalDiscounts = orders.reduce((acc: number, o: ReportOrder) => acc + o.discountAmount, 0);
     const totalReturns = returns.reduce((acc: number, r: ReportReturn) => acc + r.total, 0);
-    
+
     const paymentMethods: Record<string, number> = {};
     orders.forEach((o: ReportOrder) => {
       if (o.paymentMethod) {
@@ -120,7 +121,7 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
       if (sm.quantity === 0) return;
       const isOut = sm.quantity < 0;
       const absQty = Math.abs(sm.quantity);
-      
+
       const targetMap = isOut ? outsMap : insMap;
       const existing = targetMap.get(sm.productId) || {
         productId: sm.productId,
@@ -128,7 +129,7 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
         description: sm.product?.description || "Producto eliminado",
         quantity: 0
       };
-      
+
       existing.quantity += absQty;
       targetMap.set(sm.productId, existing);
     });
@@ -220,7 +221,7 @@ export const getUniqueSellersAction = async (): Promise<string[]> => {
 
   try {
     const sellers = await db.order.findMany({
-      where: { 
+      where: {
         businessId,
         seller: { not: null, notIn: [""] }
       },
