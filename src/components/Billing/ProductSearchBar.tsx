@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { getProductByCode, getProductsBySearch, getSuppliersForFilter } from "@/actions/stock";
+import { getProductByCode, getProductsByCode, getProductsBySearch, getSuppliersForFilter } from "@/actions/stock";
 import { ProductPrismaAdapter } from "@/models/ProductPrismaAdapter";
 import Product from "@/models/Product";
 import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
@@ -28,6 +28,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   const [supplierId, setSupplierId] = useState("");
   const [supplierSearch, setSupplierSearch] = useState("");
   const [supplierOpen, setSupplierOpen] = useState(false);
+  const [duplicateProducts, setDuplicateProducts] = useState<Product[]>([]);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const supplierContainerRef = useRef<HTMLDivElement>(null);
@@ -147,24 +148,40 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
     }
   };
 
+  const addProductDirect = (product: Product) => {
+    if (product.amount <= 0) {
+      setErrorMessage("Producto sin Stock");
+      return;
+    }
+    onProductAdd({ ...product, amount: 1 });
+    setSearchCode("");
+    setSuggestions([]);
+    setSelectedIndex(-1);
+  };
+
   const processBarcode = async (code: string) => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    const product = await getProductByCode(code);
-    if (!product) {
-      setErrorMessage("Producto no encontrado");
-      setSearchCode("");
-      setSuggestions([]);
-    } else if (product.amount <= 0) {
-      setErrorMessage("Producto sin Stock");
-      setSearchCode("");
-      setSuggestions([]);
+    if (supplierId) {
+      const product = await getProductByCode(code, supplierId);
+      if (!product) {
+        setErrorMessage("Producto no encontrado");
+      } else {
+        const adaptedProduct = ProductPrismaAdapter.toDomain(product);
+        addProductDirect(adaptedProduct);
+      }
     } else {
-      const adaptedProduct = ProductPrismaAdapter.toDomain(product);
-      onProductAdd({ ...adaptedProduct, amount: 1 });
-      setSearchCode("");
-      setSuggestions([]);
-      setSelectedIndex(-1);
+      const products = await getProductsByCode(code);
+      if (products.length === 0) {
+        setErrorMessage("Producto no encontrado");
+      } else if (products.length === 1) {
+        const adaptedProduct = ProductPrismaAdapter.toDomain(products[0]);
+        addProductDirect(adaptedProduct);
+      } else {
+        setDuplicateProducts(products.map(ProductPrismaAdapter.toDomain));
+      }
     }
+    setSearchCode("");
+    setSuggestions([]);
     if (barcodeTimeout.current) clearTimeout(barcodeTimeout.current);
     setIsBarcodeMode(false);
     lastKeystrokeTime.current = 0;
@@ -173,20 +190,26 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   const handleAddProduct = async (code: string) => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (barcodeTimeout.current) clearTimeout(barcodeTimeout.current);
-    const product = await getProductByCode(code);
-    if (!product) {
-      setErrorMessage("Producto no encontrado");
-      return;
+    if (supplierId) {
+      const product = await getProductByCode(code, supplierId);
+      if (!product) {
+        setErrorMessage("Producto no encontrado");
+        return;
+      }
+      const adaptedProduct = ProductPrismaAdapter.toDomain(product);
+      addProductDirect(adaptedProduct);
+    } else {
+      const products = await getProductsByCode(code);
+      if (products.length === 0) {
+        setErrorMessage("Producto no encontrado");
+        return;
+      } else if (products.length === 1) {
+        const adaptedProduct = ProductPrismaAdapter.toDomain(products[0]);
+        addProductDirect(adaptedProduct);
+      } else {
+        setDuplicateProducts(products.map(ProductPrismaAdapter.toDomain));
+      }
     }
-    if (product.amount <= 0) {
-      setErrorMessage("Producto sin Stock");
-      return;
-    }
-    const adaptedProduct = ProductPrismaAdapter.toDomain(product);
-    onProductAdd({ ...adaptedProduct, amount: 1 });
-    setSearchCode("");
-    setSuggestions([]);
-    setSelectedIndex(-1);
   };
 
   const handleScannerResult = (result: IDetectedBarcode[]) => {
@@ -194,6 +217,11 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
       handleAddProduct(result[0].rawValue);
     }
     setScannerOpen(false);
+  };
+
+  const handleDuplicateSelect = (product: Product) => {
+    setDuplicateProducts([]);
+    addProductDirect(product);
   };
 
   const filteredSuppliers = suppliers.filter((s) =>
@@ -226,7 +254,15 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
               if (e.key === "Enter") {
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
-                  handleAddProduct(suggestions[selectedIndex].code);
+                  const product = suggestions[selectedIndex];
+                  if (product.amount <= 0) {
+                    setErrorMessage("Producto sin Stock");
+                    return;
+                  }
+                  onProductAdd({ ...product, amount: 1 });
+                  setSearchCode("");
+                  setSuggestions([]);
+                  setSelectedIndex(-1);
                 } else {
                   handleAddProduct(searchCode);
                 }
@@ -263,7 +299,16 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                       ? "bg-blue-50 dark:bg-gray-700 border-l-4 border-l-blue-500"
                       : "hover:bg-gray-50 dark:hover:bg-gray-700 border-l-4 border-l-transparent"
                   )}
-                  onClick={() => handleAddProduct(product.code)}
+                  onClick={() => {
+                    if (product.amount <= 0) {
+                      setErrorMessage("Producto sin Stock");
+                      return;
+                    }
+                    onProductAdd({ ...product, amount: 1 });
+                    setSearchCode("");
+                    setSuggestions([]);
+                    setSelectedIndex(-1);
+                  }}
                 >
                   <div className="flex justify-between items-start">
                     <div>
@@ -402,6 +447,70 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
             <Scanner formats={["code_128", "codabar", "qr_code", "ean_13", "ean_8"]}
               onScan={handleScannerResult}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Product Selection Modal */}
+      {duplicateProducts.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center print-hidden">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-lg shadow-2xl border border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                Se encontraron varios productos con el mismo código
+              </h3>
+              <button
+                className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 focus-visible:ring-2 focus-visible:ring-gray-400 rounded p-1 transition-colors"
+                onClick={() => setDuplicateProducts([])}
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Seleccioná el producto correcto:
+            </p>
+            <div className="space-y-3 max-h-80 overflow-y-auto">
+              {duplicateProducts.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => handleDuplicateSelect(product)}
+                  className="w-full text-left p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-mono text-sm text-blue-600 dark:text-blue-400">{product.code}</span>
+                      {product.suplier?.name && (
+                        <span className="ml-2 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 px-2 py-0.5 rounded text-purple-700 dark:text-purple-300">
+                          {product.suplier.name}
+                        </span>
+                      )}
+                      {product.brand && (
+                        <span className="ml-2 text-xs font-medium bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-600 dark:text-gray-300">
+                          {product.brand}
+                        </span>
+                      )}
+                    </div>
+                    <span className={cn(
+                      "font-semibold text-xs px-2 py-1 rounded-full shrink-0",
+                      product.amount <= 5 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    )}>
+                      Stock: {product.amount}
+                    </span>
+                  </div>
+                  <div className="mt-1 font-medium text-gray-900 dark:text-gray-100">
+                    {product.description}
+                  </div>
+                  <div className="mt-1 font-bold text-lg text-gray-700 dark:text-gray-300">
+                    ${product.salePrice.toLocaleString("es-AR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

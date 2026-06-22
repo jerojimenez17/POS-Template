@@ -160,7 +160,8 @@ export const previewProductsBulk = async (
     const existingProducts = await db.product.findMany({
       where: {
         businessId: session.user.businessId,
-        code: { in: codes }
+        code: { in: codes },
+        ...(supplierId ? { supplierId } : {})
       },
       select: { code: true, price: true, salePrice: true, supplierId: true }
     });
@@ -350,7 +351,7 @@ export const processBulkProductBatch = async (
     // 5. Fetch Existing Products
     const codes = productsData.map(p => p.code.toString());
     const existingProducts = await db.product.findMany({
-      where: { businessId, code: { in: codes } }
+      where: { businessId, code: { in: codes }, ...(supplierId ? { supplierId } : {}) }
     });
     const existingProductMap = new Map<string, typeof existingProducts[number]>();
     for (const p of existingProducts) {
@@ -773,7 +774,7 @@ export const getProductsPaginated = async (params: {
   }
 };
 
-export const getProductByCode = async (code: string) => {
+export const getProductByCode = async (code: string, supplierId?: string) => {
   const session = await auth();
   if (!session?.user?.businessId) return null;
 
@@ -785,6 +786,7 @@ export const getProductByCode = async (code: string) => {
           { code: code },
           { codebar: code },
         ],
+        ...(supplierId ? { supplierId } : {}),
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },
     });
@@ -793,6 +795,29 @@ export const getProductByCode = async (code: string) => {
   } catch (error) {
     console.error(error);
     return null;
+  }
+};
+
+export const getProductsByCode = async (code: string) => {
+  const session = await auth();
+  if (!session?.user?.businessId) return [];
+
+  try {
+    const products = await db.product.findMany({
+      where: {
+        businessId: session.user.businessId,
+        OR: [
+          { code: code },
+          { codebar: code },
+        ],
+      },
+      include: { supplier: true, brand: true, category: true, subCategory: true },
+    });
+
+    return products;
+  } catch (error) {
+    console.error(error);
+    return [];
   }
 };
 

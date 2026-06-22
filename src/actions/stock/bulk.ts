@@ -53,7 +53,8 @@ export const previewProductsBulk = async (
     const existingProducts = await db.product.findMany({
       where: {
         businessId: session.user.businessId,
-        code: { in: codes }
+        code: { in: codes },
+        ...(supplierId ? { supplierId } : {})
       },
       select: { code: true, price: true, salePrice: true, supplierId: true }
     });
@@ -172,7 +173,7 @@ export const createProductsBulk = async (
     // Pre-load ALL existing products by code in 1 query
     const allCodes = productsData.map(p => p.code.toString());
     const existingProducts = await db.product.findMany({
-      where: { businessId, code: { in: allCodes } },
+      where: { businessId, code: { in: allCodes }, ...(supplierId ? { supplierId } : {}) },
       select: { id: true, code: true, price: true, salePrice: true, gain: true, amount: true, supplierId: true },
     });
     const existingByCode = new Map(existingProducts.map(p => [p.code, p]));
