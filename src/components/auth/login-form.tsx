@@ -97,6 +97,7 @@ export const LoginForm = () => {
                     </FormControl>
                     <FormMessage />
                   </FormItem>
+                </div>
               )}
             />
           </div>
@@ -105,22 +106,19 @@ export const LoginForm = () => {
               <FormError message={error || urlError} />
             </div>
           )}
-          <div>
-          {(error || urlError) && <FormError message={error || urlError} />}
-            <Button
-              type="submit"
-              disabled={isPending}
-              className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {isPending ? (
-                <span className="animate-pulse">
-                  Iniciando sesión...
-                </span>
-              ) : (
-                "Iniciar sesión"
-              )}
-            </Button>
-          </div>
+          <Button
+            type="submit"
+            disabled={isPending}
+            className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+          >
+            {isPending ? (
+              <span className="animate-pulse">
+                Iniciando sesión...
+              </span>
+            ) : (
+              "Iniciar sesión"
+            )}
+          </Button>
         </form>
       </Form>
     </CardWrapper>

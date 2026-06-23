@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Session } from "next-auth";
 import { Button } from "../ui/button";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -54,7 +54,9 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator !== "undefined" ? navigator.onLine : true
+  );
 
   const checkSession = () => {
     if (!hasActiveSession) {
@@ -67,8 +69,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
@@ -80,15 +80,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       window.removeEventListener("offline", handleOffline);
     };
   }, []);
-
-  const checkSession = () => {
-    if (!hasActiveSession) {
-      toast.error("Debe abrir una sesión de caja antes de realizar esta operación");
-      setIsOpeningModalOpen(true);
-      return false;
-    }
-    return true;
-  };
 
   const [openFacturaModal, setOpenFacturaModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);

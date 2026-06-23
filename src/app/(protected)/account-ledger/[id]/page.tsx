@@ -34,7 +34,6 @@ import CancelOrderButton from "./CancelOrderButton";
 import EditableOrderDetailWrapper from "./EditableOrderDetailWrapper";
 import PrintOrderButton from "./PrintOrderButton";
 import { LocalDate } from "@/components/ui/LocalDate";
-import { cn } from "@/lib/utils";
 
 interface OrderWithRelations {
   id: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, startTransition } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
@@ -83,7 +83,6 @@ export default function ClientSelectionModal({
   totalWithDiscount,
 }: ClientSelectionModalProps) {
   const [clients, setClients] = useState<Client[]>([]);
-  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -128,8 +127,7 @@ export default function ClientSelectionModal({
     const results = clients.filter((client) =>
       client.name.toLowerCase().includes(search.toLowerCase())
     );
-    setFilteredClients(results);
-  }, [search, clients]);
+  }, [clients, search]);
 
   const fetchClients = async () => {
     setIsFetchingClients(true);
@@ -137,13 +135,35 @@ export default function ClientSelectionModal({
       const response = await fetch("/api/clients");
       const data = await response.json();
       setClients(data.clients || data);
-      setFilteredClients(data.clients || data);
     } catch (error) {
       console.error("Error fetching clients:", error);
     } finally {
       setIsFetchingClients(false);
     }
   };
+
+  useEffect(() => {
+    if (open) {
+      setSelectedClientId("");
+      setExistingOrder(null);
+      setShowExistingOrderDialog(false);
+      setIsFetchingClients(true);
+      fetch("/api/clients")
+        .then((res) => res.json())
+        .then((data) => {
+          startTransition(() => {
+            setClients(data.clients || data);
+            setIsFetchingClients(false);
+          });
+        })
+        .catch((error) => {
+          console.error("Error fetching clients:", error);
+          startTransition(() => {
+            setIsFetchingClients(false);
+          });
+        });
+    }
+  }, [open]);
 
   const handleCreateClient = async () => {
     if (!newClientName.trim()) {
