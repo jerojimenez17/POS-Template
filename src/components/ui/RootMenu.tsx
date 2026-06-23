@@ -1,7 +1,7 @@
 "use client";
 import MenuCard from "./MenuCard";
 import { useSession } from "next-auth/react";
-import { LayoutGrid, FileText, Search, Package, BookOpen, Calculator, BarChart3, Users, Box, Settings } from "lucide-react";
+import { LayoutGrid, FileText, Package, BookOpen, Calculator, BarChart3, Users, Box, Settings } from "lucide-react";
 
 const RootMenu = () => {
   const { data: session } = useSession();
@@ -14,10 +14,6 @@ const RootMenu = () => {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <MenuCard url="/newBill" title="Facturar">
             <FileText className="w-16 h-16" strokeWidth={1.5} />
-          </MenuCard>
-          
-          <MenuCard url="/searchBill" title="Consultar">
-            <Search className="w-16 h-16" strokeWidth={1.5} />
           </MenuCard>
           
           <MenuCard url="/stock/productDashboard" title="Stock">

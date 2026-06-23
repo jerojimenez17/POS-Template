@@ -6,7 +6,6 @@ import { useSession } from "next-auth/react";
 import { useMobileNav } from "@/context/MobileNavContext";
 import {
   FileText,
-  Search,
   Package,
   BookOpen,
   Calculator,
@@ -28,7 +27,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Facturar", href: "/newBill", icon: <FileText className="h-5 w-5" /> },
-  { label: "Consultar", href: "/searchBill", icon: <Search className="h-5 w-5" /> },
   { label: "Stock", href: "/stock/productDashboard", icon: <Package className="h-5 w-5" /> },
   { label: "Fichero", href: "/account-ledger", icon: <BookOpen className="h-5 w-5" /> },
   { label: "Caja", href: "/cashRegister", icon: <Calculator className="h-5 w-5" /> },
