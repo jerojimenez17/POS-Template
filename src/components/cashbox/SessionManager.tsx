@@ -26,13 +26,12 @@ export const SessionManager = ({ hasActiveSession: hasActiveSessionProp }: Sessi
     setHasActiveSession(!!hasActiveSessionProp);
   }, [hasActiveSessionProp, setHasActiveSession]);
 
-  // Handle default visibility logic
+  // Handle default visibility logic (use prop directly to avoid race condition)
   useEffect(() => {
-    // If no session and not in closing process, open the modal by default
-    if (!hasActiveSession && !isClosing) {
+    if (!hasActiveSessionProp && !isClosing) {
       setIsOpeningModalOpen(true);
     }
-  }, [hasActiveSession, isClosing, setIsOpeningModalOpen]);
+  }, [hasActiveSessionProp, isClosing, setIsOpeningModalOpen]);
 
   return (
     <>
