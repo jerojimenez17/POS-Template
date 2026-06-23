@@ -2,220 +2,33 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { 
-  Eye, 
-  CreditCard, 
-  XCircle,
-  ArrowLeft,
-  Loader2,
-  User,
-  Calendar,
-  DollarSign,
-  Printer
-} from "lucide-react";
-import { Suspense } from "react";
-import { PusherListener } from "./PusherListener";
-import ConfirmOrderButton from "./ConfirmOrderButton";
-import { LocalDate } from "@/components/ui/LocalDate";
-import SearchLedger from "./SearchLedger";
-import type { Session } from "next-auth";
+import { BookOpen, ArrowLeft } from "lucide-react";
+import AccountLedgerContent from "./AccountLedgerContent";
 
-type StatusFilter = "all" | "inpago" | "pago" | "cancelado" | "pendiente";
+export default async function AccountLedgerPage() {
+  const session = await auth();
 
-type OrderWithClient = {
-  id: string;
-  date: Date;
-  total: number;
-  status: string;
-  paidStatus: string;
-  clientId: string | null;
-  client: { id: string; name: string | null } | null;
-};
-
-interface OrdersTableProps {
-  status: StatusFilter;
-  search?: string;
-  session: Session | null;
-}
-
-async function OrdersTable({ status, search, session }: OrdersTableProps) {
   if (!session?.user?.businessId) {
     redirect("/");
   }
 
-  const statusParam = status === "all" ? undefined : status;
-  const result = await getUnpaidOrders({
-    businessId: session.user.businessId,
-    status: statusParam,
-  }) as { success: boolean; data?: OrderWithClient[]; error?: string };
-
-  if (!result.success) {
-    return (
-      <div className="text-center py-8 text-red-500">
-        Error al cargar las órdenes: {result.error}
-      </div>
-    );
-  }
-
-  let orders = result.data || [];
-
-  // Filter by search term
-  if (search) {
-    const term = search.toLowerCase();
-    orders = orders.filter(
-      (o) => o.client?.name?.toLowerCase().includes(term)
-    );
-  }
-
-  // Sort alphabetically by client name
-  orders.sort((a, b) => {
-    const nameA = a.client?.name?.toLowerCase() || "";
-    const nameB = b.client?.name?.toLowerCase() || "";
-    if (nameA < nameB) return -1;
-    if (nameA > nameB) return 1;
-    return 0;
-  });
-
-  if (orders.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        No se encontraron órdenes
-      </div>
-    );
-  }
-
-  const getStatusBadge = (status: string, paidStatus: string) => {
-    if (status === "pendiente") {
-      return <Badge variant="secondary" className="bg-orange-100 text-orange-800 hover:bg-orange-200">Por Confirmar</Badge>;
-    }
-    switch (paidStatus) {
-      case "inpago":
-        return <Badge variant="destructive">Pendiente Pago</Badge>;
-      case "pago":
-        return <Badge className="bg-green-500 hover:bg-green-600">Pagado</Badge>;
-      default:
-        return <Badge variant="outline">{paidStatus}</Badge>;
-    }
-  };
-
-
-
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Cliente</TableHead>
-          <TableHead>Total</TableHead>
-          <TableHead>Fecha</TableHead>
-          <TableHead>Estado</TableHead>
-          <TableHead className="text-right">Acciones</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {orders.map((order) => (
-          <TableRow key={order.id}>
-            <TableCell className="font-medium">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                {order.client?.name || "Sin cliente"}
-              </div>
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-1">
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-                ${order.total.toLocaleString("es-AR")}
-              </div>
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <LocalDate date={order.date} />
-              </div>
-            </TableCell>
-            <TableCell>{getStatusBadge(order.status, order.paidStatus)}</TableCell>
-            <TableCell className="text-right">
-              <div className="flex items-center justify-end gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/account-ledger/${order.id}`}>
-                    <Eye className="h-4 w-4 mr-1" />
-                    Ver
-                  </Link>
-                </Button>
-                <Button variant="ghost" size="sm" asChild title="Imprimir">
-                  <Link href={`/account-ledger/${order.id}`}>
-                    <Printer className="h-4 w-4" />
-                  </Link>
-                </Button>
-                {order.status === "pendiente" ? (
-                  <ConfirmOrderButton orderId={order.id} />
-                ) : order.paidStatus !== "pago" ? (
-                  <>
-                    <Button variant="default" size="sm" asChild>
-                      <Link href={`/account-ledger/${order.id}?action=payment`}>
-                        <CreditCard className="h-4 w-4 mr-1" />
-                        Pagar
-                      </Link>
-                    </Button>
-                    <Button variant="destructive" size="sm" asChild>
-                      <Link href={`/account-ledger/${order.id}?action=cancel`}>
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Cancelar
-                      </Link>
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-export default async function AccountLedgerPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ status?: string; search?: string }>;
-}) {
-  const [session, params] = await Promise.all([
-    auth(),
-    searchParams,
-  ]);
-  const status = (params.status as StatusFilter) || "inpago";
-  const search = params.search;
-
-  return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl">
-      {session?.user?.businessId && <PusherListener businessId={session.user.businessId} />}
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Volver
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-bold">Cuenta Corriente</h1>
-      </div>
-
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between mb-6">
-        <SearchLedger />
-      </div>
-
-      <div className="flex flex-col gap-6">
-        <div className="flex gap-2 border-b pb-2">
-          <StatusTab status="pendiente" label="Por Confirmar" currentStatus={status} />
-          <StatusTab status="inpago" label="Pendientes de Pago" currentStatus={status} />
-          <StatusTab status="pago" label="Pagados" currentStatus={status} />
-          <StatusTab status="all" currentStatus={status} />
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
+      <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild title="Volver">
+            <Link href="/">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <BookOpen className="h-5 w-5 text-blue-500" />
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">Cuenta Corriente</h1>
+            </div>
+          </div>
         </div>
       </header>
 
