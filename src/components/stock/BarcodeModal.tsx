@@ -60,6 +60,7 @@ export default function BarcodeModal({
   const [isEditing, setIsEditing] = useState(!initialCodebar);
   const [isPending] = useTransition();
   const [copies, setCopies] = useState(1);
+  const [showPrice, setShowPrice] = useState(true);
 
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
@@ -249,7 +250,13 @@ console.log(copies, cards)
                       key={i}
                       className="flex flex-col items-center border border-dashed border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900"
                     >
-                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1 truncate w-full text-center">
+                      <span
+                        contentEditable
+                        suppressContentEditableWarning
+                        spellCheck={false}
+                        className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1 truncate w-full text-center outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
+                        title="Haz clic para editar la descripción antes de imprimir"
+                      >
                         {description}
                       </span>
                       <svg
@@ -259,36 +266,49 @@ console.log(copies, cards)
                         }}
                         className="w-full max-w-[200px]"
                       />
-                      <span className="text-base font-bold text-gray-900 dark:text-gray-100 mt-1">
-                        {formatPrice(salePrice, unit)}
-                      </span>
+                      {showPrice && (
+                        <span className="text-base font-bold text-gray-900 dark:text-gray-100 mt-1">
+                          {formatPrice(salePrice, unit)}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
 
-                {/* Copies + Print */}
+                {/* Copies + Price Toggle + Print */}
                 <div className="flex items-center justify-between no-print pt-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Copias</span>
-                    <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-md">
-                      <button
-                        type="button"
-                        onClick={() => setCopies((c) => Math.max(1, c - 1))}
-                        className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                      >
-                        −
-                      </button>
-                      <span className="w-7 text-center text-xs font-medium tabular-nums text-gray-900 dark:text-gray-100">
-                        {copies}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setCopies((c) => Math.min(99, c + 1))}
-                        className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                      >
-                        +
-                      </button>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Copias</span>
+                      <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-md">
+                        <button
+                          type="button"
+                          onClick={() => setCopies((c) => Math.max(1, c - 1))}
+                          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          −
+                        </button>
+                        <span className="w-7 text-center text-xs font-medium tabular-nums text-gray-900 dark:text-gray-100">
+                          {copies}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setCopies((c) => Math.min(99, c + 1))}
+                          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={showPrice}
+                        onChange={(e) => setShowPrice(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                      />
+                      <span className="text-xs text-gray-500">Precio</span>
+                    </label>
                   </div>
                   <Button
                     size="sm"
