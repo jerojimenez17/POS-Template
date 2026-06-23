@@ -1,8 +1,6 @@
 import { auth } from "@/auth";
-import { getUnpaidOrders } from "@/actions/unpaid-orders";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -219,58 +217,11 @@ export default async function AccountLedgerPage({
           <StatusTab status="pago" label="Pagados" currentStatus={status} />
           <StatusTab status="all" currentStatus={status} />
         </div>
+      </header>
 
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          }
-        >
-          <OrdersTable status={status} search={search} session={session} />
-        </Suspense>
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <AccountLedgerContent businessId={session.user.businessId} />
       </div>
     </div>
-  );
-}
-
-function StatusTab({
-  status,
-  label,
-  currentStatus,
-}: {
-  status: StatusFilter;
-  label?: string;
-  currentStatus: StatusFilter;
-}) {
-  const getTabLabel = () => {
-    if (label) return label;
-    switch (status) {
-      case "all":
-        return "Todos";
-      case "pendiente":
-        return "Por Confirmar";
-      case "inpago":
-        return "Pendientes Pago";
-      case "pago":
-        return "Pagados";
-      default:
-        return status;
-    }
-  };
-
-  return (
-    <Button
-      variant="ghost"
-      className="rounded-b-none border-b-2 border-transparent data-[active=true]:border-primary"
-      asChild
-    >
-      <Link
-        href={`/account-ledger?status=${status}`}
-        data-active={status === currentStatus ? "true" : undefined}
-      >
-        {getTabLabel()}
-      </Link>
-    </Button>
   );
 }

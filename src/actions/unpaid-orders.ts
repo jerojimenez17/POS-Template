@@ -374,20 +374,22 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
         },
       } as never);
       orders = orders ? [orders] : [];
+    } else if (input.status === "all") {
+      orders = await db.order.findMany({
+        where: { businessId },
+        include: { client: true },
+        orderBy: { date: "desc" },
+      });
     } else {
       const isPending = input.status === "pendiente";
       const paidStatus = (input.status === "pagado" ? "pago" : input.status) as PaidStatus | undefined;
       orders = await db.order.findMany({
         where: {
           businessId,
-          // Si estamos buscando "pendientes", filtramos por status = pendiente
           ...(isPending ? { status: "pendiente" } : { status: { not: "pendiente" } }),
-          // Y solo aplicamos el filtro de paidStatus si no es "pending" ni "all"
-          ...(!isPending && paidStatus && paidStatus !== ("all" as never) ? { paidStatus } : {}),
+          ...(!isPending && paidStatus ? { paidStatus } : {}),
         },
-        include: {
-          client: true,
-        },
+        include: { client: true },
         orderBy: { date: "desc" },
       });
     }
