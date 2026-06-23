@@ -5,6 +5,10 @@ import { FiltersReducer } from "./FiltersReducer";
 import { FiltersContext } from "./FiltersContext";
 import FilterField from "@/models/FilterField";
 
+const today = new Date();
+const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+const startOfTomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
 const INITIAL_STATE: FilterState = {
   Remito: {
     active: true,
@@ -48,11 +52,11 @@ const INITIAL_STATE: FilterState = {
   } as FilterField,
   startDate: {
     active: true,
-    date: new Date(),
+    date: startOfToday,
   },
   endDate: {
     active: true,
-    date: new Date(),
+    date: startOfTomorrow,
   },
 };
 
@@ -157,6 +161,10 @@ const FiltersProvider = ({ children }: props) => {
   const resetFilters = useCallback(() => {
     dispatch({ type: "reset", payload: null });
   }, []);
+
+  const initFromUrl = useCallback((params: { startDate?: Date; endDate?: Date; showAll?: boolean }) => {
+    dispatch({ type: "initFromUrl", payload: params });
+  }, []);
   
   const values = useMemo(() => ({
     filtersState: filtersState,
@@ -176,11 +184,12 @@ const FiltersProvider = ({ children }: props) => {
     seller: seller,
     disableSeller: disableSeller,
     resetFilters: resetFilters,
+    initFromUrl: initFromUrl,
   }), [
     filtersState, switchRemito, switchFacturaC, switchDebito, switchEfectivo,
     switchUnPago, switchAhora3, switchAhora6, switchCuentaDNI,
     switchTransferencia, startDate, endDate, disableEndDate,
-    disableStartDate, seller, disableSeller, resetFilters
+    disableStartDate, seller, disableSeller, resetFilters, initFromUrl
   ]);
 
   return (

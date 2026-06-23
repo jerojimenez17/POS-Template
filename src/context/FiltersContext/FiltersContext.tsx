@@ -18,6 +18,7 @@ export default interface FiltersContextProps {
   endDate: (date: Date) => void;
   disableSeller: () => void;
   resetFilters: () => void;
+  initFromUrl: (params: { startDate?: Date; endDate?: Date; showAll?: boolean }) => void;
 }
 
 export const FiltersContext = createContext<FiltersContextProps>(
