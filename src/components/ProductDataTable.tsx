@@ -477,26 +477,24 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              className="h-8 w-8"
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1}
-              className="h-8 px-3"
             >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              Anterior
+              <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
               {page} / {totalPages}
             </span>
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              className="h-8 w-8"
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages}
-              className="h-8 px-3"
             >
-              Siguiente
-              <ChevronRight className="h-4 w-4 ml-1" />
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
