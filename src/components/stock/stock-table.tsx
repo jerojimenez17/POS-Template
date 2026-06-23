@@ -11,11 +11,26 @@ import {
 import noImgPhoto from "../../../public/no-image.svg";
 import Image from "next/image";
 import DeleteButton from "../DeleteButton";
-import Modal from "../Modal";
 import ProductForm from "./product-form";
 import CodeBarModal from "./code-bar-modal";
 import SetCodebarModal from "./set-codebar-modal";
 import { Button } from "../ui/button";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Session } from "next-auth";
 import { getProductsPaginated, deleteProduct, toggleProductCatalogAction } from "@/actions/stock";
 import { ProductExtended } from "./product-form";
@@ -264,33 +279,36 @@ const StockTable = ({ descriptionFilter }: props) => {
           </div>
         )}
       </div>
-      {productToEdit && openDeleteModal && (
-        <Modal
-          className="z-50 absolute"
-          blockButton={false}
-          onCancel={() => setOpenDeleteModal(false)}
-          visible={openDeleteModal}
-          key={productToEdit.id}
-          onClose={() => setOpenDeleteModal(false)}
-          onAcept={handleDelete}
-          message="Seguro que desea eliminar este producto?"
-        />
+      {openDeleteModal && (
+        <AlertDialog open={openDeleteModal} onOpenChange={setOpenDeleteModal}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Eliminar producto</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Estás seguro de que deseas eliminar este producto? Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete}>Eliminar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
-      {productToEdit && (
-        <Modal
-          onClose={() => setOpenEditModal(false)}
-          visible={openEditModal}
-          blockButton={false}
-        >
+      <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar producto</DialogTitle>
+          </DialogHeader>
           <ProductForm
             onClose={() => {
               setOpenEditModal(false);
-              fetchProducts(page); // Refresh after edit
+              fetchProducts(page);
             }}
-            product={productToEdit}
+            product={productToEdit!}
           />
-        </Modal>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
