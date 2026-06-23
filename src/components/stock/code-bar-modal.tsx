@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { printElement } from "@/lib/print";
 import CodeBarButton from "./codebarButton";
 
@@ -46,9 +47,11 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
   const [copies, setCopies] = useState(1);
+  const [showPrice, setShowPrice] = useState(true);
   const [key, setKey] = useState(0);
 
   const unitSuffix = getUnitSuffix(unit);
+  const hasBarcode = !!barcodeValue;
   const formattedPrice = formatPrice(salePrice, unitSuffix);
 
   const generateBarcodes = useCallback(() => {
@@ -83,10 +86,45 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
       await printElement(printRef.current, {
         documentTitle: `CodigoBarras_${barcodeValue}`,
         pageStyle: `
-          @page { size: 80mm auto; margin: 0; }
+          @page { size: 80mm 75mm; margin: 0; }
           @media print {
-            body { -webkit-print-color-adjust: exact; }
+            body { -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
             .no-print { display: none !important; }
+            .label-container {
+              width: 78mm !important;
+              height: 75mm !important;
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              padding: 2mm;
+              box-sizing: border-box;
+              page-break-after: always;
+            }
+            .label-description {
+              font-size: 32px;
+              font-weight: 700;
+              text-align: center;
+              line-height: 1.1;
+              margin-bottom: 4px;
+              word-wrap: break-word;
+              width: 100%;
+            }
+            .label-price {
+              font-size: 40px;
+              font-weight: 800;
+              text-align: center;
+              margin-bottom: 8px;
+            }
+            .label-price--no-barcode {
+              font-size: 56px;
+              margin: 12px 0;
+            }
+            .label-barcode {
+              text-align: center;
+              margin: 4px 0px;
+            }
           }
         `,
         format: "thermal",
@@ -110,7 +148,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
           <CodeBarButton />
         </Button>
       </DialogTrigger>
-      <DialogContent className="w-full max-w-md">
+      <DialogContent className="w-full max-w-2xl">
         <DialogHeader>
           <DialogTitle>Codigo de Barras</DialogTitle>
         </DialogHeader>
@@ -128,6 +166,14 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
               className="w-24"
             />
           </div>
+          <div className="flex items-center gap-2 mt-5">
+            <Checkbox
+              id="show-price"
+              checked={showPrice}
+              onCheckedChange={(checked) => setShowPrice(!!checked)}
+            />
+            <Label htmlFor="show-price" className="cursor-pointer">Mostrar precio</Label>
+          </div>
           <Button
             variant="outline"
             onClick={(e) => {
@@ -143,28 +189,36 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
         <div className="no-print border rounded-md p-4 bg-slate-50 max-h-96 overflow-y-auto">
           <div
             ref={printRef}
-            className="mx-auto grid gap-3"
+            className="mx-auto flex flex-wrap gap-6 justify-center"
             style={{
-              gridTemplateColumns: "repeat(auto-fill, minmax(70mm, 1fr))",
               width: "100%",
             }}
           >
-            {cards.map((_, index) => (
+              {cards.map((_, index) => (
               <div
                 key={index}
-                className="flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white"
-                style={{ width: "70mm" }}
+                className="flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white label-container"
+                style={{ width: "78mm", height: "75mm", overflow: "hidden" }}
               >
-                <div className="text-center font-semibold text-sm mb-1 truncate w-full">
+                <div className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors text-center font-semibold mb-1 truncate w-full"
+                  contentEditable
+                  suppressContentEditableWarning
+                  spellCheck={false}
+                  title="Haz clic para editar la descripción antes de imprimir"
+                >
                   {description}
                 </div>
-                <svg
-                  ref={(el) => { barcodeRefs.current[index] = el; }}
-                  className="w-full"
-                />
-                <div className="text-center font-bold text-lg mt-1">
-                  {formattedPrice}
-                </div>
+                {showPrice && (
+                  <div className={`label-price text-center font-bold mt-1${!hasBarcode ? ' label-price--no-barcode' : ''}`}>
+                    {formattedPrice}
+                  </div>
+                )}
+                {hasBarcode && (
+                  <svg
+                    ref={(el) => { barcodeRefs.current[index] = el; }}
+                    className="w-full label-barcode"
+                  />
+                )}
               </div>
             ))}
           </div>

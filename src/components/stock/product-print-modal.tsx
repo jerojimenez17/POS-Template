@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { printElement } from "@/lib/print";
 import { ProductExtended } from "./product-form";
 
@@ -42,6 +43,7 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
   const [copies, setCopies] = useState(1);
+  const [showPrice, setShowPrice] = useState(true);
   const [key, setKey] = useState(0);
 
   const generateBarcodes = useCallback(() => {
@@ -111,6 +113,10 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
               text-align: center;
               margin-bottom: 8px;
             }
+            .label-price--no-barcode {
+              font-size: 56px;
+              margin: 12px 0;
+            }
             .label-barcode {
               text-align: center;
               margin: 4px 0px;
@@ -149,6 +155,14 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
               className="w-24"
             />
           </div>
+          <div className="flex items-center gap-2 mt-5">
+            <Checkbox
+              id="show-price"
+              checked={showPrice}
+              onCheckedChange={(checked) => setShowPrice(!!checked)}
+            />
+            <Label htmlFor="show-price" className="cursor-pointer">Mostrar precio</Label>
+          </div>
           <Button
             variant="outline"
             onClick={() => setKey((k) => k + 1)}
@@ -170,6 +184,7 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
               cards.map((_, copyIndex) => {
                 const elementIndex = productIndex * copies + copyIndex;
                 const unitSuffix = getUnitSuffix(product.unit ?? undefined);
+                const hasBarcode = !!(product.codebar || product.code);
                 const formattedPrice = formatPrice(product.salePrice, unitSuffix);
                 
                 return (
@@ -187,10 +202,12 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
                     >
                       {product.description}
                     </div>
-                    <div className="label-price">
-                      {formattedPrice}
-                    </div>
-                    {(product.codebar || product.code) && (
+                    {showPrice && (
+                      <div className={`label-price${!hasBarcode ? ' label-price--no-barcode' : ''}`}>
+                        {formattedPrice}
+                      </div>
+                    )}
+                    {hasBarcode && (
                       <div className="label-barcode">
                         <svg
                           ref={(el) => {
@@ -200,9 +217,11 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
                         />
                       </div>
                     )}
-                    <div className="label-code">
-                      {product.code}
-                    </div>
+                    {product.code && (
+                      <div className="label-code">
+                        {product.code}
+                      </div>
+                    )}
                   </div>
                 );
               })
