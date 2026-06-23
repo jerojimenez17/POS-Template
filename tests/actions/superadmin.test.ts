@@ -35,6 +35,7 @@ describe("Superadmin Actions Test Suite", () => {
       hasMultiCashbox: false,
       hasSupplierFilter: false,
       hasBudget: false,
+      hasNegativeStock: false,
       maxUsers: 5,
       maxProducts: 1000,
     };
@@ -75,6 +76,7 @@ describe("Superadmin Actions Test Suite", () => {
       hasMultiCashbox: false,
       hasSupplierFilter: false,
       hasBudget: false,
+      hasNegativeStock: false,
       maxUsers: 5,
       maxProducts: 1000,
     };

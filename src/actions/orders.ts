@@ -37,6 +37,8 @@ export const createOrder = async (order: OrderInput) => {
     const permissionResult = await assertWritePermission();
     if (!permissionResult.success) return { error: permissionResult.error };
 
+    const allowNegativeStock = (permissionResult.data?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
+
     if (order.paidStatus === "inpago") {
       const featureResult = await requireFeature("hasClientLedger");
       if (!featureResult.success) return { error: featureResult.error };
@@ -60,8 +62,7 @@ export const createOrder = async (order: OrderInput) => {
         }
 
         const newAmount = dbProduct.amount - product.amount;
-        if (newAmount < 0) {
-            // Note: Firebase impl threw error if < 0. We keep this logic.
+        if (!allowNegativeStock && newAmount < 0) {
              throw new Error(`No hay suficiente stock para ${product.description || product.id}`);
         }
 
@@ -123,6 +124,7 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
     try {
         const permissionResult = await assertWritePermission();
         if (!permissionResult.success) return { error: permissionResult.error };
+        const allowNegativeStock = (permissionResult.data?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
         await db.$transaction(async (tx) => {
             const order = await tx.order.findUnique({
                 where: { id: orderId },
@@ -159,7 +161,10 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                 for (const item of order.items) {
                     if (item.productId) {
                         const product = existingProductMap.get(item.productId);
-                        if (!product || product.amount < item.quantity) {
+                        if (!product) {
+                            throw new Error(`Producto no encontrado`);
+                        }
+                        if (!allowNegativeStock && product.amount < item.quantity) {
                             throw new Error(`Stock insuficiente para el producto ${item.description || item.productId}`);
                         }
 

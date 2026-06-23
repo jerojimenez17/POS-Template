@@ -93,6 +93,7 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
     const session = await auth();
     const businessId = session?.user?.businessId || input.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+    const allowNegativeStock = (session?.user?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
 
     return await db.$transaction(async (tx) => {
       const client = await tx.client.findUnique({
@@ -112,7 +113,7 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
         if (!product) {
           throw new Error(`Producto ${item.description || item.productId} no encontrado`);
         }
-        if (product.amount < item.quantity) {
+        if (!allowNegativeStock && product.amount < item.quantity) {
           throw new Error(`Stock insuficiente para ${item.description || item.productId}`);
         }
       }
@@ -442,6 +443,7 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
     const session = await auth();
     const businessId = session?.user?.businessId || validatedInput.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+    const allowNegativeStock = (session?.user?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
 
     return await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
@@ -459,7 +461,7 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
         if (!product) {
           throw new Error(`Producto ${item.description || item.productId} no encontrado`);
         }
-        if (product.amount < item.quantity) {
+        if (!allowNegativeStock && product.amount < item.quantity) {
           throw new Error(`Stock insuficiente para ${item.description || item.productId}`);
         }
       }
@@ -560,6 +562,7 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
     const session = await auth();
     const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+    const allowNegativeStock = (session?.user?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
 
     return await db.$transaction(async (tx) => {
       const orderItem = await tx.orderItem.findUnique({
@@ -584,7 +587,10 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
         const product = await tx.product.findUnique({
           where: { id: orderItem.productId },
         });
-        if (!product || product.amount < quantityDiff) {
+        if (!product) {
+          throw new Error("Producto no encontrado");
+        }
+        if (!allowNegativeStock && product.amount < quantityDiff) {
           throw new Error("Stock insuficiente");
         }
       }
