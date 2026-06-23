@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Session } from "next-auth";
 import { Button } from "../ui/button";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -60,7 +60,9 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator !== "undefined" ? navigator.onLine : true
+  );
   const businessId = (session?.user as { businessId?: string })?.businessId;
   const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
   const shortcutMapRef = useRef(shortcutMap);
@@ -99,8 +101,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 

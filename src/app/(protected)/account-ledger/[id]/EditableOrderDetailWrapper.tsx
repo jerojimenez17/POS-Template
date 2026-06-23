@@ -39,6 +39,7 @@ export default function EditableOrderDetailWrapper({
 
   return (
     <EditableOrderDetail
+      key={order.id}
       order={order}
       businessId={businessId}
       onOrderUpdated={handleOrderUpdated}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useOptimistic, startTransition } from "react";
+import { useState, useOptimistic, startTransition, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -92,39 +92,25 @@ export default function EditableOrderDetail({
   const [itemToRemove, setItemToRemove] = useState<string | null>(null);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchProduct, setSearchProduct] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
 
-  useEffect(() => {
-    setItems(
-      order.items.map((item) => ({
-        ...item,
-        productId: item.productId ?? undefined,
-        description: item.description || "Producto",
-      }))
-    );
-  }, [order.items]);
-
-  useEffect(() => {
+  const filteredProducts = useMemo(() => {
     if (searchProduct) {
-      const filtered = products.filter(
+      return products.filter(
         (p) =>
           p.description?.toLowerCase().includes(searchProduct.toLowerCase()) ||
           p.code?.toLowerCase().includes(searchProduct.toLowerCase())
       );
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts(products);
     }
+    return products;
   }, [searchProduct, products]);
 
   const fetchProducts = async () => {
     try {
       const data = await getProducts();
       setProducts(data || []);
-      setFilteredProducts(data || []);
     } catch (error) {
       console.error("Error fetching products:", error);
       toast.error("Error al cargar productos");
