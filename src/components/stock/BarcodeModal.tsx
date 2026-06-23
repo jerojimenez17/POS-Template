@@ -122,7 +122,6 @@ export default function BarcodeModal({
   };
 
   const cards = Array.from({ length: copies }, (_, i) => i);
-console.log(copies, cards)
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => {

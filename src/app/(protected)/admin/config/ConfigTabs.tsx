@@ -7,6 +7,7 @@ import { BrandingTab } from "./tabs/BrandingTab";
 import { NotificationsTab } from "./tabs/NotificationsTab";
 
 interface ConfigTabsProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   initialData: any;
 }
 

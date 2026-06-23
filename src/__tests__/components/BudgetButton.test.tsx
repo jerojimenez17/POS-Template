@@ -2,6 +2,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import BillButtonsDefault from "@/components/Billing/BillButtons";
+import { BillContext } from "@/context/BillContext";
 
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ push: vi.fn(), refresh: vi.fn() })),
@@ -126,7 +127,6 @@ describe("BudgetButton in BillButtonsDefault", () => {
   });
 
   it("should render the Presupuesto button when hasBudget is enabled", () => {
-    const { BillContext } = require("@/context/BillContext");
     const mockCtx = createMockBillContext(2);
 
     render(
@@ -142,7 +142,6 @@ describe("BudgetButton in BillButtonsDefault", () => {
   });
 
   it("should NOT render the Presupuesto button when hasBudget is disabled", () => {
-    const { BillContext } = require("@/context/BillContext");
     const mockCtx = createMockBillContext(2);
 
     render(
