@@ -13,7 +13,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Search, Edit3 } from "lucide-react";
+import { Loader2, Plus, Search, Edit3, Trash2 } from "lucide-react";
 import OrderItemsTable from "./OrderItemsTable";
 import { addItemsToOrder, updateOrderItem, removeOrderItem } from "@/actions/unpaid-orders";
 import { getProducts } from "@/actions/stock";
@@ -89,6 +89,7 @@ export default function EditableOrderDetail({
       return state;
     }
   );
+  const [itemToRemove, setItemToRemove] = useState<string | null>(null);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -198,7 +199,16 @@ export default function EditableOrderDetail({
     }
   };
 
-  const handleRemoveItem = async (itemId: string) => {
+  const handleRemoveItem = (itemId: string) => {
+    setItemToRemove(itemId);
+  };
+
+  const confirmRemoveItem = async () => {
+    if (!itemToRemove) return;
+
+    const itemId = itemToRemove;
+    setItemToRemove(null);
+
     startTransition(() => {
       addOptimisticAction({ type: "remove", itemId });
     });
@@ -412,6 +422,37 @@ export default function EditableOrderDetail({
                 <Plus className="h-4 w-4 mr-2" />
               )}
               Agregar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmación para eliminar item */}
+      <Dialog open={itemToRemove !== null} onOpenChange={(open) => { if (!open) setItemToRemove(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Eliminar item</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que querés eliminar este item de la orden? Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isLoading}>
+                Cancelar
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={confirmRemoveItem}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Eliminar
             </Button>
           </DialogFooter>
         </DialogContent>
