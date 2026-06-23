@@ -81,10 +81,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     };
   }, []);
 
-  const [openFacturaModal, setOpenFacturaModal] = useState(false);
-  const [openEditModal, setOpenEditModal] = useState(false);
-  const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
-  const [blockButton, setBlockButton] = useState(false);
   const [facturaKey, setFacturaKey] = useState(0);
   const [remitoKey, setRemitoKey] = useState(0);
 

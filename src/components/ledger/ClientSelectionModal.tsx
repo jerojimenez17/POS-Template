@@ -112,23 +112,6 @@ export default function ClientSelectionModal({
   const [showExistingOrderDialog, setShowExistingOrderDialog] = useState(false);
   const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      fetchClients();
-      setSelectedClientId("");
-      setOrderClientCuit("");
-      setOrderClientIva("");
-      setExistingOrder(null);
-      setShowExistingOrderDialog(false);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    const results = clients.filter((client) =>
-      client.name.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [clients, search]);
-
   const fetchClients = async () => {
     setIsFetchingClients(true);
     try {
@@ -141,6 +124,27 @@ export default function ClientSelectionModal({
       setIsFetchingClients(false);
     }
   };
+
+  useEffect(() => {
+    if (open) {
+      fetchClients();
+      setSelectedClientId("");
+      setOrderClientCuit("");
+      setOrderClientIva("");
+      setExistingOrder(null);
+      setShowExistingOrderDialog(false);
+    }
+  }, [open]);
+
+  const filteredClients = useMemo(
+    () =>
+      search
+        ? clients.filter((client) =>
+            client.name.toLowerCase().includes(search.toLowerCase())
+          )
+        : clients,
+    [clients, search]
+  );
 
   useEffect(() => {
     if (open) {

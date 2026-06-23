@@ -362,6 +362,7 @@ export const processBulkProductBatch = async (
 
     // 6. Partition Products to Create/Update
     const toCreate: Prisma.ProductCreateManyInput[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updatePromises: any[] = [];
     const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
 

@@ -235,6 +235,7 @@ export const createProductsBulk = async (
 
     // ── Step 3: Process products in chunks of 100 ──
     const CHUNK_SIZE = 100;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bulkOps: any[] = [];
     const processedCodes = new Set<string>();
 
