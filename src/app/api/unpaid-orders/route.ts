@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { clientId, items, total } = body;
+    const { clientId, items, total, clientIvaCondition, clientDocumentNumber } = body;
 
     if (!clientId || !items || !total) {
       return NextResponse.json(
@@ -24,6 +24,8 @@ export async function POST(request: Request) {
       businessId: session.user.businessId,
       items,
       total,
+      clientIvaCondition,
+      clientDocumentNumber,
     });
 
     if (result.success && 'data' in result) {

@@ -23,6 +23,8 @@ interface Client {
   name: string;
   cellPhone?: string;
   address?: string;
+  cuit?: string;
+  ivaCondition?: string;
 }
 
 interface UnpaidOrderItem {
@@ -62,6 +64,10 @@ interface ClientSelectionModalProps {
   total: number;
   businessId: string;
   onSuccess?: () => void;
+  mode?: "unpaid" | "budget";
+  seller?: string;
+  discount?: number;
+  totalWithDiscount?: number;
 }
 
 export default function ClientSelectionModal({
@@ -71,6 +77,10 @@ export default function ClientSelectionModal({
   total,
   businessId,
   onSuccess,
+  mode = "unpaid",
+  seller,
+  discount,
+  totalWithDiscount,
 }: ClientSelectionModalProps) {
   const [clients, setClients] = useState<Client[]>([]);
   const [filteredClients, setFilteredClients] = useState<Client[]>([]);
@@ -85,6 +95,12 @@ export default function ClientSelectionModal({
   const [newClientCellPhone, setNewClientCellPhone] = useState("");
   const [newClientAddress, setNewClientAddress] = useState("");
   const [isCreatingClient, setIsCreatingClient] = useState(false);
+  const [newClientCuit, setNewClientCuit] = useState("");
+  const [newClientIvaCondition, setNewClientIvaCondition] = useState("");
+
+  // Order-level CUIT/IVA overrides
+  const [orderClientCuit, setOrderClientCuit] = useState("");
+  const [orderClientIva, setOrderClientIva] = useState("");
 
   // Smart client selection state (R3)
   const [existingOrder, setExistingOrder] = useState<ExistingOrder | null>(null);
@@ -95,6 +111,8 @@ export default function ClientSelectionModal({
     if (open) {
       fetchClients();
       setSelectedClientId("");
+      setOrderClientCuit("");
+      setOrderClientIva("");
       setExistingOrder(null);
       setShowExistingOrderDialog(false);
     }
@@ -133,6 +151,8 @@ export default function ClientSelectionModal({
         name: newClientName.trim(),
         cellPhone: newClientCellPhone.trim() || undefined,
         address: newClientAddress.trim() || undefined,
+        cuit: newClientCuit.trim() || undefined,
+        ivaCondition: newClientIvaCondition.trim() || undefined,
       });
 
       if (result.error) {
@@ -143,6 +163,8 @@ export default function ClientSelectionModal({
         setNewClientName("");
         setNewClientCellPhone("");
         setNewClientAddress("");
+        setNewClientCuit("");
+        setNewClientIvaCondition("");
         await fetchClients();
         if (result.client) {
           setSelectedClientId(result.client.id);
@@ -194,30 +216,61 @@ export default function ClientSelectionModal({
         subTotal: item.salePrice * item.amount,
       }));
 
-      const response = await fetch("/api/unpaid-orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          clientId,
-          businessId,
-          items: orderItems,
-          total,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success("Orden a cuenta creada correctamente");
-        onOpenChange(false);
-        onSuccess?.();
+      if (mode === "budget") {
+        try {
+          const { createBudgetAction } = await import("@/actions/budget");
+          const result = await createBudgetAction({
+            clientId,
+            clientIvaCondition: orderClientIva || undefined,
+            clientDocumentNumber: orderClientCuit || undefined,
+            products: items.map(item => ({
+              id: item.id,
+              code: item.code || "",
+              description: item.description,
+              salePrice: item.salePrice,
+              amount: item.amount,
+            })),
+            total: total,
+            totalWithDiscount: totalWithDiscount || total,
+            seller: seller || "",
+            discount: discount || 0,
+            paidMethod: "Efectivo",
+          });
+          if ('error' in result && result.error) {
+            toast.error(result.error as string);
+          } else {
+            toast.success("Presupuesto creado correctamente");
+            onOpenChange(false);
+            onSuccess?.();
+          }
+        } catch (error) {
+          console.error("Error creating budget:", error);
+          toast.error("Error al crear el presupuesto");
+        }
       } else {
-        toast.error(result.error || "Error al crear la orden");
+        const response = await fetch("/api/unpaid-orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId,
+            businessId,
+            items: orderItems,
+            total,
+            clientIvaCondition: orderClientIva || undefined,
+            clientDocumentNumber: orderClientCuit || undefined,
+          }),
+        });
+        const result = await response.json();
+        if (result.success) {
+          toast.success("Orden a cuenta creada correctamente");
+          onOpenChange(false);
+          onSuccess?.();
+        } else {
+          toast.error(result.error || "Error al crear la orden");
+        }
       }
     } catch (error) {
-      console.error("Error creating unpaid order:", error);
+      console.error("Error creating order:", error);
       toast.error("Error al crear la orden");
     } finally {
       setIsLoading(false);
@@ -265,9 +318,9 @@ export default function ClientSelectionModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Crear Orden a Cuenta</DialogTitle>
+          <DialogTitle>{mode === "budget" ? "Crear Presupuesto" : "Crear Orden a Cuenta"}</DialogTitle>
           <DialogDescription>
-            Seleccione un cliente para crear la orden a cuenta
+            {mode === "budget" ? "Seleccione un cliente para crear el presupuesto" : "Seleccione un cliente para crear la orden a cuenta"}
           </DialogDescription>
         </DialogHeader>
 
@@ -305,7 +358,11 @@ export default function ClientSelectionModal({
               filteredClients.map((client) => (
                 <div
                   key={client.id}
-                  onClick={() => setSelectedClientId(client.id)}
+                  onClick={() => {
+                    setSelectedClientId(client.id);
+                    setOrderClientCuit(client.cuit || "");
+                    setOrderClientIva(client.ivaCondition || "");
+                  }}
                   className={`p-3 cursor-pointer border-b last:border-b-0 transition-colors ${
                     selectedClientId === client.id
                       ? "bg-primary/10"
@@ -321,10 +378,50 @@ export default function ClientSelectionModal({
                       {client.cellPhone}
                     </p>
                   )}
+                  {client.cuit && (
+                    <p className="text-sm text-muted-foreground ml-6">
+                      CUIT: {client.cuit}
+                    </p>
+                  )}
+                  {client.ivaCondition && (
+                    <p className="text-sm text-muted-foreground ml-6">
+                      Cond. IVA: {client.ivaCondition}
+                    </p>
+                  )}
                 </div>
               ))
             )}
           </div>
+
+          {selectedClientId && (
+            <div className="space-y-2 border rounded-lg p-3">
+              <div className="grid gap-2">
+                <label htmlFor="orderCuit" className="text-xs font-medium">CUIT/CUIL (opcional)</label>
+                <Input
+                  id="orderCuit"
+                  placeholder="20-12345678-9"
+                  value={orderClientCuit}
+                  onChange={(e) => setOrderClientCuit(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="grid gap-2">
+                <label htmlFor="orderIva" className="text-xs font-medium">Condición IVA (opcional)</label>
+                <select
+                  id="orderIva"
+                  value={orderClientIva}
+                  onChange={(e) => setOrderClientIva(e.target.value)}
+                  className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="Consumidor Final">Consumidor Final</option>
+                  <option value="Responsable Inscripto">Responsable Inscripto</option>
+                  <option value="Monotributista">Monotributista</option>
+                  <option value="Exento">Exento</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
             <span className="text-sm text-muted-foreground">Total:</span>
@@ -391,6 +488,32 @@ export default function ClientSelectionModal({
               value={newClientAddress}
               onChange={(e) => setNewClientAddress(e.target.value)}
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="clientCuit">CUIT/CUIL</Label>
+            <Input
+              id="clientCuit"
+              placeholder="20-12345678-9"
+              value={newClientCuit}
+              onChange={(e) => setNewClientCuit(e.target.value)}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="clientIva">Condición IVA</Label>
+            <select
+              id="clientIva"
+              value={newClientIvaCondition}
+              onChange={(e) => setNewClientIvaCondition(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">Seleccionar...</option>
+              <option value="Consumidor Final">Consumidor Final</option>
+              <option value="Responsable Inscripto">Responsable Inscripto</option>
+              <option value="Monotributista">Monotributista</option>
+              <option value="Exento">Exento</option>
+            </select>
           </div>
         </div>
 

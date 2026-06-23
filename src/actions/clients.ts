@@ -10,6 +10,8 @@ export const createClient = async (data: {
   name: string;
   address?: string;
   cellPhone?: string;
+  cuit?: string;
+  ivaCondition?: string;
   balance?: number;
 }) => {
   const session = await auth();
@@ -20,6 +22,8 @@ export const createClient = async (data: {
         name: data.name,
         address: data.address,
         cellPhone: data.cellPhone,
+        cuit: data.cuit,
+        ivaCondition: data.ivaCondition,
         balance: data.balance || 0,
         businessId: session.user.businessId,
       },

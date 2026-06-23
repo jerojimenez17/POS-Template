@@ -33,6 +33,8 @@ describe("Superadmin Actions Test Suite", () => {
       hasPublicCatalog: true,
       hasClientLedger: true,
       hasMultiCashbox: false,
+      hasSupplierFilter: false,
+      hasBudget: false,
       maxUsers: 5,
       maxProducts: 1000,
     };
@@ -71,6 +73,8 @@ describe("Superadmin Actions Test Suite", () => {
       hasPublicCatalog: true,
       hasClientLedger: true,
       hasMultiCashbox: false,
+      hasSupplierFilter: false,
+      hasBudget: false,
       maxUsers: 5,
       maxProducts: 1000,
     };

@@ -20,7 +20,8 @@ import {
   Loader2,
   User,
   Calendar,
-  DollarSign
+  DollarSign,
+  Printer
 } from "lucide-react";
 import { Suspense } from "react";
 import { PusherListener } from "./PusherListener";
@@ -148,6 +149,11 @@ async function OrdersTable({ status, search, session }: OrdersTableProps) {
                   <Link href={`/account-ledger/${order.id}`}>
                     <Eye className="h-4 w-4 mr-1" />
                     Ver
+                  </Link>
+                </Button>
+                <Button variant="ghost" size="sm" asChild title="Imprimir">
+                  <Link href={`/account-ledger/${order.id}`}>
+                    <Printer className="h-4 w-4" />
                   </Link>
                 </Button>
                 {order.status === "pendiente" ? (

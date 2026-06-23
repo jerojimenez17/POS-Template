@@ -27,6 +27,7 @@ import {
 import { Lock, FileText, Wallet, CheckCircle } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useFeatures } from "@/hooks/useFeatures";
+import { createBudgetAction } from "@/actions/budget";
 
 interface props {
   session: Session | null;
@@ -35,6 +36,7 @@ interface props {
   orderId?: string;
 }
 const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props) => {
+  const canUseBudget = session?.user?.business?.features?.hasBudget ?? false;
   const router = useRouter();
   const [createVoucherError, setCreateVoucherError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -42,6 +44,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [respAfip, setRespAfip] = useState<CAE | undefined>();
   const [localCAE, setLocalCAE] = useState<CAE>({ CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" });
   const [openRemitoModal, setOpenRemitoModal] = useState(false);
+  const [openFacturaModal, setOpenFacturaModal] = useState(false);
+  const [openEditModal, setOpenEditModal] = useState(false);
+  const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
+  const [openBudgetModal, setOpenBudgetModal] = useState(false);
   const { BillState, dispatch, onOrderResetRef, printMode } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
@@ -103,11 +109,18 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           setOpenAcuentaModal(true);
         }
       }
+      if (e.key === 'F4') {
+        e.preventDefault();
+        if (!checkSession()) return;
+        if (BillState.products?.length > 0) {
+          setOpenBudgetModal(true);
+        }
+      }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, dispatch, BillState.products?.length, isEditing]);
+  }, [session, dispatch, BillState.products?.length, isEditing, setOpenBudgetModal]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {
@@ -251,9 +264,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
       throw err;
     }
   };
-  const [openFacturaModal, setOpenFacturaModal] = useState(false);
-  const [openEditModal, setOpenEditModal] = useState(false);
-  const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [blockButton, setBlockButton] = useState(false);
   return (
     <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-3 py-4 px-4">
@@ -372,6 +382,62 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
             </svg>
             A cuenta
           </Button>
+
+          {canUseBudget && (
+            <>
+              <Button
+                variant="outline"
+                className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto"
+                disabled={BillState.products.length === 0}
+                onClick={() => {
+                  if (!checkSession()) return;
+                  if (session?.user.email) {
+                    dispatch({ type: "sellerName", payload: session.user.email || "" });
+                  }
+                  setOpenBudgetModal(true);
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+                </svg>
+                Presupuesto
+              </Button>
+              <ClientSelectionModal
+                mode="budget"
+                open={openBudgetModal}
+                onOpenChange={setOpenBudgetModal}
+                items={BillState.products.map((p) => ({
+                  id: p.id,
+                  code: p.code,
+                  description: p.description,
+                  salePrice: p.salePrice || 0,
+                  amount: p.amount,
+                }))}
+                total={BillState.total}
+                totalWithDiscount={BillState.products.reduce(
+                  (acc, act) => acc + act.salePrice * act.amount,
+                  0,
+                ) * (1 - BillState.discount * 0.01)}
+                discount={BillState.discount}
+                seller={session?.user?.email || ""}
+                businessId={session?.user?.businessId || ""}
+                onSuccess={() => {
+                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+                  if (targetWin) {
+                    targetWin.document.write("<html><head><title>Generando Presupuesto...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando presupuesto, por favor espere...</h2></body></html>");
+                  }
+                  dispatch({ type: "billType", payload: "Presupuesto" });
+                  handlePrint(undefined, targetWin);
+                  setTimeout(() => {
+                    dispatch({ type: "removeAll", payload: null });
+                    if (onOrderResetRef.current) {
+                      onOrderResetRef.current();
+                    }
+                  }, 5000);
+                }}
+              />
+            </>
+          )}
 
           <ClientSelectionModal
             open={openAcuentaModal}
@@ -559,6 +625,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Modal
         visible={openErrorModal}
         onClose={() => setOpenErrorModal(false)}
