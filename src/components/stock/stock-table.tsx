@@ -12,8 +12,7 @@ import noImgPhoto from "../../../public/no-image.svg";
 import Image from "next/image";
 import DeleteButton from "../DeleteButton";
 import ProductForm from "./product-form";
-import CodeBarModal from "./code-bar-modal";
-import SetCodebarModal from "./set-codebar-modal";
+import BarcodeModal from "./BarcodeModal";
 import { Button } from "../ui/button";
 import {
   AlertDialog,
@@ -227,16 +226,13 @@ const StockTable = ({ descriptionFilter }: props) => {
                           setProductToEdit(product);
                           setOpenDeleteModal(true);
                         }} disable={false} />
-                      <CodeBarModal
+                      <BarcodeModal
+                        productId={product.id}
                         code={product.code || ""}
                         codebar={product.codebar || undefined}
                         description={product.description || ""}
                         salePrice={product.salePrice}
                         unit={product.unit ?? undefined}
-                      />
-                      <SetCodebarModal
-                        productId={product.id}
-                        currentCodebar={product.codebar || undefined}
                         onSuccess={(newCodebar) => {
                           setProducts((prev) =>
                             prev.map((p) =>

@@ -12,7 +12,7 @@ const RootMenu = () => {
     <div className="min-h-screen bg-slate-100 dark:bg-gray-900 flex items-center justify-center">
       <div className="w-full max-w-6xl px-4 py-8">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          <MenuCard url="/newBill" title="Facturar">
+          <MenuCard url="/newBill" title="Vender">
             <FileText className="w-16 h-16" strokeWidth={1.5} />
           </MenuCard>
           
