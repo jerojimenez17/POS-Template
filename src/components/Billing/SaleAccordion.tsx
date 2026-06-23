@@ -5,7 +5,16 @@ import BillingModal from "./BillingModal";
 import { useRouter } from "next/navigation";
 import PrintOptionsPopover from "./PrintOptionsPopover";
 import { deleteOrderAction } from "@/actions/sales/update";
-import Modal from "../Modal";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { Session } from "next-auth";
 import { formatLocalDate } from "@/utils/date";
 import { toast } from "sonner";
@@ -118,14 +127,22 @@ const SaleAccordion = ({ sale, session }: props) => {
         </div>
       </div>
 
-      <Modal
-        message="Desea eliminar la venta?"
-        onCancel={() => setOpenDelete(false)}
-        onAcept={handleDelete}
-        blockButton={deleting}
-        onClose={() => setOpenDelete(false)}
-        visible={openDelete}
-      />
+      <AlertDialog open={openDelete} onOpenChange={setOpenDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar venta</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar esta venta? Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Eliminando..." : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <BillingModal
         open={openBilling}

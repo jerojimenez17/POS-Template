@@ -4,7 +4,6 @@ import { Session } from "next-auth";
 import { Button } from "../ui/button";
 import { useContext, useEffect, useRef, useState } from "react";
 import { BillContext } from "@/context/BillContext";
-import Modal from "../Modal";
 import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
 import { createAfipVoucherAction } from "@/actions/afip";
@@ -151,7 +150,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   };
 
   const handleCreateVoucher = async (): Promise<CAE | null> => {
-    if (!checkConnection()) return null;
+    if (!checkConnection()) { setBlockButton(false); return null; }
     try {
       console.log("Calling createAfipVoucherAction");
       const resp = await createAfipVoucherAction(BillState);
@@ -195,7 +194,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   };
 
   const handleSaveSale = async (billState: typeBillState) => {
-    if (!checkConnection()) return;
+    if (!checkConnection()) { setBlockButton(false); return; }
     try {
       const result = await processSaleAction(billState);
       if ('error' in result && result.error) {
@@ -233,16 +232,21 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         return;
       }
 
-      if (
-        BillState.totalSecondMethod &&
-        totalAmount < BillState.totalSecondMethod
-      ) {
-        setErrorMessage(
-          "El monto del segundo medio de pago debe ser menor al total",
-        );
-        setOpenErrorModal(true);
-        setBlockButton(false);
-        return;
+      // Validación de pagos divididos: monto > 0 y suma igual al total
+      if (BillState.twoMethods) {
+        const secondAmount = BillState.totalSecondMethod || 0;
+        if (secondAmount < 1) {
+          setErrorMessage("El monto del segundo medio de pago debe ser mayor a $1");
+          setOpenErrorModal(true);
+          setBlockButton(false);
+          return;
+        }
+        if (secondAmount >= totalAmount) {
+          setErrorMessage("El monto del segundo medio de pago debe ser menor al total");
+          setOpenErrorModal(true);
+          setBlockButton(false);
+          return;
+        }
       }
 
       let caeData: CAE | null = null;
@@ -268,7 +272,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
           CAE: caeData || localCAE,
           totalWithDiscount: totalAmount,
         });
-        toast.success("Factura guardada correctamente");
+        toast.success(afip ? "Factura guardada correctamente" : "Remito guardado correctamente");
       }
       return caeData || localCAE;
     } catch (err) {
@@ -508,17 +512,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               setBlockButton(false);
               return;
             }
-            if (!openErrorModal && BillState.total > 0) {
-              handlePrint(caeResult, targetWin);
-              setTimeout(() => {
-                dispatch({ type: "removeAll", payload: null });
-                if (onOrderResetRef.current) {
-                  onOrderResetRef.current();
-                }
-              }, 5000);
-            } else if (targetWin) {
-              targetWin.close();
-            }
+            // Disparar impresión y limpiar estado después
+            handlePrint(caeResult, targetWin);
+            setTimeout(() => {
+              dispatch({ type: "removeAll", payload: null });
+              if (onOrderResetRef.current) {
+                onOrderResetRef.current();
+              }
+            }, 1500);
             setBlockButton(false);
           } catch (err) {
             if (targetWin) targetWin.close();
@@ -548,17 +549,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               setBlockButton(false);
               return;
             }
-            if (!openErrorModal && BillState.total > 0) {
-              handlePrint(caeResult, targetWin);
-              setTimeout(() => {
-                dispatch({ type: "removeAll", payload: null });
-                if (onOrderResetRef.current) {
-                  onOrderResetRef.current();
-                }
-              }, 5000);
-            } else if (targetWin) {
-              targetWin.close();
-            }
+            // Disparar impresión y limpiar estado después
+            handlePrint(caeResult, targetWin);
+            setTimeout(() => {
+              dispatch({ type: "removeAll", payload: null });
+              if (onOrderResetRef.current) {
+                onOrderResetRef.current();
+              }
+            }, 1500);
             setBlockButton(false);
           } catch (err) {
             if (targetWin) targetWin.close();
@@ -615,12 +613,16 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Modal
-        visible={openErrorModal}
-        onClose={() => setOpenErrorModal(false)}
-        blockButton={false}
-        message={errorMessage}
-      ></Modal>
+      <Dialog open={openErrorModal} onOpenChange={setOpenErrorModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Error</DialogTitle>
+            <DialogDescription>
+              {errorMessage}
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

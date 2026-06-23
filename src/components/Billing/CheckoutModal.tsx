@@ -109,7 +109,15 @@ export default function CheckoutModal({
     try {
       const res = await fetch("/api/clients");
       const data = await res.json();
-      setClients(data.clients || data);
+      const raw: Client[] = data.clients || data;
+      setClients(
+        raw.map((c: Client) => ({
+          id: c.id,
+          name: c.name,
+          cellPhone: c.cellPhone ?? undefined,
+          address: c.address ?? undefined,
+        }))
+      );
     } catch (e) {
       console.error(e);
     } finally {
@@ -151,7 +159,12 @@ export default function CheckoutModal({
         await fetchClients();
         if (result.client) {
           setSelectedClientId(result.client.id);
-          setSelectedClient(result.client);
+          setSelectedClient({
+            id: result.client.id,
+            name: result.client.name,
+            cellPhone: result.client.cellPhone ?? undefined,
+            address: result.client.address ?? undefined,
+          });
         }
       }
     } catch {
