@@ -144,10 +144,12 @@ export default function ClientSelectionModal({
 
   useEffect(() => {
     if (open) {
-      setSelectedClientId("");
-      setExistingOrder(null);
-      setShowExistingOrderDialog(false);
-      setIsFetchingClients(true);
+      startTransition(() => {
+        setSelectedClientId("");
+        setExistingOrder(null);
+        setShowExistingOrderDialog(false);
+        setIsFetchingClients(true);
+      });
       fetch("/api/clients")
         .then((res) => res.json())
         .then((data) => {

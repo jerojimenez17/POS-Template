@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, startTransition } from "react";
 import dynamic from "next/dynamic";
 import JsBarcode from "jsbarcode";
 import {
@@ -60,24 +60,13 @@ export default function BarcodeModal({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [savedCodebar, setSavedCodebar] = useState<string | null>(initialCodebar || null);
   const [isEditing, setIsEditing] = useState(!initialCodebar);
-  const [isPending, startTransition] = useTransition();
+  const [isPending] = useTransition();
   const [copies, setCopies] = useState(1);
 
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
 
-  const effectiveCodebar = savedCodebar || initialCodebar || null;
-  const barcodeValue = effectiveCodebar || barcodeInput || code;
-
-  // Reset on open
-  useEffect(() => {
-    if (open) {
-      setCopies(1);
-      setBarcodeInput(initialCodebar || "");
-      setSavedCodebar(initialCodebar || null);
-      setIsEditing(!initialCodebar);
-    }
-  }, [open, initialCodebar]);
+  const effectiveCodebar = savedCodebar || initialCodebar || code || null;
 
   // Generate SVGs
   useEffect(() => {
@@ -132,7 +121,17 @@ export default function BarcodeModal({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(v) => {
+        setOpen(v);
+        if (v) {
+          startTransition(() => {
+            setCopies(1);
+            setBarcodeInput(initialCodebar || "");
+            setSavedCodebar(initialCodebar || null);
+            setIsEditing(!initialCodebar);
+          });
+        }
+      }}>
         <DialogTrigger asChild>
           <Button
             variant="ghost"

@@ -79,10 +79,6 @@ const BulkUpdatePage = () => {
     }
   }, [filters]);
 
-  useEffect(() => {
-    loadFiltersData();
-  }, []);
-
   const loadFiltersData = async () => {
     try {
       const [cats, brnds, supps] = await Promise.all([
@@ -97,6 +93,10 @@ const BulkUpdatePage = () => {
       console.error("Error loading filter data:", error);
     }
   };
+
+  useEffect(() => {
+    loadFiltersData();
+  }, []);
 
   const handleSelectAll = () => {
     if (selectedIds.size === filteredProducts.length) {

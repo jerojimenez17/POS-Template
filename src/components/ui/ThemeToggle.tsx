@@ -1,13 +1,13 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useState, startTransition } from "react";
 
 export default function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => startTransition(() => setMounted(true)), []);
   if (!mounted) return null;
 
   return (
