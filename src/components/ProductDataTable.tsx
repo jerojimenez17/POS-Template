@@ -12,8 +12,7 @@ import noImgPhoto from "../../public/no-image.svg";
 import ProductForm from "./stock/product-form";
 import { Button } from "./ui/button";
 import DeleteButton from "./DeleteButton";
-import CodeBarModal from "./stock/code-bar-modal";
-import SetCodebarModal from "./stock/set-codebar-modal";
+import BarcodeModal from "./stock/BarcodeModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import {
   Table,
@@ -197,16 +196,13 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
               }}
               disable={false}
             />
-            <CodeBarModal 
-                      code={product.code || ""}
-                      codebar={product.codebar || undefined}
-                      description={product.description || ""}
-                      salePrice={product.salePrice}
-                      unit={product.unit ?? undefined}
-                    />
-            <SetCodebarModal
+            <BarcodeModal
               productId={product.id}
-              currentCodebar={product.codebar || undefined}
+              code={product.code || ""}
+              codebar={product.codebar || undefined}
+              description={product.description || ""}
+              salePrice={product.salePrice}
+              unit={product.unit ?? undefined}
             />
           </div>
         );
@@ -450,17 +446,14 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                     }}
                     disable={false}
                   />
-<CodeBarModal 
+<BarcodeModal
+                      productId={product.id}
                       code={product.code || ""}
                       codebar={product.codebar || undefined}
                       description={product.description || ""}
                       salePrice={product.salePrice}
                       unit={product.unit ?? undefined}
                     />
-                  <SetCodebarModal
-                    productId={product.id}
-                    currentCodebar={product.codebar || undefined}
-                  />
                 </div>
               </div>
             );
