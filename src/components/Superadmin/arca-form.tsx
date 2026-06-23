@@ -27,7 +27,7 @@ import {
 import { FormError } from "@/components/ui/form-error";
 import { FormSuccess } from "@/components/ui/form-success";
 import { updateBusinessArcaData } from "@/actions/arca";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface ArcaFormProps {
   businessId: string;
@@ -95,11 +95,8 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle>Configuración ARCA</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Card className="rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+      <CardContent className="p-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
