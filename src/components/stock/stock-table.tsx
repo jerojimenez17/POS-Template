@@ -228,7 +228,6 @@ const StockTable = ({ descriptionFilter }: props) => {
                         }} disable={false} />
                       <BarcodeModal
                         productId={product.id}
-                        code={product.code || ""}
                         codebar={product.codebar || undefined}
                         description={product.description || ""}
                         salePrice={product.salePrice}

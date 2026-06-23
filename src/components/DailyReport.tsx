@@ -61,20 +61,20 @@ const DailyReport = () => {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto overflow-auto h-full">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Reporte Diario</h1>
-        <div className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
-          <Button variant="ghost" size="icon" onClick={handlePrevDay}>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-5xl mx-auto overflow-auto h-full">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reporte Diario</h1>
+        <div className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm self-stretch sm:self-auto justify-between sm:justify-start">
+          <Button variant="ghost" size="icon" onClick={handlePrevDay} className="shrink-0">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="flex items-center gap-2 px-2">
-            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">
+          <div className="flex items-center gap-2 px-2 min-w-0">
+            <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="font-medium text-sm sm:text-base truncate">
               {format(date, "EEEE, d 'de' MMMM", { locale: es })}
             </span>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleNextDay} disabled={format(date, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")}>
+          <Button variant="ghost" size="icon" onClick={handleNextDay} disabled={format(date, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")} className="shrink-0">
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

@@ -384,7 +384,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                     {file ? (
                       <CheckCircle2 className="h-6 w-6 text-green-500" />
                     ) : (
-                      <UploadCloud className="h-6 w-6 text-blue-500" />
+                      <UploadCloud className="h-6 w-6 text-green-500" />
                     )}
                   </div>
                   {file ? (
@@ -503,7 +503,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                      id="supplier"
                      value={selectedSupplierId}
                      onChange={(e) => handleSupplierSelect(e.target.value)}
-                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                    >
                      <option value="">Sin proveedor</option>
                      {suppliers.map((s) => (
@@ -541,7 +541,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                    id="iva"
                    value={adjustmentIva}
                    onChange={(e) => setAdjustmentIva(e.target.value)}
-                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                  >
                    <option value="0">0%</option>
                    <option value="10.5">10.5%</option>

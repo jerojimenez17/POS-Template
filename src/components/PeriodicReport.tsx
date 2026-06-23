@@ -132,21 +132,21 @@ const PeriodicReport: React.FC<PeriodicReportProps> = ({ period, session }) => {
   const stockInsTotal = report?.stockActivity?.ins.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto border bg-white dark:bg-gray-900 rounded-xl shadow-sm">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-5xl mx-auto border bg-white dark:bg-gray-900 rounded-xl shadow-sm">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h2 className="text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">{title}</h2>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border shadow-sm">
-            <Button variant="ghost" size="icon" onClick={handlePrev} className="h-8 w-8">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border shadow-sm justify-between sm:justify-start">
+            <Button variant="ghost" size="icon" onClick={handlePrev} className="h-8 w-8 shrink-0">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <div className="flex items-center gap-2 px-3 min-w-[140px] justify-center">
-              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium text-sm capitalize">
+            <div className="flex items-center gap-2 px-3 min-w-0 sm:min-w-[140px] justify-center">
+              <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="font-medium text-sm capitalize truncate">
                 {format(date, getFormatString(), { locale: es })}
               </span>
             </div>
-            <Button variant="ghost" size="icon" onClick={handleNext} disabled={disableNext()} className="h-8 w-8">
+            <Button variant="ghost" size="icon" onClick={handleNext} disabled={disableNext()} className="h-8 w-8 shrink-0">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -175,7 +175,7 @@ const PeriodicReport: React.FC<PeriodicReportProps> = ({ period, session }) => {
 
               router.push(`/searchBill?${params.toString()}`);
             }}
-            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-sm px-4 h-11"
+            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-sm px-4 h-11 w-full sm:w-auto"
           >
             <Search className="h-5 w-4" />
             Ver Ventas
