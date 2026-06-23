@@ -1,7 +1,6 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,6 +19,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { 
   ArrowLeft,
+  BookOpen,
   User,
   Calendar,
   Package,
@@ -34,6 +34,7 @@ import CancelOrderButton from "./CancelOrderButton";
 import EditableOrderDetailWrapper from "./EditableOrderDetailWrapper";
 import PrintOrderButton from "./PrintOrderButton";
 import { LocalDate } from "@/components/ui/LocalDate";
+import { cn } from "@/lib/utils";
 
 interface OrderWithRelations {
   id: string;
@@ -79,20 +80,31 @@ export default async function AccountLedgerDetailPage({
 
   if (!order) {
     return (
-      <div className="container mx-auto py-8 px-4 max-w-4xl">
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/account-ledger">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Volver
-            </Link>
-          </Button>
+      <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
+        <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild title="Volver">
+              <Link href="/account-ledger">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            </Button>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <BookOpen className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight">Detalle de Cuenta</h1>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <Card>
+            <CardContent className="py-8 text-center">
+              <p className="text-muted-foreground">Orden no encontrada</p>
+            </CardContent>
+          </Card>
         </div>
-        <Card>
-          <CardContent className="py-8 text-center">
-            <p className="text-muted-foreground">Orden no encontrada</p>
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -102,28 +114,64 @@ export default async function AccountLedgerDetailPage({
 
 
 
-  const getStatusBadge = (paidStatus: string) => {
+  const getStatusPill = (status: string, paidStatus: string) => {
+    if (status === "pendiente") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+          Por Confirmar
+        </span>
+      );
+    }
     switch (paidStatus) {
       case "inpago":
-        return <Badge variant="destructive">Pendiente</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+            Pendiente
+          </span>
+        );
       case "pago":
-        return <Badge className="bg-green-500 hover:bg-green-600">Pagado</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border border-green-200 dark:border-green-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            Pagado
+          </span>
+        );
       default:
-        return <Badge variant="outline">{paidStatus}</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+            {paidStatus}
+          </span>
+        );
     }
   };
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-5xl">
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/account-ledger">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Volver
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-bold">Detalle de Cuenta</h1>
-      </div>
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
+      <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild title="Volver">
+            <Link href="/account-ledger">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <BookOpen className="h-5 w-5 text-blue-500" />
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">Detalle de Cuenta</h1>
+              <p className="text-sm text-gray-500 hidden sm:block">
+                Orden #{order.id.slice(-6).toUpperCase()}
+              </p>
+            </div>
+          </div>
+        </div>
+        {getStatusPill(order.status, order.paidStatus)}
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 py-6">
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Main Info Card */}
@@ -131,7 +179,7 @@ export default async function AccountLedgerDetailPage({
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>Orden #{order.id.slice(-6).toUpperCase()}</span>
-              {getStatusBadge(order.paidStatus)}
+              {getStatusPill(order.status, order.paidStatus)}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -323,6 +371,7 @@ export default async function AccountLedgerDetailPage({
           </CardContent>
         </Card>
       </div>
+    </div>
     </div>
   );
 }

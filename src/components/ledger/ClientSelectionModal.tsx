@@ -81,6 +81,12 @@ export default function ClientSelectionModal({
   const [newClientCellPhone, setNewClientCellPhone] = useState("");
   const [newClientAddress, setNewClientAddress] = useState("");
   const [isCreatingClient, setIsCreatingClient] = useState(false);
+
+  // Siempre recalcular total desde items para evitar inconsistencias
+  const calculatedTotal = useMemo(
+    () => items.reduce((sum, item) => sum + item.salePrice * item.amount, 0),
+    [items]
+  );
   const [newClientCuit, setNewClientCuit] = useState("");
   const [newClientIvaCondition, setNewClientIvaCondition] = useState("");
 
@@ -172,9 +178,8 @@ export default function ClientSelectionModal({
       return;
     }
 
-    const calculatedTotal = items.reduce((sum, item) => sum + item.salePrice * item.amount, 0);
-    if (Math.abs(calculatedTotal - total) > 0.01) {
-      toast.error("El total no coincide con los productos agregados");
+    if (calculatedTotal <= 0) {
+      toast.error("El total debe ser mayor a 0");
       return;
     }
 
@@ -250,7 +255,7 @@ export default function ClientSelectionModal({
             clientId,
             businessId,
             items: orderItems,
-            total,
+          total: calculatedTotal,
             clientIvaCondition: orderClientIva || undefined,
             clientDocumentNumber: orderClientCuit || undefined,
           }),
@@ -421,7 +426,7 @@ export default function ClientSelectionModal({
           <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
             <span className="text-sm text-muted-foreground">Total:</span>
             <span className="text-lg font-bold">
-              ${total.toLocaleString("es-AR")}
+              ${calculatedTotal.toLocaleString("es-AR")}
             </span>
           </div>
         </div>
