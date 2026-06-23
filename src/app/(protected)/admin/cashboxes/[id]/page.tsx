@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { getCashboxSessions, getCashboxes } from "@/actions/cashbox";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, History } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import Link from "next/link";
@@ -72,24 +72,27 @@ export default async function CashboxHistoryPage({
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
+      <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-4">
-          <Link href="/admin/cashboxes">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">
-              Historial - {cashbox.name}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Sesiones cerradas y reportes Z
-            </p>
+          <Button variant="ghost" size="icon" asChild title="Volver">
+            <Link href="/admin/cashboxes">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <History className="h-5 w-5 text-blue-500" />
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">Historial - {cashbox.name}</h1>
+              <p className="text-sm text-gray-500 hidden sm:block">Sesiones cerradas y reportes Z</p>
+            </div>
           </div>
         </div>
-      </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border bg-white dark:bg-gray-900 p-4 shadow-sm">
@@ -182,6 +185,7 @@ export default async function CashboxHistoryPage({
           </TableBody>
         </Table>
       </div>
+    </div>
     </div>
   );
 }
