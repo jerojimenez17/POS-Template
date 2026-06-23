@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Barcode, ScanBarcode, Printer, X, Check, PenLine } from "lucide-react";
+import { Barcode, ScanBarcode, Printer, X, Check } from "lucide-react";
 import { toast } from "sonner";
 import { printElement } from "@/lib/print";
 import { updateProduct } from "@/actions/stock";
@@ -59,7 +59,6 @@ export default function BarcodeModal({
   const [barcodeInput, setBarcodeInput] = useState(initialCodebar || "");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [savedCodebar, setSavedCodebar] = useState<string | null>(initialCodebar || null);
-  const [isEditing, setIsEditing] = useState(!initialCodebar);
   const [isPending] = useTransition();
   const [copies, setCopies] = useState(1);
 
@@ -67,8 +66,9 @@ export default function BarcodeModal({
   const printRef = useRef<HTMLDivElement>(null);
 
   const effectiveCodebar = savedCodebar || initialCodebar || code || null;
+  const hasCodebar = !!effectiveCodebar;
 
-  // Generate SVGs
+  // Generate SVGs when value or copies change
   useEffect(() => {
     if (!effectiveCodebar || !open) return;
     barcodeRefs.current.forEach((el) => {
@@ -95,7 +95,6 @@ export default function BarcodeModal({
       } else {
         toast.success("Código guardado");
         setSavedCodebar(barcodeInput.trim());
-        setIsEditing(false);
         onSuccess?.(barcodeInput.trim());
       }
     });
@@ -128,7 +127,6 @@ export default function BarcodeModal({
             setCopies(1);
             setBarcodeInput(initialCodebar || "");
             setSavedCodebar(initialCodebar || null);
-            setIsEditing(!initialCodebar);
           });
         }
       }}>
@@ -137,14 +135,14 @@ export default function BarcodeModal({
             variant="ghost"
             size="icon"
             onClick={(e) => e.stopPropagation()}
-            title={initialCodebar ? "Código de barras" : "Asignar código"}
+            title="Código de barras"
           >
-            <Barcode className={`h-4 w-4 ${!initialCodebar ? "text-purple-600" : ""}`} />
+            <Barcode className={`h-4 w-4`} />
           </Button>
         </DialogTrigger>
 
         <DialogContent
-          className="max-w-sm p-0 gap-0 overflow-visible"
+          className="max-w-sm p-0 gap-0"
           onClick={(e) => e.stopPropagation()}
         >
           {/* ── Header ── */}
@@ -154,148 +152,118 @@ export default function BarcodeModal({
             </div>
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                Código de Barras
+                {hasCodebar ? "Código de Barras" : "Asignar Código"}
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                 {description}
               </p>
             </div>
+            {hasCodebar && (
+              <span className="text-[10px] text-green-600 bg-green-50 dark:bg-green-900/20 dark:text-green-400 px-1.5 py-0.5 rounded font-medium shrink-0">
+                {effectiveCodebar}
+              </span>
+            )}
           </div>
 
           <div className="border-t border-gray-100 dark:border-gray-800" />
 
-          <div className="px-5 py-4 space-y-4">
-            {/* ── Codebar section ── */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Código de barras
-                </span>
-                {effectiveCodebar && !isEditing && (
+          {/* ── Assign mode ── */}
+          {!hasCodebar && (
+            <div className="px-5 py-4">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    placeholder="Ej: 7790001234567"
+                    disabled={isPending}
+                    className="h-9 text-sm pr-9"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSave();
+                    }}
+                  />
                   <button
                     type="button"
-                    onClick={() => { setBarcodeInput(effectiveCodebar); setIsEditing(true); }}
-                    className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1 transition-colors"
+                    onClick={() => setScannerOpen(true)}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    title="Escanear"
+                    disabled={isPending}
                   >
-                    <PenLine className="h-3 w-3" />
-                    Editar
+                    <ScanBarcode className="h-3.5 w-3.5" />
                   </button>
-                )}
+                </div>
+                <Button
+                  size="sm"
+                  className="h-9 gap-1.5 text-xs shrink-0"
+                  onClick={handleSave}
+                  disabled={isPending || !barcodeInput.trim()}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  {isPending ? "Guardando..." : "Guardar"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Print mode: barcode ready to print ── */}
+          {hasCodebar && (
+            <div className="px-5 py-4">
+              {/* Barcode cards */}
+              <div ref={printRef} className="no-print space-y-2 max-h-80 overflow-y-auto mb-4">
+                {cards.map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col items-center border border-dashed border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900"
+                  >
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2 truncate w-full text-center">
+                      {description}
+                    </span>
+                    <svg
+                      ref={(el) => { barcodeRefs.current[i] = el; }}
+                      className="w-full max-w-[220px]"
+                    />
+                    <span className="text-base font-bold text-gray-900 dark:text-gray-100 mt-2">
+                      {formatPrice(salePrice, unit)}
+                    </span>
+                  </div>
+                ))}
               </div>
 
-              {isEditing ? (
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      value={barcodeInput}
-                      onChange={(e) => setBarcodeInput(e.target.value)}
-                      placeholder="Ej: 7790001234567"
-                      disabled={isPending}
-                      className="h-9 text-sm pr-9"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSave();
-                      }}
-                    />
+              {/* Copies + Print controls */}
+              <div className="flex items-center justify-between no-print">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Copias</span>
+                  <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-md">
                     <button
                       type="button"
-                      onClick={() => setScannerOpen(true)}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                      title="Escanear"
-                      disabled={isPending}
+                      onClick={() => setCopies((c) => Math.max(1, c - 1))}
+                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
-                      <ScanBarcode className="h-3.5 w-3.5" />
+                      −
+                    </button>
+                    <span className="w-7 text-center text-xs font-medium tabular-nums text-gray-900 dark:text-gray-100">
+                      {copies}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCopies((c) => Math.min(99, c + 1))}
+                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      +
                     </button>
                   </div>
-                  <Button
-                    size="sm"
-                    className="h-9 gap-1.5 text-xs shrink-0"
-                    onClick={handleSave}
-                    disabled={isPending || !barcodeInput.trim()}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    {isPending ? "Guardando..." : "Guardar"}
-                  </Button>
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                  <span className="text-xs text-gray-400 font-mono flex-1 truncate">
-                    {effectiveCodebar}
-                  </span>
-                  <span className="text-[10px] text-green-600 bg-green-50 dark:bg-green-900/20 dark:text-green-400 px-1.5 py-0.5 rounded font-medium">
-                    Asignado
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* ── Barcode preview ── */}
-            {effectiveCodebar && (
-              <div className="space-y-3">
-                <div className="border-t border-gray-100 dark:border-gray-800" />
-
-                <div>
-                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Vista previa
-                  </span>
-                </div>
-
-                {/* Cards */}
-                <div ref={printRef} className="no-print space-y-2 max-h-72 overflow-y-auto">
-                  {cards.map((_, i) => (
-                    <div
-                      key={i}
-                      className="flex flex-col items-center border border-dashed border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900"
-                    >
-                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1 truncate w-full text-center">
-                        {description}
-                      </span>
-                      <svg
-                        ref={(el) => { barcodeRefs.current[i] = el; }}
-                        className="w-full max-w-[200px]"
-                      />
-                      <span className="text-base font-bold text-gray-900 dark:text-gray-100 mt-1">
-                        {formatPrice(salePrice, unit)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Copies + Print */}
-                <div className="flex items-center justify-between no-print pt-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Copias</span>
-                    <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-md">
-                      <button
-                        type="button"
-                        onClick={() => setCopies((c) => Math.max(1, c - 1))}
-                        className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                      >
-                        −
-                      </button>
-                      <span className="w-7 text-center text-xs font-medium tabular-nums text-gray-900 dark:text-gray-100">
-                        {copies}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setCopies((c) => Math.min(99, c + 1))}
-                        className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    className="gap-1.5 h-8 text-xs"
-                    onClick={(e) => { e.stopPropagation(); handlePrint(); }}
-                  >
-                    <Printer className="h-3.5 w-3.5" />
-                    Imprimir
-                  </Button>
-                </div>
+                <Button
+                  size="sm"
+                  className="gap-1.5 h-8 text-xs"
+                  onClick={(e) => { e.stopPropagation(); handlePrint(); }}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Imprimir
+                </Button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
