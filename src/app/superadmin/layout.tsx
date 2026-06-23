@@ -1,4 +1,5 @@
 
+import Link from "next/link";
 import { UserRole } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { auth } from "../../../auth";
@@ -22,8 +23,8 @@ export default async function SuperAdminLayout({
       <aside className="hidden w-64 flex-col bg-slate-900 text-white md:flex">
          <div className="p-4 text-xl font-bold">Super Admin</div>
          <nav className="flex-1 p-2">
-            <a href="/superadmin/dashboard" className="block rounded p-2 hover:bg-slate-800">Users</a>
-            <a href="/superadmin/businesses" className="block rounded p-2 hover:bg-slate-800">Businesses</a>
+            <Link href="/superadmin/dashboard" className="block rounded p-2 hover:bg-slate-800">Users</Link>
+            <Link href="/superadmin/businesses" className="block rounded p-2 hover:bg-slate-800">Businesses</Link>
          </nav>
       </aside>
       <main className="flex-1 overflow-auto p-8 text-black">
