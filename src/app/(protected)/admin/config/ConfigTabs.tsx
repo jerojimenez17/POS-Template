@@ -14,8 +14,7 @@ export function ConfigTabs({ initialData }: ConfigTabsProps) {
   const [data, setData] = useState(initialData);
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">Configuración del Negocio</h1>
+    <div className="w-full space-y-6">
       <Tabs defaultValue="general">
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>

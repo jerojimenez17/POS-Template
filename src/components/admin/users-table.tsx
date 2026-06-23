@@ -85,8 +85,7 @@ export const UsersTable = ({ users, cashboxes }: UsersTableProps) => {
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex justify-between items-center w-full">
-        <h2 className="text-2xl font-bold tracking-tight">Administración de Vendedores</h2>
+      <div className="flex justify-end items-center w-full mb-4">
         <Button onClick={handleCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Nuevo Vendedor

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Edit2, Trash2, Plus, Box, History } from "lucide-react";
+import { Edit2, Trash2, Plus, Box } from "lucide-react";
 import { createCashbox, updateCashbox, deleteCashbox } from "@/actions/cashbox";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -130,8 +130,7 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex justify-between items-center w-full">
-        <h2 className="text-2xl font-bold tracking-tight">Administración de Cajas</h2>
+      <div className="flex justify-end items-center w-full mb-4">
         <Button onClick={handleCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Nueva Caja
@@ -173,15 +172,6 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right space-x-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => router.push(`/admin/cashboxes/${cashbox.id}`)}
-                      className="h-8 w-8 text-slate-500 hover:text-blue-600"
-                      title="Ver historial"
-                    >
-                      <History className="h-4 w-4" />
-                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
