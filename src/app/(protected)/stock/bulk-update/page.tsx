@@ -3,6 +3,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { CheckSquare, Square, Printer, Percent, ArrowLeft, Filter, X } from "lucide-react";
 import { getProductsFiltered, bulkUpdatePrices, getSuppliersForFilter } from "@/actions/stock";
 import { getCategories } from "@/actions/categories";
@@ -38,6 +48,17 @@ const BulkUpdatePage = () => {
   const [percentage, setPercentage] = useState<string>("");
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [dialogState, setDialogState] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    variant: "info" | "confirm";
+    onConfirm?: () => void;
+  }>({ open: false, title: "", description: "", variant: "info" });
+
+  const showDialog = (title: string, description: string, variant: "info" | "confirm" = "info", onConfirm?: () => void) => {
+    setDialogState({ open: true, title, description, variant, onConfirm });
+  };
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -98,28 +119,31 @@ const BulkUpdatePage = () => {
   const handleBulkPriceUpdate = async () => {
     const percent = parseFloat(percentage);
     if (isNaN(percent) || percent < 0 || percent > 100) {
-      alert("Porcentaje inválido");
+      showDialog("Error", "Porcentaje inválido");
       return;
     }
 
     if (selectedIds.size === 0) {
-      alert("No hay productos seleccionados");
+      showDialog("Error", "No hay productos seleccionados");
       return;
     }
 
-    if (!confirm(`¿Aplicar ${percent}% de aumento a ${selectedIds.size} productos?`)) {
-      return;
-    }
-
-    const result = await bulkUpdatePrices(Array.from(selectedIds), percent);
-    
-    if (result.success) {
-      alert("Precios actualizados correctamente");
-      fetchProducts();
-      setIsFiltersOpen(false);
-    } else {
-      alert(result.error || "Error al actualizar precios");
-    }
+    showDialog(
+      "Confirmar aumento",
+      `¿Aplicar ${percent}% de aumento a ${selectedIds.size} productos?`,
+      "confirm",
+      async () => {
+        const result = await bulkUpdatePrices(Array.from(selectedIds), percent);
+        setDialogState(prev => ({ ...prev, open: false }));
+        if (result.success) {
+          showDialog("Éxito", "Precios actualizados correctamente");
+          fetchProducts();
+          setIsFiltersOpen(false);
+        } else {
+          showDialog("Error", result.error || "Error al actualizar precios");
+        }
+      }
+    );
   };
 
   const handlePrint = () => {
@@ -150,8 +174,8 @@ const BulkUpdatePage = () => {
           >
             <Filter className="h-4 w-4" />
           </Button>
-          <Button 
-            onClick={handlePrint} 
+          <Button
+            onClick={handlePrint}
             disabled={selectedProducts.length === 0}
             className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 px-3 md:px-4"
             aria-label={`Imprimir ${selectedProducts.length} productos seleccionados`}
@@ -261,16 +285,16 @@ const BulkUpdatePage = () => {
                       placeholder="% aumento…"
                       value={percentage}
                       onChange={(e) => setPercentage(e.target.value)}
-                      className="flex-1 min-w-0 px-3 py-2 border rounded-md bg-white dark:bg-gray-800 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none transition-all"
+                      className="flex-1 min-w-0 px-3 py-2 border rounded-md bg-white dark:bg-gray-800 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none transition-all h-9"
                       min="0"
                       max="100"
                     />
-                    <Button 
-                      onClick={handleBulkPriceUpdate} 
+                    <Button
+                      onClick={handleBulkPriceUpdate}
                       variant="outline"
                       size="sm"
-                      className="shrink-0"
                       disabled={selectedIds.size === 0}
+                      className="shrink-0 h-9"
                     >
                       Aplicar
                     </Button>
@@ -299,9 +323,9 @@ const BulkUpdatePage = () => {
           {/* Toolbar */}
           <div className="p-4 border-b flex items-center justify-between gap-4 bg-gray-50/50 dark:bg-gray-800/50">
             <div className="flex items-center gap-4">
-              <Button 
-                onClick={handleSelectAll} 
-                variant="ghost" 
+              <Button
+                onClick={handleSelectAll}
+                variant="ghost"
                 size="sm"
                 className="hover:bg-white dark:hover:bg-gray-800 shadow-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-700 transition-all"
                 aria-label={selectedIds.size === filteredProducts.length ? "Deseleccionar todos los productos" : "Seleccionar todos los productos"}
@@ -368,9 +392,8 @@ const BulkUpdatePage = () => {
                       {filteredProducts.map((product) => (
                         <tr
                           key={product.id}
-                          className={`group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-colors ${
-                            selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""
-                          }`}
+                          className={`group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-colors ${selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""
+                            }`}
                           onClick={() => handleToggleProduct(product.id)}
                         >
                           <td className="p-4 text-center">
@@ -402,9 +425,8 @@ const BulkUpdatePage = () => {
                   {filteredProducts.map((product) => (
                     <div
                       key={product.id}
-                      className={`p-4 active:bg-blue-50 dark:active:bg-blue-900/10 flex items-start gap-3 ${
-                        selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""
-                      }`}
+                      className={`p-4 active:bg-blue-50 dark:active:bg-blue-900/10 flex items-start gap-3 ${selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""
+                        }`}
                       onClick={() => handleToggleProduct(product.id)}
                     >
                       <div className="shrink-0 pt-0.5">
@@ -449,6 +471,27 @@ const BulkUpdatePage = () => {
           products={selectedProducts}
         />
       )}
+
+      <AlertDialog open={dialogState.open} onOpenChange={(open) => setDialogState(prev => ({ ...prev, open }))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{dialogState.title}</AlertDialogTitle>
+            <AlertDialogDescription>{dialogState.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {dialogState.variant === "confirm" ? (
+              <>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={dialogState.onConfirm}>Confirmar</AlertDialogAction>
+              </>
+            ) : (
+              <AlertDialogAction onClick={() => setDialogState(prev => ({ ...prev, open: false }))}>
+                Aceptar
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

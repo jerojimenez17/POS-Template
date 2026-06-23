@@ -367,46 +367,77 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         ) : step === "config" ? (
         <div className="grid gap-6 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="file-upload">Archivo Excel (.xlsx, .xls)</Label>
-            <label
-              htmlFor="file-upload"
-              className="flex items-center gap-3 cursor-pointer border border-input rounded-md px-4 py-3 hover:bg-accent transition-colors"
-            >
-              <UploadCloud className="h-5 w-5 text-muted-foreground shrink-0" />
-              <span className="text-sm text-muted-foreground truncate">
-                {file ? file.name : "Seleccionar archivo Excel"}
-              </span>
+            <Label htmlFor="file-upload" className="text-sm font-medium">
+              Archivo Excel (.xlsx, .xls) <span className="text-red-500">*</span>
+            </Label>
+            <label className="flex-1 cursor-pointer group">
+              <input
+                id="file-upload"
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <div className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg transition-colors bg-gray-50 dark:bg-gray-800 ${file ? 'border-green-400 bg-green-50/50 dark:bg-green-900/10' : 'border-gray-300 dark:border-gray-600 group-hover:border-gray-400 dark:group-hover:border-gray-500'}`}>
+                <div className="flex flex-col items-center justify-center text-center space-y-2">
+                  <div className={`p-2 rounded-full ${file ? 'bg-green-100 dark:bg-green-900/30' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
+                    {file ? (
+                      <CheckCircle2 className="h-6 w-6 text-green-500" />
+                    ) : (
+                      <UploadCloud className="h-6 w-6 text-blue-500" />
+                    )}
+                  </div>
+                  {file ? (
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[250px]">
+                        {file.name}
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                        Archivo cargado correctamente
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Click para seleccionar archivo
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        Solo archivos .xlsx o .xls
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </label>
-            <input
-              id="file-upload"
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleFileChange}
-              className="hidden"
-            />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Fila de inicio <span className="text-red-500">*</span></Label>
-              <Input
-                type="number"
-                min={1}
-                value={startRow}
-                onChange={(e) => setStartRow(Number(e.target.value))}
-                placeholder="2"
-              />
-              <p className="text-xs text-muted-foreground">Fila donde empiezan los datos (1=Encabezados)</p>
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div className="p-4 border-b">
+              <h3 className="font-semibold text-sm">Configuración de Filas</h3>
             </div>
-            <div className="grid gap-2">
-              <Label>Fila de fin (Opcional)</Label>
-              <Input
-                type="number"
-                min={1}
-                value={endRow}
-                onChange={(e) => setEndRow(e.target.value === "" ? "" : Number(e.target.value))}
-                placeholder="Última fila"
-              />
+            <div className="p-4 grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Fila de inicio <span className="text-red-500">*</span></Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={startRow}
+                  onChange={(e) => setStartRow(Number(e.target.value))}
+                  placeholder="2"
+                />
+                <p className="text-xs text-muted-foreground">Inicio de datos (1=Encabezados)</p>
+              </div>
+              <div className="grid gap-2">
+                <Label>Fila de fin (Opcional)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={endRow}
+                  onChange={(e) => setEndRow(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="Última fila"
+                />
+                <p className="text-xs text-muted-foreground">Dejar en blanco para todas</p>
+              </div>
             </div>
           </div>
 

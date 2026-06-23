@@ -136,14 +136,12 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
 
   return (
     <Dialog>
-      <DialogTrigger
-        asChild
-        className="h-10 bg-transparent font-semibold hover:text-white dark:text-white"
-      >
+      <DialogTrigger asChild>
         <Button
           onClick={(e) => e.stopPropagation()}
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon"
+          title="Código de barras"
         >
           <CodeBarButton />
         </Button>
