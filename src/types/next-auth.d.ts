@@ -18,6 +18,7 @@ export type ExtendedUser = DefaultSession["user"] & {
       hasClientLedger: boolean;
       hasMultiCashbox: boolean;
       hasSupplierFilter: boolean;
+      hasBudget: boolean;
       maxUsers: number;
       maxProducts: number;
     };

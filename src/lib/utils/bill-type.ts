@@ -20,6 +20,7 @@ export function getBillTypeDisplay(
   cae?: string | null,
   isRemito?: boolean
 ): string {
+  if (billType === "Presupuesto") return "Presupuesto";
   if (cae) {
     if (billType && AFIP_INVOICE_TYPES[billType]) {
       return AFIP_INVOICE_TYPES[billType];

@@ -30,6 +30,8 @@ interface CreateUnpaidOrderInput {
   businessId: string;
   items: UnpaidOrderItem[];
   total: number;
+  clientIvaCondition?: string;
+  clientDocumentNumber?: string;
 }
 
 interface RegisterPaymentInput {
@@ -123,6 +125,8 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
           status: "confirmado",
           paidStatus: "inpago",
           date: new Date(),
+          clientIvaCondition: input.clientIvaCondition,
+          clientDocumentNumber: input.clientDocumentNumber,
           items: {
             create: input.items.map((item) => ({
               productId: item.productId,

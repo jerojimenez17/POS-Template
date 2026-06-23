@@ -107,6 +107,7 @@ export const updateBusinessFeaturesAction = async (payload: {
   hasClientLedger: boolean;
   hasMultiCashbox: boolean;
   hasSupplierFilter: boolean;
+  hasBudget: boolean;
   maxUsers: number;
   maxProducts: number;
 }) => {
@@ -135,6 +136,7 @@ export const updateBusinessFeaturesAction = async (payload: {
           hasClientLedger: payload.hasClientLedger,
           hasMultiCashbox: payload.hasMultiCashbox,
           hasSupplierFilter: payload.hasSupplierFilter,
+          hasBudget: payload.hasBudget,
           maxUsers: payload.maxUsers,
           maxProducts: payload.maxProducts,
         },
@@ -146,6 +148,7 @@ export const updateBusinessFeaturesAction = async (payload: {
           hasClientLedger: payload.hasClientLedger,
           hasMultiCashbox: payload.hasMultiCashbox,
           hasSupplierFilter: payload.hasSupplierFilter,
+          hasBudget: payload.hasBudget,
           maxUsers: payload.maxUsers,
           maxProducts: payload.maxProducts,
         },

@@ -91,6 +91,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       hasClientLedger: false,
       hasMultiCashbox: false,
       hasSupplierFilter: false,
+      hasBudget: false,
             maxUsers: 1,
             maxProducts: 100,
           },

@@ -320,6 +320,8 @@ model Client {
   name      String
   address   String?
   cellPhone String? // Storing as string for flexibility
+  cuit         String?
+  ivaCondition String?
   email     String?
   balance   Float   @default(0)
 
@@ -545,6 +547,7 @@ model BusinessFeatures {
   hasClientLedger   Boolean @default(false)
   hasMultiCashbox   Boolean @default(false)
   hasSupplierFilter Boolean @default(false)
+  hasBudget Boolean @default(false)
 
   // Operational Limits
   maxUsers    Int @default(1)

@@ -54,6 +54,7 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
     hasClientLedger: false,
     hasMultiCashbox: false,
     hasSupplierFilter: false,
+    hasBudget: false,
     maxUsers: 1,
     maxProducts: 100,
   };

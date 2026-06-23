@@ -32,12 +32,17 @@ import { db } from "@/lib/db";
 import AddPaymentForm from "./AddPaymentForm";
 import CancelOrderButton from "./CancelOrderButton";
 import EditableOrderDetailWrapper from "./EditableOrderDetailWrapper";
+import PrintOrderButton from "./PrintOrderButton";
 import { LocalDate } from "@/components/ui/LocalDate";
 
 interface OrderWithRelations {
   id: string;
   date: Date;
   total: number;
+  discountPercentage: number;
+  discountAmount: number;
+  seller: string | null;
+  paidMethod: string | null;
   status: string;
   paidStatus: string;
   clientId: string | null;
@@ -308,6 +313,11 @@ export default async function AccountLedgerDetailPage({
                   businessId={session.user.businessId}
                   showButton={actionParams.action === "cancel"}
                 />
+              </div>
+            )}
+            {order.paidStatus !== "pago" && (
+              <div className="pt-2">
+                <PrintOrderButton order={order} session={session} />
               </div>
             )}
           </CardContent>
