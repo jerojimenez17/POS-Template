@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { getUnpaidOrders } from "@/actions/unpaid-orders";
+import { getBusinessBillingInfoAction } from "@/actions/business";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,8 @@ import {
 import { LocalDate } from "@/components/ui/LocalDate";
 import { pusherClient } from "@/lib/pusher-client";
 import { cn } from "@/lib/utils";
+import PrintRowButton from "./PrintRowButton";
+import ConfirmOrderButton from "./ConfirmOrderButton";
 
 type StatusFilter = "all" | "inpago" | "pago" | "pendiente";
 
@@ -58,6 +61,12 @@ export default function AccountLedgerContent({
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [refreshToggle, setRefreshToggle] = useState(0);
+  const [billingInfo, setBillingInfo] = useState<Record<string, unknown> | null>(null);
+
+  // Fetch billing info once
+  useEffect(() => {
+    getBusinessBillingInfoAction().then(setBillingInfo);
+  }, []);
 
   // Fetch all orders
   useEffect(() => {
@@ -244,6 +253,9 @@ export default function AccountLedgerContent({
                   <TableHead className="font-semibold text-gray-700 dark:text-gray-200 h-12">
                     Estado
                   </TableHead>
+                  <TableHead className="font-semibold text-gray-700 dark:text-gray-200 h-12 text-right">
+                    Acciones
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -276,6 +288,20 @@ export default function AccountLedgerContent({
                         status={order.status}
                         paidStatus={order.paidStatus}
                       />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div
+                        className="flex items-center justify-end gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {order.status === "pendiente" && (
+                          <ConfirmOrderButton orderId={order.id} />
+                        )}
+                        <PrintRowButton
+                          orderId={order.id}
+                          billingInfo={billingInfo}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
