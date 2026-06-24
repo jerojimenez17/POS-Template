@@ -39,6 +39,10 @@ function formatPrice(price: number, unitSuffix: string): string {
   return `$${price.toFixed(2)}${unitSuffix}`;
 }
 
+const TAG_WIDTH = "6.3cm";
+const TAG_HEIGHT_WITH_BARCODE = "5cm";
+const TAG_HEIGHT_WITHOUT_BARCODE = "3.5cm";
+
 const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
@@ -46,29 +50,48 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
   const [showPrice, setShowPrice] = useState(true);
   const [key, setKey] = useState(0);
 
+  const hasCodebar = products.some(p => p.codebar);
+  const tagHeight = hasCodebar ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE;
+  const tagsPerPage = hasCodebar ? 15 : 24;
+
+  const allTags: Array<{ product: ProductExtended; copyIndex: number; key: string }> = [];
+  products.forEach((product) => {
+    for (let i = 0; i < copies; i++) {
+      allTags.push({ product, copyIndex: i, key: `${product.id}-${i}` });
+    }
+  });
+
+  const pages: Array<Array<{ product: ProductExtended; copyIndex: number; key: string }>> = [];
+  for (let i = 0; i < allTags.length; i += tagsPerPage) {
+    pages.push(allTags.slice(i, i + tagsPerPage));
+  }
+
   const generateBarcodes = useCallback(() => {
-    products.forEach((product, index) => {
-      const barcodeEl = barcodeRefs.current[index];
-      const code = product.codebar || product.code;
-      if (barcodeEl && code) {
-        JsBarcode(barcodeEl, code, {
-          format: "CODE128",
-          lineColor: "#000000",
-          width: 1.5,
-          height: 40,
-          displayValue: true,
-          fontSize: 10,
-          margin: 0,
-        });
+    let index = 0;
+    products.forEach((product) => {
+      for (let c = 0; c < copies; c++) {
+        const barcodeEl = barcodeRefs.current[index];
+        if (barcodeEl && product.codebar) {
+          JsBarcode(barcodeEl, product.codebar, {
+            format: "CODE128",
+            lineColor: "#000000",
+            width: 1.5,
+            height: 40,
+            displayValue: true,
+            fontSize: 10,
+            margin: 0,
+          });
+        }
+        index++;
       }
     });
-  }, [products]);
+  }, [products, copies]);
 
   useEffect(() => {
     if (open) {
       generateBarcodes();
     }
-  }, [key, open, products, generateBarcodes]);
+  }, [key, open, products, copies, generateBarcodes]);
 
   const handleCopiesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value, 10);
@@ -78,44 +101,29 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
   };
 
   const handlePrint = async () => {
+    generateBarcodes();
     if (printRef.current) {
       await printElement(printRef.current, {
         documentTitle: `Etiquetas_${new Date().toISOString().split("T")[0]}`,
         pageStyle: `
-          @page { size: 80mm 75mm; margin: 0; }
+          @page { size: A4; margin: 5mm; }
           @media print {
             body { -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
             .no-print { display: none !important; }
-            .label-container {
-              width: 78mm !important;
-              height: 75mm !important;
-              overflow: hidden;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              padding: 2mm;
-              box-sizing: border-box;
-              page-break-after: always;
-            }
             .label-description {
-              font-size: 32px;
+              font-size: 14px;
               font-weight: 700;
               text-align: center;
-              line-height: 1.1;
-              margin-bottom: 4px;
+              line-height: 1.2;
+              margin-bottom: 2px;
               word-wrap: break-word;
               width: 100%;
             }
             .label-price {
-              font-size: 40px;
+              font-size: 18px;
               font-weight: 800;
               text-align: center;
-              margin-bottom: 8px;
-            }
-            .label-price--no-barcode {
-              font-size: 56px;
-              margin: 12px 0;
+              margin-bottom: 2px;
             }
             .label-barcode {
               text-align: center;
@@ -128,12 +136,10 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
             }
           }
         `,
-        format: "thermal",
+        format: "a4",
       });
     }
   };
-
-  const cards = Array.from({ length: copies }, (_, i) => i);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -173,59 +179,64 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
         </div>
 
         <div className="no-print border rounded-md p-4 bg-slate-50 max-h-96 overflow-y-auto">
-          <div
-            ref={printRef}
-            className="mx-auto flex flex-wrap gap-6 justify-center"
-            style={{
-              width: "100%",
-            }}
-          >
-            {products.map((product, productIndex) =>
-              cards.map((_, copyIndex) => {
-                const elementIndex = productIndex * copies + copyIndex;
-                const unitSuffix = getUnitSuffix(product.unit ?? undefined);
-                const hasBarcode = !!(product.codebar || product.code);
-                const formattedPrice = formatPrice(product.salePrice, unitSuffix);
-                
-                return (
-                  <div
-                    key={`${product.id}-${copyIndex}`}
-                    className="flex flex-col text-black items-center justify-center border border-dashed border-gray-300 rounded p-2 bg-white label-container"
-                    style={{ width: "78mm", height: "75mm", overflow: "hidden" }}
-                  >
-                    <div 
-                      className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
-                      contentEditable
-                      suppressContentEditableWarning
-                      spellCheck={false}
-                      title="Haz clic para editar la descripción antes de imprimir"
-                    >
-                      {product.description}
-                    </div>
-                    {showPrice && (
-                      <div className={`label-price${!hasBarcode ? ' label-price--no-barcode' : ''}`}>
-                        {formattedPrice}
+          <div ref={printRef}>
+            {pages.map((page, pageIndex) => (
+              <div
+                key={pageIndex}
+                style={pageIndex < pages.length - 1 ? { pageBreakAfter: "always" } : undefined}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(3, ${TAG_WIDTH})`,
+                    gap: "2mm",
+                    justifyContent: "center",
+                  }}
+                >
+                  {page.map((tag, tagIndex) => {
+                    const globalIndex = pageIndex * tagsPerPage + tagIndex;
+                    const unitSuffix = getUnitSuffix(tag.product.unit ?? undefined);
+                    const formattedPrice = formatPrice(tag.product.salePrice, unitSuffix);
+
+                    return (
+                      <div
+                        key={tag.key}
+                        className="flex flex-col text-black items-center justify-center border border-dashed border-gray-300 rounded p-2 bg-white label-container"
+                        style={{ width: TAG_WIDTH, height: tagHeight, overflow: "hidden" }}
+                      >
+                        <div
+                          className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
+                          contentEditable
+                          suppressContentEditableWarning
+                          spellCheck={false}
+                          title="Haz clic para editar la descripción antes de imprimir"
+                        >
+                          {tag.product.description}
+                        </div>
+                        {showPrice && (
+                          <div className="label-price">
+                            {formattedPrice}
+                          </div>
+                        )}
+                        <div className="label-code">
+                          {tag.product.code}
+                        </div>
+                        {tag.product.codebar && (
+                          <div className="label-barcode">
+                            <svg
+                              ref={(el) => {
+                                barcodeRefs.current[globalIndex] = el;
+                              }}
+                              className="w-full"
+                            />
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {hasBarcode && (
-                      <div className="label-barcode">
-                        <svg
-                          ref={(el) => {
-                            barcodeRefs.current[elementIndex] = el;
-                          }}
-                          className="w-full"
-                        />
-                      </div>
-                    )}
-                    {product.code && (
-                      <div className="label-code">
-                        {product.code}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

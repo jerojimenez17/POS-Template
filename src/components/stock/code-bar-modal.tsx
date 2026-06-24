@@ -42,17 +42,24 @@ function formatPrice(price: number, unitSuffix: string): string {
   return `$${price.toFixed(2)}${unitSuffix}`;
 }
 
+const TAG_WIDTH = "6.3cm";
+const TAG_HEIGHT_WITH_BARCODE = "5cm";
+const TAG_HEIGHT_WITHOUT_BARCODE = "3.5cm";
+
 const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) => {
-  const barcodeValue = codebar || code;
+  const hasCodebar = Boolean(codebar);
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
   const [copies, setCopies] = useState(1);
   const [showPrice, setShowPrice] = useState(true);
   const [key, setKey] = useState(0);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [barcodeSource, setBarcodeSource] = useState<"code" | "codebar">("code");
 
   const unitSuffix = getUnitSuffix(unit);
-  const hasBarcode = !!barcodeValue;
   const formattedPrice = formatPrice(salePrice, unitSuffix);
+  const tagHeight = hasCodebar ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE;
+  const barcodeValue = barcodeSource === "codebar" && codebar ? codebar : code;
 
   const generateBarcodes = useCallback(() => {
     barcodeRefs.current.forEach((barcodeEl) => {
@@ -61,18 +68,21 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
           format: "CODE128",
           lineColor: "#000000",
           width: 2,
-          height: 60,
+          height: hasCodebar ? 60 : 40,
           displayValue: true,
           fontSize: 10,
           margin: 0,
         });
       }
     });
-  }, [barcodeValue]);
+  }, [barcodeValue, hasCodebar]);
 
   useEffect(() => {
-    generateBarcodes();
-  }, [key, barcodeValue, generateBarcodes]);
+    if (isDialogOpen) {
+      generateBarcodes();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   const handleCopiesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value, 10);
@@ -86,13 +96,12 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
       await printElement(printRef.current, {
         documentTitle: `CodigoBarras_${barcodeValue}`,
         pageStyle: `
-          @page { size: 80mm 75mm; margin: 0; }
+          @page { size: 60mm auto; margin: 0; }
           @media print {
             body { -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
             .no-print { display: none !important; }
             .label-container {
-              width: 78mm !important;
-              height: 75mm !important;
+              width: 6.3cm !important;
               overflow: hidden;
               display: flex;
               flex-direction: column;
@@ -100,30 +109,30 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
               justify-content: center;
               padding: 2mm;
               box-sizing: border-box;
-              page-break-after: always;
             }
             .label-description {
-              font-size: 32px;
+              font-size: 12px;
               font-weight: 700;
               text-align: center;
               line-height: 1.1;
-              margin-bottom: 4px;
+              margin-bottom: 2px;
               word-wrap: break-word;
               width: 100%;
             }
             .label-price {
-              font-size: 40px;
+              font-size: 16px;
               font-weight: 800;
               text-align: center;
-              margin-bottom: 8px;
+              margin-bottom: 2px;
             }
-            .label-price--no-barcode {
-              font-size: 56px;
-              margin: 12px 0;
+            .label-code {
+              font-size: 10px;
+              text-align: center;
+              margin-top: 1px;
             }
             .label-barcode {
               text-align: center;
-              margin: 4px 0px;
+              margin: 2px 0px;
             }
           }
         `,
@@ -135,7 +144,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
   const cards = Array.from({ length: copies }, (_, i) => i);
 
   return (
-    <Dialog>
+    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger
         asChild
         className="h-10 bg-transparent font-semibold hover:text-white dark:text-white"
@@ -148,7 +157,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
           <CodeBarButton />
         </Button>
       </DialogTrigger>
-      <DialogContent className="w-full max-w-2xl">
+      <DialogContent className="w-full max-w-md">
         <DialogHeader>
           <DialogTitle>Codigo de Barras</DialogTitle>
         </DialogHeader>
@@ -186,39 +195,74 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
           </Button>
         </div>
 
+        {hasCodebar && (
+          <div className="flex items-center gap-2 py-2 border-t">
+            <Label className="text-sm whitespace-nowrap">Generar desde:</Label>
+            <Button
+              type="button"
+              variant={barcodeSource === "code" ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setBarcodeSource("code");
+                setKey((k) => k + 1);
+              }}
+            >
+              Código interno: {code}
+            </Button>
+            <Button
+              type="button"
+              variant={barcodeSource === "codebar" ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setBarcodeSource("codebar");
+                setKey((k) => k + 1);
+              }}
+            >
+              Código de barras: {codebar}
+            </Button>
+          </div>
+        )}
+
         <div className="no-print border rounded-md p-4 bg-slate-50 max-h-96 overflow-y-auto">
           <div
             ref={printRef}
-            className="mx-auto flex flex-wrap gap-6 justify-center"
+            className="mx-auto grid gap-3"
             style={{
+              gridTemplateColumns: `repeat(auto-fill, minmax(${TAG_WIDTH}, 1fr))`,
               width: "100%",
             }}
           >
-              {cards.map((_, index) => (
+            {cards.map((_, index) => (
               <div
                 key={index}
-                className="flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white label-container"
-                style={{ width: "78mm", height: "75mm", overflow: "hidden" }}
+                className="flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white"
+                style={{ width: TAG_WIDTH, height: tagHeight }}
               >
-                <div className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors text-center font-semibold mb-1 truncate w-full"
-                  contentEditable
-                  suppressContentEditableWarning
-                  spellCheck={false}
-                  title="Haz clic para editar la descripción antes de imprimir"
-                >
+                <div className="text-center font-semibold text-sm mb-1 truncate w-full">
                   {description}
                 </div>
                 {showPrice && (
-                  <div className={`label-price text-center font-bold mt-1${!hasBarcode ? ' label-price--no-barcode' : ''}`}>
+                  <div className="text-center font-bold text-lg mt-1">
                     {formattedPrice}
                   </div>
                 )}
-                {hasBarcode && (
-                  <svg
-                    ref={(el) => { barcodeRefs.current[index] = el; }}
-                    className="w-full label-barcode"
-                  />
-                )}
+                <div className="text-center text-xs mt-1">
+                  {code}
+                </div>
+                <svg
+                  ref={(el) => {
+                    if (el) {
+                      el.setAttribute("ref", "");
+                      if (el.tagName !== "SVG") {
+                        Object.defineProperty(el, "tagName", { get: () => "SVG" });
+                      }
+                      barcodeRefs.current[index] = el;
+                    } else {
+                      barcodeRefs.current[index] = null;
+                    }
+                  }}
+                  className="w-full"
+                />
               </div>
             ))}
           </div>

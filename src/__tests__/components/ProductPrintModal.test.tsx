@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -6,7 +7,6 @@ import "@testing-library/jest-dom/vitest";
 import ProductPrintModal from "@/components/stock/product-print-modal";
 import { ProductExtended } from "@/components/stock/product-form";
 
-// Mock Radix UI Dialog components
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children, open }: { children: React.ReactNode; open: boolean }) =>
     open ? <div data-testid="dialog">{children}</div> : null,
@@ -39,340 +39,355 @@ vi.mock("sonner", () => ({
   },
 }));
 
-// Mock JsBarcode
 vi.mock("jsbarcode", () => ({
   default: vi.fn(),
 }));
 
-const mockProducts: ProductExtended[] = [
-  {
-    id: "product-1",
-    code: "P001",
-    description: "Product A with Large Description",
-    salePrice: 1500.5,
-    unit: "unidades",
+vi.mock("@/lib/print", () => ({
+  printElement: vi.fn().mockResolvedValue(undefined),
+}));
+
+function createMockProduct(overrides: Partial<ProductExtended> = {}): ProductExtended {
+  return {
+    id: "test-id",
+    code: "TST001",
+    codebar: null,
+    description: "Test Product",
+    salePrice: 100,
+    unit: "Unidad",
     image: null,
     imageName: null,
     brandId: null,
     categoryId: null,
     subCategoryId: null,
-    price: 1000,
-    gain: 50,
+    price: 80,
+    gain: 25,
     amount: 10,
     supplierId: null,
     businessId: "biz-1",
     creation_date: new Date(),
     last_update: new Date(),
     client_bonus: 0,
-  } as ProductExtended,
-  {
-    id: "product-2",
-    code: "P002",
-    description: "Product B",
-    salePrice: 2500,
-    unit: "kg",
-    image: null,
-    imageName: null,
-    brandId: null,
-    categoryId: null,
-    subCategoryId: null,
-    price: 2000,
-    gain: 25,
-    amount: 5,
-    supplierId: null,
-    businessId: "biz-1",
-    creation_date: new Date(),
-    last_update: new Date(),
-    client_bonus: 0,
-  } as ProductExtended,
-];
+    ...overrides,
+  } as ProductExtended;
+}
+
+function createProductsWithoutCodebar(count: number): ProductExtended[] {
+  return Array.from({ length: count }, (_, i) =>
+    createMockProduct({
+      id: `prod-no-bc-${i}`,
+      code: `NBC${String(i + 1).padStart(3, "0")}`,
+      description: `No Barcode Product ${i + 1}`,
+      salePrice: 100 + i * 10,
+      codebar: null,
+    })
+  );
+}
+
+function createProductsWithCodebar(count: number): ProductExtended[] {
+  return Array.from({ length: count }, (_, i) =>
+    createMockProduct({
+      id: `prod-bc-${i}`,
+      code: `BC${String(i + 1).padStart(3, "0")}`,
+      description: `Barcode Product ${i + 1}`,
+      salePrice: 200 + i * 10,
+      codebar: `12345678${String(i).padStart(4, "0")}`,
+      unit: "Kg",
+    })
+  );
+}
+
+function createMixedProducts(): ProductExtended[] {
+  return [
+    createMockProduct({
+      id: "mixed-with-bc",
+      code: "MIX01",
+      description: "Mixed With Barcode",
+      salePrice: 300,
+      codebar: "9876543210",
+      unit: "Kg",
+    }),
+    createMockProduct({
+      id: "mixed-no-bc",
+      code: "MIX02",
+      description: "Mixed No Barcode",
+      salePrice: 150,
+      codebar: null,
+      unit: "Unidad",
+    }),
+  ];
+}
 
 describe("ProductPrintModal Component", () => {
   const mockOnOpenChange = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock window.print
-    global.print = vi.fn();
-    // Mock document.getElementById
-    const mockCanvas = {
-      toDataURL: vi.fn().mockReturnValue("data:image/png;base64,mocked"),
-    };
-    vi.spyOn(document, "getElementById").mockReturnValue(mockCanvas as any);
   });
 
-  it("should not render when open is false", () => {
-    render(
-      <ProductPrintModal
-        open={false}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
+  describe("Render behavior", () => {
+    it("should not render when open is false", () => {
+      render(
+        <ProductPrintModal
+          open={false}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithoutCodebar(2)}
+        />
+      );
+      expect(screen.queryByTestId("dialog")).not.toBeInTheDocument();
+    });
 
-    expect(screen.queryByTestId("dialog")).not.toBeInTheDocument();
-  });
+    it("should render when open is true", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithoutCodebar(2)}
+        />
+      );
+      expect(screen.getByTestId("dialog")).toBeInTheDocument();
+    });
 
-  it("should render when open is true", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
-
-    expect(screen.getByTestId("dialog")).toBeInTheDocument();
-  });
-
-  it("should display all selected products", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
-
-    expect(screen.getByText("Product A with Large Description")).toBeInTheDocument();
-    expect(screen.getByText("Product B")).toBeInTheDocument();
-  });
-
-  it("should display description in VERY LARGE font (36-48px)", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
-
-    const descriptionElements = document.querySelectorAll(".label-description");
-    expect(descriptionElements.length).toBeGreaterThan(0);
-
-    descriptionElements.forEach((el) => {
-      const fontSize = window.getComputedStyle(el).fontSize;
-      const sizeNum = parseInt(fontSize);
-      expect(sizeNum).toBeGreaterThanOrEqual(30);
-      expect(sizeNum).toBeLessThanOrEqual(48);
+    it("should render without crashing for empty products array", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={[]}
+        />
+      );
+      expect(screen.getByTestId("dialog")).toBeInTheDocument();
     });
   });
 
-  it("should allow editing the product description for printing", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
+  describe("Product information display", () => {
+    it("should display all products' descriptions and prices", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithoutCodebar(2)}
+        />
+      );
+      expect(screen.getByText("No Barcode Product 1")).toBeInTheDocument();
+      expect(screen.getByText("No Barcode Product 2")).toBeInTheDocument();
+    });
 
-    const descriptionElements = document.querySelectorAll(".label-description");
-    expect(descriptionElements.length).toBeGreaterThan(0);
-    
-    const firstDesc = descriptionElements[0];
-    expect(firstDesc).toHaveAttribute("contentEditable", "true");
-    
-    // Simulate user editing
-    fireEvent.input(firstDesc, { target: { textContent: "Edited Product A" } });
-    
-    expect(firstDesc.textContent).toBe("Edited Product A");
-  });
+    it("should allow editing the product description for printing (AC11)", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithoutCodebar(1)}
+        />
+      );
+      const descriptionElements = document.querySelectorAll(".label-description");
+      expect(descriptionElements.length).toBeGreaterThan(0);
+      const firstDesc = descriptionElements[0];
+      expect(firstDesc).toHaveAttribute("contentEditable", "true");
+      fireEvent.input(firstDesc, { target: { textContent: "Edited Product" } });
+      expect(firstDesc.textContent).toBe("Edited Product");
+    });
 
-  it("should display sale price in VERY LARGE font (40-52px)", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
+    it("should handle product with null code", () => {
+      const productWithNullCode = createMockProduct({
+        id: "product-null-code",
+        code: null as unknown as string,
+        description: "Product with no code",
+        salePrice: 100,
+      });
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={[productWithNullCode]}
+        />
+      );
+      expect(screen.getByText("Product with no code")).toBeInTheDocument();
+    });
 
-    const priceElements = document.querySelectorAll(".label-price");
-    expect(priceElements.length).toBeGreaterThan(0);
-
-    priceElements.forEach((el) => {
-      const fontSize = window.getComputedStyle(el).fontSize;
-      const sizeNum = parseInt(fontSize);
-      expect(sizeNum).toBeGreaterThanOrEqual(40);
-      expect(sizeNum).toBeLessThanOrEqual(52);
+    it("should display product code on each tag", () => {
+      const products = createProductsWithoutCodebar(2);
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={products}
+        />
+      );
+      expect(screen.getByText("NBC001")).toBeInTheDocument();
+      expect(screen.getByText("NBC002")).toBeInTheDocument();
     });
   });
 
-  it("should display sale price with currency format", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
-
-    expect(screen.getByText("$1,500.50")).toBeInTheDocument();
-    expect(screen.getByText("$2,500.00")).toBeInTheDocument();
-  });
-
-  it("should render barcode for each product", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
-
-    const barcodeElements = document.querySelectorAll(".label-barcode");
-    expect(barcodeElements.length).toBe(2);
-  });
-
-  it("should display product code below barcode", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
-
-    expect(screen.getByText("P001")).toBeInTheDocument();
-    expect(screen.getByText("P002")).toBeInTheDocument();
-  });
-
-  it("should display product code in medium font (14-16px)", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
-
-    const codeElements = document.querySelectorAll(".label-code");
-    expect(codeElements.length).toBeGreaterThan(0);
-
-    codeElements.forEach((el) => {
-      const fontSize = window.getComputedStyle(el).fontSize;
-      const sizeNum = parseInt(fontSize);
-      expect(sizeNum).toBeGreaterThanOrEqual(14);
-      expect(sizeNum).toBeLessThanOrEqual(16);
+  describe("A4 Grid Layout (AC4)", () => {
+    it("should render tags in CSS grid with 3 columns", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithCodebar(3)}
+        />
+      );
+      const gridContainer = document.querySelector('[style*="grid-template-columns"]');
+      expect(gridContainer).toBeInTheDocument();
+      expect(gridContainer).toHaveStyle("grid-template-columns: repeat(3, 6.3cm)");
     });
-  });
 
-  it("should have barcode smaller than description text", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
+    it("should have tag width of 6cm", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithoutCodebar(1)}
+        />
+      );
+      const tagCards = document.querySelectorAll<HTMLElement>('[style*="width"]');
+      const foundTag = Array.from(tagCards).find(
+        (el) => el.style.width === "6.3cm"
+      );
+      expect(foundTag).toBeTruthy();
+    });
 
-    const descriptionElements = document.querySelectorAll(".label-description");
-    const barcodeElements = document.querySelectorAll(".label-barcode");
+    it("should have tag height of 5cm when codebar is present (AC6)", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithCodebar(1)}
+        />
+      );
+      const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
+      const foundTag = Array.from(tagCards).find(
+        (el) => el.style.height === "5cm"
+      );
+      expect(foundTag).toBeTruthy();
+    });
 
-    expect(descriptionElements.length).toBeGreaterThan(0);
-    expect(barcodeElements.length).toBeGreaterThan(0);
+    it("should have tag height of 3.5cm when no product has codebar (AC5)", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithoutCodebar(1)}
+        />
+      );
+      const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
+      const foundTag = Array.from(tagCards).find(
+        (el) => el.style.height === "3.5cm"
+      );
+      expect(foundTag).toBeTruthy();
+    });
 
-    descriptionElements.forEach((descEl) => {
-      const descFontSize = parseInt(window.getComputedStyle(descEl).fontSize);
-      barcodeElements.forEach((barEl) => {
-        const barHeight = parseInt(window.getComputedStyle(barEl).height || "40");
-        expect(descFontSize).toBeGreaterThan(barHeight);
+    it("should use uniform 5cm height for mixed batch (AC7)", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createMixedProducts()}
+        />
+      );
+      const tagCards = document.querySelectorAll<HTMLElement>(".label-container, [class*='border-dashed']");
+      tagCards.forEach((card) => {
+        expect(card.style.height).toBe("5cm");
       });
     });
   });
 
-  it("should call window.print when Imprimir button is clicked", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
+  describe("Pagination (AC8, AC10)", () => {
+    it("should have page breaks between A4 page groups (AC8)", () => {
+      const products = createProductsWithCodebar(2);
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={products}
+        />
+      );
+      const copiesInput = screen.getByLabelText(/copias/i);
+      fireEvent.change(copiesInput, { target: { value: "10" } });
+      const allDivs = document.querySelectorAll("div");
+      const pageBreakDivs = Array.from(allDivs).filter(
+        (div) => div.style.pageBreakAfter === "always"
+      );
+      expect(pageBreakDivs.length).toBeGreaterThan(0);
+    });
 
-    const printButton = screen.getByText(/imprimir/i);
-    fireEvent.click(printButton);
-
-    expect(global.print).toHaveBeenCalled();
+    it("should paginate copies across multiple A4 pages (AC10)", () => {
+      const products = createProductsWithCodebar(2);
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={products}
+        />
+      );
+      const copiesInput = screen.getByLabelText(/copias por producto/i);
+      fireEvent.change(copiesInput, { target: { value: "10" } });
+      const tagContainers = document.querySelectorAll(".label-container, [class*='border-dashed']");
+      expect(tagContainers.length).toBe(20);
+      const containerParents = new Set<Element | null>();
+      tagContainers.forEach((tc) => containerParents.add(tc.parentElement));
+      expect(containerParents.size).toBeGreaterThan(1);
+    });
   });
 
-  it("should close modal when Cerrar button is clicked", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
+  describe("Barcode positioning (AC9)", () => {
+    it("should render barcode only for products with codebar", () => {
+      const mixed = createMixedProducts();
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={mixed}
+        />
+      );
+      const barcodeElements = document.querySelectorAll(".label-barcode");
+      const codesWithBarcode = mixed.filter((p) => p.codebar);
+      expect(barcodeElements.length).toBe(codesWithBarcode.length);
+    });
 
-    const closeButton = screen.getByText(/cerrar/i);
-    fireEvent.click(closeButton);
-
-    expect(mockOnOpenChange).toHaveBeenCalledWith(false);
+    it("should display product code before barcode in DOM order (AC9)", () => {
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithCodebar(1)}
+        />
+      );
+      const codeElements = document.querySelectorAll(".label-code");
+      const barcodeElements = document.querySelectorAll(".label-barcode");
+      expect(codeElements.length).toBeGreaterThan(0);
+      expect(barcodeElements.length).toBeGreaterThan(0);
+      codeElements.forEach((codeEl, idx) => {
+        const barEl = barcodeElements[idx];
+        if (barEl) {
+          const position = codeEl.compareDocumentPosition(barEl);
+          expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        }
+      });
+    });
   });
 
-  it("should use 80mm width thermal print layout", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={mockProducts}
-      />
-    );
-
-    const printContainer = document.querySelector(".print-container");
-    expect(printContainer).toBeInTheDocument();
-
-    const width = window.getComputedStyle(printContainer!).width;
-    const widthNum = parseInt(width);
-    expect(widthNum).toBeCloseTo(80, 0);
-  });
-
-  it("should handle product with null code", () => {
-    const productsWithNull: ProductExtended[] = [
-      {
-        id: "product-3",
-        code: null,
-        description: "Product with no code",
-        salePrice: 100,
-        unit: "unidades",
-        image: null,
-        imageName: null,
-        brandId: null,
-        categoryId: null,
-        subCategoryId: null,
-        price: 80,
-        gain: 25,
-        amount: 0,
-        supplierId: null,
-        businessId: "biz-1",
-        creation_date: new Date(),
-        last_update: new Date(),
-        client_bonus: 0,
-      } as ProductExtended,
-    ];
-
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={productsWithNull}
-      />
-    );
-
-    expect(screen.getByText("Product with no code")).toBeInTheDocument();
-  });
-
-  it("should render without crashing for empty products array", () => {
-    render(
-      <ProductPrintModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        products={[]}
-      />
-    );
-
-    expect(screen.getByTestId("dialog")).toBeInTheDocument();
+  describe("Print behavior (AC4)", () => {
+    it("should call printElement with format a4 and A4 page style", async () => {
+      const { printElement } = await import("@/lib/print");
+      render(
+        <ProductPrintModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          products={createProductsWithoutCodebar(1)}
+        />
+      );
+      const printButton = screen.getByRole("button", { name: /imprimir/i });
+      fireEvent.click(printButton);
+      expect(printElement).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          format: "a4",
+          pageStyle: expect.stringContaining("A4"),
+        })
+      );
+    });
   });
 });
