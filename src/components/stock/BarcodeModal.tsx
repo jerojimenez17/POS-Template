@@ -316,7 +316,7 @@ export default function BarcodeModal({
                 <div className="no-print border rounded-md p-3 bg-slate-50 dark:bg-gray-900/40 max-h-72 overflow-y-auto">
                   <div
                     ref={printRef}
-                    className="mx-auto grid gap-3"
+                    className="flex flex-col items-center gap-3"
                     style={{
                       gridTemplateColumns: `repeat(auto-fill, minmax(${TAG_WIDTH}, 1fr))`,
                       width: "100%",
