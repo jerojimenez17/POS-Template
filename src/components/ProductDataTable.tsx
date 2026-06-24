@@ -13,6 +13,7 @@ import ProductForm from "./stock/product-form";
 import { Button } from "./ui/button";
 import DeleteButton from "./DeleteButton";
 import BarcodeModal from "./stock/BarcodeModal";
+import ProductPrintModal from "./stock/product-print-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import {
   Table,
@@ -51,6 +52,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);
   const [productToEdit, setProductToEdit] = useState<ProductExtended | null>(null);
+  const [printProduct, setPrintProduct] = useState<ProductExtended | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const sortedProducts = useMemo(() => {
@@ -198,6 +200,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
             />
             <BarcodeModal
               productId={product.id}
+              code={product.code}
               codebar={product.codebar || undefined}
               description={product.description || ""}
               salePrice={product.salePrice}
@@ -447,6 +450,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                   />
 <BarcodeModal
                       productId={product.id}
+                      code={product.code}
                       codebar={product.codebar || undefined}
                       description={product.description || ""}
                       salePrice={product.salePrice}
@@ -528,6 +532,15 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
             />
           </DialogContent>
         </Dialog>
+      )}
+
+      {printProduct && (
+        <ProductPrintModal
+          open={true}
+          onOpenChange={(open) => { if (!open) setPrintProduct(null); }}
+          products={[printProduct]}
+          format="thermal"
+        />
       )}
     </div>
   );

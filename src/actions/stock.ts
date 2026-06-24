@@ -362,8 +362,19 @@ export const processBulkProductBatch = async (
 
     // 6. Partition Products to Create/Update
     const toCreate: Prisma.ProductCreateManyInput[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updatePromises: any[] = [];
+    const toUpdate: Array<{
+      id: string;
+      description: string;
+      price: number;
+      salePrice: number;
+      gain: number;
+      unit: string;
+      brandId: string | null;
+      categoryId: string | null;
+      subCategoryId: string | null;
+      amount: number | null;
+      supplierId: string | null;
+    }> = [];
     const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
 
     for (const item of productsData) {
@@ -418,31 +429,21 @@ export const processBulkProductBatch = async (
         }
 
         if (updateExisting || updateOnly) {
-          const updateData: Prisma.ProductUpdateInput = {
+          toUpdate.push({
+            id: existingProduct.id,
             description: item.description.toString(),
             price: isPriceValid ? costPrice : 0,
             salePrice: isPriceValid ? salePrice : 0,
             gain: applyPriceFormula ? gainValue : existingProduct.gain,
             unit: item.unit || "unidades",
-            brand: resolvedBrandId ? { connect: { id: resolvedBrandId } } : { disconnect: true },
-            category: resolvedCategoryId ? { connect: { id: resolvedCategoryId } } : { disconnect: true },
-            subCategory: resolvedSubCategoryId ? { connect: { id: resolvedSubCategoryId } } : { disconnect: true },
-            last_update: new Date(),
-            catalog: item.catalog !== undefined ? item.catalog : undefined,
-            details: item.details !== undefined ? item.details : undefined,
-            supplier: supplierId ? { connect: { id: supplierId } } : { disconnect: true },
-          };
-
-          if (item.amount !== null && item.amount !== undefined) {
-            updateData.amount = isNaN(parsedAmount) ? 0 : parsedAmount;
-          } else if (item.amount === undefined) {
-            updateData.amount = existingProduct.amount;
-          }
-
-          updatePromises.push(db.product.update({
-            where: { id: existingProduct.id },
-            data: updateData,
-          }));
+            brandId: resolvedBrandId,
+            categoryId: resolvedCategoryId,
+            subCategoryId: resolvedSubCategoryId,
+            amount: item.amount !== null && item.amount !== undefined
+              ? (isNaN(parsedAmount) ? 0 : parsedAmount)
+              : null,
+            supplierId: supplierId || null,
+          });
           updatedCount++;
         }
       } else {
@@ -481,8 +482,34 @@ export const processBulkProductBatch = async (
       });
     }
 
-    if (updatePromises.length > 0) {
-      await db.$transaction(updatePromises);
+    if (toUpdate.length > 0) {
+      const params: (string | number | null)[] = [];
+      const placeholders = toUpdate.map((_, i) => {
+        const n = i * 11;
+        return `($${n + 1}::text,$${n + 2}::text,$${n + 3}::numeric,$${n + 4}::numeric,$${n + 5}::numeric,$${n + 6}::text,$${n + 7}::text,$${n + 8}::text,$${n + 9}::text,$${n + 10}::numeric,$${n + 11}::text)`;
+      }).join(",");
+
+      for (const u of toUpdate) {
+        params.push(u.id, u.description, u.price, u.salePrice, u.gain, u.unit, u.brandId, u.categoryId, u.subCategoryId, u.amount, u.supplierId);
+      }
+
+      await db.$executeRawUnsafe(
+        `UPDATE "Product" AS p SET
+          "description" = u.description,
+          "price" = u.price,
+          "salePrice" = u.sale_price,
+          "gain" = u.gain,
+          "unit" = u.unit,
+          "brandId" = u.brand_id,
+          "categoryId" = u.category_id,
+          "subCategoryId" = u.sub_category_id,
+          "amount" = CASE WHEN u.amount IS NOT NULL THEN u.amount ELSE p.amount END,
+          "supplierId" = u.supplier_id,
+          "last_update" = NOW()
+        FROM (VALUES ${placeholders}) AS u(id, description, price, sale_price, gain, unit, brand_id, category_id, sub_category_id, amount, supplier_id)
+        WHERE p.id = u.id`,
+        ...params
+      );
     }
 
     return { createdCount, updatedCount };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, startTransition } from "react";
+import { useEffect, useRef, useState, useTransition, startTransition, useCallback } from "react";
 import dynamic from "next/dynamic";
 import JsBarcode from "jsbarcode";
 import {
@@ -29,12 +29,17 @@ const Scanner = dynamic(
 
 interface Props {
   productId: string;
+  code: string;
   codebar?: string | null;
   description: string;
   salePrice: number;
   unit?: string | null;
   onSuccess?: (codebar: string) => void;
 }
+
+const TAG_WIDTH = "6.3cm";
+const TAG_HEIGHT_WITH_BARCODE = "5cm";
+const TAG_HEIGHT_WITHOUT_BARCODE = "3.5cm";
 
 const UNIT_SUFFIX_MAP: Record<string, string> = {
   Unidad: "/u", Kg: "/kg", Gramo: "/g", Litro: "/l", Metro: "/m",
@@ -47,6 +52,7 @@ function formatPrice(price: number, unit?: string | null): string {
 
 export default function BarcodeModal({
   productId,
+  code,
   codebar: initialCodebar,
   description,
   salePrice,
@@ -61,20 +67,25 @@ export default function BarcodeModal({
   const [isPending] = useTransition();
   const [copies, setCopies] = useState(1);
   const [showPrice, setShowPrice] = useState(true);
+  const [barcodeSource, setBarcodeSource] = useState<"code" | "codebar">("code");
 
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
 
   const effectiveCodebar = savedCodebar || initialCodebar || null;
+  const hasCodebar = Boolean(effectiveCodebar);
+  const tagHeight = hasCodebar ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE;
+  const barcodeValue =
+    barcodeSource === "codebar" && effectiveCodebar ? effectiveCodebar : code;
 
-  const renderBarcode = (el: SVGSVGElement | null, code: string) => {
-    if (!el || !code) return;
+  const renderBarcode = useCallback((el: SVGSVGElement | null, value: string) => {
+    if (!el || !value) return;
     try {
-      JsBarcode(el, code, {
+      JsBarcode(el, value, {
         format: "CODE128",
         lineColor: "#000000",
         width: 2,
-        height: 60,
+        height: hasCodebar ? 60 : 40,
         displayValue: true,
         fontSize: 10,
         margin: 0,
@@ -82,13 +93,12 @@ export default function BarcodeModal({
     } catch {
       // silently ignore if SVG ref is stale
     }
-  };
+  }, [hasCodebar]);
 
-  // Regenerate when copies or effectiveCodebar changes
   useEffect(() => {
-    if (!effectiveCodebar || !open) return;
-    barcodeRefs.current.forEach((el) => renderBarcode(el, effectiveCodebar));
-  }, [effectiveCodebar, copies, open]);
+    if (!open || !code) return;
+    barcodeRefs.current.forEach((el) => renderBarcode(el, barcodeValue));
+  }, [barcodeValue, copies, open, code, renderBarcode]);
 
   const handleSave = () => {
     if (!barcodeInput.trim()) return;
@@ -108,12 +118,46 @@ export default function BarcodeModal({
   const handlePrint = async () => {
     if (printRef.current) {
       await printElement(printRef.current, {
-        documentTitle: `CodigoBarras_${effectiveCodebar}`,
+        documentTitle: `CodigoBarras_${barcodeValue}`,
         pageStyle: `
-          @page { size: 80mm auto; margin: 0; }
+          @page { size: 60mm auto; margin: 0; }
           @media print {
-            body { -webkit-print-color-adjust: exact; }
+            body { -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
             .no-print { display: none !important; }
+            .label-container {
+              width: 6.3cm !important;
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              padding: 2mm;
+              box-sizing: border-box;
+            }
+            .label-description {
+              font-size: 12px;
+              font-weight: 700;
+              text-align: center;
+              line-height: 1.1;
+              margin-bottom: 2px;
+              word-wrap: break-word;
+              width: 100%;
+            }
+            .label-price {
+              font-size: 16px;
+              font-weight: 800;
+              text-align: center;
+              margin-bottom: 2px;
+            }
+            .label-code {
+              font-size: 10px;
+              text-align: center;
+              margin-top: 1px;
+            }
+            .label-barcode {
+              text-align: center;
+              margin: 2px 0px;
+            }
           }
         `,
         format: "thermal",
@@ -132,6 +176,7 @@ export default function BarcodeModal({
             setBarcodeInput(initialCodebar || "");
             setSavedCodebar(initialCodebar || null);
             setIsEditing(!initialCodebar);
+            setBarcodeSource("code");
           });
         }
       }}>
@@ -231,8 +276,34 @@ export default function BarcodeModal({
               )}
             </div>
 
+            {hasCodebar && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider shrink-0">
+                  Generar desde
+                </span>
+                <Button
+                  type="button"
+                  variant={barcodeSource === "code" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setBarcodeSource("code")}
+                >
+                  Código interno: {code}
+                </Button>
+                <Button
+                  type="button"
+                  variant={barcodeSource === "codebar" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setBarcodeSource("codebar")}
+                >
+                  Código de barras: {effectiveCodebar}
+                </Button>
+              </div>
+            )}
+
             {/* ── Barcode preview ── */}
-            {effectiveCodebar && (
+            {code && (
               <div className="space-y-3">
                 <div className="border-t border-gray-100 dark:border-gray-800" />
 
@@ -242,36 +313,48 @@ export default function BarcodeModal({
                   </span>
                 </div>
 
-                {/* Cards */}
-                <div ref={printRef} className="no-print space-y-2 max-h-72 overflow-y-auto">
-                  {cards.map((_, i) => (
-                    <div
-                      key={i}
-                      className="flex flex-col items-center border border-dashed border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900"
-                    >
-                      <span
-                        contentEditable
-                        suppressContentEditableWarning
-                        spellCheck={false}
-                        className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1 truncate w-full text-center outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
-                        title="Haz clic para editar la descripción antes de imprimir"
+                <div className="no-print border rounded-md p-3 bg-slate-50 dark:bg-gray-900/40 max-h-72 overflow-y-auto">
+                  <div
+                    ref={printRef}
+                    className="mx-auto grid gap-3"
+                    style={{
+                      gridTemplateColumns: `repeat(auto-fill, minmax(${TAG_WIDTH}, 1fr))`,
+                      width: "100%",
+                    }}
+                  >
+                    {cards.map((_, i) => (
+                      <div
+                        key={i}
+                        className="label-container flex flex-col text-black items-center border border-dashed border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-900"
+                        style={{ width: TAG_WIDTH, height: tagHeight }}
                       >
-                        {description}
-                      </span>
-                      <svg
-                        ref={(el) => {
-                          barcodeRefs.current[i] = el;
-                          if (el && effectiveCodebar) renderBarcode(el, effectiveCodebar);
-                        }}
-                        className="w-full max-w-[200px]"
-                      />
-                      {showPrice && (
-                        <span className="text-base font-bold text-gray-900 dark:text-gray-100 mt-1">
-                          {formatPrice(salePrice, unit)}
+                        <span
+                          contentEditable
+                          suppressContentEditableWarning
+                          spellCheck={false}
+                          className="label-description text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1 truncate w-full text-center outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
+                          title="Haz clic para editar la descripción antes de imprimir"
+                        >
+                          {description}
                         </span>
-                      )}
-                    </div>
-                  ))}
+                        {showPrice && (
+                          <span className="label-price text-base font-bold text-gray-900 dark:text-gray-100">
+                            {formatPrice(salePrice, unit)}
+                          </span>
+                        )}
+                        <span className="label-code text-xs text-gray-600 dark:text-gray-400 mt-1">
+                          {code}
+                        </span>
+                        <svg
+                          ref={(el) => {
+                            barcodeRefs.current[i] = el;
+                            if (el) renderBarcode(el, barcodeValue);
+                          }}
+                          className="label-barcode w-full"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Copies + Price Toggle + Print */}

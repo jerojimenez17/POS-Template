@@ -67,8 +67,29 @@ const StockTable = ({ descriptionFilter }: props) => {
   }, [descriptionFilter]);
 
   useEffect(() => {
-    fetchProducts(1);
-  }, [fetchProducts]);
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const result = await getProductsPaginated({
+          page: 1,
+          pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
+          search: descriptionFilter || undefined,
+        });
+        if (!cancelled) {
+          setProducts(result.products as ProductExtended[]);
+          setTotalPages(result.totalPages);
+          setPage(result.page);
+        }
+      } catch (error) {
+        console.error("Error fetching products:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [descriptionFilter]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || (totalPages > 0 && newPage > totalPages)) return;
@@ -228,6 +249,7 @@ const StockTable = ({ descriptionFilter }: props) => {
                         }} disable={false} />
                       <BarcodeModal
                         productId={product.id}
+                        code={product.code}
                         codebar={product.codebar || undefined}
                         description={product.description || ""}
                         salePrice={product.salePrice}
