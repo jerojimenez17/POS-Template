@@ -9,7 +9,9 @@ import { toast } from "sonner";
 import { updateBusinessConfig } from "@/actions/business-config";
 
 interface GeneralTabProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onUpdate: (data: any) => void;
 }
 
@@ -33,8 +35,8 @@ export function GeneralTab({ data, onUpdate }: GeneralTabProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-0 shadow-md">
+      <CardHeader className="border-b bg-slate-50/50 dark:bg-slate-900/50 mb-4 rounded-t-xl">
         <CardTitle>Configuración General</CardTitle>
         <CardDescription>Parámetros generales del negocio</CardDescription>
       </CardHeader>
@@ -56,9 +58,11 @@ export function GeneralTab({ data, onUpdate }: GeneralTabProps) {
             onChange={(e) => setForm({ ...form, timezone: e.target.value })}
           />
         </div>
-        <Button onClick={handleSave} disabled={loading}>
-          {loading ? "Guardando..." : "Guardar cambios"}
-        </Button>
+        <div className="pt-4 border-t mt-6 flex justify-end">
+          <Button className="w-full sm:w-auto" onClick={handleSave} disabled={loading}>
+            {loading ? "Guardando..." : "Guardar cambios"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

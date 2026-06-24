@@ -2,6 +2,7 @@
 
 import { ReactNode } from "react";
 import Product from "@/models/Product";
+import JsBarcode from "jsbarcode";
 import {
   Dialog,
   DialogContent,
@@ -86,6 +87,40 @@ export function ProductModal({ product, children }: ProductModalProps) {
             <CardDescription>
               <strong>Unidad:</strong> {product.unit}
             </CardDescription>
+            {product.codebar && (
+              <>
+                <div className="border-t border-gray-100 dark:border-gray-800 my-2" />
+                <div>
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Código de Barras
+                  </span>
+                  <p className="text-sm font-mono text-gray-700 dark:text-gray-300 mt-1">
+                    {product.codebar}
+                  </p>
+                  <div className="mt-2 flex justify-center bg-white rounded-lg p-3 border border-gray-100">
+                    <svg
+                      ref={(el) => {
+                        if (el && product.codebar) {
+                          try {
+                            JsBarcode(el, product.codebar, {
+                              format: "CODE128",
+                              lineColor: "#000000",
+                              width: 2,
+                              height: 50,
+                              displayValue: false,
+                              margin: 0,
+                            });
+                          } catch {
+                            // silently ignore
+                          }
+                        }
+                      }}
+                      className="w-full max-w-[220px]"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
             {product.details && (
               <CardDescription>
                 <strong>Detalles:</strong> {product.details}

@@ -163,33 +163,41 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
   }, [filteredSales.length, itemsPerPage]);
 
   return (
-    <div className="text-center text-black flex flex-col w-full mb-20 px-4">
-      {" "}
-      <div className="h-20 my-8 sm:my-2 md:my-6 lg:my-4">
-        <p className="p-3 text-2xl text-gray-800 font-bold">
-          Total: $
-          {total.toLocaleString("es-AR", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-        </p>
-      </div>
-      <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-5">
+    <div className="flex flex-col w-full">
+      <div className="w-full bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* Compact total bar */}
+        <div className="flex items-center justify-between px-5 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              {filteredSales.length} resultado{filteredSales.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">Total</span>
+            <span className="text-xl font-bold text-gray-900 dark:text-gray-100 font-mono tabular-nums tracking-tight">
+              ${total.toLocaleString("es-AR", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </span>
+          </div>
+        </div>
+
+        {/* Scrollable table */}
         <div className="overflow-x-auto">
           <div className="min-w-max p-1">
             {/* Table Header */}
-            <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px] gap-4 px-5 py-3 border-b border-gray-100 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[700px] sm:w-full">
+            <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_90px] gap-4 px-5 py-3 border-b border-gray-100 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[700px] sm:w-full min-w-max">
               <div>Fecha</div>
               <div>Comprobante</div>
               <div>Medio Pago</div>
               <div>Vendedor</div>
               <div className="text-right pr-2">Total</div>
-              <div className="text-center">Imp.</div>
-              <div className="text-center">Del.</div>
+              <div className="text-center">Acciones</div>
             </div>
 
             {/* Table Body (Accordions) */}
-            <div className="flex flex-col">
+            <div className="flex flex-col divide-y divide-gray-100 dark:divide-gray-700">
               {currentSales.map((sale) => (
                 <SaleAccordion
                   session={session}
@@ -207,7 +215,7 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
         </div>
 
         {hasMore && (
-          <div className="flex justify-center py-4">
+          <div className="flex justify-center py-4 border-t border-gray-100 dark:border-gray-700">
             <Button
               variant="outline"
               onClick={handleLoadMore}
@@ -221,9 +229,10 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-4 bg-white bg-opacity-50 gap-4 mt-auto rounded-lg shadow-sm">
+      {/* Pagination */}
+      <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-4 gap-4 mt-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700 font-medium">Filas por página:</span>
+          <span className="text-sm text-gray-500 font-medium">Filas por página:</span>
           <Select
             value={itemsPerPage.toString()}
             onValueChange={(value) => setItemsPerPage(Number(value))}
@@ -241,7 +250,7 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
         </div>
 
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-700 font-medium">
+          <span className="text-sm text-gray-500 font-medium">
             Página {currentPage} de {totalPages || 1}
           </span>
           <div className="flex gap-2">

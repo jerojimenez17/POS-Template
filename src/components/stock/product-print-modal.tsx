@@ -52,8 +52,13 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
   const [showPrice, setShowPrice] = useState(true);
   const [key, setKey] = useState(0);
 
-  const tagHeight = isThermal ? undefined : TAG_HEIGHT_WITH_BARCODE;
-  const tagsPerPage = 15;
+  const hasAnyCodebar = products.some((p) => Boolean(p.codebar));
+  const tagHeight = isThermal
+    ? undefined
+    : hasAnyCodebar
+      ? TAG_HEIGHT_WITH_BARCODE
+      : TAG_HEIGHT_WITHOUT_BARCODE;
+  const tagsPerPage = hasAnyCodebar ? 15 : 24;
 
   const allTags: Array<{ product: ProductExtended; copyIndex: number; key: string }> = [];
   products.forEach((product) => {
@@ -72,13 +77,12 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
     products.forEach((product) => {
       for (let c = 0; c < copies; c++) {
         const barcodeEl = barcodeRefs.current[index];
-        const barcodeValue = product.codebar || product.code;
-        if (barcodeEl && barcodeValue) {
-          JsBarcode(barcodeEl, barcodeValue, {
+        if (barcodeEl && product.codebar) {
+          JsBarcode(barcodeEl, product.codebar, {
             format: "CODE128",
             lineColor: "#000000",
             width: 1.5,
-            height: 40,
+            height: hasAnyCodebar ? 40 : 30,
             displayValue: true,
             fontSize: 10,
             margin: 0,
@@ -87,7 +91,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
         index++;
       }
     });
-  }, [products, copies]);
+  }, [products, copies, hasAnyCodebar]);
 
   useEffect(() => {
     generateBarcodes();
@@ -292,7 +296,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                           <div className="label-code">
                             {tag.product.code}
                           </div>
-                          {(tag.product.codebar || tag.product.code) && (
+                          {tag.product.codebar ? (
                             <div className="label-barcode">
                               <svg
                                 ref={(el) => {
@@ -301,7 +305,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                                 className="w-full"
                               />
                             </div>
-                          )}
+                          ) : null}
                         </div>
                       );
                     })}

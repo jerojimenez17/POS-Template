@@ -2,7 +2,7 @@ import { getBusinessArcaData } from "@/actions/arca";
 import { ArcaForm } from "@/components/Superadmin/arca-form";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ArrowLeft, Settings } from "lucide-react";
 import { auth } from "../../../../auth";
 import { redirect } from "next/navigation";
 import { UserRole } from "@prisma/client";
@@ -22,14 +22,16 @@ export default async function AdminSettingsPage() {
 
   if (data.error || !data.success) {
     return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4">
-        <p className="text-destructive font-semibold">{data.error || "Datos no encontrados"}</p>
-        <Button asChild variant="outline">
-          <Link href="/">
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            Volver
-          </Link>
-        </Button>
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-4">
+          <p className="text-destructive font-semibold">{data.error || "Datos no encontrados"}</p>
+          <Button asChild variant="outline">
+            <Link href="/">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Volver
+            </Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -47,18 +49,29 @@ export default async function AdminSettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <div className="flex items-center space-x-4">
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/">
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            Volver
-          </Link>
-        </Button>
-        <h1 className="text-3xl font-bold">Configuración de Negocio (ARCA)</h1>
-      </div>
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-900">
+      <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild title="Volver">
+            <Link href="/">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <Settings className="h-5 w-5 text-blue-500" />
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">Configuración</h1>
+              <p className="text-sm text-gray-500 hidden sm:block">ARCA / facturación electrónica</p>
+            </div>
+          </div>
+        </div>
+      </header>
 
-      <ArcaForm businessId={businessId || ""} initialData={initialData} />
+      <div className="max-w-5xl mx-auto px-4 py-6">
+        <ArcaForm businessId={businessId || ""} initialData={initialData} />
+      </div>
     </div>
   );
 }

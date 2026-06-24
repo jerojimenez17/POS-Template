@@ -19,7 +19,6 @@ import { FormError } from "../ui/form-error";
 import { login } from "../actions/login";
 import { useSearchParams } from "next/navigation";
 
-
 export const LoginForm = () => {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>("");
@@ -73,7 +72,6 @@ export const LoginForm = () => {
                         type="email"
                         autoComplete="username"
                         disabled={isPending}
-                        className="transition-all duration-200 focus:scale-[1.02]"
                       />
                     </FormControl>
                     <FormMessage />
@@ -95,7 +93,6 @@ export const LoginForm = () => {
                         placeholder="Ingresa tu contraseña"
                         type="password"
                         disabled={isPending}
-                        className="transition-all duration-200 focus:scale-[1.02]"
                       />
                     </FormControl>
                     <FormMessage />
@@ -109,21 +106,19 @@ export const LoginForm = () => {
               <FormError message={error || urlError} />
             </div>
           )}
-          <div>
-            <Button
-              type="submit"
-              disabled={isPending}
-              className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {isPending ? (
-                <span className="animate-pulse">
-                  Iniciando sesión...
-                </span>
-              ) : (
-                "Iniciar sesión"
-              )}
-            </Button>
-          </div>
+          <Button
+            type="submit"
+            disabled={isPending}
+            className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+          >
+            {isPending ? (
+              <span className="animate-pulse">
+                Iniciando sesión...
+              </span>
+            ) : (
+              "Iniciar sesión"
+            )}
+          </Button>
         </form>
       </Form>
     </CardWrapper>

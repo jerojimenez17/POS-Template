@@ -287,8 +287,13 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
             autoComplete="off"
             spellCheck={false}
           />
+          {/* Overlay to dim table when suggestions are open */}
           {suggestions.length > 0 && (
-            <div className="absolute z-20 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl max-h-72 overflow-y-auto">
+            <div className="fixed inset-0 bg-black/10 dark:bg-black/30 z-10" onClick={() => { setSuggestions([]); setSelectedIndex(-1); }} />
+          )}
+
+          {suggestions.length > 0 && (
+            <div className="absolute z-20 w-full mt-2 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm border-2 border-gray-200 dark:border-gray-600 rounded-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 max-h-72 overflow-y-auto">
               {suggestions.map((product, index) => (
                 <div
                   key={product.id}

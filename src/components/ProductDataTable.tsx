@@ -9,14 +9,12 @@ import {
 } from "@tanstack/react-table";
 import Image from "next/image";
 import noImgPhoto from "../../public/no-image.svg";
-import Modal from "@/components/Modal";
 import ProductForm from "./stock/product-form";
 import { Button } from "./ui/button";
 import DeleteButton from "./DeleteButton";
-import CodeBarButton from "./stock/codebarButton";
+import BarcodeModal from "./stock/BarcodeModal";
 import ProductPrintModal from "./stock/product-print-modal";
-import SetCodebarModal from "./stock/set-codebar-modal";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import {
   Table,
   TableBody,
@@ -200,20 +198,13 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
               }}
               disable={false}
             />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                setPrintProduct(product);
-              }}
-              className="h-8 w-8"
-            >
-              <CodeBarButton />
-            </Button>
-            <SetCodebarModal
+            <BarcodeModal
               productId={product.id}
-              currentCodebar={product.codebar || undefined}
+              code={product.code}
+              codebar={product.codebar || undefined}
+              description={product.description || ""}
+              salePrice={product.salePrice}
+              unit={product.unit ?? undefined}
             />
           </div>
         );
@@ -457,21 +448,14 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                     }}
                     disable={false}
                   />
-<Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPrintProduct(product);
-                    }}
-                    className="h-8 w-8"
-                  >
-                    <CodeBarButton />
-                  </Button>
-                  <SetCodebarModal
-                    productId={product.id}
-                    currentCodebar={product.codebar || undefined}
-                  />
+<BarcodeModal
+                      productId={product.id}
+                      code={product.code}
+                      codebar={product.codebar || undefined}
+                      description={product.description || ""}
+                      salePrice={product.salePrice}
+                      unit={product.unit ?? undefined}
+                    />
                 </div>
               </div>
             );
@@ -488,47 +472,53 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              className="h-8 w-8"
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1}
-              className="h-8 px-3"
             >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              Anterior
+              <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
               {page} / {totalPages}
             </span>
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              className="h-8 w-8"
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages}
-              className="h-8 px-3"
             >
-              Siguiente
-              <ChevronRight className="h-4 w-4 ml-1" />
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
       )}
 
-      {productToEdit && openDeleteModal && (
-        <Modal
-          className="z-50 absolute"
-          blockButton={isPending}
-          onCancel={() => setOpenDeleteModal(false)}
-          visible={openDeleteModal}
-          key={productToEdit.id}
-          onClose={() => setOpenDeleteModal(false)}
-          onAcept={handleDelete}
-          message="¿Seguro que desea eliminar este producto?"
-        />
+      {productToEdit && (
+        <Dialog open={openDeleteModal} onOpenChange={setOpenDeleteModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Eliminar producto</DialogTitle>
+              <DialogDescription>
+                ¿Estás seguro de que deseas eliminar <strong>{productToEdit.description}</strong>? Esta acción no se puede deshacer.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setOpenDeleteModal(false)} disabled={isPending}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={isPending}>
+                {isPending ? "Eliminando..." : "Eliminar"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {productToEdit && openEditModal && (
         <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
-          <DialogContent className="sm:max-w-lg overflow-auto h-full max-h-[90vh]">
+          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Editar producto</DialogTitle>
             </DialogHeader>

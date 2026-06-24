@@ -483,7 +483,7 @@ export const processBulkProductBatch = async (
     }
 
     if (toUpdate.length > 0) {
-      const params: any[] = [];
+      const params: (string | number | null)[] = [];
       const placeholders = toUpdate.map((_, i) => {
         const n = i * 11;
         return `($${n + 1}::text,$${n + 2}::text,$${n + 3}::numeric,$${n + 4}::numeric,$${n + 5}::numeric,$${n + 6}::text,$${n + 7}::text,$${n + 8}::text,$${n + 9}::text,$${n + 10}::numeric,$${n + 11}::text)`;

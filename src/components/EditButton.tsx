@@ -16,16 +16,16 @@ const EditButton = ({ session, onSuccess }: props) => {
   const [loading, setLoading] = useState(false);
 
   return (
-    <div className="flex flex-col w-full sm:w-1/3 max-w-[200px] relative">
+    <div className="flex flex-col relative">
       <button
-        className="w-full py-3 px-4 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-lg shadow-sm border border-red-200 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400"
+        className="w-auto sm:min-w-[130px] py-2 px-3 sm:py-3 sm:px-4 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-lg shadow-sm border border-red-200 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400 text-sm sm:text-base whitespace-nowrap"
         onClick={() => setOpenTotalInput(!openTotalInput)}
       >
         Retiro
       </button>
       
       {openTotalInput && (
-        <div className="absolute top-full mt-2 w-full z-10 bg-white p-2 rounded-lg shadow-lg border border-gray-100 dark:border-gray-800 dark:bg-gray-900">
+        <div className="absolute right-0 top-full mt-2 w-[220px] sm:w-[260px] z-10 bg-white p-3 rounded-xl shadow-lg border border-gray-100 dark:border-gray-800 dark:bg-gray-900">
           <Input
             disabled={loading}
             type="number"

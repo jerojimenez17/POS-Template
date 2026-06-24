@@ -222,6 +222,73 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
     }
 }
 
+export interface OrderPrintData {
+  id: string;
+  date: Date;
+  total: number;
+  discountPercentage: number;
+  discountAmount: number;
+  seller: string | null;
+  status: string;
+  paidStatus: string;
+  paymentMethod: string | null;
+  client: { name: string | null } | null;
+  clientIvaCondition: string | null;
+  clientDocumentNumber: string | null;
+  items: Array<{
+    id: string;
+    productId: string | null;
+    description: string | null;
+    code: string | null;
+    price: number;
+    quantity: number;
+    subTotal: number;
+  }>;
+}
+
+export const getOrderForPrint = async (orderId: string): Promise<{ data?: OrderPrintData; error?: string }> => {
+  try {
+    const permissionResult = await assertWritePermission();
+    if (!permissionResult.success) return { error: permissionResult.error };
+
+    const order = await db.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        date: true,
+        total: true,
+        discountPercentage: true,
+        discountAmount: true,
+        seller: true,
+        status: true,
+        paidStatus: true,
+        paymentMethod: true,
+        clientIvaCondition: true,
+        clientDocumentNumber: true,
+        client: { select: { name: true } },
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            description: true,
+            code: true,
+            price: true,
+            quantity: true,
+            subTotal: true,
+          },
+        },
+      },
+    });
+
+    if (!order) return { error: "Orden no encontrada" };
+
+    return { data: order as OrderPrintData };
+  } catch (error) {
+    console.error("Error fetching order for print:", error);
+    return { error: "Error al obtener datos de la orden" };
+  }
+};
+
 export const updateOrderPaidStatus = async (orderId: string, newStatus: PaidStatus) => {
     try {
         const permissionResult = await assertWritePermission();

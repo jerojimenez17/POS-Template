@@ -19,12 +19,13 @@ import {
 } from "@/components/ui/table";
 import Spinner from "./ui/Spinner";
 import { Button } from "./ui/button";
-import { CalendarIcon, ChevronLeft, ChevronRight, BarChart3, PackagePlus, PackageMinus } from "lucide-react";
+import { CalendarIcon, ChevronLeft, ChevronRight, BarChart3, PackagePlus, PackageMinus, Search } from "lucide-react";
 import { format, addDays, subDays, addMonths, subMonths, addYears, subYears, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 import { es } from "date-fns/locale";
 import StockActivityModal, { StockActivityItem } from "./StockActivityModal";
 import { pusherClient } from "@/lib/pusher-client";
 import { Session } from "next-auth";
+import { useRouter } from "next/navigation";
 
 export interface PeriodicReportData {
   totalSales: number;
@@ -47,6 +48,7 @@ interface PeriodicReportProps {
 }
 
 const PeriodicReport: React.FC<PeriodicReportProps> = ({ period, session }) => {
+  const router = useRouter();
   const [date, setDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<PeriodicReportData | null>(null);
@@ -130,21 +132,53 @@ const PeriodicReport: React.FC<PeriodicReportProps> = ({ period, session }) => {
   const stockInsTotal = report?.stockActivity?.ins.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto border bg-white dark:bg-gray-900 rounded-xl shadow-sm">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-5xl mx-auto border bg-white dark:bg-gray-900 rounded-xl shadow-sm">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h2 className="text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">{title}</h2>
-        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border shadow-sm">
-          <Button variant="ghost" size="icon" onClick={handlePrev} className="h-8 w-8">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex items-center gap-2 px-3 min-w-[140px] justify-center">
-            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium text-sm capitalize">
-              {format(date, getFormatString(), { locale: es })}
-            </span>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border shadow-sm justify-between sm:justify-start">
+            <Button variant="ghost" size="icon" onClick={handlePrev} className="h-8 w-8 shrink-0">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-2 px-3 min-w-0 sm:min-w-[140px] justify-center">
+              <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="font-medium text-sm capitalize truncate">
+                {format(date, getFormatString(), { locale: es })}
+              </span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleNext} disabled={disableNext()} className="h-8 w-8 shrink-0">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleNext} disabled={disableNext()} className="h-8 w-8">
-            <ChevronRight className="h-4 w-4" />
+          <Button
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              const params = new URLSearchParams();
+              params.set("report", period);
+
+              let from = date;
+              let to = date;
+              if (period === "daily") {
+                from = date;
+                to = date;
+              } else if (period === "monthly") {
+                from = startOfMonth(date);
+                to = endOfMonth(date);
+              } else {
+                from = startOfYear(date);
+                to = endOfYear(date);
+              }
+              params.set("from", format(from, "yyyy-MM-dd"));
+              params.set("to", format(to, "yyyy-MM-dd"));
+              params.set("showAll", "true");
+
+              router.push(`/searchBill?${params.toString()}`);
+            }}
+            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-sm px-4 h-11 w-full sm:w-auto"
+          >
+            <Search className="h-5 w-4" />
+            Ver Ventas
           </Button>
         </div>
       </div>

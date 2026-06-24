@@ -4,8 +4,12 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import CodeBarModal from "@/components/stock/code-bar-modal";
+import BarcodeModal from "@/components/stock/BarcodeModal";
 import JsBarcode from "jsbarcode";
+
+vi.mock("@/actions/stock", () => ({
+  updateProduct: vi.fn().mockResolvedValue({ success: true }),
+}));
 
 vi.mock("@/components/ui/dialog", () => {
   let dialogOpen = false;
@@ -18,13 +22,7 @@ vi.mock("@/components/ui/dialog", () => {
     },
     DialogContent: ({ children }: { children: React.ReactNode }) =>
       dialogOpen ? <div data-testid="dialog-content">{children}</div> : null,
-    DialogHeader: ({ children }: { children: React.ReactNode }) =>
-      dialogOpen ? <div data-testid="dialog-header">{children}</div> : null,
-    DialogTitle: ({ children }: { children: React.ReactNode }) =>
-      dialogOpen ? <h2 data-testid="dialog-title">{children}</h2> : null,
-    DialogFooter: ({ children }: { children: React.ReactNode }) =>
-      dialogOpen ? <div data-testid="dialog-footer">{children}</div> : null,
-    DialogTrigger: ({ children, asChild }: any) => (
+    DialogTrigger: ({ children }: any) => (
       <div data-testid="dialog-trigger" onClick={() => onOpenChange?.(true)}>
         {children}
       </div>
@@ -33,9 +31,19 @@ vi.mock("@/components/ui/dialog", () => {
 });
 
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, onClick }: any) => (
-    <button onClick={onClick}>{children}</button>
+  Button: ({ children, onClick, type }: any) => (
+    <button type={type ?? "button"} onClick={onClick}>
+      {children}
+    </button>
   ),
+}));
+
+vi.mock("@/components/ui/input", () => ({
+  Input: (props: any) => <input {...props} />,
+}));
+
+vi.mock("next/dynamic", () => ({
+  default: () => () => null,
 }));
 
 vi.mock("jsbarcode", () => ({
@@ -46,8 +54,8 @@ vi.mock("@/lib/print", () => ({
   printElement: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("next-themes", () => ({
-  useTheme: () => ({ theme: "light", setTheme: vi.fn() }),
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 function openDialog() {
@@ -59,76 +67,46 @@ function renderAndOpen(elm: React.ReactElement) {
   openDialog();
 }
 
-describe("CodeBarModal Component", () => {
+const defaultProps = {
+  productId: "prod-1",
+  code: "CODE001",
+  description: "Test Product",
+  salePrice: 99.99,
+  unit: "Unidad",
+};
+
+describe("BarcodeModal Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe("Render product information", () => {
     it("should render the dialog title", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
-      expect(screen.getByText("Codigo de Barras")).toBeInTheDocument();
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
+      expect(screen.getByText("Código de Barras")).toBeInTheDocument();
     });
 
     it("should render product description on tag card", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
-      expect(screen.getByText("Test Product")).toBeInTheDocument();
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
+      expect(
+        document.querySelector(".label-description")?.textContent
+      ).toBe("Test Product");
     });
 
     it("should render product price with unit suffix on tag card", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
       expect(screen.getByText("$99.99/u")).toBeInTheDocument();
     });
 
     it("should render product code on tag card", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
       expect(screen.getByText("CODE001")).toBeInTheDocument();
     });
   });
 
   describe("Tag dimensions (AC1, AC2)", () => {
     it("should have tag width of 6cm", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
       const tagCards = document.querySelectorAll<HTMLElement>('[style*="width"]');
       const foundTag = Array.from(tagCards).find(
         (el) => el.style.width === "6.3cm"
@@ -137,15 +115,7 @@ describe("CodeBarModal Component", () => {
     });
 
     it("should have tag height of 3.5cm when codebar is null (AC1)", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
       const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
       const foundTag = Array.from(tagCards).find(
         (el) => el.style.height === "3.5cm"
@@ -155,13 +125,7 @@ describe("CodeBarModal Component", () => {
 
     it("should have tag height of 5cm when codebar is present (AC2)", () => {
       renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar="123456789012"
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
+        <BarcodeModal {...defaultProps} codebar="123456789012" />
       );
       const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
       const foundTag = Array.from(tagCards).find(
@@ -171,15 +135,7 @@ describe("CodeBarModal Component", () => {
     });
 
     it("should not have inline height when codebar is absent (no height set)", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
       const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
       const tagsWithWrongHeight = Array.from(tagCards).filter(
         (el) => el.style.height && el.style.height !== "3.5cm"
@@ -190,101 +146,52 @@ describe("CodeBarModal Component", () => {
 
   describe("Barcode rendering", () => {
     it("should render barcode SVG even without codebar (from internal code)", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
-      const barcodeSvg = document.querySelectorAll<HTMLElement>(
-        '[style*="width"][style*="height"] svg, svg[class*="w-full"]'
-      );
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
+      const barcodeSvg = document.querySelectorAll("svg.label-barcode, svg.w-full");
       expect(barcodeSvg.length).toBeGreaterThan(0);
     });
 
     it("should render barcode SVG when codebar is present", () => {
       renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar="123456789012"
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
+        <BarcodeModal {...defaultProps} codebar="123456789012" />
       );
-      const barcodeSvg = document.querySelectorAll<HTMLElement>(
-        '[style*="width"][style*="height"] svg, svg[class*="w-full"]'
-      );
+      const barcodeSvg = document.querySelectorAll("svg.label-barcode, svg.w-full");
       expect(barcodeSvg.length).toBeGreaterThan(0);
     });
 
     it("should display product code before barcode in DOM order", () => {
       renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar="123456789012"
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
+        <BarcodeModal {...defaultProps} codebar="123456789012" />
       );
-      const allElements = document.querySelectorAll("div, span, svg");
-      let codeIndex = -1;
-      let barcodeIndex = -1;
-      allElements.forEach((el, idx) => {
-        if (el.textContent?.trim() === "CODE001") codeIndex = idx;
-        if (el.tagName === "SVG") {
-          const hasRef = el.hasAttribute("ref") || el.classList.contains("w-full");
-          if (hasRef && barcodeIndex === -1) barcodeIndex = idx;
-        }
-      });
-      expect(codeIndex).toBeGreaterThan(-1);
-      expect(barcodeIndex).toBeGreaterThan(-1);
-      expect(codeIndex).toBeLessThan(barcodeIndex);
+      const tagCard = document.querySelector(".label-container");
+      expect(tagCard).toBeTruthy();
+      const codeEl = tagCard?.querySelector(".label-code");
+      const barcodeEl = tagCard?.querySelector("svg");
+      expect(codeEl).toBeTruthy();
+      expect(barcodeEl).toBeTruthy();
+      const position = codeEl!.compareDocumentPosition(barcodeEl!);
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
   });
 
   describe("Barcode source selector", () => {
     it("should show source selector buttons when codebar is present", () => {
       renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar="123456789012"
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
+        <BarcodeModal {...defaultProps} codebar="123456789012" />
       );
       expect(screen.getByText(/Código interno:/)).toBeInTheDocument();
       expect(screen.getByText(/Código de barras:/)).toBeInTheDocument();
     });
 
     it("should NOT show source selector when codebar is absent", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
       expect(screen.queryByText(/Código interno:/)).not.toBeInTheDocument();
       expect(screen.queryByText(/Código de barras:/)).not.toBeInTheDocument();
     });
 
     it("should switch to codebar source when clicking 'Código de barras' button", () => {
       renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar="779123456"
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
+        <BarcodeModal {...defaultProps} codebar="779123456" />
       );
       const barcodeButton = screen.getByText(/Código de barras: 779123456/);
       fireEvent.click(barcodeButton);
@@ -296,13 +203,7 @@ describe("CodeBarModal Component", () => {
     it("should call printElement with format thermal", async () => {
       const { printElement } = await import("@/lib/print");
       renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar="123456789012"
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
+        <BarcodeModal {...defaultProps} codebar="123456789012" />
       );
       const printButton = screen.getByText(/imprimir/i);
       fireEvent.click(printButton);
@@ -314,24 +215,17 @@ describe("CodeBarModal Component", () => {
   });
 
   describe("Copies multiplier", () => {
-    it("should multiply tag cards based on copies input", () => {
+    it("should multiply tag cards based on copies controls", () => {
       renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar="123456789012"
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
+        <BarcodeModal {...defaultProps} codebar="123456789012" />
       );
-      const descriptionElements = screen.getAllByText("Test Product");
-      expect(descriptionElements.length).toBe(1);
-      const copiesInput = screen.getByLabelText(/cantidad de copias/i);
-      fireEvent.change(copiesInput, { target: { value: "5" } });
-      const updatedElements = screen.getAllByText("Test Product");
-      expect(updatedElements.length).toBe(5);
+      const tagCards = document.querySelectorAll(".label-container");
+      expect(tagCards.length).toBe(1);
+      const plusButton = screen.getByText("+");
+      for (let i = 0; i < 4; i++) {
+        fireEvent.click(plusButton);
+      }
+      expect(document.querySelectorAll(".label-container").length).toBe(5);
     });
   });
 });
-
-

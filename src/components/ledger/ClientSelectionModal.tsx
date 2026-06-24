@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, startTransition } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
@@ -83,7 +83,6 @@ export default function ClientSelectionModal({
   totalWithDiscount,
 }: ClientSelectionModalProps) {
   const [clients, setClients] = useState<Client[]>([]);
-  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -95,6 +94,12 @@ export default function ClientSelectionModal({
   const [newClientCellPhone, setNewClientCellPhone] = useState("");
   const [newClientAddress, setNewClientAddress] = useState("");
   const [isCreatingClient, setIsCreatingClient] = useState(false);
+
+  // Siempre recalcular total desde items para evitar inconsistencias
+  const calculatedTotal = useMemo(
+    () => items.reduce((sum, item) => sum + item.salePrice * item.amount, 0),
+    [items]
+  );
   const [newClientCuit, setNewClientCuit] = useState("");
   const [newClientIvaCondition, setNewClientIvaCondition] = useState("");
 
@@ -107,6 +112,19 @@ export default function ClientSelectionModal({
   const [showExistingOrderDialog, setShowExistingOrderDialog] = useState(false);
   const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
 
+  const fetchClients = async () => {
+    setIsFetchingClients(true);
+    try {
+      const response = await fetch("/api/clients");
+      const data = await response.json();
+      setClients(data.clients || data);
+    } catch (error) {
+      console.error("Error fetching clients:", error);
+    } finally {
+      setIsFetchingClients(false);
+    }
+  };
+
   useEffect(() => {
     if (open) {
       fetchClients();
@@ -118,26 +136,40 @@ export default function ClientSelectionModal({
     }
   }, [open]);
 
-  useEffect(() => {
-    const results = clients.filter((client) =>
-      client.name.toLowerCase().includes(search.toLowerCase())
-    );
-    setFilteredClients(results);
-  }, [search, clients]);
+  const filteredClients = useMemo(
+    () =>
+      search
+        ? clients.filter((client) =>
+            client.name.toLowerCase().includes(search.toLowerCase())
+          )
+        : clients,
+    [clients, search]
+  );
 
-  const fetchClients = async () => {
-    setIsFetchingClients(true);
-    try {
-      const response = await fetch("/api/clients");
-      const data = await response.json();
-      setClients(data.clients || data);
-      setFilteredClients(data.clients || data);
-    } catch (error) {
-      console.error("Error fetching clients:", error);
-    } finally {
-      setIsFetchingClients(false);
+  useEffect(() => {
+    if (open) {
+      startTransition(() => {
+        setSelectedClientId("");
+        setExistingOrder(null);
+        setShowExistingOrderDialog(false);
+        setIsFetchingClients(true);
+      });
+      fetch("/api/clients")
+        .then((res) => res.json())
+        .then((data) => {
+          startTransition(() => {
+            setClients(data.clients || data);
+            setIsFetchingClients(false);
+          });
+        })
+        .catch((error) => {
+          console.error("Error fetching clients:", error);
+          startTransition(() => {
+            setIsFetchingClients(false);
+          });
+        });
     }
-  };
+  }, [open]);
 
   const handleCreateClient = async () => {
     if (!newClientName.trim()) {
@@ -181,6 +213,11 @@ export default function ClientSelectionModal({
   const handleSubmit = async () => {
     if (!selectedClientId) {
       toast.error("Por favor seleccione un cliente");
+      return;
+    }
+
+    if (calculatedTotal <= 0) {
+      toast.error("El total debe ser mayor a 0");
       return;
     }
 
@@ -255,7 +292,7 @@ export default function ClientSelectionModal({
             clientId,
             businessId,
             items: orderItems,
-            total,
+          total: calculatedTotal,
             clientIvaCondition: orderClientIva || undefined,
             clientDocumentNumber: orderClientCuit || undefined,
           }),
@@ -426,7 +463,7 @@ export default function ClientSelectionModal({
           <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
             <span className="text-sm text-muted-foreground">Total:</span>
             <span className="text-lg font-bold">
-              ${total.toLocaleString("es-AR")}
+              ${calculatedTotal.toLocaleString("es-AR")}
             </span>
           </div>
         </div>

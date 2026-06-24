@@ -1,17 +1,17 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Session } from "next-auth";
 import { Button } from "../ui/button";
 import { useContext, useEffect, useRef, useState } from "react";
 import { BillContext } from "@/context/BillContext";
-import Modal from "../Modal";
 import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
 import { createAfipVoucherAction } from "@/actions/afip";
 import { processSaleAction, updateOrderAction } from "@/actions/sales";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import Spinner from "../ui/Spinner";
 import ClientSelectionModal from "../ledger/ClientSelectionModal";
+import CheckoutModal from "./CheckoutModal";
 import { useRouter } from "next/navigation";
 import { useCashbox } from "@/context/CashboxContext";
 import {
@@ -21,7 +21,6 @@ import {
   DialogFooter,
   DialogTitle,
   DialogHeader,
-  DialogTrigger,
   DialogDescription,
 } from "../ui/dialog";
 import { Lock, FileText, Wallet, CheckCircle } from "lucide-react";
@@ -34,8 +33,9 @@ interface props {
   handlePrint: (cae?: CAE, win?: Window | null) => void;
   isEditing?: boolean;
   orderId?: string;
+  ptoVentas?: number[];
 }
-const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props) => {
+const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVentas }: props) => {
   const canUseBudget = session?.user?.business?.features?.hasBudget ?? false;
   const router = useRouter();
   const [createVoucherError, setCreateVoucherError] = useState(false);
@@ -54,7 +54,9 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator !== "undefined" ? navigator.onLine : true
+  );
 
   const checkSession = () => {
     if (!hasActiveSession) {
@@ -67,8 +69,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
@@ -81,6 +81,9 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     };
   }, []);
 
+  const [facturaKey, setFacturaKey] = useState(0);
+  const [remitoKey, setRemitoKey] = useState(0);
+
   // Global keydown listeners for F1, F2, F3 shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -92,6 +95,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
+        setFacturaKey(k => k + 1);
         setOpenFacturaModal(true);
       }
       if (e.key === 'F2') {
@@ -100,6 +104,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
+        setRemitoKey(k => k + 1);
         setOpenRemitoModal(true);
       }
       if (e.key === 'F3') {
@@ -132,7 +137,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   };
 
   const handleCreateVoucher = async (): Promise<CAE | null> => {
-    if (!checkConnection()) return null;
+    if (!checkConnection()) { setBlockButton(false); return null; }
     try {
       console.log("Calling createAfipVoucherAction");
       const resp = await createAfipVoucherAction(BillState);
@@ -176,7 +181,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   };
 
   const handleSaveSale = async (billState: typeBillState) => {
-    if (!checkConnection()) return;
+    if (!checkConnection()) { setBlockButton(false); return; }
     try {
       const result = await processSaleAction(billState);
       if ('error' in result && result.error) {
@@ -214,16 +219,21 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         return;
       }
 
-      if (
-        BillState.totalSecondMethod &&
-        totalAmount < BillState.totalSecondMethod
-      ) {
-        setErrorMessage(
-          "El monto del segundo medio de pago debe ser menor al total",
-        );
-        setOpenErrorModal(true);
-        setBlockButton(false);
-        return;
+      // Validación de pagos divididos: monto > 0 y suma igual al total
+      if (BillState.twoMethods) {
+        const secondAmount = BillState.totalSecondMethod || 0;
+        if (secondAmount < 1) {
+          setErrorMessage("El monto del segundo medio de pago debe ser mayor a $1");
+          setOpenErrorModal(true);
+          setBlockButton(false);
+          return;
+        }
+        if (secondAmount >= totalAmount) {
+          setErrorMessage("El monto del segundo medio de pago debe ser menor al total");
+          setOpenErrorModal(true);
+          setBlockButton(false);
+          return;
+        }
       }
 
       let caeData: CAE | null = null;
@@ -249,7 +259,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           CAE: caeData || localCAE,
           totalWithDiscount: totalAmount,
         });
-        toast.success("Factura guardada correctamente");
+        toast.success(afip ? "Factura guardada correctamente" : "Remito guardado correctamente");
       }
       return caeData || localCAE;
     } catch (err) {
@@ -267,8 +277,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [blockButton, setBlockButton] = useState(false);
   return (
     <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-3 py-4 px-4">
-      <Toaster position="top-right" richColors />
-
       {isEditing ? (
         <div className="flex w-full sm:w-auto">
           <Button
@@ -304,9 +312,11 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               if (session?.user.email) {
                 dispatch({ type: "sellerName", payload: session.user.email || "" });
               }
+              setFacturaKey(k => k + 1);
               setOpenFacturaModal(true);
             }}
-            className="rounded-lg h-11 px-6 font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 w-full sm:w-auto"
+            disabled={!hasActiveSession || BillState.products.length === 0}
+            className="rounded-lg h-11 px-6 font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 w-full sm:w-auto inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -325,18 +335,21 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               <line x1="16" y1="17" x2="8" y2="17" />
             </svg>
             Facturar
+            <kbd className="ml-1 text-[10px] bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded border border-white/10">F1</kbd>
           </Button>
 
           <Button
             variant="outline"
+            disabled={!hasActiveSession || BillState.products.length === 0}
             onClick={() => {
               if (!checkSession()) return;
               if (session?.user.email) {
                 dispatch({ type: "sellerName", payload: session.user.email || "" });
               }
+              setRemitoKey(k => k + 1);
               setOpenRemitoModal(true);
             }}
-            className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto"
+            className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -353,12 +366,13 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               <path d="M12 18h.01" />
             </svg>
             Remito
+            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F2</kbd>
           </Button>
 
           <Button
             variant="outline"
-            className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto"
-            disabled={BillState.products.length === 0}
+            className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!hasActiveSession || BillState.products.length === 0}
             onClick={() => {
               if (!checkSession()) return;
               setOpenAcuentaModal(true);
@@ -381,6 +395,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
             A cuenta
+            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F3</kbd>
           </Button>
 
           {canUseBudget && (
@@ -462,63 +477,80 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
       )}
 
       {blockButton && <Spinner />}
-      <Dialog open={openFacturaModal} onOpenChange={setOpenFacturaModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmar creación de Factura</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            ¿Está seguro que desea crear una factura?
-          </DialogDescription>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline" className="rounded-lg">
-                Cancelar
-              </Button>
-            </DialogClose>
-            <DialogClose asChild>
-              <Button
-                autoFocus
-                onClick={async () => {
-                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
-                  if (targetWin) {
-                    targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
-                  }
+      
+      <CheckoutModal
+        key={`factura-${facturaKey}`}
+        open={openFacturaModal}
+        onOpenChange={setOpenFacturaModal}
+        type="factura"
+        ptoVentas={ptoVentas}
+        onConfirm={async () => {
+          setBlockButton(true);
+          setOpenFacturaModal(false);
+          const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+          if (targetWin) {
+            targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
+          }
 
-                  setBlockButton(true);
-                  try {
-                    const caeResult = await createSale(true, false);
-                    if (!caeResult) {
-                      if (targetWin) targetWin.close();
-                      setBlockButton(false);
-                      return;
-                    }
-                    if (!openErrorModal && BillState.total > 0) {
-                      handlePrint(caeResult, targetWin);
-                      setTimeout(() => {
-                        dispatch({ type: "removeAll", payload: null });
-                        if (onOrderResetRef.current) {
-                          onOrderResetRef.current();
-                        }
-                      }, 5000);
-                    } else if (targetWin) {
-                       targetWin.close();
-                    }
-                    setOpenFacturaModal(false);
-                    setBlockButton(false);
-                  } catch (err) {
-                    if (targetWin) targetWin.close();
-                    console.error(err);
-                  }
-                }}
-                className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900"
-              >
-                Confirmar
-              </Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          try {
+            const caeResult = await createSale(true, false);
+            if (!caeResult) {
+              if (targetWin) targetWin.close();
+              setBlockButton(false);
+              return;
+            }
+            // Disparar impresión y limpiar estado después
+            handlePrint(caeResult, targetWin);
+            setTimeout(() => {
+              dispatch({ type: "removeAll", payload: null });
+              if (onOrderResetRef.current) {
+                onOrderResetRef.current();
+              }
+            }, 1500);
+            setBlockButton(false);
+          } catch (err) {
+            if (targetWin) targetWin.close();
+            console.error(err);
+          }
+        }}
+      />
+
+      <CheckoutModal
+        key={`remito-${remitoKey}`}
+        open={openRemitoModal}
+        onOpenChange={setOpenRemitoModal}
+        type="remito"
+        ptoVentas={ptoVentas}
+        onConfirm={async () => {
+          setBlockButton(true);
+          setOpenRemitoModal(false);
+          const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+          if (targetWin) {
+            targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
+          }
+
+          try {
+            const caeResult = await createSale(false, false);
+            if (!caeResult) {
+              if (targetWin) targetWin.close();
+              setBlockButton(false);
+              return;
+            }
+            // Disparar impresión y limpiar estado después
+            handlePrint(caeResult, targetWin);
+            setTimeout(() => {
+              dispatch({ type: "removeAll", payload: null });
+              if (onOrderResetRef.current) {
+                onOrderResetRef.current();
+              }
+            }, 1500);
+            setBlockButton(false);
+          } catch (err) {
+            if (targetWin) targetWin.close();
+            console.error(err);
+          }
+        }}
+      />
 
       {/* UPDATE DIALOG */}
       <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
@@ -568,70 +600,16 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={openRemitoModal} onOpenChange={setOpenRemitoModal}>
+      <Dialog open={openErrorModal} onOpenChange={setOpenErrorModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar creación de Remito</DialogTitle>
+            <DialogTitle>Error</DialogTitle>
+            <DialogDescription>
+              {errorMessage}
+            </DialogDescription>
           </DialogHeader>
-          <DialogDescription>
-            ¿Está seguro que desea crear un remito?
-          </DialogDescription>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline" className="rounded-lg">
-                Cancelar
-              </Button>
-            </DialogClose>
-            <DialogClose asChild>
-              <Button
-                autoFocus
-                onClick={async () => {
-                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
-                  if (targetWin) {
-                    targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
-                  }
-
-                  setBlockButton(true);
-                  try {
-                    const caeResult = await createSale(false, false);
-                    if (!caeResult) {
-                      if (targetWin) targetWin.close();
-                      setBlockButton(false);
-                      return;
-                    }
-                    if (!openErrorModal && BillState.total > 0) {
-                      handlePrint(caeResult, targetWin);
-                      setTimeout(() => {
-                        dispatch({ type: "removeAll", payload: null });
-                        if (onOrderResetRef.current) {
-                          onOrderResetRef.current();
-                        }
-                      }, 5000);
-                    } else if (targetWin) {
-                       targetWin.close();
-                    }
-                    setOpenRemitoModal(false);
-                    setBlockButton(false);
-                  } catch (err) {
-                    if (targetWin) targetWin.close();
-                    console.error(err);
-                  }
-                }}
-                className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900"
-              >
-                Confirmar
-              </Button>
-            </DialogClose>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Modal
-        visible={openErrorModal}
-        onClose={() => setOpenErrorModal(false)}
-        blockButton={false}
-        message={errorMessage}
-      ></Modal>
     </div>
   );
 };

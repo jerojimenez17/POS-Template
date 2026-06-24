@@ -341,7 +341,7 @@ const ProductForm = ({ product, onClose }: Props) => {
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
+        className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4"
       >
         <div className="col-span-1 md:col-span-2 space-y-2">
           <FormField
@@ -510,7 +510,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                       className="h-10 w-10 text-gray-500 hover:text-black"
                       title="Escanear código de barras"
                     >
-                      <ScanBarcode className="h-5 w-5" />
+                      <ScanBarcode className="h-4 w-4" />
                     </Button>
                   </div>
                 </FormControl>
@@ -597,140 +597,132 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
-        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="category"
             render={({ field }) => (
-              <FormItem className="flex-1">
+              <FormItem>
                 <FormLabel>
                   Categoria <span className="text-red-500">*</span>
                 </FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona Categoria" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent className="text-black bg-white">
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona Categoria" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent className="text-black bg-white">
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <CreateAttributeModal
+                    type="category"
+                    onSuccess={handleCategorySuccess}
+                  />
+                </div>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <div className="pt-1.5">
-            <CreateAttributeModal
-              type="category"
-              onSuccess={handleCategorySuccess}
-            />
-          </div>
-        </div>
-        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="subCategory"
             render={({ field }) => (
-              <FormItem className="flex-1">
+              <FormItem>
                 <FormLabel>Subcategoría</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                  disabled={!selectedCategoryId}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {subcategories.map((sub) => (
-                      <SelectItem key={sub.id} value={sub.id}>
-                        {sub.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    disabled={!selectedCategoryId}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {subcategories.map((sub) => (
+                        <SelectItem key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <CreateAttributeModal
+                    type="subcategory"
+                    parentId={selectedCategoryId}
+                    onSuccess={handleSubcategorySuccess}
+                  />
+                </div>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <div className="pt-1.5">
-            <CreateAttributeModal
-              type="subcategory"
-              parentId={selectedCategoryId}
-              onSuccess={handleSubcategorySuccess}
-            />
-          </div>
-        </div>
-        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="brand"
             render={({ field }) => (
-              <FormItem className="flex-1">
+              <FormItem>
                 <FormLabel>
                   Marca <span className="text-red-500">*</span>
                 </FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {brands.map((brand) => (
-                      <SelectItem key={brand.id} value={brand.id}>
-                        {brand.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {brands.map((brand) => (
+                        <SelectItem key={brand.id} value={brand.id}>
+                          {brand.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <CreateAttributeModal type="brand" onSuccess={handleBrandSuccess} />
+                </div>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <div className="pt-1.5">
-            <CreateAttributeModal type="brand" onSuccess={handleBrandSuccess} />
-          </div>
-        </div>
-        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="supplier"
             render={({ field }) => (
-              <FormItem className="flex-1">
+              <FormItem>
                 <FormLabel>Proveedor</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {suppliers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <CreateAttributeModal
+                    type="supplier"
+                    onSuccess={handleSupplierSuccess}
+                  />
+                </div>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <div className="pt-1.5">
-            <CreateAttributeModal
-              type="supplier"
-              onSuccess={handleSupplierSuccess}
-            />
-          </div>
-        </div>
 
         <div className="space-y-2">
           <FormField

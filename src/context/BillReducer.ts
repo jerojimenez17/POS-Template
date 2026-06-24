@@ -25,6 +25,8 @@ type BillAction =
   | { type: "paidMethod"; payload: string }
   | { type: "billType"; payload: string }
   | { type: "CAE"; payload: CAE }
+  | { type: "clientId"; payload: string }
+  | { type: "client"; payload: string }
   | { type: "setState"; payload: BillState };
 
 export const BillReducer = (
@@ -92,13 +94,21 @@ export const BillReducer = (
           return product;
         }),
       };
-    case "removeItem":
+    case "removeItem": {
+      const filtered = state.products.filter(
+        (product: Product) => product.id !== action.payload.id
+      );
+      const recalculatedTotal = filtered.reduce(
+        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+        0
+      );
       return {
         ...state,
-        products: state.products.filter(
-          (product: Product) => product.id !== action.payload.id
-        ),
+        products: filtered,
+        total: recalculatedTotal,
+        totalWithDiscount: recalculatedTotal * (1 - (state.discount || 0) * 0.01),
       };
+    }
     case "removeAll":
       return {
         ...state,
@@ -110,6 +120,9 @@ export const BillReducer = (
         total: 0,
         date: new Date(),
         paidMethod: "Efectivo",
+        twoMethods: false,
+        secondPaidMethod: undefined,
+        totalSecondMethod: null,
         totalWithDiscount: 0,
         pago: false,
         entrega: 0,
@@ -117,28 +130,42 @@ export const BillReducer = (
         typeDocument: "",
         CAE: { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" },
       };
-    case "changePrice":
+    case "changePrice": {
+      const priceChanged = state.products.map(({ ...product }) => {
+        if (product.id === action.payload.id) {
+          product.price = action.payload.price;
+        }
+        return product;
+      });
+      const priceTotal = priceChanged.reduce(
+        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+        0
+      );
       return {
         ...state,
-        products: state.products.map(({ ...product }) => {
-          if (product.id === action.payload.id) {
-            product.price = action.payload.price;
-          }
-
-          return product;
-        }),
+        products: priceChanged,
+        total: priceTotal,
+        totalWithDiscount: priceTotal * (1 - (state.discount || 0) * 0.01),
       };
-    case "changeUnit":
+    }
+    case "changeUnit": {
+      const unitChanged = state.products.map(({ ...product }) => {
+        if (product.id === action.payload.id) {
+          product.amount = action.payload.amount;
+        }
+        return product;
+      });
+      const unitTotal = unitChanged.reduce(
+        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+        0
+      );
       return {
         ...state,
-        products: state.products.map(({ ...product }) => {
-          if (product.id === action.payload.id) {
-            product.amount = action.payload.amount;
-          }
-
-          return product;
-        }),
+        products: unitChanged,
+        total: unitTotal,
+        totalWithDiscount: unitTotal * (1 - (state.discount || 0) * 0.01),
       };
+    }
     case "total":
       return {
         ...state,
@@ -218,6 +245,18 @@ export const BillReducer = (
       return {
         ...state,
         date: action.payload,
+      };
+    }
+    case "clientId": {
+      return {
+        ...state,
+        clientId: action.payload,
+      };
+    }
+    case "client": {
+      return {
+        ...state,
+        client: action.payload,
       };
     }
     case "setState": {

@@ -15,7 +15,9 @@ type FiltersAction =
   | { type: "disableStartDate"; payload: null }
   | { type: "seller"; payload: string }
   | { type: "disableSeller"; payload: null }
-  | { type: "disableEndDate"; payload: null };
+  | { type: "disableEndDate"; payload: null }
+  | { type: "reset"; payload: null }
+  | { type: "initFromUrl"; payload: { startDate?: Date; endDate?: Date; showAll?: boolean } };
 
 export const FiltersReducer = (
   state: FiltersState,
@@ -147,7 +149,54 @@ export const FiltersReducer = (
           active: false,
         },
       };
+    case "initFromUrl": {
+      const newState = { ...state };
+
+      if (action.payload.startDate) {
+        newState.startDate = { active: true, date: action.payload.startDate };
+      }
+      if (action.payload.endDate) {
+        newState.endDate = { active: true, date: action.payload.endDate };
+      }
+
+      if (action.payload.showAll) {
+        // Desactivar todos los medios de pago para mostrar todo
+        newState.Efectivo = { ...newState.Efectivo, active: false };
+        newState.Debito = { ...newState.Debito, active: false };
+        newState.UnPago = { ...newState.UnPago, active: false };
+        newState.Ahora3 = { ...newState.Ahora3, active: false };
+        newState.Ahora6 = { ...newState.Ahora6, active: false };
+        newState.Transferencia = { ...newState.Transferencia, active: false };
+        newState.CuentaDNI = { ...newState.CuentaDNI, active: false };
+        // Mostrar ambos tipos de comprobante
+        newState.Remito = { ...newState.Remito, active: true };
+        newState.FacturaC = { ...newState.FacturaC, active: true };
+        // Desactivar filtro de vendedor
+        newState.Seller = { ...newState.Seller, active: false };
+      }
+
+      return newState;
+    }
     default:
       return state;
+
+    case "reset":
+      const now = new Date();
+      const resetStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const resetEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      return {
+        Remito: { active: true, filter: "remito" },
+        Seller: { active: false, filter: "Seleccionar Vendedor" },
+        FacturaC: { active: false, filter: "facturac" },
+        Debito: { active: false, filter: "debito" },
+        UnPago: { active: false, filter: "Credito 1 pago" },
+        Ahora3: { active: false, filter: "ahora 3" },
+        Ahora6: { active: false, filter: "ahora 6" },
+        Transferencia: { active: false, filter: "transferencia" },
+        Efectivo: { active: true, filter: "efectivo" },
+        CuentaDNI: { active: false, filter: "cuentaDNI" },
+        startDate: { active: true, date: resetStart },
+        endDate: { active: true, date: resetEnd },
+      };
   }
 };

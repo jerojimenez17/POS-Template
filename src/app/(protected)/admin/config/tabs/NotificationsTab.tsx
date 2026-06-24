@@ -10,7 +10,9 @@ import { toast } from "sonner";
 import { updateBusinessConfig } from "@/actions/business-config";
 
 interface NotificationsTabProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onUpdate: (data: any) => void;
 }
 
