@@ -12,6 +12,7 @@ const CodeBarButton = () => {
       width="30px"
       height="30px"
       viewBox="0 0 426.494 426.494"
+      data-testid="codebar-button-icon"
     >
       <g>
         <g>
