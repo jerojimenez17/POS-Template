@@ -20,6 +20,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   products: ProductExtended[];
+  format?: "a4" | "thermal";
 }
 
 const UNIT_SUFFIX_MAP: Record<string, string> = {
@@ -43,16 +44,16 @@ const TAG_WIDTH = "6.3cm";
 const TAG_HEIGHT_WITH_BARCODE = "5cm";
 const TAG_HEIGHT_WITHOUT_BARCODE = "3.5cm";
 
-const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
+const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Props) => {
+  const isThermal = format === "thermal";
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
   const [copies, setCopies] = useState(1);
   const [showPrice, setShowPrice] = useState(true);
   const [key, setKey] = useState(0);
 
-  const hasCodebar = products.some(p => p.codebar);
-  const tagHeight = hasCodebar ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE;
-  const tagsPerPage = hasCodebar ? 15 : 24;
+  const tagHeight = isThermal ? undefined : TAG_HEIGHT_WITH_BARCODE;
+  const tagsPerPage = 15;
 
   const allTags: Array<{ product: ProductExtended; copyIndex: number; key: string }> = [];
   products.forEach((product) => {
@@ -71,8 +72,9 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
     products.forEach((product) => {
       for (let c = 0; c < copies; c++) {
         const barcodeEl = barcodeRefs.current[index];
-        if (barcodeEl && product.codebar) {
-          JsBarcode(barcodeEl, product.codebar, {
+        const barcodeValue = product.codebar || product.code;
+        if (barcodeEl && barcodeValue) {
+          JsBarcode(barcodeEl, barcodeValue, {
             format: "CODE128",
             lineColor: "#000000",
             width: 1.5,
@@ -88,10 +90,9 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
   }, [products, copies]);
 
   useEffect(() => {
-    if (open) {
-      generateBarcodes();
-    }
-  }, [key, open, products, copies, generateBarcodes]);
+    generateBarcodes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   const handleCopiesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value, 10);
@@ -101,27 +102,24 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
   };
 
   const handlePrint = async () => {
-    generateBarcodes();
     if (printRef.current) {
-      await printElement(printRef.current, {
-        documentTitle: `Etiquetas_${new Date().toISOString().split("T")[0]}`,
-        pageStyle: `
-          @page { size: A4; margin: 5mm; }
+      const pageStyle = isThermal ? `
+          @page { size: 60mm auto; margin: 0; }
           @media print {
             body { -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
             .no-print { display: none !important; }
             .label-description {
-              font-size: 14px;
-              font-weight: 700;
+              font-size: 16px;
+              font-weight: 800;
               text-align: center;
-              line-height: 1.2;
-              margin-bottom: 2px;
+              line-height: 1.3;
+              margin-bottom: 4px;
               word-wrap: break-word;
               width: 100%;
             }
             .label-price {
-              font-size: 18px;
-              font-weight: 800;
+              font-size: 13px;
+              font-weight: 700;
               text-align: center;
               margin-bottom: 2px;
             }
@@ -130,13 +128,49 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
               margin: 4px 0px;
             }
             .label-code {
-              font-size: 12px;
+              font-size: 10px;
               text-align: center;
               margin-top: 2px;
             }
           }
-        `,
-        format: "a4",
+        ` : `
+          @page { size: A4; margin: 5mm; }
+          @media print {
+            body { -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
+            .no-print { display: none !important; }
+            .label-container {
+              overflow: visible !important;
+            }
+            .label-description {
+              font-size: 16px;
+              font-weight: 800;
+              text-align: center;
+              line-height: 1.3;
+              margin-bottom: 4px;
+              word-wrap: break-word;
+              width: 100%;
+            }
+            .label-price {
+              font-size: 13px;
+              font-weight: 700;
+              text-align: center;
+              margin-bottom: 2px;
+            }
+            .label-barcode {
+              text-align: center;
+              margin: 4px 0px;
+            }
+            .label-code {
+              font-size: 10px;
+              text-align: center;
+              margin-top: 2px;
+            }
+          }
+        `;
+      await printElement(printRef.current, {
+        documentTitle: `Etiquetas_${new Date().toISOString().split("T")[0]}`,
+        pageStyle,
+        format: isThermal ? "thermal" : "a4",
       });
     }
   };
@@ -180,63 +214,101 @@ const ProductPrintModal = ({ open, onOpenChange, products }: Props) => {
 
         <div className="no-print border rounded-md p-4 bg-slate-50 max-h-96 overflow-y-auto">
           <div ref={printRef}>
-            {pages.map((page, pageIndex) => (
-              <div
-                key={pageIndex}
-                style={pageIndex < pages.length - 1 ? { pageBreakAfter: "always" } : undefined}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: `repeat(3, ${TAG_WIDTH})`,
-                    gap: "2mm",
-                    justifyContent: "center",
-                  }}
-                >
-                  {page.map((tag, tagIndex) => {
-                    const globalIndex = pageIndex * tagsPerPage + tagIndex;
-                    const unitSuffix = getUnitSuffix(tag.product.unit ?? undefined);
-                    const formattedPrice = formatPrice(tag.product.salePrice, unitSuffix);
-
-                    return (
-                      <div
-                        key={tag.key}
-                        className="flex flex-col text-black items-center justify-center border border-dashed border-gray-300 rounded p-2 bg-white label-container"
-                        style={{ width: TAG_WIDTH, height: tagHeight, overflow: "hidden" }}
-                      >
-                        <div
-                          className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
-                          contentEditable
-                          suppressContentEditableWarning
-                          spellCheck={false}
-                          title="Haz clic para editar la descripción antes de imprimir"
-                        >
-                          {tag.product.description}
-                        </div>
-                        {showPrice && (
-                          <div className="label-price">
-                            {formattedPrice}
-                          </div>
-                        )}
-                        <div className="label-code">
-                          {tag.product.code}
-                        </div>
-                        {tag.product.codebar && (
-                          <div className="label-barcode">
-                            <svg
-                              ref={(el) => {
-                                barcodeRefs.current[globalIndex] = el;
-                              }}
-                              className="w-full"
-                            />
-                          </div>
-                        )}
+            {isThermal ? (
+              <div className="flex flex-col items-center gap-3">
+                {allTags.map((tag, globalIndex) => {
+                  const unitSuffix = getUnitSuffix(tag.product.unit ?? undefined);
+                  const formattedPrice = formatPrice(tag.product.salePrice, unitSuffix);
+                  return (
+                    <div
+                      key={tag.key}
+                      className="flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white"
+                      style={{ width: TAG_WIDTH }}
+                    >
+                      <div className="label-description">
+                        {tag.product.description}
                       </div>
-                    );
-                  })}
-                </div>
+                      {showPrice && (
+                        <div className="label-price">
+                          {formattedPrice}
+                        </div>
+                      )}
+                      <div className="label-code">
+                        {tag.product.code}
+                      </div>
+                      <svg
+                        ref={(el) => {
+                          if (el) {
+                            barcodeRefs.current[globalIndex] = el;
+                          } else {
+                            barcodeRefs.current[globalIndex] = null;
+                          }
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            ) : (
+              pages.map((page, pageIndex) => (
+                <div
+                  key={pageIndex}
+                  style={pageIndex < pages.length - 1 ? { pageBreakAfter: "always" } : undefined}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: `repeat(3, ${TAG_WIDTH})`,
+                      gap: "2mm",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {page.map((tag, tagIndex) => {
+                      const globalIndex = pageIndex * tagsPerPage + tagIndex;
+                      const unitSuffix = getUnitSuffix(tag.product.unit ?? undefined);
+                      const formattedPrice = formatPrice(tag.product.salePrice, unitSuffix);
+
+                      return (
+                        <div
+                          key={tag.key}
+                          className="flex flex-col text-black items-center justify-center border border-dashed border-gray-300 rounded p-2 bg-white label-container"
+                          style={{ width: TAG_WIDTH, height: tagHeight, overflow: "hidden" }}
+                        >
+                          <div
+                            className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
+                            contentEditable
+                            suppressContentEditableWarning
+                            spellCheck={false}
+                            title="Haz clic para editar la descripción antes de imprimir"
+                          >
+                            {tag.product.description}
+                          </div>
+                          {showPrice && (
+                            <div className="label-price">
+                              {formattedPrice}
+                            </div>
+                          )}
+                          <div className="label-code">
+                            {tag.product.code}
+                          </div>
+                          {(tag.product.codebar || tag.product.code) && (
+                            <div className="label-barcode">
+                              <svg
+                                ref={(el) => {
+                                  barcodeRefs.current[globalIndex] = el;
+                                }}
+                                className="w-full"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

@@ -13,7 +13,8 @@ import Modal from "@/components/Modal";
 import ProductForm from "./stock/product-form";
 import { Button } from "./ui/button";
 import DeleteButton from "./DeleteButton";
-import CodeBarModal from "./stock/code-bar-modal";
+import CodeBarButton from "./stock/codebarButton";
+import ProductPrintModal from "./stock/product-print-modal";
 import SetCodebarModal from "./stock/set-codebar-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import {
@@ -53,6 +54,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);
   const [productToEdit, setProductToEdit] = useState<ProductExtended | null>(null);
+  const [printProduct, setPrintProduct] = useState<ProductExtended | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const sortedProducts = useMemo(() => {
@@ -198,13 +200,17 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
               }}
               disable={false}
             />
-            <CodeBarModal 
-                      code={product.code || ""}
-                      codebar={product.codebar || undefined}
-                      description={product.description || ""}
-                      salePrice={product.salePrice}
-                      unit={product.unit ?? undefined}
-                    />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPrintProduct(product);
+              }}
+              className="h-8 w-8"
+            >
+              <CodeBarButton />
+            </Button>
             <SetCodebarModal
               productId={product.id}
               currentCodebar={product.codebar || undefined}
@@ -451,13 +457,17 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                     }}
                     disable={false}
                   />
-<CodeBarModal 
-                      code={product.code || ""}
-                      codebar={product.codebar || undefined}
-                      description={product.description || ""}
-                      salePrice={product.salePrice}
-                      unit={product.unit ?? undefined}
-                    />
+<Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPrintProduct(product);
+                    }}
+                    className="h-8 w-8"
+                  >
+                    <CodeBarButton />
+                  </Button>
                   <SetCodebarModal
                     productId={product.id}
                     currentCodebar={product.codebar || undefined}
@@ -532,6 +542,15 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
             />
           </DialogContent>
         </Dialog>
+      )}
+
+      {printProduct && (
+        <ProductPrintModal
+          open={true}
+          onOpenChange={(open) => { if (!open) setPrintProduct(null); }}
+          products={[printProduct]}
+          format="thermal"
+        />
       )}
     </div>
   );
