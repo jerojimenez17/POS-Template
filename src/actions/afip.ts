@@ -10,7 +10,7 @@ import { getArcaCredentialsForBilling } from "./arca";
  * This action validates the user session and uses a shared secret for authentication.
  */
 export const createAfipVoucherAction = async (billState: BillState) => {
-  const featureResult = await requireFeature("hasBilling");
+  const featureResult = await requireFeature("hasAfipBilling");
   if (!featureResult.success) {
     return { error: featureResult.error };
   }
