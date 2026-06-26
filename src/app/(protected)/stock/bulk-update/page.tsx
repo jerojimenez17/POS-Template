@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { CheckSquare, Square, Printer, Percent, ArrowLeft, Filter, X } from "lucide-react";
+import { CheckSquare, Square, Printer, Percent, ArrowLeft, Filter, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { getProductsFiltered, bulkUpdatePrices, getSuppliersForFilter } from "@/actions/stock";
 import { getCategories } from "@/actions/categories";
 import { getBrands } from "@/actions/brands";
@@ -38,29 +38,52 @@ const BulkUpdatePage = () => {
   const [percentage, setPercentage] = useState<string>("");
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [filterVersion, setFilterVersion] = useState(0);
+  const isFirstLoadAfterFilter = useRef(true);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getProductsFiltered({
+      const result = await getProductsFiltered({
         search: filters.search || undefined,
         categoryId: filters.categoryId || undefined,
         brandId: filters.brandId || undefined,
         unit: filters.unit || undefined,
         supplierId: filters.supplierId || undefined,
+        page,
+        pageSize,
       });
-      setFilteredProducts(data as ProductExtended[]);
-      setSelectedIds(new Set(data.map((p: ProductExtended) => p.id)));
+      setFilteredProducts(result.products as ProductExtended[]);
+      // On first load after applying filters, select all products on current page
+      if (isFirstLoadAfterFilter.current) {
+        setSelectedIds(new Set(result.products.map((p: ProductExtended) => p.id)));
+        isFirstLoadAfterFilter.current = false;
+      }
+      setTotal(result.total);
+      setPage(result.page);
+      setTotalPages(result.totalPages);
     } catch (error) {
       console.error("Error fetching products:", error);
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, page, pageSize]);
 
   useEffect(() => {
     loadFiltersData();
   }, []);
+
+  // Auto-fetch products when page, pageSize, or filters change
+  useEffect(() => {
+    if (hasLoaded) {
+      fetchProducts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, hasLoaded, filterVersion]);
 
   const loadFiltersData = async () => {
     try {
@@ -78,11 +101,17 @@ const BulkUpdatePage = () => {
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.size === filteredProducts.length) {
-      setSelectedIds(new Set());
+    const currentPageIds = filteredProducts.map((p) => p.id);
+    const allOnPageSelected = currentPageIds.every((id) => selectedIds.has(id));
+    const newSelected = new Set(selectedIds);
+    if (allOnPageSelected) {
+      // Deselect only current page products
+      currentPageIds.forEach((id) => newSelected.delete(id));
     } else {
-      setSelectedIds(new Set(filteredProducts.map((p) => p.id)));
+      // Select all current page products
+      currentPageIds.forEach((id) => newSelected.add(id));
     }
+    setSelectedIds(newSelected);
   };
 
   const handleToggleProduct = (id: string) => {
@@ -238,7 +267,7 @@ const BulkUpdatePage = () => {
                   </select>
                 </div>
 
-                <Button onClick={() => { setHasLoaded(true); fetchProducts(); setIsFiltersOpen(false); }} variant="default" className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                <Button onClick={() => { setHasLoaded(true); setPage(1); setSelectedIds(new Set()); isFirstLoadAfterFilter.current = true; setFilterVersion(v => v + 1); setIsFiltersOpen(false); }} variant="default" className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
                   Aplicar Filtros
                 </Button>
               </div>
@@ -437,6 +466,49 @@ const BulkUpdatePage = () => {
                   ))}
                 </div>
               </>
+            )}
+
+            {/* Pagination */}
+            {total > 0 && (
+              <div className="flex items-center justify-between px-2 py-4 border-t">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {(page - 1) * pageSize + 1}&ndash;{Math.min(page * pageSize, total)} de {total.toLocaleString("es-AR")} productos
+                  </span>
+                  {/* Page size selector */}
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="text-sm border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                  >
+                    <option value={25}>25 por página</option>
+                    <option value={50}>50 por página</option>
+                    <option value={100}>100 por página</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" onClick={() => setPage(1)} disabled={page <= 1} className="h-8 w-8 p-0">
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page <= 1} className="h-8 px-3">
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-gray-500 dark:text-gray-400 px-3">
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages} className="h-8 px-3">
+                    Siguiente
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPage(totalPages)} disabled={page >= totalPages} className="h-8 w-8 p-0">
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
         </main>

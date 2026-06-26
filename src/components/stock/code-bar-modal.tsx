@@ -25,21 +25,9 @@ interface Props {
   unit?: string;
 }
 
-const UNIT_SUFFIX_MAP: Record<string, string> = {
-  Unidad: "/u",
-  Kg: "/kg",
-  Gramo: "/g",
-  Litro: "/l",
-  Metro: "/m",
-};
-
-function getUnitSuffix(unit?: string): string {
-  if (!unit) return "/u";
-  return UNIT_SUFFIX_MAP[unit] ?? "/u";
-}
-
-function formatPrice(price: number, unitSuffix: string): string {
-  return `$${price.toFixed(2)}${unitSuffix}`;
+function formatPrice(price: number): string {
+  const rounded = Math.round(price / 10) * 10;
+  return `$${rounded}`;
 }
 
 const TAG_WIDTH = "6.3cm";
@@ -56,8 +44,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [barcodeSource, setBarcodeSource] = useState<"code" | "codebar">("code");
 
-  const unitSuffix = getUnitSuffix(unit);
-  const formattedPrice = formatPrice(salePrice, unitSuffix);
+  const formattedPrice = formatPrice(salePrice);
   const tagHeight = hasCodebar ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE;
   const barcodeValue = barcodeSource === "codebar" && codebar ? codebar : code;
 
@@ -277,7 +264,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
               handlePrint();
             }}
           >
-            Imprimir
+            Imprimir!
           </Button>
         </DialogFooter>
       </DialogContent>

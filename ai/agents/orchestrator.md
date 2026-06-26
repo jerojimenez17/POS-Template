@@ -11,8 +11,8 @@ Workflow orchestrator responsible for managing the TDD feature development lifec
    - Create a `ai/features/{feature-name}/` workspace
 
 2. **Delegate Each Workflow Step**
-   - Use the `Task` tool with `subagent_type: "general"` for each delegation
-   - Load the appropriate skill + agent definition files into the sub-agent prompt
+   - Use the `Task` tool with the native subagent name (e.g., `subagent_type: "architect"`) for each delegation
+   - Each subagent already loads its own skills and agent definition — no need to load files manually
    - Provide clear input/output expectations
 
 3. **Validate Outputs Between Steps**
@@ -33,16 +33,18 @@ Workflow orchestrator responsible for managing the TDD feature development lifec
 
 ---
 
-## Skill → Agent Mapping
+## Agent Delegation (Native Opencode Subagents)
 
-| Step | Agent | Sub-agent Prompt Includes |
-|------|-------|---------------------------|
-| 1 | Architect | `ai/agents/architect.md`, `ai/skills/prisma-postgresql/SKILL.md`, `ai/skills/nextjs-development/SKILL.md`, `AGENTS.md` |
-| 2 | QA (write tests) | `ai/agents/qa.md`, `ai/skills/vitest-testing-library/SKILL.md`, `ai/project-context.md` |
-| 3 | Developer (implement) | `ai/agents/dev.md`, `ai/skills/nextjs-development/SKILL.md`, `ai/skills/prisma-postgresql/SKILL.md`, `ai/skills/web-design-guidelines/SKILL.md`, `AGENTS.md` |
-| 4 | QA (execute tests) | Same as step 2 + implementation file paths |
-| 5 | Developer (fix) | Same as step 3 + test failure output |
-| 6 | Reviewer | `ai/agents/reviewer.md`, `AGENTS.md` |
+| Step | Agent | `subagent_type` |
+|------|-------|-----------------|
+| 1 | Architect | `architect` |
+| 2 | QA (write tests) | `qa` |
+| 3 | Developer (implement) | `dev` |
+| 4 | QA (execute tests) | `qa` |
+| 5 | Developer (fix) | `dev` |
+| 6 | Reviewer | `reviewer` |
+
+Each subagent is defined in `.opencode/agents/` and loads its own skills automatically via the `skill` tool. Do NOT load files manually — just pass the feature context and input/output expectations.
 
 ---
 
