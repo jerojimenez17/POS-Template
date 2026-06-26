@@ -21,6 +21,17 @@ vi.mock("../../../auth", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-gates", () => ({
+  requireFeature: vi.fn().mockResolvedValue({ success: true, data: { businessId: "business-123" } }),
+}));
+
+vi.mock("@/lib/pusher-server", () => ({
+  pusherServer: {
+    trigger: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 const mockCAE = {
@@ -587,5 +598,148 @@ describe("Billing Fields - Integration Verification", () => {
     expect(minimalInput.total).toBe(100);
     expect(minimalInput.seller).toBe("Test Seller");
     expect(minimalInput.products.length).toBe(1);
+  });
+});
+
+describe("AFIP Feature Gate - processSaleAction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should return error when feature disabled and CAE present (gate blocks)", async () => {
+    const { requireFeature } = await import("@/lib/auth-gates");
+    vi.mocked(requireFeature).mockResolvedValue({
+      success: false,
+      error: "Función no habilitada",
+    });
+
+    const inputWithCAE = {
+      ...baseInput,
+      CAE: mockCAE,
+    } as Parameters<typeof processSaleAction>[0];
+
+    const result = await processSaleAction(inputWithCAE);
+
+    expect("error" in result && result.error).toBeTruthy();
+    // $transaction should NOT be called when gate blocks
+    const { db } = await import("@/lib/db");
+    expect((db.$transaction as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+  });
+
+  it("should succeed when feature enabled and CAE present (gate passes)", async () => {
+    const { db } = await import("@/lib/db");
+    const { requireFeature } = await import("@/lib/auth-gates");
+    vi.mocked(requireFeature).mockResolvedValue({
+      success: true,
+      data: { id: "user-1", businessId: "business-123", role: "ADMIN", business: null },
+    });
+
+    const createdOrder = {
+      id: "order-cae-gate-1",
+      total: 100,
+      seller: "Test Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      CAE: mockCAE,
+      items: [],
+    };
+
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: Function) => {
+        const tx = {
+          cashboxSession: {
+            findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
+          },
+          order: {
+            create: vi.fn().mockResolvedValue(createdOrder),
+          },
+          product: {
+            update: vi.fn().mockResolvedValue({ id: "product-1" }),
+          },
+          stockMovement: {
+            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
+          },
+          cashBox: {
+            update: vi.fn().mockResolvedValue({ id: "cashbox-1" }),
+          },
+          cashMovement: {
+            create: vi.fn().mockResolvedValue({ id: "cash-movement-1" }),
+          },
+        };
+        return callback(tx);
+      }
+    );
+
+    const inputWithCAE = {
+      ...baseInput,
+      CAE: mockCAE,
+    } as Parameters<typeof processSaleAction>[0];
+
+    const result = await processSaleAction(inputWithCAE);
+
+    expect(result.success).toBe(true);
+    expect((db.$transaction as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+  });
+
+  it("should succeed when feature disabled but NO CAE (gate skipped)", async () => {
+    const { db } = await import("@/lib/db");
+
+    // Mock requireFeature to fail — but gate should be skipped since no CAE
+    const { requireFeature } = await import("@/lib/auth-gates");
+    vi.mocked(requireFeature).mockResolvedValue({
+      success: false,
+      error: "Función no habilitada",
+    });
+
+    const createdOrder = {
+      id: "order-no-cae-gate-skip-1",
+      total: 100,
+      seller: "Test Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      items: [],
+    };
+
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: Function) => {
+        const tx = {
+          cashboxSession: {
+            findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
+          },
+          order: {
+            create: vi.fn().mockResolvedValue(createdOrder),
+          },
+          product: {
+            update: vi.fn().mockResolvedValue({ id: "product-1" }),
+          },
+          stockMovement: {
+            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
+          },
+          cashBox: {
+            update: vi.fn().mockResolvedValue({ id: "cashbox-1" }),
+          },
+          cashMovement: {
+            create: vi.fn().mockResolvedValue({ id: "cash-movement-1" }),
+          },
+        };
+        return callback(tx);
+      }
+    );
+
+    // No CAE in input
+    const result = await processSaleAction(baseInput);
+
+    expect(result.success).toBe(true);
+    expect((db.$transaction as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
   });
 });

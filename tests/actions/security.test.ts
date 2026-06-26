@@ -135,15 +135,15 @@ describe("Server-Side Action Security Gates Test Suite", () => {
   });
 
   describe("Phase 4: Server Action Gated Scenarios", () => {
-    describe("1. AFIP billing action (hasBilling)", () => {
-      it("should reject voucher generation if hasBilling is false", async () => {
+    describe("1. AFIP billing action (hasAfipBilling)", () => {
+      it("should reject voucher generation if hasAfipBilling is false", async () => {
         vi.mocked(auth).mockResolvedValue({
           user: {
             businessId: "business_123",
             business: {
               accountStatus: "ACTIVO",
               features: {
-                hasBilling: false,
+                hasAfipBilling: false,
               },
             },
           },

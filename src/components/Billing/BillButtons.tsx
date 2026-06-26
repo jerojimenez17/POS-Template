@@ -23,7 +23,7 @@ import {
   DialogHeader,
   DialogDescription,
 } from "../ui/dialog";
-import { Lock, FileText, Wallet, CheckCircle } from "lucide-react";
+import { Lock, FileText, Wallet, CheckCircle, MessageCircle } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useFeatures } from "@/hooks/useFeatures";
 import { createBudgetAction } from "@/actions/budget";
@@ -52,6 +52,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
+  const [openFeatureBlockedModal, setOpenFeatureBlockedModal] = useState(false);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(
@@ -239,6 +240,13 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       let caeData: CAE | null = null;
       if (afip && !isUpdate) {
         caeData = await handleCreateVoucher();
+      }
+
+      // NEW: Abort if AFIP feature is disabled or credentials missing
+      if (afip && !caeData) {
+        setBlockButton(false);
+        setOpenFeatureBlockedModal(true);
+        return undefined;
       }
 
       if (isUpdate && orderId) {
@@ -608,6 +616,41 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               {errorMessage}
             </DialogDescription>
           </DialogHeader>
+        </DialogContent>
+      </Dialog>
+
+      {/* Blocked Feature Modal */}
+      <Dialog open={openFeatureBlockedModal} onOpenChange={setOpenFeatureBlockedModal}>
+        <DialogContent className="sm:max-w-md">
+          <div className="flex flex-col items-center text-center py-6 px-2 gap-4">
+            <div className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-950/50 flex items-center justify-center">
+              <Lock className="h-7 w-7 text-red-400 dark:text-red-400" />
+            </div>
+            <div>
+              <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                Funcionalidad no disponible
+              </DialogTitle>
+              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+                Esta funcionalidad no está incluida en tu plan actual.
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Contactanos vía WhatsApp para activarlo.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 w-full mt-2">
+              <a
+                href="https://wa.me/5492265418113"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1"
+              >
+                <Button className="w-full rounded-lg bg-[#25D366] hover:bg-[#128C7E] text-white flex items-center gap-2 justify-center">
+                  <MessageCircle className="h-4 w-4" />
+                  Contactar por WhatsApp
+                </Button>
+              </a>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

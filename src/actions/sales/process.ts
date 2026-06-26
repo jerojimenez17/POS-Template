@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
+import { requireFeature } from "@/lib/auth-gates";
 import { fail } from "@/lib/action-result";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
@@ -44,6 +45,14 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
+
+  // Gate: check AFIP billing feature when CAE is present
+  if (billState.CAE) {
+    const featureCheck = await requireFeature("hasAfipBilling");
+    if (!featureCheck.success) {
+      return { error: featureCheck.error || "Esta funcionalidad no está disponible en tu plan actual." };
+    }
+  }
 
   try {
     const now = new Date();
