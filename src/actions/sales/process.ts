@@ -340,6 +340,11 @@ export const updateOrderAction = async (
 
       if (!existingOrder) throw new Error("Orden no encontrada");
 
+      // Block editing invoiced sales
+      if (existingOrder.CAE) {
+        throw new Error("Esta venta ya fue facturada. No se puede editar. Genere una nota de crédito.");
+      }
+
       // 🔹 calcular versión
       const lastUpdate = await tx.orderUpdate.findFirst({
         where: { orderId },
@@ -440,6 +445,8 @@ export const updateOrderAction = async (
           discountPercentage: discountPercent,
           discountAmount,
           clientId: updatedData.clientId,
+          clientIvaCondition: updatedData.clientIvaCondition,
+          clientDocumentNumber: updatedData.clientDocumentNumber,
           items: {
             deleteMany: {},
             create: updatedData.products.map((p) => ({
@@ -489,6 +496,10 @@ export const updateOrderAction = async (
     return result;
   } catch (error) {
     console.error("Error updating sale:", error);
+    // Preserve specific CAE guard message instead of generic error
+    if (error instanceof Error && error.message.includes("ya fue facturada")) {
+      return { error: error.message };
+    }
     return fail("Error al actualizar la venta");
   }
 };

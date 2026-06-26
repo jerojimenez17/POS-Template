@@ -37,6 +37,8 @@ const ProductsTable = ({ session, isEditing, orderId, ptoVentas }: props) => {
           session={session}
           handlePrint={handlePrint}
           ptoVentas={ptoVentas}
+          isEditing={isEditing}
+          orderId={orderId}
         />
       </div>
     </div>

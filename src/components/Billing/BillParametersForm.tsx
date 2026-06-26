@@ -20,13 +20,14 @@ import { BillContext } from "@/context/BillContext";
 import BillTypes from "@/models/billType";
 import { getVoucherNumberAction } from "@/actions/voucher";
 import { cn } from "@/lib/utils";
-import { Settings2, X } from "lucide-react";
+import { Settings2, X, FileText, Receipt } from "lucide-react";
 
 interface BillParametersFormProps {
   ptoVentas?: number[];
+  layout?: "compact" | "cards";
 }
 
-const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
+const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParametersFormProps) => {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [lastVoucherNum, setLastVoucherNum] = React.useState<number | null>(null);
   const [loadingVoucher, setLoadingVoucher] = React.useState(false);
@@ -347,6 +348,240 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
     </Form>
   );
 
+  if (layout === "cards") {
+    // ──── CARD LAYOUT (edit page) ────
+    return (
+      <Form {...form}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* ──── DATOS DEL COMPROBANTE ──── */}
+          <section className="bg-card border rounded-xl p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Datos del comprobante
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <FormField
+                control={form.control}
+                name="billType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Tipo</FormLabel>
+                    <Select {...field} onValueChange={field.onChange}>
+                      <SelectTrigger className="h-9 text-sm rounded-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(BillTypes).map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+              {ptoVentas.length > 0 && (
+                <FormField
+                  control={form.control}
+                  name="ptoVenta"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Pto. Venta</FormLabel>
+                      <Select value={field.value ? String(field.value) : undefined} onValueChange={(v) => field.onChange(Number(v))}>
+                        <SelectTrigger className="h-9 text-sm rounded-md">
+                          <SelectValue placeholder="-" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ptoVentas.map((p) => (
+                            <SelectItem key={p} value={String(p)}>{String(p).padStart(3, '0')}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+              )}
+              <FormField
+                control={form.control}
+                name="clientCondition"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Cond. IVA</FormLabel>
+                    <Select {...field} onValueChange={field.onChange}>
+                      <SelectTrigger className="h-9 text-sm rounded-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(ClientConditions).map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+              {showDocInput ? (
+                <FormField
+                  control={form.control}
+                  name="documentNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                        {watchClientCondition === ClientConditions.CUIT ? "CUIT" : "DNI"}
+                      </FormLabel>
+                      <Input
+                        className="h-9 text-sm rounded-md"
+                        type="number"
+                        name={field.name}
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                        onBlur={field.onBlur}
+                        ref={field.ref}
+                      />
+                    </FormItem>
+                  )}
+                />
+              ) : (
+                <div className="flex items-end pb-1">
+                  <span className="text-xs text-muted-foreground/60 italic">
+                    Consumidor Final — no requiere documento
+                  </span>
+                </div>
+              )}
+            </div>
+            {watchPtoVenta && (
+              <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground font-mono">
+                Próximo: {String(watchPtoVenta).padStart(3, '0')}-{String((lastVoucherNum || 0) + 1).padStart(4, '0')}
+              </div>
+            )}
+          </section>
+
+          {/* ──── PAGO ──── */}
+          <section className="bg-card border rounded-xl p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-muted-foreground" />
+              Pago
+            </h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+                <FormField
+                  control={form.control}
+                  name="paidMethod"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Medio de pago</FormLabel>
+                      <Select {...field} onValueChange={field.onChange}>
+                        <SelectTrigger className="h-9 text-sm rounded-md">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.values(PaidMethods).map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                <div className="flex items-end pb-1">
+                  <FormField
+                    control={form.control}
+                    name="twoMethods"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center gap-2.5 cursor-pointer select-none">
+                          <Checkbox
+                            id="twoMethods-edit"
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            className="h-4 w-4"
+                          />
+                          <label htmlFor="twoMethods-edit" className="text-sm font-medium cursor-pointer">
+                            Dividir pago
+                          </label>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+              {showSplit && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3 pl-5 border-l-2 border-border">
+                  <FormField
+                    control={form.control}
+                    name="secondPaidMethod"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">2do medio</FormLabel>
+                        <Select {...field} onValueChange={field.onChange}>
+                          <SelectTrigger className="h-9 text-sm rounded-md">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.values(PaidMethods).map((m) => (
+                              <SelectItem key={m} value={m}>{m}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="totalSecondMethod"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Monto 2do medio</FormLabel>
+                        <Input
+                          className="h-9 text-sm rounded-md"
+                          placeholder="0"
+                          {...field}
+                          onChange={field.onChange}
+                        />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+
+              {/* Descuento inline */}
+              <div className="pt-3 border-t border-border">
+                <FormField
+                  control={form.control}
+                  name="discount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Descuento</FormLabel>
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-28">
+                          <Input
+                            className="h-9 text-sm rounded-md pr-7 text-right"
+                            {...field}
+                            value={field.value === 0 ? "" : field.value}
+                            placeholder="0"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
+                        </div>
+                        {watchDiscount > 0 && (
+                          <span className="text-sm text-orange-600 dark:text-orange-400 font-medium">
+                            -{watchDiscount}%
+                          </span>
+                        )}
+                        {!watchDiscount && (
+                          <span className="text-xs text-muted-foreground/60 italic">Sin descuento</span>
+                        )}
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+          </section>
+        </div>
+      </Form>
+    );
+  }
+
+  // ──── COMPACT LAYOUT (default) ────
   return (
     <>
       {/* Desktop: always visible */}
