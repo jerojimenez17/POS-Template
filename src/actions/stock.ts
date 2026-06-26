@@ -762,13 +762,7 @@ export const getProductsPaginated = async (params: {
 
   const where: Prisma.ProductWhereInput = {
     businessId: session.user.businessId,
-    ...(params.search && {
-      OR: [
-        { code: { contains: params.search, mode: "insensitive" } },
-        { codebar: { contains: params.search, mode: "insensitive" } },
-        { description: { contains: params.search, mode: "insensitive" } },
-      ],
-    }),
+    ...buildSearchFilter(params.search),
     ...(params.categoryId && { categoryId: params.categoryId }),
     ...(params.brandId && { brandId: params.brandId }),
     ...(params.unit && { unit: params.unit }),
@@ -849,27 +843,94 @@ export const getProductsByCode = async (code: string) => {
   }
 };
 
+const buildSearchFilter = (search?: string): Prisma.ProductWhereInput => {
+  if (!search) return {};
+  const words = search.split(/\s+/).filter(Boolean);
+  return {
+    AND: words.map((word) => ({
+      OR: [
+        { code: { contains: word, mode: "insensitive" } },
+        { codebar: { contains: word, mode: "insensitive" } },
+        { description: { contains: word, mode: "insensitive" } },
+        { brand: { name: { contains: word, mode: "insensitive" } } },
+        { supplier: { name: { contains: word, mode: "insensitive" } } },
+      ],
+    })),
+  };
+};
+
+const searchILIKE = async (query: string, businessId: string, supplierId?: string) => {
+  return db.product.findMany({
+    where: {
+      businessId,
+      ...buildSearchFilter(query),
+      ...(supplierId ? { supplierId } : {}),
+    },
+    include: { supplier: true, brand: true, category: true, subCategory: true },
+    take: 300,
+  });
+};
+
 export const getProductsBySearch = async (query: string, supplierId?: string) => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
 
   try {
+    const businessId = session.user.businessId;
+
+    // Short queries (< 3 chars): pg_trgm needs at least 3 chars for trigrams, use ILIKE
+    if (query.length < 3) {
+      return searchILIKE(query, businessId, supplierId);
+    }
+
+    // Try pg_trgm fuzzy search, fall back to ILIKE if extension is not installed
+    type SearchResult = { id: string; similarity: number };
+
+    const results = await db.$queryRaw<SearchResult[]>(
+      Prisma.sql`
+        SELECT DISTINCT ON (p.id)
+          p.id,
+          GREATEST(
+            COALESCE(similarity(COALESCE(p.description, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(p.code, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(p.codebar, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(b.name, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(s.name, ''), ${query}), 0)
+          ) AS similarity
+        FROM "Product" p
+        LEFT JOIN "Brand" b ON b.id = p."brandId"
+        LEFT JOIN "Supplier" s ON s.id = p."supplierId"
+        WHERE p."businessId" = ${businessId}
+          AND (
+            similarity(COALESCE(p.description, ''), ${query}) > 0.15
+            OR similarity(COALESCE(p.code, ''), ${query}) > 0.15
+            OR similarity(COALESCE(p.codebar, ''), ${query}) > 0.15
+            OR similarity(COALESCE(b.name, ''), ${query}) > 0.15
+            OR similarity(COALESCE(s.name, ''), ${query}) > 0.15
+          )
+          ${supplierId ? Prisma.sql`AND p."supplierId" = ${supplierId}` : Prisma.empty}
+        ORDER BY similarity DESC
+        LIMIT 300
+      `
+    );
+
+    if (results.length === 0) return [];
+
+    const ids = results.map((r) => r.id);
+
     const products = await db.product.findMany({
-      where: {
-        businessId: session.user.businessId,
-        OR: [
-          { code: { contains: query, mode: "insensitive" } },
-          { codebar: { contains: query, mode: "insensitive" } },
-          { description: { contains: query, mode: "insensitive" } },
-        ],
-        ...(supplierId ? { supplierId } : {}),
-      },
+      where: { id: { in: ids } },
       include: { supplier: true, brand: true, category: true, subCategory: true },
-      take: 300, // Limit results for performance
     });
 
-    return products;
+    // Preserve similarity ordering
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    return ids.map((id) => productMap.get(id)).filter(Boolean) as typeof products;
   } catch (error) {
+    // If pg_trgm extension is not installed, fall back to ILIKE
+    if (query.length >= 3) {
+      return searchILIKE(query, session.user.businessId!, supplierId);
+    }
     console.error(error);
     return [];
   }
@@ -906,15 +967,7 @@ export const getProductsFiltered = async (filters: {
     const products = await db.product.findMany({
       where: {
         businessId: session.user.businessId,
-        ...(filters.search
-          ? {
-            OR: [
-              { code: { contains: filters.search, mode: "insensitive" } },
-              { codebar: { contains: filters.search, mode: "insensitive" } },
-              { description: { contains: filters.search, mode: "insensitive" } },
-            ],
-          }
-          : {}),
+        ...buildSearchFilter(filters.search),
         ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
         ...(filters.brandId ? { brandId: filters.brandId } : {}),
         ...(filters.unit ? { unit: filters.unit } : {}),
