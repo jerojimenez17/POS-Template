@@ -1109,14 +1109,14 @@ export const getProductsFiltered = async (filters: {
   const skip = (currentPage - 1) * currentPageSize;
 
   try {
-    const where = {
+    const where: Prisma.ProductWhereInput = {
       businessId: session.user.businessId,
       ...(filters.search
         ? {
           OR: [
-            { code: { contains: filters.search, mode: "insensitive" } },
-            { codebar: { contains: filters.search, mode: "insensitive" } },
-            { description: { contains: filters.search, mode: "insensitive" } },
+            { code: { contains: filters.search, mode: "insensitive" as const } },
+            { codebar: { contains: filters.search, mode: "insensitive" as const } },
+            { description: { contains: filters.search, mode: "insensitive" as const } },
           ],
         }
         : {}),
