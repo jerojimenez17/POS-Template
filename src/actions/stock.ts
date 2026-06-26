@@ -760,8 +760,16 @@ export const getProductsPaginated = async (params: {
   const pageSize = Math.min(100, Math.max(1, params.pageSize || 25));
   const skip = (page - 1) * pageSize;
 
+  const businessId = session.user.businessId;
+
+  // pg_trgm ranked search for queries >= 3 chars
+  if (params.search && params.search.length >= 3) {
+    return getProductsPaginatedWithRanking(params.search, businessId, page, pageSize, skip, params);
+  }
+
+  // Fallback to ILIKE for short queries or no search
   const where: Prisma.ProductWhereInput = {
-    businessId: session.user.businessId,
+    businessId,
     ...buildSearchFilter(params.search),
     ...(params.categoryId && { categoryId: params.categoryId }),
     ...(params.brandId && { brandId: params.brandId }),
@@ -793,6 +801,90 @@ export const getProductsPaginated = async (params: {
   } catch (error) {
     console.error("Error fetching paginated products:", error);
     return { products: [], total: 0, page, pageSize, totalPages: 0 };
+  }
+};
+
+const getProductsPaginatedWithRanking = async (
+  search: string,
+  businessId: string,
+  page: number,
+  pageSize: number,
+  skip: number,
+  filters: { categoryId?: string; brandId?: string; unit?: string },
+) => {
+  try {
+    type IdResult = { id: string };
+
+    const idResults = await db.$queryRaw<IdResult[]>(
+      Prisma.sql`
+        SELECT p.id
+        FROM "Product" p
+        LEFT JOIN "Brand" b ON b.id = p."brandId"
+        LEFT JOIN "Supplier" s ON s.id = p."supplierId"
+        WHERE p."businessId" = ${businessId}
+          AND (
+            similarity(COALESCE(p.description, ''), ${search}) > 0.15
+            OR similarity(COALESCE(p.code, ''), ${search}) > 0.15
+            OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
+            OR similarity(COALESCE(b.name, ''), ${search}) > 0.15
+            OR similarity(COALESCE(s.name, ''), ${search}) > 0.15
+          )
+          ${filters.categoryId ? Prisma.sql`AND p."categoryId" = ${filters.categoryId}` : Prisma.empty}
+          ${filters.brandId ? Prisma.sql`AND p."brandId" = ${filters.brandId}` : Prisma.empty}
+          ${filters.unit ? Prisma.sql`AND p."unit" = ${filters.unit}` : Prisma.empty}
+        ORDER BY GREATEST(
+          similarity(COALESCE(p.description, ''), ${search}),
+          similarity(COALESCE(p.code, ''), ${search}),
+          similarity(COALESCE(p.codebar, ''), ${search}),
+          similarity(COALESCE(b.name, ''), ${search}),
+          similarity(COALESCE(s.name, ''), ${search})
+        ) DESC
+        LIMIT 300
+      `
+    );
+
+    const total = idResults.length;
+    const pageIds = idResults.map((r) => r.id).slice(skip, skip + pageSize);
+
+    if (pageIds.length === 0) {
+      return { products: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    const products = await db.product.findMany({
+      where: { id: { in: pageIds } },
+      include: {
+        brand: { select: { id: true, name: true } },
+        images: { select: { id: true, url: true } },
+      },
+    });
+
+    // Preserve pg_trgm ranking order
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    const orderedProducts = pageIds.map((id) => productMap.get(id)).filter(Boolean) as typeof products;
+
+    return {
+      products: orderedProducts,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  } catch (error) {
+    // Fall back to ILIKE if pg_trgm fails
+    const where: Prisma.ProductWhereInput = {
+      businessId,
+      ...buildSearchFilter(search),
+      ...(filters.categoryId && { categoryId: filters.categoryId }),
+      ...(filters.brandId && { brandId: filters.brandId }),
+      ...(filters.unit && { unit: filters.unit }),
+    };
+
+    const [products, total] = await db.$transaction([
+      db.product.findMany({ where, include: { brand: { select: { id: true, name: true } }, images: { select: { id: true, url: true } } }, orderBy: { description: "asc" }, skip, take: pageSize }),
+      db.product.count({ where }),
+    ]);
+
+    return { products, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
 };
 
