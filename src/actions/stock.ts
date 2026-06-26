@@ -751,6 +751,7 @@ export const getProductsPaginated = async (params: {
   categoryId?: string;
   brandId?: string;
   unit?: string;
+  codeOnly?: boolean;
 }) => {
   const session = await auth();
   if (!session?.user?.businessId)
@@ -770,7 +771,7 @@ export const getProductsPaginated = async (params: {
   // Fallback to ILIKE for short queries or no search
   const where: Prisma.ProductWhereInput = {
     businessId,
-    ...buildSearchFilter(params.search),
+    ...buildSearchFilter(params.search, params.codeOnly),
     ...(params.categoryId && { categoryId: params.categoryId }),
     ...(params.brandId && { brandId: params.brandId }),
     ...(params.unit && { unit: params.unit }),
@@ -810,10 +811,12 @@ const getProductsPaginatedWithRanking = async (
   page: number,
   pageSize: number,
   skip: number,
-  filters: { categoryId?: string; brandId?: string; unit?: string },
+  filters: { categoryId?: string; brandId?: string; unit?: string; codeOnly?: boolean },
 ) => {
   try {
     type IdResult = { id: string };
+
+    const { codeOnly } = filters;
 
     const idResults = await db.$queryRaw<IdResult[]>(
       Prisma.sql`
@@ -823,21 +826,37 @@ const getProductsPaginatedWithRanking = async (
         LEFT JOIN "Supplier" s ON s.id = p."supplierId"
         WHERE p."businessId" = ${businessId}
           AND (
-            similarity(COALESCE(p.description, ''), ${search}) > 0.15
-            OR similarity(COALESCE(p.code, ''), ${search}) > 0.15
-            OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
-            OR similarity(COALESCE(b.name, ''), ${search}) > 0.15
-            OR similarity(COALESCE(s.name, ''), ${search}) > 0.15
+            ${codeOnly
+              ? Prisma.sql`
+                  similarity(COALESCE(p.code, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
+                `
+              : Prisma.sql`
+                  similarity(COALESCE(p.description, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.code, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(b.name, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(s.name, ''), ${search}) > 0.15
+                `
+            }
           )
           ${filters.categoryId ? Prisma.sql`AND p."categoryId" = ${filters.categoryId}` : Prisma.empty}
           ${filters.brandId ? Prisma.sql`AND p."brandId" = ${filters.brandId}` : Prisma.empty}
           ${filters.unit ? Prisma.sql`AND p."unit" = ${filters.unit}` : Prisma.empty}
         ORDER BY GREATEST(
-          similarity(COALESCE(p.description, ''), ${search}),
-          similarity(COALESCE(p.code, ''), ${search}),
-          similarity(COALESCE(p.codebar, ''), ${search}),
-          similarity(COALESCE(b.name, ''), ${search}),
-          similarity(COALESCE(s.name, ''), ${search})
+          ${codeOnly
+            ? Prisma.sql`
+                similarity(COALESCE(p.code, ''), ${search}),
+                similarity(COALESCE(p.codebar, ''), ${search})
+              `
+            : Prisma.sql`
+                similarity(COALESCE(p.description, ''), ${search}),
+                similarity(COALESCE(p.code, ''), ${search}),
+                similarity(COALESCE(p.codebar, ''), ${search}),
+                similarity(COALESCE(b.name, ''), ${search}),
+                similarity(COALESCE(s.name, ''), ${search})
+              `
+          }
         ) DESC
         LIMIT 300
       `
@@ -873,7 +892,7 @@ const getProductsPaginatedWithRanking = async (
     // Fall back to ILIKE if pg_trgm fails
     const where: Prisma.ProductWhereInput = {
       businessId,
-      ...buildSearchFilter(search),
+      ...buildSearchFilter(search, filters.codeOnly),
       ...(filters.categoryId && { categoryId: filters.categoryId }),
       ...(filters.brandId && { brandId: filters.brandId }),
       ...(filters.unit && { unit: filters.unit }),
@@ -935,18 +954,23 @@ export const getProductsByCode = async (code: string) => {
   }
 };
 
-const buildSearchFilter = (search?: string): Prisma.ProductWhereInput => {
+const buildSearchFilter = (search?: string, codeOnly = false): Prisma.ProductWhereInput => {
   if (!search) return {};
   const words = search.split(/\s+/).filter(Boolean);
   return {
     AND: words.map((word) => ({
-      OR: [
-        { code: { contains: word, mode: "insensitive" } },
-        { codebar: { contains: word, mode: "insensitive" } },
-        { description: { contains: word, mode: "insensitive" } },
-        { brand: { name: { contains: word, mode: "insensitive" } } },
-        { supplier: { name: { contains: word, mode: "insensitive" } } },
-      ],
+      OR: codeOnly
+        ? [
+            { code: { contains: word, mode: "insensitive" } },
+            { codebar: { contains: word, mode: "insensitive" } },
+          ]
+        : [
+            { code: { contains: word, mode: "insensitive" } },
+            { codebar: { contains: word, mode: "insensitive" } },
+            { description: { contains: word, mode: "insensitive" } },
+            { brand: { name: { contains: word, mode: "insensitive" } } },
+            { supplier: { name: { contains: word, mode: "insensitive" } } },
+          ],
     })),
   };
 };

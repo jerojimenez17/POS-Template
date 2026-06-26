@@ -16,6 +16,7 @@ const ProductDashboard = () => {
   const [openExcelModal, setOpenExcelModal] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [codeOnly, setCodeOnly] = useState(false);
   const [products, setProducts] = useState<ProductExtended[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -32,13 +33,14 @@ const ProductDashboard = () => {
     }, 300);
   }, []);
 
-  const fetchProducts = useCallback(async (pageNum: number, searchTerm: string) => {
+  const fetchProducts = useCallback(async (pageNum: number, searchTerm: string, codeOnlySearch?: boolean) => {
     setLoading(true);
     try {
       const result = await getProductsPaginated({
         page: pageNum,
         pageSize: PAGE_SIZE,
         search: searchTerm || undefined,
+        codeOnly: codeOnlySearch,
       });
       setProducts(result.products as ProductExtended[]);
       setTotal(result.total);
@@ -56,17 +58,17 @@ const ProductDashboard = () => {
   }, [fetchProducts]);
 
   useEffect(() => {
-    fetchProducts(page, debouncedSearch);
-  }, [debouncedSearch]);
+    fetchProducts(page, debouncedSearch, codeOnly);
+  }, [debouncedSearch, codeOnly]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
-    fetchProducts(newPage, debouncedSearch);
-  }, [debouncedSearch, fetchProducts]);
+    fetchProducts(newPage, debouncedSearch, codeOnly);
+  }, [debouncedSearch, codeOnly, fetchProducts]);
 
   const handleRefresh = useCallback(() => {
-    fetchProducts(page, debouncedSearch);
-  }, [page, debouncedSearch, fetchProducts]);
+    fetchProducts(page, debouncedSearch, codeOnly);
+  }, [page, debouncedSearch, codeOnly, fetchProducts]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
@@ -92,6 +94,8 @@ const ProductDashboard = () => {
             handleOpenModal={() => setOpenModal(!openModal)}
             handleOpenExcelModal={() => setOpenExcelModal(true)}
             handleOpenSelectionModal={() => {}}
+            codeOnly={codeOnly}
+            onCodeOnlyChange={setCodeOnly}
           />
         </div>
 
