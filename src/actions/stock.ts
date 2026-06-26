@@ -752,6 +752,7 @@ export const getProductsPaginated = async (params: {
   categoryId?: string;
   brandId?: string;
   unit?: string;
+  codeOnly?: boolean;
 }) => {
   const session = await auth();
   if (!session?.user?.businessId)
@@ -761,15 +762,17 @@ export const getProductsPaginated = async (params: {
   const pageSize = Math.min(100, Math.max(1, params.pageSize || 25));
   const skip = (page - 1) * pageSize;
 
+  const businessId = session.user.businessId;
+
+  // pg_trgm ranked search for queries >= 3 chars
+  if (params.search && params.search.length >= 3) {
+    return getProductsPaginatedWithRanking(params.search, businessId, page, pageSize, skip, params);
+  }
+
+  // Fallback to ILIKE for short queries or no search
   const where: Prisma.ProductWhereInput = {
-    businessId: session.user.businessId,
-    ...(params.search && {
-      OR: [
-        { code: { contains: params.search, mode: "insensitive" } },
-        { codebar: { contains: params.search, mode: "insensitive" } },
-        { description: { contains: params.search, mode: "insensitive" } },
-      ],
-    }),
+    businessId,
+    ...buildSearchFilter(params.search, params.codeOnly),
     ...(params.categoryId && { categoryId: params.categoryId }),
     ...(params.brandId && { brandId: params.brandId }),
     ...(params.unit && { unit: params.unit }),
@@ -790,8 +793,12 @@ export const getProductsPaginated = async (params: {
       db.product.count({ where }),
     ]);
 
+    const sortedProducts = params.codeOnly && params.search
+      ? sortByExactCode(products, params.search)
+      : products;
+
     return {
-      products,
+      products: sortedProducts,
       total,
       page,
       pageSize,
@@ -800,6 +807,115 @@ export const getProductsPaginated = async (params: {
   } catch (error) {
     console.error("Error fetching paginated products:", error);
     return { products: [], total: 0, page, pageSize, totalPages: 0 };
+  }
+};
+
+const getProductsPaginatedWithRanking = async (
+  search: string,
+  businessId: string,
+  page: number,
+  pageSize: number,
+  skip: number,
+  filters: { categoryId?: string; brandId?: string; unit?: string; codeOnly?: boolean },
+) => {
+  try {
+    type IdResult = { id: string };
+
+    const { codeOnly } = filters;
+
+    const idResults = await db.$queryRaw<IdResult[]>(
+      Prisma.sql`
+        SELECT p.id
+        FROM "Product" p
+        LEFT JOIN "Brand" b ON b.id = p."brandId"
+        LEFT JOIN "Supplier" s ON s.id = p."supplierId"
+        WHERE p."businessId" = ${businessId}
+          AND (
+            ${codeOnly
+              ? Prisma.sql`
+                  similarity(COALESCE(p.code, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
+                `
+              : Prisma.sql`
+                  similarity(COALESCE(p.description, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.code, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(b.name, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(s.name, ''), ${search}) > 0.15
+                `
+            }
+          )
+          ${filters.categoryId ? Prisma.sql`AND p."categoryId" = ${filters.categoryId}` : Prisma.empty}
+          ${filters.brandId ? Prisma.sql`AND p."brandId" = ${filters.brandId}` : Prisma.empty}
+          ${filters.unit ? Prisma.sql`AND p."unit" = ${filters.unit}` : Prisma.empty}
+        ORDER BY
+          (p.code = ${search} OR p.codebar = ${search}) DESC,
+          GREATEST(
+            ${codeOnly
+              ? Prisma.sql`
+                  similarity(COALESCE(p.code, ''), ${search}),
+                  similarity(COALESCE(p.codebar, ''), ${search})
+                `
+              : Prisma.sql`
+                  similarity(COALESCE(p.description, ''), ${search}),
+                  similarity(COALESCE(p.code, ''), ${search}),
+                  similarity(COALESCE(p.codebar, ''), ${search}),
+                  similarity(COALESCE(b.name, ''), ${search}),
+                  similarity(COALESCE(s.name, ''), ${search})
+                `
+            }
+          ) DESC
+        LIMIT 300
+      `
+    );
+
+    const total = idResults.length;
+    const pageIds = idResults.map((r) => r.id).slice(skip, skip + pageSize);
+
+    if (pageIds.length === 0) {
+      return { products: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    const products = await db.product.findMany({
+      where: { id: { in: pageIds } },
+      include: {
+        brand: { select: { id: true, name: true } },
+        images: { select: { id: true, url: true } },
+      },
+    });
+
+    // Preserve pg_trgm ranking order
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    const orderedProducts = pageIds.map((id) => productMap.get(id)).filter(Boolean) as typeof products;
+
+    return {
+      products: orderedProducts,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  } catch (error) {
+    console.warn("pg_trgm no disponible, usando ILIKE fallback:", error);
+    const where: Prisma.ProductWhereInput = {
+      businessId,
+      ...buildSearchFilter(search, filters.codeOnly),
+      ...(filters.categoryId && { categoryId: filters.categoryId }),
+      ...(filters.brandId && { brandId: filters.brandId }),
+      ...(filters.unit && { unit: filters.unit }),
+    };
+
+    const [productsResult, total] = await db.$transaction([
+      db.product.findMany({ where, include: { brand: { select: { id: true, name: true } }, images: { select: { id: true, url: true } } }, orderBy: { description: "asc" }, skip, take: pageSize }),
+      db.product.count({ where }),
+    ]);
+
+    let sortedProducts = productsResult;
+    if (filters.codeOnly) {
+      sortedProducts = sortByExactCode(productsResult, search);
+    }
+
+    return { products: sortedProducts, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
 };
 
@@ -850,28 +966,109 @@ export const getProductsByCode = async (code: string) => {
   }
 };
 
+const sortByExactCode = <T extends { code: string | null; codebar: string | null }>(
+  products: T[],
+  search: string,
+): T[] => {
+  return products.sort((a, b) => {
+    const aExact = a.code === search || a.codebar === search ? 0 : 1;
+    const bExact = b.code === search || b.codebar === search ? 0 : 1;
+    return aExact - bExact;
+  });
+};
+
+const buildSearchFilter = (search?: string, codeOnly = false): Prisma.ProductWhereInput => {
+  if (!search) return {};
+  const words = search.split(/\s+/).filter(Boolean);
+  return {
+    AND: words.map((word) => ({
+      OR: codeOnly
+        ? [
+            { code: { contains: word, mode: "insensitive" } },
+            { codebar: { contains: word, mode: "insensitive" } },
+          ]
+        : [
+            { code: { contains: word, mode: "insensitive" } },
+            { codebar: { contains: word, mode: "insensitive" } },
+            { description: { contains: word, mode: "insensitive" } },
+            { brand: { name: { contains: word, mode: "insensitive" } } },
+            { supplier: { name: { contains: word, mode: "insensitive" } } },
+          ],
+    })),
+  };
+};
+
+const searchILIKE = async (query: string, businessId: string, supplierId?: string) => {
+  return db.product.findMany({
+    where: {
+      businessId,
+      ...buildSearchFilter(query),
+      ...(supplierId ? { supplierId } : {}),
+    },
+    include: { supplier: true, brand: true, category: true, subCategory: true },
+    take: 300,
+  });
+};
+
 export const getProductsBySearch = async (query: string, supplierId?: string) => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
 
   try {
+    const businessId = session.user.businessId;
+
+    // Short queries (< 3 chars): pg_trgm needs at least 3 chars for trigrams, use ILIKE
+    if (query.length < 3) {
+      return searchILIKE(query, businessId, supplierId);
+    }
+
+    // Try pg_trgm fuzzy search, fall back to ILIKE if extension is not installed
+    type SearchResult = { id: string; similarity: number };
+
+    const results = await db.$queryRaw<SearchResult[]>(
+      Prisma.sql`
+        SELECT p.id,
+          GREATEST(
+            COALESCE(similarity(COALESCE(p.description, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(p.code, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(p.codebar, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(b.name, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(s.name, ''), ${query}), 0)
+          ) AS similarity
+        FROM "Product" p
+        LEFT JOIN "Brand" b ON b.id = p."brandId"
+        LEFT JOIN "Supplier" s ON s.id = p."supplierId"
+        WHERE p."businessId" = ${businessId}
+          AND (
+            similarity(COALESCE(p.description, ''), ${query}) > 0.15
+            OR similarity(COALESCE(p.code, ''), ${query}) > 0.15
+            OR similarity(COALESCE(p.codebar, ''), ${query}) > 0.15
+            OR similarity(COALESCE(b.name, ''), ${query}) > 0.15
+            OR similarity(COALESCE(s.name, ''), ${query}) > 0.15
+          )
+          ${supplierId ? Prisma.sql`AND p."supplierId" = ${supplierId}` : Prisma.empty}
+        ORDER BY similarity DESC
+        LIMIT 300
+      `
+    );
+
+    if (results.length === 0) return [];
+
+    const ids = results.map((r) => r.id);
+
     const products = await db.product.findMany({
-      where: {
-        businessId: session.user.businessId,
-        OR: [
-          { code: { contains: query, mode: "insensitive" } },
-          { codebar: { contains: query, mode: "insensitive" } },
-          { description: { contains: query, mode: "insensitive" } },
-        ],
-        ...(supplierId ? { supplierId } : {}),
-      },
+      where: { id: { in: ids } },
       include: { supplier: true, brand: true, category: true, subCategory: true },
-      take: 300, // Limit results for performance
     });
 
-    return products;
+    // Preserve similarity ordering
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    return ids.map((id) => productMap.get(id)).filter(Boolean) as typeof products;
   } catch (error) {
-    console.error(error);
+    console.warn("pg_trgm no disponible, usando ILIKE fallback:", error);
+    if (query.length >= 3) {
+      return searchILIKE(query, session.user.businessId!, supplierId);
+    }
     return [];
   }
 };
