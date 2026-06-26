@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "../../auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { Product, Prisma } from "@prisma/client";
+import { PAGINATION } from "@/lib/pagination";
 
 
 // Supplier Actions
@@ -898,36 +899,57 @@ export const getProductsFiltered = async (filters: {
   brandId?: string;
   unit?: string;
   supplierId?: string;
+  page?: number;
+  pageSize?: number;
 }) => {
   const session = await auth();
-  if (!session?.user?.businessId) return [];
+  if (!session?.user?.businessId) {
+    return { products: [], total: 0, page: 1, pageSize: 25, totalPages: 0 };
+  }
+
+  const currentPage = Math.max(1, filters.page ?? 1);
+  const currentPageSize = Math.min(PAGINATION.MAX_PAGE_SIZE, Math.max(1, filters.pageSize ?? PAGINATION.DEFAULT_PAGE_SIZE));
+  const skip = (currentPage - 1) * currentPageSize;
 
   try {
-    const products = await db.product.findMany({
-      where: {
-        businessId: session.user.businessId,
-        ...(filters.search
-          ? {
-            OR: [
-              { code: { contains: filters.search, mode: "insensitive" } },
-              { codebar: { contains: filters.search, mode: "insensitive" } },
-              { description: { contains: filters.search, mode: "insensitive" } },
-            ],
-          }
-          : {}),
-        ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
-        ...(filters.brandId ? { brandId: filters.brandId } : {}),
-        ...(filters.unit ? { unit: filters.unit } : {}),
-        ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
-      },
-      include: { supplier: true, brand: true, category: true, subCategory: true },
-      orderBy: { description: "asc" },
-    });
+    const where = {
+      businessId: session.user.businessId,
+      ...(filters.search
+        ? {
+          OR: [
+            { code: { contains: filters.search, mode: "insensitive" } },
+            { codebar: { contains: filters.search, mode: "insensitive" } },
+            { description: { contains: filters.search, mode: "insensitive" } },
+          ],
+        }
+        : {}),
+      ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+      ...(filters.brandId ? { brandId: filters.brandId } : {}),
+      ...(filters.unit ? { unit: filters.unit } : {}),
+      ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+    };
 
-    return products;
+    const [products, total] = await db.$transaction([
+      db.product.findMany({
+        where,
+        include: { supplier: true, brand: true, category: true, subCategory: true },
+        orderBy: { description: "asc" },
+        skip,
+        take: currentPageSize,
+      }),
+      db.product.count({ where }),
+    ]);
+
+    return {
+      products,
+      total,
+      page: currentPage,
+      pageSize: currentPageSize,
+      totalPages: Math.ceil(total / currentPageSize),
+    };
   } catch (error) {
     console.error("Error fetching filtered products:", error);
-    return [];
+    return { products: [], total: 0, page: 1, pageSize: 25, totalPages: 0 };
   }
 };
 
