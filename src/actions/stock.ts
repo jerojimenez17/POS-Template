@@ -792,8 +792,12 @@ export const getProductsPaginated = async (params: {
       db.product.count({ where }),
     ]);
 
+    const sortedProducts = params.codeOnly && params.search
+      ? sortByExactCode(products, params.search)
+      : products;
+
     return {
-      products,
+      products: sortedProducts,
       total,
       page,
       pageSize,
@@ -843,21 +847,23 @@ const getProductsPaginatedWithRanking = async (
           ${filters.categoryId ? Prisma.sql`AND p."categoryId" = ${filters.categoryId}` : Prisma.empty}
           ${filters.brandId ? Prisma.sql`AND p."brandId" = ${filters.brandId}` : Prisma.empty}
           ${filters.unit ? Prisma.sql`AND p."unit" = ${filters.unit}` : Prisma.empty}
-        ORDER BY GREATEST(
-          ${codeOnly
-            ? Prisma.sql`
-                similarity(COALESCE(p.code, ''), ${search}),
-                similarity(COALESCE(p.codebar, ''), ${search})
-              `
-            : Prisma.sql`
-                similarity(COALESCE(p.description, ''), ${search}),
-                similarity(COALESCE(p.code, ''), ${search}),
-                similarity(COALESCE(p.codebar, ''), ${search}),
-                similarity(COALESCE(b.name, ''), ${search}),
-                similarity(COALESCE(s.name, ''), ${search})
-              `
-          }
-        ) DESC
+        ORDER BY
+          (p.code = ${search} OR p.codebar = ${search}) DESC,
+          GREATEST(
+            ${codeOnly
+              ? Prisma.sql`
+                  similarity(COALESCE(p.code, ''), ${search}),
+                  similarity(COALESCE(p.codebar, ''), ${search})
+                `
+              : Prisma.sql`
+                  similarity(COALESCE(p.description, ''), ${search}),
+                  similarity(COALESCE(p.code, ''), ${search}),
+                  similarity(COALESCE(p.codebar, ''), ${search}),
+                  similarity(COALESCE(b.name, ''), ${search}),
+                  similarity(COALESCE(s.name, ''), ${search})
+                `
+            }
+          ) DESC
         LIMIT 300
       `
     );
@@ -889,7 +895,7 @@ const getProductsPaginatedWithRanking = async (
       totalPages: Math.ceil(total / pageSize),
     };
   } catch (error) {
-    // Fall back to ILIKE if pg_trgm fails
+    console.warn("pg_trgm no disponible, usando ILIKE fallback:", error);
     const where: Prisma.ProductWhereInput = {
       businessId,
       ...buildSearchFilter(search, filters.codeOnly),
@@ -898,12 +904,17 @@ const getProductsPaginatedWithRanking = async (
       ...(filters.unit && { unit: filters.unit }),
     };
 
-    const [products, total] = await db.$transaction([
+    const [productsResult, total] = await db.$transaction([
       db.product.findMany({ where, include: { brand: { select: { id: true, name: true } }, images: { select: { id: true, url: true } } }, orderBy: { description: "asc" }, skip, take: pageSize }),
       db.product.count({ where }),
     ]);
 
-    return { products, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+    let sortedProducts = productsResult;
+    if (filters.codeOnly) {
+      sortedProducts = sortByExactCode(productsResult, search);
+    }
+
+    return { products: sortedProducts, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
 };
 
@@ -952,6 +963,17 @@ export const getProductsByCode = async (code: string) => {
     console.error(error);
     return [];
   }
+};
+
+const sortByExactCode = <T extends { code: string | null; codebar: string | null }>(
+  products: T[],
+  search: string,
+): T[] => {
+  return products.sort((a, b) => {
+    const aExact = a.code === search || a.codebar === search ? 0 : 1;
+    const bExact = b.code === search || b.codebar === search ? 0 : 1;
+    return aExact - bExact;
+  });
 };
 
 const buildSearchFilter = (search?: string, codeOnly = false): Prisma.ProductWhereInput => {
@@ -1004,8 +1026,7 @@ export const getProductsBySearch = async (query: string, supplierId?: string) =>
 
     const results = await db.$queryRaw<SearchResult[]>(
       Prisma.sql`
-        SELECT DISTINCT ON (p.id)
-          p.id,
+        SELECT p.id,
           GREATEST(
             COALESCE(similarity(COALESCE(p.description, ''), ${query}), 0),
             COALESCE(similarity(COALESCE(p.code, ''), ${query}), 0),
@@ -1043,11 +1064,10 @@ export const getProductsBySearch = async (query: string, supplierId?: string) =>
     const productMap = new Map(products.map((p) => [p.id, p]));
     return ids.map((id) => productMap.get(id)).filter(Boolean) as typeof products;
   } catch (error) {
-    // If pg_trgm extension is not installed, fall back to ILIKE
+    console.warn("pg_trgm no disponible, usando ILIKE fallback:", error);
     if (query.length >= 3) {
       return searchILIKE(query, session.user.businessId!, supplierId);
     }
-    console.error(error);
     return [];
   }
 };
