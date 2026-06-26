@@ -273,6 +273,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     } catch (err) {
       if (!isOnline) {
         toast.error("Operación cancelada: Sin conexión a internet");
+      } else if (err instanceof Error && err.message.includes("ya fue facturada")) {
+        toast.error(err.message);
       } else {
         toast.error(
           "Error inesperado: " + (err instanceof Error ? err.message : ""),
@@ -294,21 +296,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               }
               setOpenEditModal(true);
             }}
-            className="rounded-lg h-11 px-6 font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-sm w-full sm:w-auto"
+            className="rounded-lg h-11 px-6 font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 w-full sm:w-auto inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-            </svg>
             Actualizar Venta
           </Button>
         </div>
