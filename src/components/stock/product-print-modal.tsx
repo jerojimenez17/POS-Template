@@ -262,10 +262,10 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                   return (
                     <div
                       key={tag.key}
-                      className={`flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white ${!hasBarcode ? "no-barcode" : ""} ${showPrice ? "has-price" : ""}`}
+                      className={`flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white ${!hasBarcode ? "no-barcode" : ""} ${showPrice ? "has-price" : ""} ${hasBarcode && !showPrice ? "justify-center flex-1" : ""}`}
                       style={{
-                        width: TAG_WIDTH,
-                        height: hasBarcode && showPrice ? undefined : TAG_HEIGHT_WITHOUT_BARCODE,
+                        width: hasBarcode && !showPrice ? "55mm" : TAG_WIDTH,
+                        height: !hasBarcode ? TAG_HEIGHT_WITHOUT_BARCODE : (showPrice ? undefined : "65mm"),
                         ...(globalIndex < allTags.length - 1 ? { pageBreakAfter: "always" } : {}),
                       }}
                     >
