@@ -13,6 +13,7 @@ import { getBusinessBillingInfoAction } from "@/actions/business";
 import { QRCodeSVG } from "qrcode.react";
 import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES, type PrintOptions } from "@/lib/print";
 import { getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { useFeatures } from "@/hooks/useFeatures";
 import { Trash2 } from "lucide-react";
 import QRCode from "qrcode";
 import CAE from "@/models/CAE";
@@ -216,7 +217,8 @@ const PrintableTable = ({
     return { subtotal, discountAmount, total };
   }, [state.products, state.discount, state.totalWithDiscount]);
 
-  const hasSupplierFilter = session?.user?.business?.features?.hasSupplierFilter ?? false;
+  const { hasFeature } = useFeatures();
+  const hasSupplierFilter = hasFeature("hasSupplierFilter");
 
   return (
     <div ref={contentRef} className={`${className} print:block print:bg-white overflow-visible`}>

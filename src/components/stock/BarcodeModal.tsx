@@ -186,6 +186,7 @@ export default function BarcodeModal({
             size="icon"
             onClick={(e) => e.stopPropagation()}
             title="Código de barras"
+            className="h-8 w-8 text-slate-500 hover:text-gray-600"
           >
             <Barcode className={`h-4 w-4`} />
           </Button>

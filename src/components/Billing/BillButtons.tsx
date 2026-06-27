@@ -37,8 +37,9 @@ interface props {
   ptoVentas?: number[];
 }
 const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVentas }: props) => {
-  const canUseBudget = session?.user?.business?.features?.hasBudget ?? false;
-  const canUseLedger = session?.user?.business?.features?.hasClientLedger ?? false;
+  const { hasFeature } = useFeatures();
+  const canUseBudget = hasFeature("hasBudget");
+  const canUseLedger = hasFeature("hasClientLedger");
   const router = useRouter();
   const [createVoucherError, setCreateVoucherError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");

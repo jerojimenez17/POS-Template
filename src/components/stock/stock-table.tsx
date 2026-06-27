@@ -13,7 +13,7 @@ import Image from "next/image";
 import ProductForm from "./product-form";
 import BarcodeModal from "./BarcodeModal";
 import { Button } from "../ui/button";
-import { Trash2 } from "lucide-react";
+import { Edit2, Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -239,7 +239,18 @@ const StockTable = ({ descriptionFilter }: props) => {
                         onClick={(e) => e.stopPropagation()}
                       />
                     </TableCell>
-                    <TableCell className="z-50">
+                    <TableCell className="text-right space-x-2 z-50" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setProductToEdit(product);
+                          setOpenEditModal(true);
+                        }}
+                        className="h-8 w-8 text-slate-500 hover:text-blue-600"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
