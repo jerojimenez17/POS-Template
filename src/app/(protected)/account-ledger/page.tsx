@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { BookOpen, ArrowLeft, Lock, MessageCircle } from "lucide-react";
+import { getCachedPlan } from "@/lib/plan-resolver";
 import AccountLedgerContent from "./AccountLedgerContent";
 
 export default async function AccountLedgerPage() {
@@ -12,7 +13,8 @@ export default async function AccountLedgerPage() {
     redirect("/");
   }
 
-  const hasClientLedger = session?.user?.business?.features?.hasClientLedger ?? false;
+  const plan = await getCachedPlan(session.user.businessId);
+  const hasClientLedger = plan.hasClientLedger;
 
   if (!hasClientLedger) {
     return (
