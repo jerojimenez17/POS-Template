@@ -547,7 +547,8 @@ model BusinessFeatures {
   hasClientLedger   Boolean @default(false)
   hasMultiCashbox   Boolean @default(false)
   hasSupplierFilter Boolean @default(false)
-  hasBudget Boolean @default(false)
+  hasBudget        Boolean @default(false)
+  hasNegativeStock Boolean @default(false)
 
   // Operational Limits
   maxUsers    Int @default(1)
