@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Poppins } from "next/font/google";
 import React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import { UserButton } from "../auth/user-button";
 import { useSession } from "next-auth/react";
@@ -18,9 +19,13 @@ const font = Poppins({
 });
 
 export function NavigationMenuHeader() {
+  const pathname = usePathname();
   const { data: session } = useSession();
   const { open: mobileOpen, setOpen: setMobileOpen } = useMobileNav();
   const businessName = session?.user?.businessName || "Stock.ia";
+
+  // Ocultar el header en el catálogo público
+  if (pathname?.includes("/catalogo")) return null;
 
   return (
     <div

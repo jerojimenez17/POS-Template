@@ -5,16 +5,25 @@ import { auth } from "@/auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+
+interface CaeData {
+  CAE: string;
+  vencimiento: string;
+  nroComprobante: number;
+  qrData: string;
+}
+
 interface UpdateCaeInput {
-  CAE: {
-    CAE: string;
-    vencimiento: string;
-    nroComprobante: number;
-    qrData: string;
-  };
+  CAE: CaeData;
   IVACondition: string;
   documentNumber: number;
   paidMethod: string;
+  /** Persisted extra fields from the invoicing form */
+  twoMethods?: boolean;
+  secondPaidMethod?: string | null;
+  totalSecondMethod?: number | null;
+  discount?: number;
+  billType?: string;
 }
 
 export const updateOrderCaeAction = async (
@@ -26,14 +35,71 @@ export const updateOrderCaeAction = async (
   if (!businessId) return { error: "No autorizado" };
 
   try {
-    await db.order.update({
-      where: { id: orderId, businessId },
-      data: {
-        CAE: data.CAE,
-        clientIvaCondition: data.IVACondition,
-        clientDocumentNumber: String(data.documentNumber),
-        paymentMethod: data.paidMethod,
-      },
+    await db.$transaction(async (tx) => {
+      // 1. Fetch current order to compute diffs
+      const current = await tx.order.findUniqueOrThrow({
+        where: { id: orderId, businessId },
+      });
+
+      // 2. Update the order with billing info
+      await tx.order.update({
+        where: { id: orderId, businessId },
+        data: {
+          CAE: data.CAE,
+          clientIvaCondition: data.IVACondition,
+          clientDocumentNumber: String(data.documentNumber),
+          paymentMethod: data.paidMethod,
+          // Extra fields
+          ...(data.twoMethods !== undefined && {
+            paymentMethod2: data.twoMethods ? data.secondPaidMethod ?? null : null,
+            totalMethod2: data.twoMethods ? data.totalSecondMethod ?? 0 : 0,
+          }),
+          ...(data.discount !== undefined && {
+            discountPercentage: data.discount,
+          }),
+        },
+      });
+
+      // 3. Record billType in OrderUpdate history (it's not on the Order model)
+      if (data.billType) {
+        const lastUpdate = await tx.orderUpdate.findFirst({
+          where: { orderId },
+          orderBy: { version: "desc" },
+          select: { version: true },
+        });
+
+        await tx.orderUpdate.create({
+          data: {
+            orderId,
+            businessId,
+            updatedById: session!.user!.id,
+            type: "ITEMS_UPDATED",
+            message: "Facturación AFIP/ARCA",
+            version: (lastUpdate?.version ?? 0) + 1,
+            changes: {
+              billTypeChanged: {
+                from: null,
+                to: data.billType,
+              },
+              ivaChanged: {
+                from: { condition: current.clientIvaCondition, documentNumber: current.clientDocumentNumber },
+                to: { condition: data.IVACondition, documentNumber: String(data.documentNumber) },
+              },
+              paymentChanged: {
+                from: { method: current.paymentMethod, twoMethods: !!current.paymentMethod2, secondMethod: current.paymentMethod2 },
+                to: { method: data.paidMethod, twoMethods: !!data.twoMethods, secondMethod: data.secondPaidMethod ?? null },
+              },
+              ...(data.discount !== undefined && {
+                discountChanged: {
+                  from: current.discountPercentage,
+                  to: data.discount,
+                },
+              }),
+              billTypeTo: data.billType,
+            },
+          },
+        });
+      }
     });
 
     await pusherServer.trigger(

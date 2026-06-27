@@ -3,25 +3,31 @@
 import { useState, useMemo } from "react";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calculator, FileText, Receipt, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Calculator, FileText, Receipt, Loader2, ArrowRight } from "lucide-react";
 import type BillState from "@/models/BillState";
-import type CAE from "@/models/CAE";
 import BillTypes from "@/models/billType";
 import ClientConditions from "@/models/ClientConditions";
 import PaidMethods from "@/models/PaidMethods";
 import { createAfipVoucherAction } from "@/actions/afip";
+import { updateOrderCaeAction } from "@/actions/sales/update";
 import { toast } from "sonner";
 import { parsePlanError } from "@/lib/plan-error";
 import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { cn } from "@/lib/utils";
 
 interface InvoiceModalProps {
   open: boolean;
@@ -30,8 +36,6 @@ interface InvoiceModalProps {
 }
 
 const inputClass =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring";
-const selectClass =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring";
 
 export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalProps) {
@@ -62,7 +66,6 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
     [sale.products]
   );
   const discountAmount = subtotal * (discount / 100);
-  const totalFinal = subtotal - discountAmount;
 
   const formato = (n: number) =>
     n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -71,8 +74,9 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
   const handleInvoice = async () => {
     setInvoicing(true);
     try {
-      // Merge sale data with modal selections
-      const payload: BillState = {
+      const totalFinal = subtotal - discountAmount;
+
+      const payload = {
         ...sale,
         billType,
         IVACondition: ivaCondition,
@@ -86,7 +90,7 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
         totalWithDiscount: totalFinal,
         clientIvaCondition: ivaCondition,
         clientDocumentNumber: String(documentNumber),
-      };
+      } as BillState;
 
       const result = await createAfipVoucherAction(payload);
       if ("error" in result && result.error) {
@@ -96,7 +100,31 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
         } else {
           toast.error(result.error);
         }
-      } else if ("success" in result && result.success) {
+      } else if ("success" in result && result.success && result.data?.afip) {
+        // Persist CAE + form changes to the order
+        const afipData = result.data.afip;
+        const caeResult = await updateOrderCaeAction(sale.id, {
+          CAE: {
+            CAE: afipData.CAE,
+            vencimiento: afipData.CAEFchVto,
+            nroComprobante: result.data.nroCbte || afipData.nroCbte,
+            qrData: result.data.qrData || afipData.qrData,
+          },
+          IVACondition: ivaCondition,
+          documentNumber,
+          paidMethod,
+          twoMethods,
+          secondPaidMethod: twoMethods ? secondPaidMethod : null,
+          totalSecondMethod: twoMethods ? totalSecondMethod : null,
+          discount,
+          billType,
+        });
+
+        if (caeResult.error) {
+          toast.error("CAE creado pero no se pudo actualizar la venta: " + caeResult.error);
+          return;
+        }
+
         toast.success("Factura emitida correctamente");
         onOpenChange(false);
         window.location.reload();
@@ -112,18 +140,21 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-6xl max-h-[95vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-6xl max-h-[95vh] overflow-y-auto gap-0 p-0">
+          {/* ──── HEADER ──── */}
+          <DialogHeader className="px-6 pt-6 pb-0">
             <DialogTitle className="text-xl flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
               Facturar Venta #{sale.id.slice(-6).toUpperCase()}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="py-4">
+          {/* ──── BODY ──── */}
+          <div className="px-6 py-5">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+
               {/* ──── DATOS DEL COMPROBANTE ──── */}
-              <section className="lg:col-span-3 bg-card border rounded-xl p-5 shadow-sm">
+              <section className="lg:col-span-3 bg-card border rounded-xl p-5 shadow-sm self-start">
                 <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   Datos del comprobante
@@ -133,32 +164,34 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
                       Tipo
                     </Label>
-                    <select
-                      value={billType}
-                      onChange={(e) => setBillType(e.target.value)}
-                      className={selectClass}
-                    >
-                      {Object.values(BillTypes).map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+                    <Select value={billType} onValueChange={setBillType}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(BillTypes).map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
                       Cond. IVA
                     </Label>
-                    <select
-                      value={ivaCondition}
-                      onChange={(e) => setIvaCondition(e.target.value)}
-                      className={selectClass}
-                    >
-                      {Object.values(ClientConditions).map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                    <Select value={ivaCondition} onValueChange={setIvaCondition}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(ClientConditions).map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   {showDocInput ? (
-                    <div>
+                    <div className="sm:col-span-2">
                       <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
                         {ivaCondition === ClientConditions.CUIT ? "CUIT" : "DNI"}
                       </Label>
@@ -171,17 +204,40 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
                       />
                     </div>
                   ) : (
-                    <div className="flex items-end pb-1">
+                    <div className="sm:col-span-2 flex items-end pb-1">
                       <span className="text-xs text-muted-foreground/60 italic">
                         Consumidor Final — no requiere documento
                       </span>
                     </div>
                   )}
                 </div>
+
+                {/* ──── FACTURAR BUTTON ──── */}
+                <Button
+                  size="lg"
+                  onClick={handleInvoice}
+                  disabled={invoicing}
+                  className="w-full mt-5 h-11 text-base font-semibold gap-2 shadow-sm
+                    bg-gradient-to-r from-blue-600 to-blue-500
+                    hover:from-blue-700 hover:to-blue-600
+                    active:scale-[0.98] transition-all duration-150"
+                >
+                  {invoicing ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Facturando...
+                    </>
+                  ) : (
+                    <>
+                      Facturar
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </Button>
               </section>
 
               {/* ──── CLIENTE (compacto) ──── */}
-              <section className="lg:col-span-2 bg-card border rounded-xl p-5 shadow-sm">
+              <section className="lg:col-span-2 bg-card border rounded-xl p-5 shadow-sm self-start">
                 <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   Cliente
@@ -217,15 +273,16 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
                       Medio de pago
                     </Label>
-                    <select
-                      value={paidMethod}
-                      onChange={(e) => setPaidMethod(e.target.value)}
-                      className={selectClass}
-                    >
-                      {Object.values(PaidMethods).map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
+                    <Select value={paidMethod} onValueChange={setPaidMethod}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(PaidMethods).map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="flex items-end pb-1">
                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
@@ -244,15 +301,16 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
                       <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
                         2do medio
                       </Label>
-                      <select
-                        value={secondPaidMethod}
-                        onChange={(e) => setSecondPaidMethod(e.target.value)}
-                        className={selectClass}
-                      >
-                        {Object.values(PaidMethods).map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
+                      <Select value={secondPaidMethod} onValueChange={setSecondPaidMethod}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.values(PaidMethods).map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div>
                       <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
@@ -276,10 +334,10 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
                   <Calculator className="h-4 w-4 text-muted-foreground" />
                   Resumen
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4 items-center">
+                <div className="flex flex-wrap items-end gap-x-12 gap-y-4">
                   <div>
                     <span className="text-xs text-muted-foreground block mb-1">Subtotal</span>
-                    <span className="text-lg font-semibold font-mono tabular-nums">
+                    <span className="text-2xl font-bold font-mono tabular-nums">
                       $ {formato(subtotal)}
                     </span>
                   </div>
@@ -291,7 +349,7 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
                           type="number"
                           value={discount || ""}
                           onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
-                          className={`${inputClass} pr-7 text-right`}
+                          className={cn(inputClass, "pr-7 text-right")}
                           placeholder="0"
                           min={0}
                           max={100}
@@ -310,33 +368,23 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
                       )}
                     </div>
                   </div>
-                  <div className="sm:text-right">
-                    <span className="text-xs text-muted-foreground block mb-1">Total final</span>
-                    <span className="text-2xl font-bold font-mono tabular-nums text-primary">
-                      $ {formato(totalFinal)}
-                    </span>
-                  </div>
                 </div>
               </section>
+
             </div>
           </div>
 
-          <DialogFooter className="gap-3 pt-4 border-t border-border">
-            <DialogClose asChild>
-              <Button variant="outline" disabled={invoicing}>
-                Cancelar
-              </Button>
-            </DialogClose>
+          {/* ──── FOOTER (solo cancelar) ──── */}
+          <div className="px-6 py-4 border-t border-border flex justify-end">
             <Button
-              variant="default"
-              autoFocus
-              onClick={handleInvoice}
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
               disabled={invoicing}
+              className="text-muted-foreground hover:text-foreground"
             >
-              {invoicing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {invoicing ? "Facturando..." : "Facturar"}
+              Cancelar
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
