@@ -138,7 +138,7 @@ export default function PrintOptionsPopover({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir">
-          <Printer className="h-4 w-4 text-gray-500" />
+          <Printer className="h-4 w-4 text-blue-500 dark:text-blue-400" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">

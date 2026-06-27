@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -17,6 +16,7 @@ import { updateOrderCaeAction } from "@/actions/sales/update";
 import { Input } from "../ui/input";
 import { paidMethods } from "@/utils/PaidMethods";
 import { Button } from "../ui/button";
+import { FileText, Receipt, Calculator } from "lucide-react";
 
 interface BillingModalProps {
   open: boolean;
@@ -120,98 +120,126 @@ const BillingModal = ({
     }
   };
 
-  const totalToDisplay = sale.totalWithDiscount || sale.total;
+  const totalToDisplay = useMemo(
+    () => sale.totalWithDiscount || sale.total,
+    [sale.totalWithDiscount, sale.total],
+  );
+
+  const inputClass =
+    "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-106.25 bg-white text-black">
+      <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-pink-400">Facturar Venta</DialogTitle>
-          <DialogDescription>
-            Genere una Factura C para esta venta existente.
-          </DialogDescription>
+          <DialogTitle className="text-xl flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            Facturar Venta
+          </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          {/* Tipo de Comprobante - Fixed */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <label className="text-right text-sm text-gray-500">Tipo</label>
-            <Input
-              disabled
-              value="Factura C"
-              className="col-span-3 border-gray-300"
-            />
-          </div>
 
-          {/* Condición IVA */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <label htmlFor="iva" className="text-right text-sm text-gray-500">
-              Condición
-            </label>
-            <div className="col-span-3">
-              <Select
-                id="iva"
-                active={true}
-                value={ivaCondition}
-                options={["Consumidor Final", "CUIT", "DNI"]}
-                handleChange={(e) => {
-                  setIvaCondition(e.target.value);
-                  if (e.target.value === "Consumidor Final") {
-                    setDocumentNumber("");
-                  }
-                }}
-              />
+        <div className="py-2 space-y-5">
+          {/* Datos del comprobante */}
+          <section className="bg-card border rounded-xl p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Datos del comprobante
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                  Tipo
+                </label>
+                <input
+                  disabled
+                  value="Factura C"
+                  className={`${inputClass} opacity-60 cursor-not-allowed`}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                  Cond. IVA
+                </label>
+                <Select
+                  id="iva"
+                  active={true}
+                  value={ivaCondition}
+                  options={["Consumidor Final", "CUIT", "DNI"]}
+                  handleChange={(e) => {
+                    setIvaCondition(e.target.value);
+                    if (e.target.value === "Consumidor Final") {
+                      setDocumentNumber("");
+                    }
+                  }}
+                />
+              </div>
+              {ivaCondition !== "Consumidor Final" && (
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                    {ivaCondition === "CUIT" ? "CUIT" : "DNI"}
+                  </label>
+                  <Input
+                    id="docNumber"
+                    value={documentNumber}
+                    onChange={handleDocumentNumberChange}
+                    maxLength={ivaCondition === "CUIT" ? 11 : 8}
+                    className="h-9 text-sm rounded-md"
+                  />
+                </div>
+              )}
+              {ivaCondition === "Consumidor Final" && (
+                <div className="flex items-end pb-1">
+                  <span className="text-xs text-muted-foreground/60 italic">
+                    Consumidor Final — no requiere documento
+                  </span>
+                </div>
+              )}
             </div>
-          </div>
+          </section>
 
-          {/* Document Number */}
-          {ivaCondition !== "Consumidor Final" && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label
-                htmlFor="docNumber"
-                className="text-right text-sm text-gray-500"
-              >
-                {ivaCondition === "CUIT" ? "CUIT" : "DNI"}
-              </label>
-              <Input
-                id="docNumber"
-                value={documentNumber}
-                onChange={handleDocumentNumberChange}
-                maxLength={ivaCondition === "CUIT" ? 11 : 8}
-                className="col-span-3 border-gray-300"
-              />
-            </div>
-          )}
-
-          {/* Forma de Pago */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <label
-              htmlFor="payment"
-              className="text-right text-sm text-gray-500"
-            >
+          {/* Pago */}
+          <section className="bg-card border rounded-xl p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-muted-foreground" />
               Pago
-            </label>
-            <div className="col-span-3">
-              <Select
-                id="payment"
-                active={true}
-                value={paymentMethod}
-                options={paidMethods.map((pm) => pm.name)}
-                handleChange={(e) => setPaymentMethod(e.target.value)}
-              />
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                  Medio de pago
+                </label>
+                <Select
+                  id="payment"
+                  active={true}
+                  value={paymentMethod}
+                  options={paidMethods.map((pm) => pm.name)}
+                  handleChange={(e) => setPaymentMethod(e.target.value)}
+                />
+              </div>
             </div>
-          </div>
+          </section>
 
-          {/* Totales */}
-          <div className="flex justify-end pt-4">
-            <div className="text-lg font-bold text-pink-400">
-              Total: $
-              {totalToDisplay.toLocaleString("es-AR", {
-                minimumFractionDigits: 2,
-              })}
+          {/* Resumen */}
+          <section className="bg-card border rounded-xl p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-muted-foreground" />
+              Total
+            </h3>
+            <div className="flex justify-end">
+              <div className="text-right">
+                <span className="text-xs text-muted-foreground block mb-1">Total final</span>
+                <span className="text-2xl font-bold font-mono tabular-nums text-primary">
+                  $ {totalToDisplay.toLocaleString("es-AR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
             </div>
-          </div>
+          </section>
         </div>
-        <DialogFooter>
+
+        <DialogFooter className="gap-3 pt-2 border-t border-border">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -222,7 +250,7 @@ const BillingModal = ({
           <Button
             onClick={handleBilling}
             disabled={loading}
-            className="bg-pink-400 hover:bg-pink-500 text-white"
+            autoFocus
           >
             {loading ? "Facturando..." : "Facturar"}
           </Button>

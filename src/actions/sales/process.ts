@@ -46,8 +46,9 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
 
-  // Gate: check AFIP billing feature when CAE is present
-  if (billState.CAE) {
+  // Gate: check AFIP billing feature when CAE is present (CAE is Json?, check actual number)
+  const billCae = billState.CAE as { CAE?: string } | null | undefined;
+  if (billCae?.CAE) {
     const featureCheck = await requireFeature("hasAfipBilling");
     if (!featureCheck.success) {
       return { error: featureCheck.error || "Esta funcionalidad no está disponible en tu plan actual." };
@@ -340,8 +341,9 @@ export const updateOrderAction = async (
 
       if (!existingOrder) throw new Error("Orden no encontrada");
 
-      // Block editing invoiced sales
-      if (existingOrder.CAE) {
+      // Block editing invoiced sales (CAE is Json?, check actual CAE number not just truthy)
+      const orderCae = existingOrder.CAE as { CAE?: string } | null;
+      if (orderCae?.CAE) {
         throw new Error("Esta venta ya fue facturada. No se puede editar. Genere una nota de crédito.");
       }
 
@@ -498,7 +500,7 @@ export const updateOrderAction = async (
     console.error("Error updating sale:", error);
     // Preserve specific CAE guard message instead of generic error
     if (error instanceof Error && error.message.includes("ya fue facturada")) {
-      return { error: error.message };
+      return { success: false as const, error: error.message };
     }
     return fail("Error al actualizar la venta");
   }
