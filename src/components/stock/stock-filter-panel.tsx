@@ -13,6 +13,8 @@ interface Props {
   handleOpenSelectionModal?: () => void;
   codeOnly: boolean;
   onCodeOnlyChange: (value: boolean) => void;
+  exactCode?: boolean;
+  onExactCodeChange?: (value: boolean) => void;
 }
 
 const StockFilterPanel = ({
@@ -21,6 +23,8 @@ const StockFilterPanel = ({
   handleOpenExcelModal,
   codeOnly,
   onCodeOnlyChange,
+  exactCode = false,
+  onExactCodeChange,
 }: Props) => {
   const router = useRouter();
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -52,15 +56,28 @@ const StockFilterPanel = ({
           onChange={handleSearchChange}
           onKeyDown={handleKeyDown}
         />
-        <label className="flex items-center gap-1.5 mt-1 cursor-pointer text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 select-none">
-          <input
-            type="checkbox"
-            checked={codeOnly}
-            onChange={(e) => onCodeOnlyChange(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600"
-          />
-          Solo código
-        </label>
+          <div className="flex items-center gap-4 mt-2">
+            <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 select-none">
+              <input
+                type="checkbox"
+                checked={codeOnly}
+                onChange={(e) => onCodeOnlyChange(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600"
+              />
+              Solo código
+            </label>
+            {onExactCodeChange && (
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 select-none">
+                <input
+                  type="checkbox"
+                  checked={exactCode}
+                  onChange={(e) => onExactCodeChange(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600"
+                />
+                Código exacto
+              </label>
+            )}
+          </div>
       </div>
 
       {/* Actions */}

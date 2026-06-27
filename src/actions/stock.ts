@@ -753,6 +753,7 @@ export const getProductsPaginated = async (params: {
   brandId?: string;
   unit?: string;
   codeOnly?: boolean;
+  exactCode?: boolean;
 }) => {
   const session = await auth();
   if (!session?.user?.businessId)
@@ -763,6 +764,11 @@ export const getProductsPaginated = async (params: {
   const skip = (page - 1) * pageSize;
 
   const businessId = session.user.businessId;
+
+  // Exact code match bypasses ranked search
+  if (params.search && params.exactCode) {
+    return getProductsExactCode(params.search, businessId, page, pageSize, skip, params);
+  }
 
   // pg_trgm ranked search for queries >= 3 chars
   if (params.search && params.search.length >= 3) {
@@ -807,6 +813,44 @@ export const getProductsPaginated = async (params: {
   } catch (error) {
     console.error("Error fetching paginated products:", error);
     return { products: [], total: 0, page, pageSize, totalPages: 0 };
+  }
+};
+
+const getProductsExactCode = async (
+  search: string,
+  businessId: string,
+  page: number,
+  pageSize: number,
+  skip: number,
+  filters: { categoryId?: string; brandId?: string; unit?: string; codeOnly?: boolean },
+) => {
+  const where: Prisma.ProductWhereInput = {
+    businessId,
+    OR: [
+      { code: { equals: search, mode: "insensitive" } },
+      { codebar: { equals: search, mode: "insensitive" } },
+    ],
+    ...(filters.categoryId && { categoryId: filters.categoryId }),
+    ...(filters.brandId && { brandId: filters.brandId }),
+    ...(filters.unit && { unit: filters.unit }),
+  };
+
+  try {
+    const [products, total] = await db.$transaction([
+      db.product.findMany({
+        where,
+        include: { brand: { select: { id: true, name: true } }, images: { select: { id: true, url: true } } },
+        orderBy: { code: "asc" },
+        skip,
+        take: pageSize,
+      }),
+      db.product.count({ where }),
+    ]);
+
+    return { products, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  } catch (error) {
+    console.error("Error in getProductsExactCode:", error);
+    return { products: [], total: 0, page: 1, pageSize: 25, totalPages: 0 };
   }
 };
 
