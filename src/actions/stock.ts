@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "../../auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { Product, Prisma } from "@prisma/client";
+import { assertLimit } from "@/lib/auth-gates";
 
 
 // Supplier Actions
@@ -263,6 +264,16 @@ export const processBulkProductBatch = async (
     const businessId = session.user.businessId;
     let createdCount = 0;
     let updatedCount = 0;
+
+    // Check limit before processing bulk
+    const newProductsCount = productsData.length;
+    if (newProductsCount > 0) {
+      const currentCount = await db.product.count({ where: { businessId } });
+      const limitCheck = await assertLimit("maxProducts", currentCount + newProductsCount);
+      if (!limitCheck.success) {
+        return { error: limitCheck.error || "Has alcanzado el límite de productos de tu plan." };
+      }
+    }
 
     // 1. Gather all unique names for Brands, Categories, and Subcategories
     const brandNames = Array.from(new Set(productsData.map(p => p.brandName?.trim()).filter(Boolean))) as string[];

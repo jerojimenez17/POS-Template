@@ -322,8 +322,13 @@ const ProductForm = ({ product, onClose }: Props) => {
           };
           const result = await newProduct(submissionValues);
           if (result.error) {
-            toast.error(result.error);
-            setErrorMessages([result.error]);
+            const parsed = parsePlanError(result.error);
+            if (parsed.isPlanError) {
+              setPlanError(parsed);
+            } else {
+              toast.error(result.error);
+              setErrorMessages([result.error]);
+            }
           } else {
             setUploadMessages(["Producto cargado con éxito"]);
             toast.success("Producto cargado con éxito");
@@ -341,6 +346,7 @@ const ProductForm = ({ product, onClose }: Props) => {
   };
 
   return (
+    <>
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
@@ -932,6 +938,16 @@ const ProductForm = ({ product, onClose }: Props) => {
         <FormError key={message} message={message} />
       ))}
     </Form>
+
+    <FeatureBlockedModal
+      open={!!planError}
+      onOpenChange={(open) => { if (!open) setPlanError(null); }}
+      variant={planError?.variant ?? "feature"}
+      feature={planError?.feature}
+      resource={planError?.resource}
+      limitValue={planError?.limitValue}
+    />
+    </>
   );
 };
 

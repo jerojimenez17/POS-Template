@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { BulkProductInput, previewProductsBulk, PreviewProductsBulkResult, processBulkProductBatch, finalizeBulkImport } from "@/actions/stock";
 import { toast } from "sonner";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import * as XLSX from 'xlsx';
 import { UploadCloud, CheckCircle2, ArrowRight, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +32,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [step, setStep] = useState<"config" | "preview">("config");
   const [previewData, setPreviewData] = useState<PreviewProductsBulkResult["preview"] | null>(null);
   const [parsedProductsState, setParsedProductsState] = useState<BulkProductInput[]>([]);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
@@ -279,7 +282,12 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         );
 
         if ('error' in result) {
-          toast.error(result.error, { id: "bulk-confirm" });
+          const parsed = parsePlanError(result.error);
+          if (parsed.isPlanError) {
+            setPlanError(parsed);
+          } else {
+            toast.error(result.error, { id: "bulk-confirm" });
+          }
           setLoading(false);
           return;
         }
@@ -319,6 +327,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(val) => {
       if (!val) {
         setStep("config");
@@ -674,5 +683,15 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         )}
       </DialogContent>
     </Dialog>
+
+      <FeatureBlockedModal
+        open={!!planError}
+        onOpenChange={(open) => { if (!open) setPlanError(null); }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
+      />
+    </>
   );
 }

@@ -446,6 +446,7 @@ Creado: {format(account.date, "dd/MM/yyyy HH:mm")} – Última
         feature={planError?.feature}
         resource={planError?.resource}
         limitValue={planError?.limitValue}
+        showAcknowledge={false}
       />
     </div>
   );
