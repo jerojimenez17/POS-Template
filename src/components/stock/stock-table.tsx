@@ -11,7 +11,6 @@ import {
 import noImgPhoto from "../../../public/no-image.svg";
 import Image from "next/image";
 import ProductForm from "./product-form";
-import BarcodeModal from "./BarcodeModal";
 import { Button } from "../ui/button";
 import { Edit2, Trash2 } from "lucide-react";
 import {
@@ -263,21 +262,6 @@ const StockTable = ({ descriptionFilter }: props) => {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                      <BarcodeModal
-                        productId={product.id}
-                        code={product.code}
-                        codebar={product.codebar || undefined}
-                        description={product.description || ""}
-                        salePrice={product.salePrice}
-                        unit={product.unit ?? undefined}
-                        onSuccess={(newCodebar) => {
-                          setProducts((prev) =>
-                            prev.map((p) =>
-                              p.id === product.id ? { ...p, codebar: newCodebar } : p
-                            )
-                          );
-                        }}
-                      />
                     </TableCell>
                   </TableRow>
                 );
