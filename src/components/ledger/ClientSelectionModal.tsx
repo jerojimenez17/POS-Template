@@ -15,6 +15,8 @@ import {
 } from "../ui/dialog";
 import { toast } from "sonner";
 import { Loader2, User, Search, Plus } from "lucide-react";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import { createClient } from "@/actions/clients";
 import { getClientUnpaidOrders, addItemsToOrder } from "@/actions/unpaid-orders";
 
@@ -98,6 +100,7 @@ export default function ClientSelectionModal({
   const [selectedExistingOrderId, setSelectedExistingOrderId] = useState<string | null>(null);
   const [showExistingOrderDialog, setShowExistingOrderDialog] = useState(false);
   const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -172,7 +175,12 @@ export default function ClientSelectionModal({
       });
 
       if (result.error) {
-        toast.error(result.error);
+        const parsed = parsePlanError(result.error);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+        } else {
+          toast.error(result.error);
+        }
       } else {
         toast.success(result.success || "Cliente creado correctamente");
         setIsCreateModalOpen(false);
@@ -259,7 +267,12 @@ export default function ClientSelectionModal({
             paidMethod: "Efectivo",
           });
           if ('error' in result && result.error) {
-            toast.error(result.error as string);
+            const parsed = parsePlanError(result.error as string);
+            if (parsed.isPlanError) {
+              setPlanError(parsed);
+            } else {
+              toast.error(result.error as string);
+            }
           } else {
             toast.success("Presupuesto creado correctamente");
             onOpenChange(false);
@@ -288,7 +301,12 @@ export default function ClientSelectionModal({
           onOpenChange(false);
           onSuccess?.();
         } else {
-          toast.error(result.error || "Error al crear la orden");
+          const parsed = parsePlanError(result.error || "");
+          if (parsed.isPlanError) {
+            setPlanError(parsed);
+          } else {
+            toast.error(result.error || "Error al crear la orden");
+          }
         }
       }
     } catch (error) {
@@ -325,7 +343,12 @@ export default function ClientSelectionModal({
         onOpenChange(false);
         onSuccess?.();
       } else {
-        toast.error(result.error || "Error al agregar items a la orden");
+        const parsed = parsePlanError(result.error || "");
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+        } else {
+          toast.error(result.error || "Error al agregar items a la orden");
+        }
       }
     } catch (error) {
       console.error("Error adding to existing order:", error);
@@ -665,6 +688,17 @@ export default function ClientSelectionModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <FeatureBlockedModal
+      open={!!planError}
+      onOpenChange={(open) => {
+        if (!open) setPlanError(null);
+      }}
+      variant={planError?.variant ?? "feature"}
+      feature={planError?.feature}
+      resource={planError?.resource}
+      limitValue={planError?.limitValue}
+    />
     </>
   );
 }

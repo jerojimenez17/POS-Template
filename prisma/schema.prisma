@@ -2,7 +2,8 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL_UNPOOLED")
+  // uncomment next line if you use Prisma <5.10
+  // directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 generator client {
@@ -89,7 +90,6 @@ model Business {
   timezone                    String?   @default("America/Argentina/Buenos_Aires")
   orderUpdates      OrderUpdate[]
   features          BusinessFeatures?
-  shortcutConfigs   ShortcutConfig[]
 }
 
 enum BusinessStatus {
@@ -234,7 +234,6 @@ model Product {
   rankings        ProductRanking[]
   stockMovements  StockMovement[]
   saleReturnItems SaleReturnItem[]
-  shortcutConfigs ShortcutConfig[]
 
   @@index([businessId])
   @@index([businessId, description])
@@ -535,39 +534,30 @@ enum Plan {
   ENTERPRISE
 }
 
-model ShortcutConfig {
-  id         String   @id @default(cuid())
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  key        String   // "F1" | "F2" | "F3"
-  productId  String
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+model PlanDefinition {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  features    Json              // { hasAfipBilling, hasPublicCatalog, ... }
+  limits      Json              // { maxUsers, maxProducts, maxCashboxes, maxClients, dailySalesLimit }
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  displayOrder Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  @@unique([businessId, key])
-  @@index([businessId])
+  businessFeatures BusinessFeatures[]
 }
 
 model BusinessFeatures {
-  id         String   @id @default(cuid())
-  businessId String   @unique
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  plan Plan @default(BASIC)
-
-  // Feature Toggles
-  hasAfipBilling    Boolean @default(false)
-  hasPublicCatalog  Boolean @default(false)
-  hasClientLedger   Boolean @default(false)
-  hasMultiCashbox   Boolean @default(false)
-  hasSupplierFilter Boolean @default(false)
-  hasBudget        Boolean @default(false)
-  hasNegativeStock Boolean @default(false)
-
-  // Operational Limits
-  maxUsers    Int @default(1)
-  maxProducts Int @default(100)
-
-  updatedAt DateTime @updatedAt
+  id                String         @id @default(cuid())
+  businessId        String         @unique
+  business          Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  planDefinitionId  String
+  planDefinition    PlanDefinition @relation(fields: [planDefinitionId], references: [id])
+  overrides         Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([businessId])
 }

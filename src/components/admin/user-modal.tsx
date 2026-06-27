@@ -34,8 +34,12 @@ import {
 import { createBusinessUser, updateBusinessUser } from "@/components/actions/users";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import { UserType } from "@/components/admin/users-table";
 import { CashBox } from "@prisma/client";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 
 interface UserModalProps {
   isOpen: boolean;
@@ -49,6 +53,7 @@ export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalPr
   const [isPending, startTransition] = useTransition();
 
   const isEditing = !!user;
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
 
   const form = useForm<z.infer<typeof BusinessUserSchema>>({
     resolver: zodResolver(BusinessUserSchema),
@@ -88,7 +93,12 @@ export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalPr
       if (isEditing) {
         updateBusinessUser(user.id, values).then((data) => {
           if (data.error) {
-            toast.error(data.error);
+            const parsed = parsePlanError(data.error);
+            if (parsed.isPlanError) {
+              setPlanError(parsed);
+            } else {
+              toast.error(data.error);
+            }
           } else {
             toast.success(data.success);
             onClose();
@@ -98,7 +108,12 @@ export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalPr
       } else {
         createBusinessUser(values).then((data) => {
           if (data.error) {
-            toast.error(data.error);
+            const parsed = parsePlanError(data.error);
+            if (parsed.isPlanError) {
+              setPlanError(parsed);
+            } else {
+              toast.error(data.error);
+            }
           } else {
             toast.success(data.success);
             onClose();
@@ -110,6 +125,7 @@ export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalPr
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) {
         onClose();
@@ -238,5 +254,14 @@ export const UserModal = ({ isOpen, onClose, user, cashboxes = [] }: UserModalPr
         </Form>
       </DialogContent>
     </Dialog>
-  );
+
+    <FeatureBlockedModal
+      open={!!planError}
+      onOpenChange={(open) => { if (!open) setPlanError(null); }}
+      variant={planError?.variant ?? "feature"}
+      feature={planError?.feature}
+      resource={planError?.resource}
+      limitValue={planError?.limitValue}
+    />
+    </>   );
 };

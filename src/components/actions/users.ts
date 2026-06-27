@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { auth } from "../../../auth";
 import { BusinessUserSchema } from "@/schemas";
 import bcrypt from "bcryptjs";
+import { assertLimit } from "@/lib/auth-gates";
 
 export const getBusinessUsers = async () => {
   const session = await auth();
@@ -43,6 +44,12 @@ export const createBusinessUser = async (values: z.infer<typeof BusinessUserSche
   // Only SUPER_ADMIN or ADMIN can create users
   if (!session || !session.user || !session.user.businessId || session.user.role === "USER") {
     return { error: "No autorizado" };
+  }
+
+  const currentCount = await db.user.count({ where: { businessId: session.user.businessId } });
+  const limitCheck = await assertLimit("maxUsers", currentCount);
+  if (!limitCheck.success) {
+    return { error: limitCheck.error || "Has alcanzado el límite de usuarios de tu plan." };
   }
 
   const validateFields = BusinessUserSchema.safeParse(values);

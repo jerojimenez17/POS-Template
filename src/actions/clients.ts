@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { fail } from "@/lib/action-result";
+import { assertLimit } from "@/lib/auth-gates";
 
 export const createClient = async (data: {
   name: string;
@@ -16,6 +17,13 @@ export const createClient = async (data: {
 }) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const currentCount = await db.client.count({ where: { businessId: session.user.businessId } });
+  const limitCheck = await assertLimit("maxClients", currentCount);
+  if (!limitCheck.success) {
+    return { error: limitCheck.error || "Has alcanzado el límite de clientes de tu plan." };
+  }
+
   try {
     const client = await db.client.create({
       data: {
