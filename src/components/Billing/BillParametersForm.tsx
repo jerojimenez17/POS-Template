@@ -85,6 +85,25 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
     };
   }, [form, onOrderResetRef]);
 
+  // Sync form from BillContext when in cards layout (edit mode)
+  const syncKey = `${BillState.IVACondition}-${BillState.documentNumber}-${BillState.paidMethod}`;
+  useEffect(() => {
+    if (layout === "cards" && BillState.IVACondition) {
+      form.reset({
+        paidMethod: BillState.paidMethod || PaidMethods.EFECTIVO,
+        clientCondition: BillState.IVACondition || ClientConditions.CONSUMIDOR_FINAL,
+        discount: BillState.discount || 0,
+        twoMethods: BillState.twoMethods || false,
+        billType: BillState.billType || BillTypes.C,
+        totalSecondMethod: BillState.totalSecondMethod || 0,
+        secondPaidMethod: BillState.secondPaidMethod || PaidMethods.DEBITO,
+        ptoVenta: BillState.ptoVenta || (ptoVentas.length > 0 ? ptoVentas[0] : undefined),
+        documentNumber: BillState.documentNumber || 0,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncKey, layout, form]);
+
   const currentDate = useMemo(() => new Date(), []);
   const billStateRef = useRef(BillState);
   billStateRef.current = BillState;

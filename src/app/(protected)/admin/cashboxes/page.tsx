@@ -25,7 +25,7 @@ export default async function AdminCashboxesPage() {
       <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild title="Volver">
-            <Link href="/admin">
+            <Link href="/">
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>

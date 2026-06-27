@@ -30,6 +30,7 @@ interface ProcessSaleInput {
   discount?: number;
   clientId?: string;
   twoMethods?: boolean;
+  billType?: string;
   products: SaleProduct[];
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
@@ -356,6 +357,71 @@ export const updateOrderAction = async (
       const version = (lastUpdate?.version ?? 0) + 1;
 
       // 🔹 calcular cambios
+      // Helper: normalize strings for comparison
+      const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+
+      const ivaChanged = (() => {
+        const from = existingOrder.clientIvaCondition;
+        const to = updatedData.clientIvaCondition ?? null;
+        const docFrom = existingOrder.clientDocumentNumber;
+        const docTo = updatedData.clientDocumentNumber ?? null;
+        if (norm(from) !== norm(to) || norm(docFrom) !== norm(docTo)) {
+          return {
+            from: { condition: from, documentNumber: docFrom },
+            to: { condition: to, documentNumber: docTo },
+          };
+        }
+        return undefined;
+      })();
+
+      // Bill type from the latest history (not stored on Order, but tracked via updates)
+      const billTypeChanged = (() => {
+        if (!updatedData.billType) return undefined;
+        // Try to get previous bill type from last history entry
+        let prevBillType: string | null = null;
+        if (lastUpdate?.changes) {
+          try {
+            const prevChanges = lastUpdate.changes as Record<string, unknown>;
+            prevBillType = (prevChanges.billTypeTo as string | null) ?? null;
+          } catch { /* ignore */ }
+        }
+        // Only detect change when we have a recorded previous value (skip first edit — no baseline)
+        if (prevBillType !== null && norm(prevBillType) !== norm(updatedData.billType)) {
+          return {
+            from: prevBillType,
+            to: updatedData.billType,
+          };
+        }
+        return undefined;
+      })();
+
+      const paymentChanged = (() => {
+        const fromMethod = existingOrder.paymentMethod;
+        const toMethod = updatedData.paidMethod;
+        const fromTwo = !!existingOrder.paymentMethod2;
+        const toTwo = !!updatedData.twoMethods;
+        const fromSecond = existingOrder.paymentMethod2;
+        // Only compare second method when twoMethods is active on either side
+        // (form always defaults secondPaidMethod even when twoMethods=false)
+        const toSecond = toTwo ? (updatedData.secondPaidMethod ?? null) : null;
+        if (norm(fromMethod) !== norm(toMethod) || fromTwo !== toTwo || norm(fromSecond) !== norm(toSecond)) {
+          return {
+            from: { method: fromMethod, twoMethods: fromTwo, secondMethod: fromSecond },
+            to: { method: toMethod, twoMethods: toTwo, secondMethod: toSecond },
+          };
+        }
+        return undefined;
+      })();
+
+      const discountChanged = (() => {
+        const from = existingOrder.discountPercentage;
+        const to = updatedData.discount;
+        if (from !== to) {
+          return { from: from ?? 0, to: to ?? 0 };
+        }
+        return undefined;
+      })();
+
       const changes: OrderUpdateChanges = {
         type: "ITEMS_UPDATED",
         items: updatedData.products.map((p) => ({
@@ -369,6 +435,12 @@ export const updateOrderAction = async (
             to: p.amount,
           },
         })),
+        ...(ivaChanged && { ivaChanged }),
+        ...(billTypeChanged && { billTypeChanged }),
+        ...(paymentChanged && { paymentChanged }),
+        ...(discountChanged && { discountChanged }),
+        // Store current billType for future history reads (order doesn't store it)
+        ...(updatedData.billType ? { billTypeTo: updatedData.billType } : {}),
       };
 
       // 🔹 snapshot cada 10 versiones

@@ -6,6 +6,8 @@ import { useForm } from "react-hook-form";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { z } from "zod";
 import { newProduct } from "../actions/newProduct";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import {
   Form,
   FormControl,
@@ -77,6 +79,7 @@ const ProductForm = ({ product, onClose }: Props) => {
   const [isPending, startTransition] = useTransition();
   const [uploadMessages, setUploadMessages] = useState<string[]>([]);
   const [errorMessages, setErrorMessages] = useState<string[]>([]);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
     [],
   );

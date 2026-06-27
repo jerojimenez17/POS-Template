@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import { Plan } from "@prisma/client";
 import { updateBusinessFeaturesAction } from "@/actions/superadmin";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -29,10 +28,20 @@ import { Label } from "@/components/ui/label";
 interface FeaturesFormProps {
   businessId: string;
   businessName: string;
+  planDefinitions: Array<{
+    id: string;
+    name: string;
+    features: any;
+    limits: any;
+    description: string | null;
+    displayOrder: number;
+  }>;
   initialFeatures: {
     id?: string;
     businessId: string;
-    plan: Plan;
+    planDefinitionId: string;
+    plan: string;
+    overrides: any;
     hasAfipBilling: boolean;
     hasPublicCatalog: boolean;
     hasClientLedger: boolean;
@@ -45,7 +54,7 @@ interface FeaturesFormProps {
 }
 
 interface PlanPreset {
-  plan: Plan;
+  planName: string;
   name: string;
   badge: string;
   price: string;
@@ -65,7 +74,7 @@ interface PlanPreset {
 
 const PRESETS: PlanPreset[] = [
   {
-    plan: Plan.BASIC,
+    planName: "BASIC",
     name: "Basic Plan",
     badge: "Inicial",
     price: "$15.000 / mes",
@@ -91,7 +100,7 @@ const PRESETS: PlanPreset[] = [
     ],
   },
   {
-    plan: Plan.PRO,
+    planName: "PRO",
     name: "Pro Plan",
     badge: "Más Popular",
     price: "$45.000 / mes",
@@ -117,7 +126,7 @@ const PRESETS: PlanPreset[] = [
     ],
   },
   {
-    plan: Plan.ENTERPRISE,
+    planName: "ENTERPRISE",
     name: "Premium / Enterprise",
     badge: "Ilimitado",
     price: "$120.000 / mes",
@@ -144,12 +153,16 @@ const PRESETS: PlanPreset[] = [
   },
 ];
 
-export function FeaturesForm({ businessId, businessName, initialFeatures }: FeaturesFormProps) {
+export function FeaturesForm({ businessId, businessName, planDefinitions, initialFeatures }: FeaturesFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // Modular states
-  const [selectedPlan, setSelectedPlan] = useState<Plan>(initialFeatures.plan);
+  // Find the matching PlanDefinition for the initial plan name
+  const initialPlanDef = planDefinitions.find((p) => p.name === initialFeatures.plan);
+  const initialPlanDefId = initialPlanDef?.id ?? initialFeatures.planDefinitionId;
+
+  // Modular states — use planDefinitionId to track selected plan
+  const [selectedPlanDefinitionId, setSelectedPlanDefinitionId] = useState(initialPlanDefId);
   const [hasAfipBilling, setHasAfipBilling] = useState(initialFeatures.hasAfipBilling);
   const [hasPublicCatalog, setHasPublicCatalog] = useState(initialFeatures.hasPublicCatalog);
   const [hasClientLedger, setHasClientLedger] = useState(initialFeatures.hasClientLedger);
@@ -161,11 +174,14 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
 
   const [isCustomOverride, setIsCustomOverride] = useState(false);
 
+  // Resolve the selected plan name from planDefinitions for matching
+  const selectedPlanName = planDefinitions.find((p) => p.id === selectedPlanDefinitionId)?.name ?? "";
+
   // Check if current states match any standard preset exactly
   useEffect(() => {
     const matchingPreset = PRESETS.find(
       (p) =>
-        p.plan === selectedPlan &&
+        p.planName === selectedPlanName &&
         p.hasAfipBilling === hasAfipBilling &&
         p.hasPublicCatalog === hasPublicCatalog &&
         p.hasClientLedger === hasClientLedger &&
@@ -176,11 +192,15 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
         p.maxProducts === maxProducts
     );
     setIsCustomOverride(!matchingPreset);
-  }, [selectedPlan, hasAfipBilling, hasPublicCatalog, hasClientLedger, hasMultiCashbox, hasSupplierFilter, hasBudget, maxUsers, maxProducts]);
+  }, [selectedPlanName, hasAfipBilling, hasPublicCatalog, hasClientLedger, hasMultiCashbox, hasSupplierFilter, hasBudget, maxUsers, maxProducts]);
 
   // Handle preset selection
   const handlePresetSelect = (preset: PlanPreset) => {
-    setSelectedPlan(preset.plan);
+    // Find matching PlanDefinition by name
+    const planDef = planDefinitions.find((p) => p.name === preset.planName);
+    if (planDef) {
+      setSelectedPlanDefinitionId(planDef.id);
+    }
     setHasAfipBilling(preset.hasAfipBilling);
     setHasPublicCatalog(preset.hasPublicCatalog);
     setHasClientLedger(preset.hasClientLedger);
@@ -192,20 +212,45 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
     toast.success(`Preset "${preset.name}" aplicado automáticamente.`);
   };
 
+  // Build overrides by comparing form state against selected PlanDefinition defaults
+  const buildOverrides = (): Record<string, any> | undefined => {
+    const selectedPlanDef = planDefinitions.find((p) => p.id === selectedPlanDefinitionId);
+    if (!selectedPlanDef) return undefined;
+
+    const defaults: Record<string, any> = {
+      ...(selectedPlanDef.features as Record<string, any>),
+      ...(selectedPlanDef.limits as Record<string, any>),
+    };
+
+    const currentValues: Record<string, any> = {
+      hasAfipBilling,
+      hasPublicCatalog,
+      hasClientLedger,
+      hasMultiCashbox,
+      hasSupplierFilter,
+      hasBudget,
+      maxUsers,
+      maxProducts,
+    };
+
+    const overrides: Record<string, any> = {};
+    for (const [key, value] of Object.entries(currentValues)) {
+      if (value !== defaults[key]) {
+        overrides[key] = value;
+      }
+    }
+
+    return Object.keys(overrides).length > 0 ? overrides : undefined;
+  };
+
   // Submit action
   const handleSave = () => {
     startTransition(async () => {
+      const overrides = buildOverrides();
       const payload = {
         businessId,
-        plan: selectedPlan,
-        hasAfipBilling,
-        hasPublicCatalog,
-        hasClientLedger,
-        hasMultiCashbox,
-        hasSupplierFilter,
-        hasBudget,
-        maxUsers,
-        maxProducts,
+        planDefinitionId: selectedPlanDefinitionId,
+        overrides,
       };
 
       const result = await updateBusinessFeaturesAction(payload);
@@ -244,7 +289,7 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {PRESETS.map((preset) => {
-            const isCurrentPresetSelected = selectedPlan === preset.plan;
+            const isCurrentPresetSelected = selectedPlanName === preset.planName;
             const matchesExactState =
               isCurrentPresetSelected &&
               preset.hasAfipBilling === hasAfipBilling &&
@@ -256,7 +301,7 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
 
             return (
               <Card
-                key={preset.plan}
+                key={preset.planName}
                 onClick={() => handlePresetSelect(preset)}
                 className={`relative flex flex-col justify-between overflow-hidden cursor-pointer transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl border-2 ${
                   matchesExactState
@@ -563,7 +608,8 @@ export function FeaturesForm({ businessId, businessName, initialFeatures }: Feat
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  setSelectedPlan(initialFeatures.plan);
+                  const resetPlanDef = planDefinitions.find((p) => p.name === initialFeatures.plan);
+                  if (resetPlanDef) setSelectedPlanDefinitionId(resetPlanDef.id);
                   setHasAfipBilling(initialFeatures.hasAfipBilling);
                   setHasPublicCatalog(initialFeatures.hasPublicCatalog);
                   setHasClientLedger(initialFeatures.hasClientLedger);

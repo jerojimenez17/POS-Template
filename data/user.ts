@@ -15,7 +15,7 @@ export const getUserById = async (id: string) => {
   try {
     const user = await db.user.findUnique({
       where: { id },
-      include: { business: { include: { features: true } } },
+      include: { business: { include: { features: { include: { planDefinition: true } } } } },
     });
     return user;
   } catch {

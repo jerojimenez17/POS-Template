@@ -5,6 +5,8 @@ import { auth } from "../../../auth";
 import { ProductSchema } from "@/schemas";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { assertLimit } from "@/lib/auth-gates";
+import { parsePlanError } from "@/lib/plan-error";
 
 type NewProductInput = z.infer<typeof ProductSchema> & {
   imageUrls?: string[];
@@ -13,6 +15,13 @@ type NewProductInput = z.infer<typeof ProductSchema> & {
 export const newProduct = async (values: NewProductInput) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const currentCount = await db.product.count({ where: { businessId: session.user.businessId } });
+  const limitCheck = await assertLimit("maxProducts", currentCount);
+  if (!limitCheck.success) {
+    const parsed = parsePlanError(limitCheck.error || "");
+    return { error: limitCheck.error || "Has alcanzado el límite de productos de tu plan.", errorCode: parsed.isPlanError ? "LIMIT_EXCEEDED" : undefined };
+  }
 
   const validateFields = ProductSchema.safeParse(values);
   if (!validateFields.success) {

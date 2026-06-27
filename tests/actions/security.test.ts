@@ -5,8 +5,14 @@ import { createAfipVoucherAction } from "@/actions/afip";
 import { createOrder } from "@/actions/orders";
 import { createCashbox, openSession } from "@/actions/cashbox";
 import { getPublicProductsByBusinessId } from "@/actions/catalog";
+import { getEffectivePlan } from "@/lib/plan-resolver";
 import { db } from "@/lib/db";
 import type { ActionResult } from "@/lib/action-result";
+
+// Mock plan-resolver for catalog tests
+vi.mock("@/lib/plan-resolver", () => ({
+  getEffectivePlan: vi.fn(),
+}));
 
 const mockAuth = vi.hoisted(() => vi.fn());
 
@@ -253,15 +259,26 @@ describe("Server-Side Action Security Gates Test Suite", () => {
     });
 
     describe("4. Catalog public product action (hasPublicCatalog)", () => {
-      it("should reject fetching products if hasPublicCatalog is false in the database", async () => {
-        const spy = vi.spyOn(db.businessFeatures, "findUnique").mockResolvedValue({
+      it("should reject fetching products if hasPublicCatalog is false", async () => {
+        vi.mocked(getEffectivePlan).mockResolvedValue({
+          plan: "BASIC",
+          hasAfipBilling: false,
           hasPublicCatalog: false,
-        } as any);
+          hasClientLedger: false,
+          hasMultiCashbox: false,
+          hasSupplierFilter: false,
+          hasBudget: false,
+          maxUsers: 1,
+          maxProducts: 100,
+          maxCashboxes: 1,
+          maxClients: 50,
+          dailySalesLimit: 999999,
+        });
 
         await expect(getPublicProductsByBusinessId("business_123")).rejects.toThrowError(
           "El catálogo público no está habilitado"
         );
-        expect(spy).toHaveBeenCalledWith({ where: { businessId: "business_123" } });
+        expect(getEffectivePlan).toHaveBeenCalledWith("business_123");
       });
     });
   });

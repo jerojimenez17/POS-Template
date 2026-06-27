@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { requireFeature } from "@/lib/auth-gates";
 
 interface LedgerProductInput {
   id: string;
@@ -45,6 +46,11 @@ export const createLedgerAccountAction = async (input: CreateLedgerInput) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
+
+  const featureCheck = await requireFeature("hasClientLedger");
+  if (!featureCheck.success) {
+    return { error: featureCheck.error || "Esta funcionalidad no está disponible en tu plan actual." };
+  }
 
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -205,6 +211,11 @@ export const addProductsToLedgerAction = async (
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
+
+  const featureCheck = await requireFeature("hasClientLedger");
+  if (!featureCheck.success) {
+    return { error: featureCheck.error || "Esta funcionalidad no está disponible en tu plan actual." };
+  }
 
   const now = new Date();
   const month = now.getMonth() + 1;

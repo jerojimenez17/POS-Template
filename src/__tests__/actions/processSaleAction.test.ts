@@ -3,6 +3,7 @@ import {
   processSaleAction,
   getSalesAction,
   getSaleByIdAction,
+  updateOrderAction,
 } from "@/actions/sales";
 
 vi.mock("@/lib/db", () => ({
@@ -741,5 +742,137 @@ describe("AFIP Feature Gate - processSaleAction", () => {
 
     expect(result.success).toBe(true);
     expect((db.$transaction as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+  });
+});
+
+describe("updateOrderAction — CAE validation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should update non-invoiced sale (no CAE) successfully", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "ADMIN" },
+    });
+
+    const existingOrder = {
+      id: "order-no-cae-edit",
+      total: 100,
+      seller: "Test Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      clientId: null,
+      clientIvaCondition: null,
+      clientDocumentNumber: null,
+      CAE: null,
+      discountAmount: 0,
+      discountPercentage: 0,
+      items: [],
+    };
+
+    let mockTx: any;
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: Function) => {
+        const tx = {
+          order: {
+            findFirst: vi.fn().mockResolvedValue(existingOrder),
+            update: vi.fn().mockResolvedValue(existingOrder),
+          },
+          orderUpdate: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue({ id: "update-1" }),
+          },
+          product: {
+            update: vi.fn().mockResolvedValue({}),
+          },
+          stockMovement: {
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        mockTx = tx;
+        return callback(tx);
+      }
+    );
+
+    const result = await updateOrderAction("order-no-cae-edit", {
+      total: 100,
+      seller: "Test Seller",
+      paidMethod: "Efectivo",
+      products: [
+        { id: "product-1", code: "P001", description: "Test", salePrice: 100, amount: 1 },
+      ],
+      clientIvaCondition: "CUIT",
+      clientDocumentNumber: "20123456789",
+    });
+
+    expect(result.success).toBe(true);
+    // Verify IVA fields were included in the update
+    expect(mockTx.order.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          clientIvaCondition: "CUIT",
+          clientDocumentNumber: "20123456789",
+        }),
+      })
+    );
+  });
+
+  it("should block editing invoiced sale (CAE present)", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "ADMIN" },
+    });
+
+    const existingOrderWithCAE = {
+      id: "order-cae-blocked",
+      total: 100,
+      seller: "Test Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      clientId: null,
+      CAE: { CAE: "1234567890123", vencimiento: "2026-12-31", nroComprobante: 1, qrData: "https://example.com/qr" },
+      discountAmount: 0,
+      discountPercentage: 0,
+      items: [],
+    };
+
+    let mockTx: any;
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: Function) => {
+        const tx = {
+          order: {
+            findFirst: vi.fn().mockResolvedValue(existingOrderWithCAE),
+          },
+        };
+        mockTx = tx;
+        return callback(tx);
+      }
+    );
+
+    const result = await updateOrderAction("order-cae-blocked", {
+      total: 100,
+      seller: "Test Seller",
+      paidMethod: "Efectivo",
+      products: [
+        { id: "product-1", code: "P001", description: "Test", salePrice: 100, amount: 1 },
+      ],
+    });
+
+    // Should fail because CAE exists (throw inside transaction → outer catch returns error)
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+    // order.findFirst was called (CAE check happened)
+    expect(mockTx.order.findFirst).toHaveBeenCalled();
+    // order.update should NOT have been called because CAE check throws before it
+    expect(mockTx.order.update).toBeUndefined();
   });
 });

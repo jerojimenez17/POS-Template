@@ -10,10 +10,24 @@ vi.mock("@/lib/db", () => ({
     business: {
       findUnique: vi.fn(),
     },
-    businessFeatures: {
-      findUnique: vi.fn().mockResolvedValue({ hasPublicCatalog: true }),
-    },
   },
+}));
+
+vi.mock("@/lib/plan-resolver", () => ({
+  getEffectivePlan: vi.fn().mockResolvedValue({
+    plan: "BASIC",
+    hasAfipBilling: false,
+    hasPublicCatalog: true,
+    hasClientLedger: false,
+    hasMultiCashbox: false,
+    hasSupplierFilter: false,
+    hasBudget: false,
+    maxUsers: 1,
+    maxProducts: 100,
+    maxCashboxes: 1,
+    maxClients: 50,
+    dailySalesLimit: 999999,
+  }),
 }));
 
 describe("getBusinessBySlug", () => {
@@ -106,6 +120,9 @@ describe("getPublicProductsByBusinessId", () => {
         amount: 50,
         brand: { name: "Brand A" },
         category: { name: "Category X" },
+        images: [],
+        catalog: true,
+        details: null,
       },
       {
         id: "product-2",
@@ -117,6 +134,9 @@ describe("getPublicProductsByBusinessId", () => {
         amount: 30,
         brand: null,
         category: { name: "Category Y" },
+        images: [],
+        catalog: true,
+        details: null,
       },
     ];
 
@@ -135,6 +155,9 @@ describe("getPublicProductsByBusinessId", () => {
       unit: "unidades",
       image: "https://example.com/img1.jpg",
       amount: 50,
+      images: [],
+      catalog: true,
+      details: null,
     });
   });
 
@@ -152,6 +175,9 @@ describe("getPublicProductsByBusinessId", () => {
         amount: 10,
         brand: { name: "Brand" },
         category: null,
+        images: [],
+        catalog: true,
+        details: null,
       },
     ];
 
@@ -183,6 +209,9 @@ describe("getPublicProductsByBusinessId", () => {
         amount: 100,
         brand: { name: "TestBrand" },
         category: { name: "TestCat" },
+        images: [],
+        catalog: true,
+        details: null,
       },
     ];
 
@@ -224,9 +253,9 @@ describe("getPublicProductsByBusinessId", () => {
     const { db } = await import("@/lib/db");
 
     const mockProducts = [
-      { id: "p1", code: null, description: "Zebra Product", salePrice: 100, unit: null, image: null, amount: 10, brand: null, category: null },
-      { id: "p2", code: null, description: "Apple Product", salePrice: 100, unit: null, image: null, amount: 10, brand: null, category: null },
-      { id: "p3", code: null, description: "Mango Product", salePrice: 100, unit: null, image: null, amount: 10, brand: null, category: null },
+      { id: "p1", code: null, description: "Zebra Product", salePrice: 100, unit: null, image: null, amount: 10, brand: null, category: null, images: [], catalog: true, details: null },
+      { id: "p2", code: null, description: "Apple Product", salePrice: 100, unit: null, image: null, amount: 10, brand: null, category: null, images: [], catalog: true, details: null },
+      { id: "p3", code: null, description: "Mango Product", salePrice: 100, unit: null, image: null, amount: 10, brand: null, category: null, images: [], catalog: true, details: null },
     ];
 
     (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
@@ -254,6 +283,9 @@ describe("getPublicProductsByBusinessId", () => {
         amount: 10,
         brand: null,
         category: null,
+        images: [],
+        catalog: true,
+        details: null,
       },
     ];
 
@@ -261,6 +293,7 @@ describe("getPublicProductsByBusinessId", () => {
 
     const result = await getPublicProductsByBusinessId("business-123");
 
+    expect(result).toHaveLength(1);
     expect(result[0].brand).toBeNull();
     expect(result[0].category).toBeNull();
   });
@@ -280,6 +313,8 @@ describe("getPublicProductsByBusinessId", () => {
         amount: 50,
         brand: { name: "Brand A" },
         category: { name: "Category X" },
+        images: [],
+        catalog: true,
       },
     ];
 
@@ -289,6 +324,7 @@ describe("getPublicProductsByBusinessId", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].details).toBe("Detailed description of the product");
+    expect(result[0].images).toEqual([]);
   });
 
   it("should query only products where catalog is true", async () => {

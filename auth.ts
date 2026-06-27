@@ -3,8 +3,9 @@ import NextAuth from "next-auth";
 import authConfig from "./auth.config";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
+import { resolvePlanFromBusiness } from "@/lib/plan-resolver";
 import { getUserById, getUserByEmail } from "./data/user";
-import { UserRole, Plan, BusinessStatus } from "@prisma/client";
+import { UserRole, BusinessStatus } from "@prisma/client";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { LoginSchema } from "@/schemas";
 import bcrypt from "bcryptjs";
@@ -80,20 +81,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       token.businessSlug = existingUser.business?.slug || null;
       token.image = existingUser.image;
       if (existingUser.business) {
+        const resolved = resolvePlanFromBusiness(existingUser.business);
+
         token.business = {
           name: existingUser.business.name,
           slug: existingUser.business.slug,
           accountStatus: existingUser.business.accountStatus as BusinessStatus,
-          features: existingUser.business.features || {
-            plan: Plan.BASIC,
-      hasAfipBilling: false,
-      hasPublicCatalog: false,
-      hasClientLedger: false,
-      hasMultiCashbox: false,
-      hasSupplierFilter: false,
-      hasBudget: false,
+          features: resolved || {
+            plan: "BASIC",
+            hasAfipBilling: false,
+            hasPublicCatalog: false,
+            hasClientLedger: false,
+            hasMultiCashbox: false,
+            hasSupplierFilter: false,
+            hasBudget: false,
             maxUsers: 1,
             maxProducts: 100,
+            maxCashboxes: 1,
+            maxClients: 50,
+            dailySalesLimit: 999999,
           },
         };
       } else {

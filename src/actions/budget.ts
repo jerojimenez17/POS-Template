@@ -6,6 +6,7 @@ import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
+import { requireFeature } from "@/lib/auth-gates";
 
 interface BudgetProduct {
   id: string;
@@ -32,6 +33,11 @@ export const createBudgetAction = async (input: BudgetInput) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
+
+  const featureCheck = await requireFeature("hasBudget");
+  if (!featureCheck.success) {
+    return { error: featureCheck.error || "Esta funcionalidad no está disponible en tu plan actual." };
+  }
 
   try {
     const discountPercent = Number(input.discount) || 0;

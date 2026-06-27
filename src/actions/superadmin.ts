@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { UserRole, Plan } from "@prisma/client";
+import { UserRole, Prisma } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/lib/auth";
@@ -101,15 +101,8 @@ export const deleteBusiness = async (businessId: string) => {
 
 export const updateBusinessFeaturesAction = async (payload: {
   businessId: string;
-  plan: Plan;
-  hasAfipBilling: boolean;
-  hasPublicCatalog: boolean;
-  hasClientLedger: boolean;
-  hasMultiCashbox: boolean;
-  hasSupplierFilter: boolean;
-  hasBudget: boolean;
-  maxUsers: number;
-  maxProducts: number;
+  planDefinitionId: string;
+  overrides?: Record<string, any>;
 }) => {
   const session = await auth();
 
@@ -118,6 +111,33 @@ export const updateBusinessFeaturesAction = async (payload: {
   }
 
   try {
+    // Load PlanDefinition to validate override keys
+    const planDef = await db.planDefinition.findUnique({
+      where: { id: payload.planDefinitionId },
+    });
+    if (!planDef) {
+      return { success: false, error: "Plan no encontrado" };
+    }
+
+    // Build set of valid keys from PlanDefinition features + limits
+    const validKeys = new Set<string>();
+    const features = planDef.features as Record<string, any>;
+    Object.keys(features).forEach((k) => validKeys.add(k));
+    const limits = planDef.limits as Record<string, any>;
+    Object.keys(limits).forEach((k) => validKeys.add(k));
+
+    // Validate that all override keys exist in the PlanDefinition
+    if (payload.overrides) {
+      for (const key of Object.keys(payload.overrides)) {
+        if (!validKeys.has(key)) {
+          return {
+            success: false,
+            error: `Override inválido: '${key}' no existe en el plan ${planDef.name}`,
+          };
+        }
+      }
+    }
+
     await db.$transaction(async (tx) => {
       const business = await tx.business.findUnique({
         where: { id: payload.businessId },
@@ -130,27 +150,13 @@ export const updateBusinessFeaturesAction = async (payload: {
       await tx.businessFeatures.upsert({
         where: { businessId: payload.businessId },
         update: {
-          plan: payload.plan,
-          hasAfipBilling: payload.hasAfipBilling,
-          hasPublicCatalog: payload.hasPublicCatalog,
-          hasClientLedger: payload.hasClientLedger,
-          hasMultiCashbox: payload.hasMultiCashbox,
-          hasSupplierFilter: payload.hasSupplierFilter,
-          hasBudget: payload.hasBudget,
-          maxUsers: payload.maxUsers,
-          maxProducts: payload.maxProducts,
+          planDefinitionId: payload.planDefinitionId,
+          overrides: payload.overrides ?? Prisma.JsonNull,
         },
         create: {
           businessId: payload.businessId,
-          plan: payload.plan,
-          hasAfipBilling: payload.hasAfipBilling,
-          hasPublicCatalog: payload.hasPublicCatalog,
-          hasClientLedger: payload.hasClientLedger,
-          hasMultiCashbox: payload.hasMultiCashbox,
-          hasSupplierFilter: payload.hasSupplierFilter,
-          hasBudget: payload.hasBudget,
-          maxUsers: payload.maxUsers,
-          maxProducts: payload.maxProducts,
+          planDefinitionId: payload.planDefinitionId,
+          overrides: payload.overrides ?? Prisma.JsonNull,
         },
       });
     });

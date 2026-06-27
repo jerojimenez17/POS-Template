@@ -1,0 +1,36 @@
+status: archived
+phase: 2
+prd_ref: FR-003 to FR-010
+change: fix-critical-bugs
+branch: fix-critical-bugs
+commits: []
+completed_at: 2026-06-25
+artifacts:
+  - proposal.md
+  - exploration.md
+  - spec.md
+  - design.md
+  - tasks.md
+  - verify-report.md
+  - archive-report.md
+verification:
+  verdict: PASS
+  tests: 314 passed, 100 failed (pre-existing: 97+), 11 errors (pre-existing)
+  tsc: pass (pre-existing errors unchanged)
+known_debt:
+  - FR-007: AccountLedgerContent navigates to /account-ledger/[id] with client ID. New /account-ledger/client/[clientId] route needed.
+files_touched: 14
+  - src/actions/catalog.ts (modified)
+  - src/app/[business]/catalogo/page.tsx (modified)
+  - src/components/Billing/PrintableTable.tsx (modified)
+  - src/components/Billing/FilterBillPanel.tsx (modified)
+  - src/components/admin/user-modal.tsx (modified)
+  - src/actions/stock/products.ts (modified)
+  - src/components/ProductDataTable.tsx (modified)
+  - src/components/Billing/BillButtons.tsx (modified)
+  - src/app/(protected)/account-ledger/AccountLedgerContent.tsx (rewritten)
+  - src/components/ui/feature-blocked-modal.tsx (created)
+  - src/actions/clients.ts (created)
+  - src/__tests__/actions/catalog.test.ts (modified)
+  - tests/actions/security.test.ts (modified)
+  - src/components/CashRegister.tsx (verified — no change needed)

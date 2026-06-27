@@ -7,6 +7,7 @@ import { ChevronRight, Shield, Calendar, Building, Hash } from "lucide-react";
 import { FeaturesForm } from "./FeaturesForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { resolveFeatures } from "@/lib/plan-resolver";
 
 interface FeaturesPageProps {
   params: Promise<{
@@ -24,11 +25,17 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
 
   const { id } = await params;
 
+  // Load all active plan definitions for the plan selector
+  const planDefinitions = await db.planDefinition.findMany({
+    orderBy: { displayOrder: "asc" },
+    where: { isActive: true },
+  });
+
   // Eager-load the target business features from the database
   const business = await db.business.findUnique({
     where: { id },
     include: {
-      features: true,
+      features: { include: { planDefinition: true } },
       users: {
         select: {
           id: true,
@@ -44,20 +51,75 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
     redirect("/superadmin/businesses");
   }
 
-  // Provide sensible default features if they do not exist yet
-  const businessFeatures = business.features || {
-    id: "",
-    businessId: business.id,
-    plan: "BASIC",
-    hasAfipBilling: false,
-    hasPublicCatalog: false,
-    hasClientLedger: false,
-    hasMultiCashbox: false,
-    hasSupplierFilter: false,
-    hasBudget: false,
-    maxUsers: 1,
-    maxProducts: 100,
+  // Resolve initial features: if BusinessFeatures exists with PlanDefinition, merge defaults + overrides
+  type InitialBusinessFeatures = {
+    id?: string;
+    businessId: string;
+    planDefinitionId: string;
+    plan: string;
+    overrides: any;
+    hasAfipBilling: boolean;
+    hasPublicCatalog: boolean;
+    hasClientLedger: boolean;
+    hasMultiCashbox: boolean;
+    hasSupplierFilter: boolean;
+    hasBudget: boolean;
+    maxUsers: number;
+    maxProducts: number;
+    maxCashboxes: number;
+    maxClients: number;
+    dailySalesLimit: number;
   };
+
+  let businessFeatures: InitialBusinessFeatures;
+
+  if (business.features?.planDefinition) {
+    const resolved = resolveFeatures(
+      {
+        features: business.features.planDefinition.features as Record<string, any>,
+        limits: business.features.planDefinition.limits as Record<string, any>,
+      },
+      business.features.overrides as Record<string, any> | null,
+    );
+
+    businessFeatures = {
+      id: business.features.id,
+      businessId: business.id,
+      planDefinitionId: business.features.planDefinitionId,
+      plan: business.features.planDefinition.name,
+      overrides: business.features.overrides,
+      hasAfipBilling: resolved.hasAfipBilling,
+      hasPublicCatalog: resolved.hasPublicCatalog,
+      hasClientLedger: resolved.hasClientLedger,
+      hasMultiCashbox: resolved.hasMultiCashbox,
+      hasSupplierFilter: resolved.hasSupplierFilter,
+      hasBudget: resolved.hasBudget,
+      maxUsers: resolved.maxUsers,
+      maxProducts: resolved.maxProducts,
+      maxCashboxes: resolved.maxCashboxes,
+      maxClients: resolved.maxClients,
+      dailySalesLimit: resolved.dailySalesLimit,
+    };
+  } else {
+    businessFeatures = {
+      id: "",
+      businessId: business.id,
+      planDefinitionId: planDefinitions.find((p) => p.name === "BASIC")?.id ?? "",
+      plan: "BASIC",
+      overrides: null,
+      hasAfipBilling: false,
+      hasPublicCatalog: false,
+      hasClientLedger: false,
+      hasMultiCashbox: false,
+      hasSupplierFilter: false,
+      hasBudget: false,
+      maxUsers: 1,
+      maxProducts: 100,
+      maxCashboxes: 1,
+      maxClients: 50,
+      dailySalesLimit: 999999,
+    };
+  }
 
   const owner = business.users.find((u) => u.id === business.userId) || business.users[0];
 
@@ -182,6 +244,7 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
         businessId={business.id}
         businessName={business.name}
         initialFeatures={businessFeatures}
+        planDefinitions={planDefinitions}
       />
     </div>
   );

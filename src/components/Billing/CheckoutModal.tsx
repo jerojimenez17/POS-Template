@@ -16,6 +16,8 @@ import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
 import { Search, User, Plus, Loader2, FileText, Receipt, Calculator } from "lucide-react";
 import { toast } from "sonner";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import { createClient } from "@/actions/clients";
 import BillTypes from "@/models/billType";
 import ClientConditions from "@/models/ClientConditions";
@@ -82,6 +84,7 @@ export default function CheckoutModal({
   const [newPhone, setNewPhone] = useState("");
   const [newAddress, setNewAddress] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
 
   // --- Derived totals ---
   const subtotal = useMemo(
@@ -149,7 +152,12 @@ export default function CheckoutModal({
         address: newAddress.trim() || undefined,
       });
       if (result.error) {
-        toast.error(result.error);
+        const parsed = parsePlanError(result.error);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+        } else {
+          toast.error(result.error);
+        }
       } else {
         toast.success(result.success || "Cliente creado");
         setIsCreateOpen(false);
@@ -602,6 +610,17 @@ export default function CheckoutModal({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FeatureBlockedModal
+        open={!!planError}
+        onOpenChange={(open) => {
+          if (!open) setPlanError(null);
+        }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
+      />
     </>
   );
 }

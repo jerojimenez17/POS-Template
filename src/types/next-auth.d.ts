@@ -1,4 +1,4 @@
-import { UserRole, Plan, BusinessStatus } from "@prisma/client";
+import { UserRole, BusinessStatus } from "@prisma/client";
 import { type DefaultSession } from "next-auth";
 
 export type ExtendedUser = DefaultSession["user"] & {
@@ -12,7 +12,7 @@ export type ExtendedUser = DefaultSession["user"] & {
     slug: string;
     accountStatus: BusinessStatus;
     features: {
-      plan: Plan;
+      plan: string;
       hasAfipBilling: boolean;
       hasPublicCatalog: boolean;
       hasClientLedger: boolean;
@@ -21,6 +21,9 @@ export type ExtendedUser = DefaultSession["user"] & {
       hasBudget: boolean;
       maxUsers: number;
       maxProducts: number;
+      maxCashboxes: number;
+      maxClients: number;
+      dailySalesLimit: number;
     };
   } | null;
 };

@@ -23,7 +23,8 @@ import {
   DialogHeader,
   DialogDescription,
 } from "../ui/dialog";
-import { Lock, FileText, Wallet, CheckCircle, MessageCircle } from "lucide-react";
+import { Lock, FileText, Wallet, CheckCircle } from "lucide-react";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useFeatures } from "@/hooks/useFeatures";
 import { createBudgetAction } from "@/actions/budget";
@@ -37,6 +38,7 @@ interface props {
 }
 const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVentas }: props) => {
   const canUseBudget = session?.user?.business?.features?.hasBudget ?? false;
+  const canUseLedger = session?.user?.business?.features?.hasClientLedger ?? false;
   const router = useRouter();
   const [createVoucherError, setCreateVoucherError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -53,6 +55,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const [openFeatureBlockedModal, setOpenFeatureBlockedModal] = useState(false);
+  const [openLedgerBlockedModal, setOpenLedgerBlockedModal] = useState(false);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(
@@ -144,7 +147,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       const resp = await createAfipVoucherAction(BillState);
 
       if (resp.error) {
-        toast.error(resp.error);
         setBlockButton(false);
         return null;
       }
@@ -231,6 +233,19 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         }
         if (secondAmount >= totalAmount) {
           setErrorMessage("El monto del segundo medio de pago debe ser menor al total");
+          setOpenErrorModal(true);
+          setBlockButton(false);
+          return;
+        }
+      }
+
+      // Validación: Condición IVA requiere número de documento
+      const ivaCond = BillState.clientIvaCondition || BillState.IVACondition;
+      if (ivaCond && ivaCond !== "Consumidor Final") {
+        const docNum = BillState.clientDocumentNumber || BillState.documentNumber;
+        if (!docNum || String(docNum).trim() === "" || Number(docNum) === 0) {
+          const tipoDoc = ivaCond === "CUIT" ? "CUIT" : "DNI";
+          setErrorMessage(`Debe ingresar un ${tipoDoc} para la condición ${ivaCond}`);
           setOpenErrorModal(true);
           setBlockButton(false);
           return;
@@ -372,6 +387,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
             disabled={!hasActiveSession || BillState.products.length === 0}
             onClick={() => {
               if (!checkSession()) return;
+              if (!canUseLedger) {
+                setOpenLedgerBlockedModal(true);
+                return;
+              }
               setOpenAcuentaModal(true);
             }}
           >
@@ -608,40 +627,20 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         </DialogContent>
       </Dialog>
 
-      {/* Blocked Feature Modal */}
-      <Dialog open={openFeatureBlockedModal} onOpenChange={setOpenFeatureBlockedModal}>
-        <DialogContent className="sm:max-w-md">
-          <div className="flex flex-col items-center text-center py-6 px-2 gap-4">
-            <div className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-950/50 flex items-center justify-center">
-              <Lock className="h-7 w-7 text-red-400 dark:text-red-400" />
-            </div>
-            <div>
-              <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                Funcionalidad no disponible
-              </DialogTitle>
-              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-                Esta funcionalidad no está incluida en tu plan actual.
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Contactanos vía WhatsApp para activarlo.
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 w-full mt-2">
-              <a
-                href="https://wa.me/5492265418113"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1"
-              >
-                <Button className="w-full rounded-lg bg-[#25D366] hover:bg-[#128C7E] text-white flex items-center gap-2 justify-center">
-                  <MessageCircle className="h-4 w-4" />
-                  Contactar por WhatsApp
-                </Button>
-              </a>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FeatureBlockedModal
+        open={openFeatureBlockedModal}
+        onOpenChange={setOpenFeatureBlockedModal}
+        variant="feature"
+        feature="Facturación electrónica (ARCA)"
+      />
+
+      <FeatureBlockedModal
+        open={openLedgerBlockedModal}
+        onOpenChange={setOpenLedgerBlockedModal}
+        variant="feature"
+        feature="Cuenta Corriente"
+        showAcknowledge={false}
+      />
     </div>
   );
 };

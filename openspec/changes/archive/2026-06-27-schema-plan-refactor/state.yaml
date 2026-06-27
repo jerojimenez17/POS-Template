@@ -1,0 +1,13 @@
+change: schema-plan-refactor
+status: archived
+created: 2026-06-25
+archived: 2026-06-27
+phases:
+  explore: completed
+  proposal: completed
+  spec: completed
+  design: completed
+  tasks: completed
+  apply: completed
+  verify: completed
+  archive: completed

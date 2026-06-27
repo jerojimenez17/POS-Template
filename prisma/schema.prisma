@@ -534,26 +534,30 @@ enum Plan {
   ENTERPRISE
 }
 
+model PlanDefinition {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  features    Json              // { hasAfipBilling, hasPublicCatalog, ... }
+  limits      Json              // { maxUsers, maxProducts, maxCashboxes, maxClients, dailySalesLimit }
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  displayOrder Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  businessFeatures BusinessFeatures[]
+}
+
 model BusinessFeatures {
-  id         String   @id @default(cuid())
-  businessId String   @unique
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  plan Plan @default(BASIC)
-
-  // Feature Toggles
-  hasAfipBilling    Boolean @default(false)
-  hasPublicCatalog  Boolean @default(false)
-  hasClientLedger   Boolean @default(false)
-  hasMultiCashbox   Boolean @default(false)
-  hasSupplierFilter Boolean @default(false)
-  hasBudget Boolean @default(false)
-
-  // Operational Limits
-  maxUsers    Int @default(1)
-  maxProducts Int @default(100)
-
-  updatedAt DateTime @updatedAt
+  id                String         @id @default(cuid())
+  businessId        String         @unique
+  business          Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  planDefinitionId  String
+  planDefinition    PlanDefinition @relation(fields: [planDefinitionId], references: [id])
+  overrides         Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([businessId])
 }

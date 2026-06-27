@@ -17,6 +17,24 @@ export type OrderUpdateChanges =
         quantity?: { from: number; to: number }
         price?: { from: number; to: number }
       }[]
+      ivaChanged?: {
+        from: { condition: string | null; documentNumber: string | null }
+        to: { condition: string | null; documentNumber: string | null }
+      }
+      billTypeChanged?: {
+        from: string | null
+        to: string | null
+      }
+      paymentChanged?: {
+        from: { method: string | null; twoMethods: boolean; secondMethod: string | null }
+        to: { method: string | null; twoMethods: boolean; secondMethod: string | null }
+      }
+      discountChanged?: {
+        from: number
+        to: number
+      }
+      // Stored for future history reads (billType is not on Order model)
+      billTypeTo?: string
     }
   | {
       type: "ITEMS_REMOVED"

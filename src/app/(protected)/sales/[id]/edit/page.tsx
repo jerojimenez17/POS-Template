@@ -39,7 +39,7 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="container mx-auto px-4 py-6 md:py-8 max-w-7xl h-full flex flex-col">
-      <Link href={`/sales/${id}`} className="text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors w-fit mb-4 text-sm font-medium">
+      <Link href={`/sales/${id}`} className="text-red-500/70 hover:text-red-600 dark:text-red-400/70 dark:hover:text-red-400 flex items-center gap-1 transition-colors w-fit mb-4 text-sm font-medium">
         <ArrowLeft className="h-4 w-4" /> Cancelar Edición
       </Link>
       <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-4 md:p-6 overflow-hidden">
