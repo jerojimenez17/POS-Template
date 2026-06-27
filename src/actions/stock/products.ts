@@ -6,7 +6,7 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
-import { assertLimit } from "@/lib/auth-gates";
+import { checkLimit } from "@/lib/plan-resolver";
 import { Product, Prisma } from "@prisma/client";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "@/firebase/config";
@@ -18,9 +18,10 @@ export const createProduct = async (data: Product) => {
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
   const currentCount = await db.product.count({ where: { businessId: session.user.businessId } });
-  const limitCheck = await assertLimit("maxProducts", currentCount);
-  if (!limitCheck.success) {
-    return { error: limitCheck.error || "Has alcanzado el límite de productos de tu plan." };
+  try {
+    await checkLimit(session.user.businessId, "products", currentCount);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Has alcanzado el límite de productos de tu plan." };
   }
 
   try {

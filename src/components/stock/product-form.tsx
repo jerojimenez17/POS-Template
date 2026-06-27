@@ -586,7 +586,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-sm font-medium">
-                  Margen de ganancia % <span className="text-red-500">*</span>
+                  Margen de ganancia %
                 </FormLabel>
                 <FormControl>
                   <div className="relative">
@@ -612,7 +612,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Categoria <span className="text-red-500">*</span>
+                  Categoria
                 </FormLabel>
                 <div className="flex gap-2">
                   <Select onValueChange={field.onChange} value={field.value}>
@@ -679,7 +679,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Marca <span className="text-red-500">*</span>
+                  Marca
                 </FormLabel>
                 <div className="flex gap-2">
                   <Select onValueChange={field.onChange} value={field.value}>
@@ -767,7 +767,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-sm font-medium">
-                  Unidad <span className="text-red-500">*</span>
+                  Unidad
                 </FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>

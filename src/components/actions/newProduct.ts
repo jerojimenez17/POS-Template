@@ -7,6 +7,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { assertLimit } from "@/lib/auth-gates";
 import { parsePlanError } from "@/lib/plan-error";
+import { getDailyUsage, checkDailyLimit, incrementDailyUsage } from "@/lib/daily-limits";
 
 type NewProductInput = z.infer<typeof ProductSchema> & {
   imageUrls?: string[];
@@ -21,6 +22,13 @@ export const newProduct = async (values: NewProductInput) => {
   if (!limitCheck.success) {
     const parsed = parsePlanError(limitCheck.error || "");
     return { error: limitCheck.error || "Has alcanzado el límite de productos de tu plan.", errorCode: parsed.isPlanError ? "LIMIT_EXCEEDED" : undefined };
+  }
+
+  // Daily limit check for DEMO plan
+  const usage = await getDailyUsage(session.user.businessId);
+  const dailyLimitCheck = await checkDailyLimit(session.user.businessId, "dailyProductsLimit", usage.productsCreated);
+  if (!dailyLimitCheck.allowed) {
+    return { error: `Has superado el límite diario de creación de productos (${dailyLimitCheck.limit}).` };
   }
 
   const validateFields = ProductSchema.safeParse(values);
@@ -67,6 +75,7 @@ export const newProduct = async (values: NewProductInput) => {
       });
     }
 
+    await incrementDailyUsage(session.user.businessId, "productsCreated");
     revalidatePath("/stock");
     return { success: "Producto cargado con éxito" };
   } catch (error) {

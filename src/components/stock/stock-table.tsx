@@ -10,10 +10,10 @@ import {
 } from "../ui/table";
 import noImgPhoto from "../../../public/no-image.svg";
 import Image from "next/image";
-import DeleteButton from "../DeleteButton";
 import ProductForm from "./product-form";
 import BarcodeModal from "./BarcodeModal";
 import { Button } from "../ui/button";
+import { Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -240,13 +240,18 @@ const StockTable = ({ descriptionFilter }: props) => {
                       />
                     </TableCell>
                     <TableCell className="z-50">
-                      <DeleteButton
-                        id="deleteButton"
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={(e) => {
                           e.stopPropagation();
                           setProductToEdit(product);
                           setOpenDeleteModal(true);
-                        }} disable={false} />
+                        }}
+                        className="h-8 w-8 text-slate-500 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                       <BarcodeModal
                         productId={product.id}
                         code={product.code}
