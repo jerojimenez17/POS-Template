@@ -29,17 +29,38 @@ export const register = async (values: z.infer<typeof RegisterSchema>) => {
     .replace(/^-+|-+$/g, "") + "-" + Date.now().toString().slice(-4);
 
   try {
+    // Find DEMO PlanDefinition (fallback: first default plan)
+    const demoPlan = await db.planDefinition.findFirst({
+      where: { name: "DEMO", isActive: true },
+    });
+
+    if (!demoPlan) {
+      return { error: "Error de configuración: no hay plan DEMO disponible. Contacta al administrador." };
+    }
+
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 30);
+
      // Transaction to ensure both Business and User are created or neither
     await db.$transaction(async (tx) => {
-      // 1. Create Business
+      // 1. Create Business with trial tracking
       const business = await tx.business.create({
         data: {
           name: businessName,
           slug: slug,
+          trialEndsAt: trialEndsAt,
         },
       });
 
-      // 2. Create User linked to Business as ADMIN
+      // 2. Create BusinessFeatures with DEMO plan
+      await tx.businessFeatures.create({
+        data: {
+          businessId: business.id,
+          planDefinitionId: demoPlan.id,
+        },
+      });
+
+      // 3. Create User linked to Business as ADMIN
       await tx.user.create({
         data: {
           name: registerName,

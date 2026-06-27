@@ -7,6 +7,7 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
 import { requireFeature } from "@/lib/auth-gates";
 import { fail } from "@/lib/action-result";
+import { getDailyUsage, checkDailyLimit, incrementDailyUsage } from "@/lib/daily-limits";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
 
@@ -54,6 +55,15 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
     if (!featureCheck.success) {
       return { error: featureCheck.error || "Esta funcionalidad no está disponible en tu plan actual." };
     }
+  }
+
+  // Daily limit check for DEMO plan
+  const usage = await getDailyUsage(businessId);
+  const limitCheck = await checkDailyLimit(businessId, "dailySalesLimit", usage.salesCount);
+  if (!limitCheck.allowed) {
+    return {
+      error: `Has superado el límite diario de ventas (${limitCheck.limit}). En tu plan actual solo podés realizar ${limitCheck.limit} ventas por día.`,
+    };
   }
 
   try {
@@ -215,6 +225,9 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
     for (const movement of result.movements) {
       await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
     }
+
+    // Track daily usage for DEMO plan limits
+    await incrementDailyUsage(businessId, "salesCount");
 
     revalidateTag(CACHE_TAGS.STOCK, "max");
     revalidateTag(CACHE_TAGS.CASHBOX, "max");

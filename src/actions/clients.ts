@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { fail } from "@/lib/action-result";
-import { assertLimit } from "@/lib/auth-gates";
+import { checkLimit } from "@/lib/plan-resolver";
+import { getDailyUsage, checkDailyLimit, incrementDailyUsage } from "@/lib/daily-limits";
 
 export const createClient = async (data: {
   name: string;
@@ -19,9 +20,17 @@ export const createClient = async (data: {
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
   const currentCount = await db.client.count({ where: { businessId: session.user.businessId } });
-  const limitCheck = await assertLimit("maxClients", currentCount);
-  if (!limitCheck.success) {
-    return { error: limitCheck.error || "Has alcanzado el límite de clientes de tu plan." };
+  try {
+    await checkLimit(session.user.businessId, "clients", currentCount);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Has alcanzado el límite de clientes de tu plan." };
+  }
+
+  // Daily limit check for DEMO plan
+  const usage = await getDailyUsage(session.user.businessId);
+  const dailyLimitCheck = await checkDailyLimit(session.user.businessId, "dailyClientsLimit", usage.clientsCreated);
+  if (!dailyLimitCheck.allowed) {
+    return { error: `Has superado el límite diario de creación de clientes (${dailyLimitCheck.limit}).` };
   }
 
   try {
@@ -36,6 +45,7 @@ export const createClient = async (data: {
         businessId: session.user.businessId,
       },
     });
+    await incrementDailyUsage(session.user.businessId, "clientsCreated");
     revalidateTag(CACHE_TAGS.CLIENTS, "max");
     revalidateTag(CACHE_TAGS.CLIENTS, "max");
     return { success: "Cliente agregado", client };

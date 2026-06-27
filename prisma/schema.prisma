@@ -60,6 +60,7 @@ model Business {
   cashMovements   CashMovement[]
   saleReturns     SaleReturn[]
   stockMovements  StockMovement[]
+  dailyUsage      DailyUsage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -76,6 +77,7 @@ model Business {
   // Arca Fileds Ends
   accountStatus     BusinessStatus    @default(ACTIVO)
   lastPaymentDate   DateTime?
+  trialEndsAt       DateTime?
 
   // Branding fields
   brandLogo             String?   // URL to uploaded logo
@@ -532,6 +534,7 @@ enum Plan {
   BASIC
   PRO
   ENTERPRISE
+  DEMO
 }
 
 model PlanDefinition {
@@ -560,4 +563,17 @@ model BusinessFeatures {
   updatedAt         DateTime       @updatedAt
 
   @@index([businessId])
+}
+
+model DailyUsage {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  date        DateTime // normalized to UTC midnight
+  salesCount  Int      @default(0)
+  productsCreated Int  @default(0)
+  clientsCreated  Int  @default(0)
+
+  @@unique([businessId, date])
+  @@index([businessId, date])
 }

@@ -11,13 +11,15 @@ export interface ResolvedFeatures {
   maxCashboxes: number;
   maxClients: number;
   dailySalesLimit: number;
+  dailyProductsLimit: number;
+  dailyClientsLimit: number;
 }
 
 export interface PlanSeed {
   name: string;
   description?: string;
-  features: Omit<ResolvedFeatures, "plan" | "maxUsers" | "maxProducts" | "maxCashboxes" | "maxClients" | "dailySalesLimit">;
-  limits: Pick<ResolvedFeatures, "maxUsers" | "maxProducts" | "maxCashboxes" | "maxClients" | "dailySalesLimit">;
+  features: Omit<ResolvedFeatures, "plan" | "maxUsers" | "maxProducts" | "maxCashboxes" | "maxClients" | "dailySalesLimit" | "dailyProductsLimit" | "dailyClientsLimit">;
+  limits: Pick<ResolvedFeatures, "maxUsers" | "maxProducts" | "maxCashboxes" | "maxClients" | "dailySalesLimit" | "dailyProductsLimit" | "dailyClientsLimit">;
   isDefault?: boolean;
   isActive?: boolean;
   displayOrder?: number;
@@ -41,6 +43,8 @@ export const PLAN_SEEDS: PlanSeed[] = [
       maxCashboxes: 1,
       maxClients: 50,
       dailySalesLimit: 999999,
+      dailyProductsLimit: 999999,
+      dailyClientsLimit: 999999,
     },
     isDefault: true,
     displayOrder: 1,
@@ -62,6 +66,8 @@ export const PLAN_SEEDS: PlanSeed[] = [
       maxCashboxes: 3,
       maxClients: 500,
       dailySalesLimit: 999999,
+      dailyProductsLimit: 999999,
+      dailyClientsLimit: 999999,
     },
     displayOrder: 2,
   },
@@ -82,6 +88,8 @@ export const PLAN_SEEDS: PlanSeed[] = [
       maxCashboxes: 999999,
       maxClients: 999999,
       dailySalesLimit: 999999,
+      dailyProductsLimit: 999999,
+      dailyClientsLimit: 999999,
     },
     displayOrder: 3,
   },
@@ -101,7 +109,9 @@ export const PLAN_SEEDS: PlanSeed[] = [
       maxProducts: 10,
       maxCashboxes: 2,
       maxClients: 2,
-      dailySalesLimit: 2,
+      dailySalesLimit: 3,
+      dailyProductsLimit: 5,
+      dailyClientsLimit: 2,
     },
     displayOrder: 0,
   },
@@ -122,6 +132,8 @@ export const PLAN_SEEDS: PlanSeed[] = [
       maxCashboxes: 999999,
       maxClients: 999999,
       dailySalesLimit: 999999,
+      dailyProductsLimit: 999999,
+      dailyClientsLimit: 999999,
     },
     displayOrder: 99,
   },
