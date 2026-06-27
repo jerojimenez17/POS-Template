@@ -15,6 +15,7 @@ import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML
 import { getBillTypeDisplay } from "@/lib/utils/bill-type";
 import QRCode from "qrcode";
 import CAE from "@/models/CAE";
+import PriceEditInput from "./PriceEditInput";
 
 interface Props {
   printTrigger: number;
@@ -60,7 +61,7 @@ const PrintableTable = ({
   forceCae,
   targetWindowRef,
 }: Props) => {
-  const { BillState, addItem, removeItem, printMode, qzTrayActive } = React.useContext(BillContext);
+  const { BillState, addItem, removeItem, printMode, qzTrayActive, focusPriceProductId, setFocusPriceProductId } = React.useContext(BillContext);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
   const [isClient, setIsClient] = useState(false);
   const [billingInfo, setBillingInfo] = useState<{
@@ -332,10 +333,10 @@ const PrintableTable = ({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">
-                    ${product.salePrice.toLocaleString("es-AR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    <PriceEditInput
+                      productId={product.id}
+                      salePrice={product.salePrice}
+                    />
                   </td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">
                     ${(product.salePrice * product.amount).toLocaleString("es-AR", {

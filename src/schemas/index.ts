@@ -144,6 +144,17 @@ export const AccountSchema = z
     path: ["clientEmail"],
   });
 
+export const ShortcutKeyEnum = z.enum(["F1", "F2", "F3"]);
+
+export const SaveShortcutConfigSchema = z.object({
+  key: ShortcutKeyEnum,
+  productId: z.string().min(1, "Producto es obligatorio"),
+});
+
+export const DeleteShortcutConfigSchema = z.object({
+  key: ShortcutKeyEnum,
+});
+
 export const ArcaFieldsSchema = z.object({
   cuit: z.string().min(1, { message: "CUIT es obligatorio" }),
   razonSocial: z.string().min(1, { message: "Razón Social es obligatoria" }),

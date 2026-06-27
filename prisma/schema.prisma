@@ -90,6 +90,7 @@ model Business {
   timezone                    String?   @default("America/Argentina/Buenos_Aires")
   orderUpdates      OrderUpdate[]
   features          BusinessFeatures?
+  shortcutConfigs   ShortcutConfig[]
 }
 
 enum BusinessStatus {
@@ -234,6 +235,7 @@ model Product {
   rankings        ProductRanking[]
   stockMovements  StockMovement[]
   saleReturnItems SaleReturnItem[]
+  shortcutConfigs ShortcutConfig[]
 
   @@index([businessId])
   @@index([businessId, description])
@@ -532,6 +534,18 @@ enum Plan {
   BASIC
   PRO
   ENTERPRISE
+}
+
+model ShortcutConfig {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  key        String   // "F1" | "F2" | "F3"
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, key])
+  @@index([businessId])
 }
 
 model BusinessFeatures {

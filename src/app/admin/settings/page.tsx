@@ -9,6 +9,7 @@ import { UserRole } from "@prisma/client";
 import * as z from "zod";
 import { ArcaFieldsSchema } from "@/schemas";
 import { ArcaData } from "@/models/Arca";
+import ShortcutConfigSection from "@/components/AdminSettings/ShortcutConfigSection";
 
 export default async function AdminSettingsPage() {
   const session = await auth();
@@ -59,6 +60,7 @@ export default async function AdminSettingsPage() {
       </div>
 
       <ArcaForm businessId={businessId || ""} initialData={initialData} />
+      <ShortcutConfigSection businessId={businessId || ""} />
     </div>
   );
 }
