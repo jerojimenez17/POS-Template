@@ -16,7 +16,7 @@ export default async function AccountLedgerPage() {
 
   if (!hasClientLedger) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4">
         <div className="flex flex-col items-center text-center max-w-md gap-4">
           <div className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-950/50 flex items-center justify-center">
             <Lock className="h-7 w-7 text-red-400 dark:text-red-400" />

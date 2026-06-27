@@ -38,8 +38,6 @@ import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
 import { parsePlanError } from "@/lib/plan-error";
 import { UserType } from "@/components/admin/users-table";
 import { CashBox } from "@prisma/client";
-import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
-import { parsePlanError } from "@/lib/plan-error";
 
 interface UserModalProps {
   isOpen: boolean;

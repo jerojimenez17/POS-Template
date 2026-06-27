@@ -77,7 +77,7 @@ export const FeatureBlockedModal = ({
   feature,
   resource,
   limitValue,
-  showAcknowledge = true,
+  showAcknowledge = false,
 }: FeatureBlockedModalProps) => {
   const cfg = VARIANTS[variant];
 

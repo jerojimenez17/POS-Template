@@ -15,6 +15,8 @@ import { Edit2, Trash2, Plus, Box } from "lucide-react";
 import { createCashbox, updateCashbox, deleteCashbox } from "@/actions/cashbox";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,6 +58,7 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [cashboxToDelete, setCashboxToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
 
   const handleCreate = () => {
     setEditingCashbox(null);
@@ -111,7 +114,12 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
     } else {
       const result = await createCashbox(cashboxName.trim());
       if ('error' in result && result.error) {
-        toast.error(result.error as string);
+        const parsed = parsePlanError(result.error as string);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+        } else {
+          toast.error(result.error as string);
+        }
       } else {
         toast.success("Caja creada");
         setIsModalOpen(false);
@@ -246,6 +254,15 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <FeatureBlockedModal
+        open={!!planError}
+        onOpenChange={(open) => { if (!open) setPlanError(null); }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
+      />
     </div>
   );
 };

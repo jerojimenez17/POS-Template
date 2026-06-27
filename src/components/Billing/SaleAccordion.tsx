@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import BillState from "@/models/BillState";
-import BillingModal from "./BillingModal";
+import InvoiceModal from "./InvoiceModal";
 import { useRouter } from "next/navigation";
 import PrintOptionsPopover from "./PrintOptionsPopover";
 import { deleteOrderAction } from "@/actions/sales/update";
@@ -144,11 +144,10 @@ const SaleAccordion = ({ sale, session }: props) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <BillingModal
+      <InvoiceModal
         open={openBilling}
         onOpenChange={setOpenBilling}
         sale={sale}
-        onSuccess={() => setOpenBilling(false)}
       />
     </>
   );
