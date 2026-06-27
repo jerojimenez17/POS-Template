@@ -11,7 +11,6 @@ import {
 import noImgPhoto from "../../../public/no-image.svg";
 import Image from "next/image";
 import ProductForm from "./product-form";
-import BarcodeModal from "./BarcodeModal";
 import { Button } from "../ui/button";
 import { Edit2, Trash2 } from "lucide-react";
 import {
@@ -67,8 +66,29 @@ const StockTable = ({ descriptionFilter }: props) => {
   }, [descriptionFilter]);
 
   useEffect(() => {
-    fetchProducts(1);
-  }, [fetchProducts]);
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const result = await getProductsPaginated({
+          page: 1,
+          pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
+          search: descriptionFilter || undefined,
+        });
+        if (!cancelled) {
+          setProducts(result.products as ProductExtended[]);
+          setTotalPages(result.totalPages);
+          setPage(result.page);
+        }
+      } catch (error) {
+        console.error("Error fetching products:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [descriptionFilter]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || (totalPages > 0 && newPage > totalPages)) return;
@@ -242,20 +262,6 @@ const StockTable = ({ descriptionFilter }: props) => {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                      <BarcodeModal
-                        productId={product.id}
-                        codebar={product.codebar || undefined}
-                        description={product.description || ""}
-                        salePrice={product.salePrice}
-                        unit={product.unit ?? undefined}
-                        onSuccess={(newCodebar) => {
-                          setProducts((prev) =>
-                            prev.map((p) =>
-                              p.id === product.id ? { ...p, codebar: newCodebar } : p
-                            )
-                          );
-                        }}
-                      />
                     </TableCell>
                   </TableRow>
                 );
