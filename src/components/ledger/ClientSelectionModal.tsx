@@ -698,6 +698,7 @@ export default function ClientSelectionModal({
       feature={planError?.feature}
       resource={planError?.resource}
       limitValue={planError?.limitValue}
+      showAcknowledge={false}
     />
     </>
   );

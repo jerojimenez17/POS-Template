@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getBusinessBySlug } from "@/actions/business";
 import { getPublicProductsByBusinessId } from "@/actions/catalog";
 import ProductSelector from "@/components/catalog/product-selector";
+import { PublicCart } from "@/components/catalog/public-cart";
 import { Button } from "@/components/ui/button";
 import { Lock, MessageCircle, ArrowLeft } from "lucide-react";
 
@@ -46,7 +47,7 @@ export default async function PublicCatalogPage({ params }: Props) {
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full mt-2">
             <Link
-              href={`/${businessSlug}`}
+              href="/"
               className="flex-1"
             >
               <Button variant="outline" className="w-full rounded-lg flex items-center gap-2 justify-center">
@@ -72,10 +73,13 @@ export default async function PublicCatalogPage({ params }: Props) {
   }
 
   return (
+    <>
     <ProductSelector
       variant="public-catalog"
       products={products}
       business={{ name: business.name, logo: business.logo }}
     />
+    <PublicCart businessId={business.id} />
+    </>
   );
 }

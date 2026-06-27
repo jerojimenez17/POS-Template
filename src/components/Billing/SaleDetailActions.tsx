@@ -1,15 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, FileText, CheckCircle, ShieldAlert, Loader2 } from "lucide-react";
+import { Printer, FileText, CheckCircle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
-import { parsePlanError } from "@/lib/plan-error";
 import PrintOptionsPopover from "./PrintOptionsPopover";
+import InvoiceModal from "./InvoiceModal";
 import type BillState from "@/models/BillState";
 import { Session } from "next-auth";
-import { createAfipVoucherAction } from "@/actions/afip";
-import { toast } from "sonner";
 
 
 interface SaleDetailActionsProps {
@@ -18,37 +15,18 @@ interface SaleDetailActionsProps {
 }
 
 export default function SaleDetailActions({ sale, session }: SaleDetailActionsProps) {
-  const [invoicing, setInvoicing] = useState(false);
-  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
 
   const isInvoiced = Boolean(sale.CAE?.CAE);
 
-  const handleInvoice = async () => {
-    setInvoicing(true);
-    try {
-      const result = await createAfipVoucherAction(sale);
-      if ("error" in result && result.error) {
-        const parsed = parsePlanError(result.error);
-        if (parsed.isPlanError) {
-          setPlanError(parsed);
-        } else {
-          toast.error(result.error);
-        }
-      } else if ("success" in result && result.success) {
-        toast.success("Factura emitida correctamente");
-        // Reload to show CAE
-        window.location.reload();
-      }
-    } catch (error) {
-      toast.error("Error al facturar");
-      console.error("Invoice error:", error);
-    } finally {
-      setInvoicing(false);
-    }
-  };
-
   return (
     <>
+    <InvoiceModal
+      open={invoiceOpen}
+      onOpenChange={setInvoiceOpen}
+      sale={sale}
+    />
+
     <section className="bg-card border rounded-xl p-5 shadow-sm h-fit space-y-4">
       <h3 className="text-sm font-semibold text-card-foreground flex items-center gap-2">
         <Printer className="h-4 w-4 text-muted-foreground" />
@@ -104,30 +82,15 @@ export default function SaleDetailActions({ sale, session }: SaleDetailActionsPr
             </span>
           </div>
           <Button
-            onClick={handleInvoice}
-            disabled={invoicing}
+            onClick={() => setInvoiceOpen(true)}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white"
           >
-            {invoicing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FileText className="h-4 w-4" />
-            )}
-            {invoicing ? "Facturando..." : "Facturar"}
+            <FileText className="h-4 w-4" />
+            Facturar
           </Button>
         </div>
       )}
     </section>
-
-      <FeatureBlockedModal
-        open={!!planError}
-        onOpenChange={(open) => { if (!open) setPlanError(null); }}
-        variant={planError?.variant ?? "feature"}
-        feature={planError?.feature}
-        resource={planError?.resource}
-        limitValue={planError?.limitValue}
-        showAcknowledge={false}
-      />
     </>
   );
 }
