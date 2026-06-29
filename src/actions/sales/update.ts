@@ -45,7 +45,7 @@ export const updateOrderCaeAction = async (
       await tx.order.update({
         where: { id: orderId, businessId },
         data: {
-          CAE: data.CAE,
+          CAE: JSON.parse(JSON.stringify(data.CAE)),
           clientIvaCondition: data.IVACondition,
           clientDocumentNumber: String(data.documentNumber),
           paymentMethod: data.paidMethod,
@@ -72,7 +72,7 @@ export const updateOrderCaeAction = async (
           data: {
             orderId,
             businessId,
-            updatedById: session!.user!.id,
+            updatedById: session!.user!.id!,
             type: "ITEMS_UPDATED",
             message: "Facturación AFIP/ARCA",
             version: (lastUpdate?.version ?? 0) + 1,

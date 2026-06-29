@@ -200,7 +200,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
             />
             <BarcodeModal
               productId={product.id}
-              code={product.code}
+              code={product.code ?? ""}
               codebar={product.codebar || undefined}
               description={product.description || ""}
               salePrice={product.salePrice}
@@ -450,7 +450,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                   />
 <BarcodeModal
                       productId={product.id}
-                      code={product.code}
+                      code={product.code ?? ""}
                       codebar={product.codebar || undefined}
                       description={product.description || ""}
                       salePrice={product.salePrice}

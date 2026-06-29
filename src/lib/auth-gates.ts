@@ -37,7 +37,7 @@ export const requireFeature = async (featureName: string): Promise<ActionResult<
   }
 
   const plan = await getCachedPlan(businessId);
-  const isEnabled = (plan as Record<string, unknown>)[featureName];
+  const isEnabled = (plan as unknown as Record<string, unknown>)[featureName];
 
   if (!isEnabled) {
     return fail("Esta función no está habilitada en tu plan actual.", "FORBIDDEN");
@@ -66,7 +66,7 @@ export const assertLimit = async (limitName: string, value: number): Promise<Act
   }
 
   const plan = await getCachedPlan(businessId);
-  const limit = (plan as Record<string, unknown>)[limitName] as number | null | undefined;
+  const limit = (plan as unknown as Record<string, unknown>)[limitName] as number | null | undefined;
 
   if (limit !== null && limit !== undefined && value >= limit) {
     return fail(

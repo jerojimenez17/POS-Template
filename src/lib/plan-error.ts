@@ -1,5 +1,3 @@
-import type { ErrorCode } from "@/lib/action-result";
-
 export interface ParsedPlanError {
   isPlanError: boolean;
   variant: "feature" | "limit" | "delinquent" | null;
