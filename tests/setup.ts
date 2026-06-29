@@ -8,6 +8,7 @@ export const mockDb = {
     }
     return Promise.all(arg);
   }),
+  $executeRawUnsafe: vi.fn().mockResolvedValue(0),
   brand: {
     findFirst: vi.fn().mockResolvedValue(null),
     findMany: vi.fn().mockResolvedValue([]),

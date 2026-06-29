@@ -11,6 +11,11 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    server: {
+      deps: {
+        inline: [/@csstools\/css-calc/, /@asamuzakjp\/css-color/],
+      },
+    },
   },
   resolve: {
     alias: {
