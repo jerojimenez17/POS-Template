@@ -38,7 +38,8 @@ async function main() {
 
   // ── 2. Read old BusinessFeatures columns via raw SQL ─────────────────
   // These columns still exist in the DB until the new schema is pushed.
-  let rows: Record<string, unknown>[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let rows: any[];
   try {
     rows = await prisma.$queryRawUnsafe(`
       SELECT id, "businessId", plan,
