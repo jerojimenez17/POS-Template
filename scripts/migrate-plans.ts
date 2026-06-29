@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { PLAN_SEEDS } from "../src/types/plan";
 
 const prisma = new PrismaClient();
@@ -38,7 +38,7 @@ async function main() {
 
   // ── 2. Read old BusinessFeatures columns via raw SQL ─────────────────
   // These columns still exist in the DB until the new schema is pushed.
-  let rows: any[];
+  let rows: Record<string, unknown>[];
   try {
     rows = await prisma.$queryRawUnsafe(`
       SELECT id, "businessId", plan,
@@ -69,7 +69,7 @@ async function main() {
     ENTERPRISE: "ENTERPRISE",
   };
 
-  const updates: Array<{ id: string; planName: string; overrides: Record<string, any> | null }> = [];
+  const updates: Array<{ id: string; planName: string; overrides: Record<string, unknown> | null }> = [];
   const skipped: string[] = [];
   const errors: Array<{ businessId: string; reason: string }> = [];
 
@@ -96,7 +96,7 @@ async function main() {
     }
 
     // Build overrides: only fields that differ from plan defaults
-    const overrides: Record<string, any> = {};
+    const overrides: Record<string, unknown> = {};
 
     for (const field of FEATURE_FIELDS) {
       const dbValue = row[field];
@@ -147,7 +147,7 @@ async function main() {
         where: { id: update.id },
         data: {
           planDefinitionId: planDefMap.get(update.planName)!.id,
-          overrides: update.overrides,
+          overrides: update.overrides ?? Prisma.DbNull,
         },
       });
     }

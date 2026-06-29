@@ -19,7 +19,7 @@ export async function checkDailyLimit(
   currentCount: number
 ): Promise<{ allowed: boolean; used: number; limit: number }> {
   const plan = await import("./plan-resolver").then((m) => m.getEffectivePlan(businessId));
-  const limit = (plan as any)[limitKey] ?? 999999;
+  const limit = plan[limitKey] ?? 999999;
 
   if (currentCount >= limit) {
     return { allowed: false, used: currentCount, limit };

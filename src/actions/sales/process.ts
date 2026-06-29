@@ -410,7 +410,7 @@ export const updateOrderAction = async (
 
       const paymentChanged = (() => {
         const fromMethod = existingOrder.paymentMethod;
-        const toMethod = updatedData.paidMethod;
+        const toMethod = updatedData.paidMethod ?? null;
         const fromTwo = !!existingOrder.paymentMethod2;
         const toTwo = !!updatedData.twoMethods;
         const fromSecond = existingOrder.paymentMethod2;
