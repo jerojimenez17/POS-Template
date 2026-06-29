@@ -6,6 +6,7 @@ import { auth } from "../../auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { Product, Prisma } from "@prisma/client";
 import { PAGINATION } from "@/lib/pagination";
+import { parseExcelIva } from "@/utils/iva-parser";
 
 
 // Supplier Actions
@@ -126,6 +127,7 @@ export interface BulkProductInput {
   catalog?: boolean;
   details?: string;
   supplierId?: string;
+  iva?: string | number | null;
 }
 
 export interface PreviewProductItem extends BulkProductInput {
@@ -188,11 +190,14 @@ export const previewProductsBulk = async (
         let costPrice = filePrice;
         let salePrice = filePrice;
 
-        if (applyPriceFormula) {
+        const parsed = parseExcelIva(item.iva);
+        const rowIva = parsed.percent !== null ? parsed.percent : (iva ?? 0);
+        const hasExcelIva = parsed.percent !== null;
+
+        if (applyPriceFormula || hasExcelIva) {
           const d = discount ?? 0;
-          const i = iva ?? 0;
           const g = gain ?? 0;
-          costPrice = filePrice * (1 - d / 100) * (1 + i / 100);
+          costPrice = filePrice * (1 - d / 100) * (1 + rowIva / 100);
           salePrice = costPrice * (1 + g / 100);
         }
 
@@ -402,11 +407,14 @@ export const processBulkProductBatch = async (
       let salePrice = filePrice;
       let gainValue = 0;
 
-      if (applyPriceFormula) {
+      const parsed = parseExcelIva(item.iva);
+      const rowIva = parsed.percent !== null ? parsed.percent : (iva ?? 0);
+      const hasExcelIva = parsed.percent !== null;
+
+      if (applyPriceFormula || hasExcelIva) {
         const d = discount ?? 0;
-        const i = iva ?? 0;
         const g = gain ?? 0;
-        costPrice = filePrice * (1 - d / 100) * (1 + i / 100);
+        costPrice = filePrice * (1 - d / 100) * (1 + rowIva / 100);
         salePrice = costPrice * (1 + g / 100);
         gainValue = g;
       }
@@ -435,7 +443,7 @@ export const processBulkProductBatch = async (
             description: item.description.toString(),
             price: isPriceValid ? costPrice : 0,
             salePrice: isPriceValid ? salePrice : 0,
-            gain: applyPriceFormula ? gainValue : existingProduct.gain,
+            gain: (applyPriceFormula || hasExcelIva) ? gainValue : existingProduct.gain,
             unit: item.unit || "unidades",
             brandId: resolvedBrandId,
             categoryId: resolvedCategoryId,
@@ -459,7 +467,7 @@ export const processBulkProductBatch = async (
           description: item.description.toString(),
           price: isPriceValid ? costPrice : 0,
           salePrice: isPriceValid ? salePrice : 0,
-          gain: applyPriceFormula ? gainValue : 0,
+          gain: (applyPriceFormula || hasExcelIva) ? gainValue : 0,
           amount: isNaN(parsedAmount) ? 0 : parsedAmount,
           unit: item.unit || "unidades",
           brandId: resolvedBrandId,
@@ -484,7 +492,7 @@ export const processBulkProductBatch = async (
     }
 
     if (toUpdate.length > 0) {
-      const params: any[] = [];
+      const params: (string | number | null)[] = [];
       const placeholders = toUpdate.map((_, i) => {
         const n = i * 11;
         return `($${n + 1}::text,$${n + 2}::text,$${n + 3}::numeric,$${n + 4}::numeric,$${n + 5}::numeric,$${n + 6}::text,$${n + 7}::text,$${n + 8}::text,$${n + 9}::text,$${n + 10}::numeric,$${n + 11}::text)`;
@@ -1191,6 +1199,46 @@ export const getProductsFiltered = async (filters: {
   } catch (error) {
     console.error("Error fetching filtered products:", error);
     return { products: [], total: 0, page: 1, pageSize: 25, totalPages: 0 };
+  }
+};
+
+export const getFilteredProductIds = async (filters: {
+  search?: string;
+  categoryId?: string;
+  brandId?: string;
+  unit?: string;
+  supplierId?: string;
+}): Promise<string[]> => {
+  const session = await auth();
+  if (!session?.user?.businessId) return [];
+
+  const where: Prisma.ProductWhereInput = {
+    businessId: session.user.businessId,
+    ...(filters.search
+      ? {
+          OR: [
+            { code: { contains: filters.search, mode: "insensitive" as const } },
+            { codebar: { contains: filters.search, mode: "insensitive" as const } },
+            { description: { contains: filters.search, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+    ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+    ...(filters.brandId ? { brandId: filters.brandId } : {}),
+    ...(filters.unit ? { unit: filters.unit } : {}),
+    ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+  };
+
+  try {
+    const products = await db.product.findMany({
+      where,
+      select: { id: true },
+      orderBy: { description: "asc" },
+    });
+    return products.map((p) => p.id);
+  } catch (error) {
+    console.error("Error fetching filtered product IDs:", error);
+    return [];
   }
 };
 

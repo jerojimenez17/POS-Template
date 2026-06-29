@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { CheckSquare, Square, Printer, Percent, ArrowLeft, Filter, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
-import { getProductsFiltered, bulkUpdatePrices, getSuppliersForFilter } from "@/actions/stock";
+import { getProductsFiltered, bulkUpdatePrices, getSuppliersForFilter, getFilteredProductIds } from "@/actions/stock";
 import { getCategories } from "@/actions/categories";
 import { getBrands } from "@/actions/brands";
 import { ProductExtended } from "@/components/stock/product-form";
@@ -43,6 +43,7 @@ const BulkUpdatePage = () => {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [filterVersion, setFilterVersion] = useState(0);
+  const [selectAllLoading, setSelectAllLoading] = useState(false);
   const isFirstLoadAfterFilter = useRef(true);
 
   const fetchProducts = useCallback(async () => {
@@ -100,18 +101,31 @@ const BulkUpdatePage = () => {
     }
   };
 
-  const handleSelectAll = () => {
-    const currentPageIds = filteredProducts.map((p) => p.id);
-    const allOnPageSelected = currentPageIds.every((id) => selectedIds.has(id));
-    const newSelected = new Set(selectedIds);
-    if (allOnPageSelected) {
-      // Deselect only current page products
-      currentPageIds.forEach((id) => newSelected.delete(id));
-    } else {
-      // Select all current page products
-      currentPageIds.forEach((id) => newSelected.add(id));
+  const handleSelectAll = async () => {
+    if (!hasLoaded || total === 0) return;
+
+    // If all matching products are already selected, deselect all
+    if (selectedIds.size === total) {
+      setSelectedIds(new Set());
+      return;
     }
-    setSelectedIds(newSelected);
+
+    // Otherwise, fetch ALL product IDs matching current filters (across all pages)
+    setSelectAllLoading(true);
+    try {
+      const allIds = await getFilteredProductIds({
+        search: filters.search || undefined,
+        categoryId: filters.categoryId || undefined,
+        brandId: filters.brandId || undefined,
+        unit: filters.unit || undefined,
+        supplierId: filters.supplierId || undefined,
+      });
+      setSelectedIds(new Set(allIds));
+    } catch (error) {
+      console.error("Error selecting all products:", error);
+    } finally {
+      setSelectAllLoading(false);
+    }
   };
 
   const handleToggleProduct = (id: string) => {
@@ -332,21 +346,24 @@ const BulkUpdatePage = () => {
                 onClick={handleSelectAll} 
                 variant="ghost" 
                 size="sm"
+                disabled={selectAllLoading || !hasLoaded || total === 0}
                 className="hover:bg-white dark:hover:bg-gray-800 shadow-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-700 transition-all"
-                aria-label={selectedIds.size === filteredProducts.length ? "Deseleccionar todos los productos" : "Seleccionar todos los productos"}
+                aria-label={selectedIds.size === total && total > 0 ? "Deseleccionar todos los productos filtrados" : "Seleccionar todos los productos filtrados"}
               >
-                {selectedIds.size === filteredProducts.length ? (
+                {selectAllLoading ? (
+                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full" />
+                ) : selectedIds.size === total && total > 0 ? (
                   <CheckSquare className="h-4 w-4 text-blue-500" />
                 ) : (
                   <Square className="h-4 w-4 text-gray-400" />
                 )}
                 <span className="ml-2 font-medium">
-                  {selectedIds.size === filteredProducts.length ? "Deseleccionar todos" : "Seleccionar todos"}
+                  {selectedIds.size === total && total > 0 ? "Deseleccionar todos" : "Seleccionar todos"}
                 </span>
               </Button>
               <div className="h-4 w-px bg-gray-300 dark:bg-gray-700 hidden sm:block" />
               <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                {selectedIds.size.toLocaleString("es-AR")} de {filteredProducts.length.toLocaleString("es-AR")} seleccionados
+                {selectedIds.size.toLocaleString("es-AR")} de {total.toLocaleString("es-AR")} seleccionados
               </span>
             </div>
           </div>
