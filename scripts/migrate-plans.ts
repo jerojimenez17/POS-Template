@@ -148,7 +148,7 @@ async function main() {
         where: { id: update.id },
         data: {
           planDefinitionId: planDefMap.get(update.planName)!.id,
-          overrides: update.overrides ?? Prisma.DbNull,
+          overrides: (update.overrides ?? Prisma.DbNull) as Prisma.InputJsonValue,
         },
       });
     }
