@@ -1,77 +1,75 @@
-# SPEC: Budget (Presupuesto) Feature
+# SPEC: Fix Transaction Failures with 25+ Products
 
-## Overview
-Add a "Presupuesto" feature toggleable by superadmin. Budgets are unconfirmed orders (status: "pendiente") that appear in account-ledger and can be printed.
+## Problem Statement
+
+When creating a Remito (via `processSaleAction`) or an "A cuenta" order (via `createUnpaidOrder` / `addItemsToOrder`), the transaction fails with `"An unexpected response was received from the server"` when the bill contains **25 or more distinct products**.
+
+The same products work correctly when creating a Presupuesto (via `createBudgetAction`).
+
+## Root Cause
+
+Inside a Prisma interactive transaction, `Promise.all` fires **N × 3** simultaneous database queries (product.update + stockMovement.create + productRanking.upsert for each product). With 25+ products, this results in 75+ concurrent queries over a single PostgreSQL connection, which overwhelms the connection.
+
+## Solution
+
+Extract a reusable `processInBatches` helper that splits items into chunks of a configurable `batchSize` (default 10). Each batch runs its queries in parallel via `Promise.all`, but batches execute sequentially via `for...of`.
 
 ## Requirements
 
-### 1. Feature Flag: `hasBudget`
-- New Boolean field on `BusinessFeatures` model
-- Toggleable from superadmin features page
-- BASIC: false, PRO: false, ENTERPRISE: true
-- Session type must include `hasBudget`
+### R1: `processInBatches` utility
 
-### 2. Server Action: `createBudgetAction`
-- Creates Order with `status: "pendiente"`, `paidStatus: "inpago"`
-- No cash session required
-- No stock decrement
-- No cash movements
-- No client balance update
-- Client is optional
-- Triggers pusher + revalidation
+- Create a generic `processInBatches<T>` async function
+- Parameters: `items: T[]`, `batchSize: number`, `fn: (item: T) => Promise<unknown>[]`
+- Splits `items` into chunks of `batchSize`
+- Runs `Promise.all(batch.flatMap(fn))` for each chunk
+- Chunks are processed sequentially (for...of / for loop)
 
-### 3. UI: Budget Button on NewBill page
-- New "Presupuesto" button in `BillButtonsDefault` component
-- Guarded by `session?.user?.business?.features?.hasBudget`
-- Opens confirmation dialog (like Facturar/Remito)
-- On confirm: call `createBudgetAction`, print, reset products
-- No client required
-- Sets `billType: "Presupuesto"` for print display
+### R2: Fix `processSaleAction`
 
-### 4. Print: "Presupuesto" label
-- Update `getBillTypeDisplay` to return "Presupuesto" when billType === "Presupuesto"
+- Replace the `Promise.all` block (stock update + movement + ranking) with `processInBatches`
+- Default batch size: 10
+- Behavior must be identical — same stock, movement, and ranking records created
 
-### 5. Account-Ledger: Print capability
-- Add print button per row in account-ledger list
-- Add print button in account-ledger detail view
-- Reuse `PrintOptionsPopover` with order-to-BillState conversion
+### R3: Fix `createUnpaidOrder`
+
+- Replace the `Promise.all` block with `processInBatches`
+- Default batch size: 10
+
+### R4: Fix `addItemsToOrder`
+
+- Replace the `Promise.all` block with `processInBatches`
+- Default batch size: 10
 
 ## Acceptance Criteria
 
-1. Superadmin can toggle `hasBudget` on/off per business
-2. When `hasBudget` is ON, a "Presupuesto" button appears in BillButtons
-3. When `hasBudget` is OFF, the button is hidden
-4. Clicking "Presupuesto" without products shows disabled state
-5. Clicking "Presupuesto" with products opens confirmation dialog
-6. On confirm, budget order is created with status "pendiente"
-7. Creating a budget does NOT decrement stock
-8. Creating a budget does NOT require an open cash session
-9. Creating a budget does NOT create cash movements
-10. Budget appears in account-ledger under "Por Confirmar" tab
-11. Budget can be printed at creation time with "Presupuesto" label
-12. From account-ledger list, each row has a print button
-13. From account-ledger detail, there is a print button
+| ID | Criteria |
+|----|----------|
+| AC1 | `processInBatches` processes all items exactly once |
+| AC2 | `processInBatches` limits concurrency to `batchSize * operationsPerItem` |
+| AC3 | `processInBatches` preserves order — batch 1 finishes before batch 2 starts |
+| AC4 | `processInBatches` propagates errors from any batch |
+| AC5 | `processInBatches` works with empty arrays (no-op) |
+| AC6 | `processSaleAction` works with 1, 10, 25, 50 products |
+| AC7 | `createUnpaidOrder` works with 25+ products |
+| AC8 | `addItemsToOrder` works with 25+ products |
+| AC9 | Budget creation is NOT affected |
 
-## Data Model Changes
+## Data Models & Interfaces
 
-```prisma
-// BusinessFeatures additions
-hasBudget Boolean @default(false)
+```typescript
+// New utility — file: src/lib/batch-utils.ts
+export async function processInBatches<T>(
+  items: T[],
+  batchSize: number,
+  fn: (item: T) => Promise<unknown>[]
+): Promise<void>;
 ```
 
-## File Changes
+## File Structure
 
 | File | Action |
 |------|--------|
-| `prisma/schema.prisma` | Add `hasBudget` field |
-| `src/types/next-auth.d.ts` | Add `hasBudget` to type |
-| `auth.ts` | Add default `hasBudget: false` |
-| `src/actions/superadmin.ts` | Add `hasBudget` to payload/upsert |
-| `src/app/superadmin/businesses/[id]/features/page.tsx` | Add default |
-| `src/app/superadmin/businesses/[id]/features/FeaturesForm.tsx` | Add toggle UI |
-| `src/actions/budget.ts` | **NEW** — `createBudgetAction` |
-| `src/lib/utils/bill-type.ts` | Handle "Presupuesto" |
-| `src/components/Billing/BillButtons.tsx` | Add budget button + dialog |
-| `src/app/(protected)/account-ledger/page.tsx` | Add print per row |
-| `src/app/(protected)/account-ledger/[id]/page.tsx` | Add print on detail |
-| `src/app/(protected)/account-ledger/[id]/PrintOrderButton.tsx` | **NEW** — client print wrapper |
+| `src/lib/batch-utils.ts` | NEW — batch processing utility |
+| `src/actions/sales/process.ts` | MODIFY — use `processInBatches` |
+| `src/actions/unpaid-orders.ts` | MODIFY — use `processInBatches` in 2 places |
+| `src/__tests__/lib/batch-utils.test.ts` | NEW — unit tests |

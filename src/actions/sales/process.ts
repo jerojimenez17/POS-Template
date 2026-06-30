@@ -97,53 +97,51 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         include: { items: true },
       });
 
-      // 🔥 OPTIMIZACIÓN: Ejecutar operaciones por lote en paralelo
-      await Promise.all([
-        // Lote 1: Actualizar stock
-        ...billState.products.map((item) =>
-          tx.product.update({
-            where: { id: item.id },
-            data: { amount: { decrement: item.amount } },
-          })
-        ),
-        // Lote 2: Crear movimientos de stock
-        ...billState.products.map((item) =>
-          tx.stockMovement.create({
-            data: {
-              type: "SALE",
-              quantity: -item.amount,
-              productId: item.id,
-              orderId: order.id,
-              businessId: businessId,
-              reason: `Venta #${order.id}`,
-            },
-          })
-        ),
-        // Lote 3: Actualizar ranking de productos
-        ...billState.products.map((item) =>
-          tx.productRanking.upsert({
-            where: {
-              productId_month_year_businessId: {
-                productId: item.id,
-                month,
-                year,
-                businessId,
-              },
-            },
-            update: {
-              totalSold: { increment: item.amount },
-              totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
-            },
-            create: {
+      // 🔥 OPTIMIZACIÓN: Procesar en batches secuenciales para no saturar
+      // la conexión de PostgreSQL con N×3 queries simultáneas.
+      // Cada batch de 10 productos ejecuta stock + movement + ranking en paralelo,
+      // pero los batches se ejecutan uno tras otro.
+      const { processInBatches } = await import("@/lib/batch-utils");
+      await processInBatches(billState.products, 10, (item) => [
+        // 1. Actualizar stock
+        tx.product.update({
+          where: { id: item.id },
+          data: { amount: { decrement: item.amount } },
+        }),
+        // 2. Crear movimiento de stock
+        tx.stockMovement.create({
+          data: {
+            type: "SALE",
+            quantity: -item.amount,
+            productId: item.id,
+            orderId: order.id,
+            businessId: businessId,
+            reason: `Venta #${order.id}`,
+          },
+        }),
+        // 3. Actualizar ranking de productos
+        tx.productRanking.upsert({
+          where: {
+            productId_month_year_businessId: {
               productId: item.id,
               month,
               year,
               businessId,
-              totalSold: item.amount,
-              totalIncome: item.amount * (item.salePrice || item.price || 0),
             },
-          })
-        ),
+          },
+          update: {
+            totalSold: { increment: item.amount },
+            totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
+          },
+          create: {
+            productId: item.id,
+            month,
+            year,
+            businessId,
+            totalSold: item.amount,
+            totalIncome: item.amount * (item.salePrice || item.price || 0),
+          },
+        }),
       ]);
 
       let cashToIncrement = 0;

@@ -148,53 +148,48 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
       const month = now.getMonth() + 1;
       const year = now.getFullYear();
 
-      // 🔥 OPTIMIZACIÓN: Ejecutar operaciones por lote en paralelo
-      // en lugar de secuencialmente (reduce de O(n) a O(1))
-      await Promise.all([
-        // Lote 1: Actualizar stock de todos los productos
-        ...input.items.map((item) =>
-          tx.product.update({
-            where: { id: item.productId },
-            data: { amount: { decrement: item.quantity } },
-          })
-        ),
-        // Lote 2: Crear movimientos de stock
-        ...input.items.map((item) =>
-          tx.stockMovement.create({
-            data: {
-              type: "SALE",
-              quantity: -item.quantity,
-              productId: item.productId,
-              orderId: order.id,
-              businessId,
-            },
-          })
-        ),
-        // Lote 3: Actualizar ranking de productos
-        ...input.items.map((item) =>
-          tx.productRanking.upsert({
-            where: {
-              productId_month_year_businessId: {
-                productId: item.productId,
-                month,
-                year,
-                businessId,
-              },
-            },
-            update: {
-              totalSold: { increment: item.quantity },
-              totalIncome: { increment: item.quantity * item.price },
-            },
-            create: {
+      // 🔥 OPTIMIZACIÓN: Procesar en batches secuenciales para no saturar
+      // la conexión de PostgreSQL con N×3 queries simultáneas.
+      const { processInBatches } = await import("@/lib/batch-utils");
+      await processInBatches(input.items, 10, (item) => [
+        // 1. Actualizar stock
+        tx.product.update({
+          where: { id: item.productId },
+          data: { amount: { decrement: item.quantity } },
+        }),
+        // 2. Crear movimiento de stock
+        tx.stockMovement.create({
+          data: {
+            type: "SALE",
+            quantity: -item.quantity,
+            productId: item.productId,
+            orderId: order.id,
+            businessId,
+          },
+        }),
+        // 3. Actualizar ranking de productos
+        tx.productRanking.upsert({
+          where: {
+            productId_month_year_businessId: {
               productId: item.productId,
               month,
               year,
               businessId,
-              totalSold: item.quantity,
-              totalIncome: item.quantity * item.price,
             },
-          })
-        ),
+          },
+          update: {
+            totalSold: { increment: item.quantity },
+            totalIncome: { increment: item.quantity * item.price },
+          },
+          create: {
+            productId: item.productId,
+            month,
+            year,
+            businessId,
+            totalSold: item.quantity,
+            totalIncome: item.quantity * item.price,
+          },
+        }),
       ]);
 
       await tx.client.update({
@@ -483,68 +478,62 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
       const month = currentTimestamp.getMonth() + 1;
       const year = currentTimestamp.getFullYear();
 
-      // 🔥 OPTIMIZACIÓN: Crear items + actualizar stock + movimientos + ranking en paralelo
-      await Promise.all([
-        // Lote 1: Crear orderItems
-        ...validatedInput.items.map((item) =>
-          tx.orderItem.create({
-            data: {
-              orderId: validatedInput.orderId,
-              productId: item.productId,
-              code: item.code,
-              description: item.description,
-              costPrice: item.costPrice || 0,
-              price: item.price,
-              quantity: item.quantity,
-              subTotal: item.subTotal,
-              addedAt: currentTimestamp,
-            },
-          })
-        ),
-        // Lote 2: Actualizar stock
-        ...validatedInput.items.map((item) =>
-          tx.product.update({
-            where: { id: item.productId },
-            data: { amount: { decrement: item.quantity } },
-          })
-        ),
-        // Lote 3: Crear movimientos de stock
-        ...validatedInput.items.map((item) =>
-          tx.stockMovement.create({
-            data: {
-              type: "SALE",
-              quantity: -item.quantity,
-              productId: item.productId,
-              orderId: order.id,
-              businessId,
-            },
-          })
-        ),
-        // Lote 4: Actualizar ranking
-        ...validatedInput.items.map((item) =>
-          tx.productRanking.upsert({
-            where: {
-              productId_month_year_businessId: {
-                productId: item.productId,
-                month,
-                year,
-                businessId,
-              },
-            },
-            update: {
-              totalSold: { increment: item.quantity },
-              totalIncome: { increment: item.quantity * item.price },
-            },
-            create: {
+      // 🔥 OPTIMIZACIÓN: Procesar en batches secuenciales para no saturar
+      // la conexión de PostgreSQL con N×4 queries simultáneas.
+      const { processInBatches } = await import("@/lib/batch-utils");
+      await processInBatches(validatedInput.items, 10, (item) => [
+        // 1. Crear orderItem
+        tx.orderItem.create({
+          data: {
+            orderId: validatedInput.orderId,
+            productId: item.productId,
+            code: item.code,
+            description: item.description,
+            costPrice: item.costPrice || 0,
+            price: item.price,
+            quantity: item.quantity,
+            subTotal: item.subTotal,
+            addedAt: currentTimestamp,
+          },
+        }),
+        // 2. Actualizar stock
+        tx.product.update({
+          where: { id: item.productId },
+          data: { amount: { decrement: item.quantity } },
+        }),
+        // 3. Crear movimiento de stock
+        tx.stockMovement.create({
+          data: {
+            type: "SALE",
+            quantity: -item.quantity,
+            productId: item.productId,
+            orderId: order.id,
+            businessId,
+          },
+        }),
+        // 4. Actualizar ranking
+        tx.productRanking.upsert({
+          where: {
+            productId_month_year_businessId: {
               productId: item.productId,
               month,
               year,
               businessId,
-              totalSold: item.quantity,
-              totalIncome: item.quantity * item.price,
             },
-          })
-        ),
+          },
+          update: {
+            totalSold: { increment: item.quantity },
+            totalIncome: { increment: item.quantity * item.price },
+          },
+          create: {
+            productId: item.productId,
+            month,
+            year,
+            businessId,
+            totalSold: item.quantity,
+            totalIncome: item.quantity * item.price,
+          },
+        }),
       ]);
 
       const itemsTotal = validatedInput.items.reduce((sum, item) => sum + item.subTotal, 0);
