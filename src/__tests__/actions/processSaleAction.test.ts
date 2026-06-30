@@ -21,6 +21,7 @@ vi.mock("../../../auth", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
 }));
 
 const mockCAE = {
