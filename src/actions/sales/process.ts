@@ -97,46 +97,54 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         include: { items: true },
       });
 
-      for (const item of billState.products) {
-        await tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.amount,
-            productId: item.id,
-            orderId: order.id,
-            businessId: businessId,
-            reason: `Venta #${order.id}`,
-          },
-        });
-
-        await tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
+      // 🔥 OPTIMIZACIÓN: Ejecutar operaciones por lote en paralelo
+      await Promise.all([
+        // Lote 1: Actualizar stock
+        ...billState.products.map((item) =>
+          tx.product.update({
+            where: { id: item.id },
+            data: { amount: { decrement: item.amount } },
+          })
+        ),
+        // Lote 2: Crear movimientos de stock
+        ...billState.products.map((item) =>
+          tx.stockMovement.create({
+            data: {
+              type: "SALE",
+              quantity: -item.amount,
+              productId: item.id,
+              orderId: order.id,
+              businessId: businessId,
+              reason: `Venta #${order.id}`,
+            },
+          })
+        ),
+        // Lote 3: Actualizar ranking de productos
+        ...billState.products.map((item) =>
+          tx.productRanking.upsert({
+            where: {
+              productId_month_year_businessId: {
+                productId: item.id,
+                month,
+                year,
+                businessId,
+              },
+            },
+            update: {
+              totalSold: { increment: item.amount },
+              totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
+            },
+            create: {
               productId: item.id,
               month,
               year,
               businessId,
+              totalSold: item.amount,
+              totalIncome: item.amount * (item.salePrice || item.price || 0),
             },
-          },
-          update: {
-            totalSold: { increment: item.amount },
-            totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
-          },
-          create: {
-            productId: item.id,
-            month,
-            year,
-            businessId,
-            totalSold: item.amount,
-            totalIncome: item.amount * (item.salePrice || item.price || 0),
-          },
-        });
-      }
+          })
+        ),
+      ]);
 
       let cashToIncrement = 0;
       if (billState.paidMethod === "Efectivo") {
@@ -197,7 +205,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       }
 
       return { order, movements };
-    });
+    }, { maxWait: 10000, timeout: 60000 });
 
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
@@ -240,41 +248,45 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
         },
       });
 
-      for (const item of data.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { amount: { increment: item.quantity } },
-        });
+      // Buscar todos los orderItems de una sola vez
+      const orderItems = await tx.orderItem.findMany({
+        where: { orderId: data.orderId },
+        select: { id: true, productId: true },
+      });
+      const orderItemMap = new Map(orderItems.map((oi) => [oi.productId, oi.id]));
 
-        await tx.stockMovement.create({
-          data: {
-            type: "RETURN",
-            quantity: item.quantity,
-            productId: item.productId,
-            businessId,
-            reason: `Devolución #${returnRecord.id} (Ref: Venta #${data.orderId})`,
-          },
-        });
+      // 🔥 Ejecutar todas las operaciones de devolución en paralelo
+      await Promise.all(
+        data.items.map((item) => {
+          const orderItemId = orderItemMap.get(item.productId);
+          if (!orderItemId) throw new Error(`OrderItem not found for product ${item.productId}`);
 
-        const orderItem = await tx.orderItem.findFirst({
-          where: { 
-            orderId: data.orderId, 
-            productId: item.productId 
-          }
-        });
-
-        if (!orderItem) throw new Error("OrderItem not found");
-
-        await tx.saleReturnItem.create({
-          data: {
-            returnId: returnRecord.id,
-            orderItemId: orderItem.id,
-            productId: item.productId,
-            quantity: item.quantity,
-            refundAmount: item.refundAmount,
-          }
-        });
-      }
+          return Promise.all([
+            tx.product.update({
+              where: { id: item.productId },
+              data: { amount: { increment: item.quantity } },
+            }),
+            tx.stockMovement.create({
+              data: {
+                type: "RETURN",
+                quantity: item.quantity,
+                productId: item.productId,
+                businessId,
+                reason: `Devolución #${returnRecord.id} (Ref: Venta #${data.orderId})`,
+              },
+            }),
+            tx.saleReturnItem.create({
+              data: {
+                returnId: returnRecord.id,
+                orderItemId,
+                productId: item.productId,
+                quantity: item.quantity,
+                refundAmount: item.refundAmount,
+              },
+            }),
+          ]);
+        })
+      );
 
       const totalRefund = data.items.reduce((acc, item) => acc + item.refundAmount, 0);
       await tx.cashBox.update({
@@ -294,7 +306,7 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
       });
 
       return returnRecord;
-    });
+    }, { maxWait: 10000, timeout: 60000 });
 
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
     revalidateTag(CACHE_TAGS.STOCK, "max");
@@ -391,26 +403,29 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 revertir stock anterior
-      for (const item of existingOrder.items) {
-        if (item.productId) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { amount: { increment: item.quantity } },
-          });
-
-          await tx.stockMovement.create({
-            data: {
-              type: "ADJUSTMENT",
-              quantity: item.quantity,
-              productId: item.productId,
-              orderId,
-              businessId,
-              reason: `Reversión por edición de Venta #${orderId}`,
-            },
-          });
-        }
-      }
+      // 🔹 revertir stock anterior (en paralelo)
+      await Promise.all(
+        existingOrder.items
+          .filter((item) => item.productId)
+          .map((item) =>
+            Promise.all([
+              tx.product.update({
+                where: { id: item.productId! },
+                data: { amount: { increment: item.quantity } },
+              }),
+              tx.stockMovement.create({
+                data: {
+                  type: "ADJUSTMENT",
+                  quantity: item.quantity,
+                  productId: item.productId!,
+                  orderId,
+                  businessId,
+                  reason: `Reversión por edición de Venta #${orderId}`,
+                },
+              }),
+            ])
+          )
+      );
 
       // 🔹 recalcular totales
       const discountPercent = Number(updatedData.discount) || 0;
@@ -446,27 +461,30 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 descontar stock nuevo
-      for (const item of updatedData.products) {
-        await tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.amount,
-            productId: item.id,
-            orderId,
-            businessId,
-            reason: `Actualización por edición de Venta #${orderId}`,
-          },
-        });
-      }
+      // 🔹 descontar stock nuevo (en paralelo)
+      await Promise.all(
+        updatedData.products.map((item) =>
+          Promise.all([
+            tx.product.update({
+              where: { id: item.id },
+              data: { amount: { decrement: item.amount } },
+            }),
+            tx.stockMovement.create({
+              data: {
+                type: "SALE",
+                quantity: -item.amount,
+                productId: item.id,
+                orderId,
+                businessId,
+                reason: `Actualización por edición de Venta #${orderId}`,
+              },
+            }),
+          ])
+        )
+      );
 
       return { success: true };
-    });
+    }, { maxWait: 10000, timeout: 60000 });
 
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 

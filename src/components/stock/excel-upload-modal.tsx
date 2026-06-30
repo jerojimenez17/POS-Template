@@ -609,9 +609,9 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                 </TableBody>
               </Table>
             </div>
-            {previewData && previewData.items.length > 100 && (
+            {previewData && previewData.totalItems > 100 && (
               <p className="text-sm text-muted-foreground text-center">
-                Mostrando los primeros 100 productos de {previewData.items.length}
+                Mostrando los primeros 100 productos de {previewData.totalItems}
               </p>
             )}
           </div>
