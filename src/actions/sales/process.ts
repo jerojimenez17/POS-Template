@@ -264,38 +264,36 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
       });
       const orderItemMap = new Map(orderItems.map((oi) => [oi.productId, oi.id]));
 
-      // 🔥 Ejecutar todas las operaciones de devolución en paralelo
-      await Promise.all(
-        data.items.map((item) => {
-          const orderItemId = orderItemMap.get(item.productId);
-          if (!orderItemId) throw new Error(`OrderItem not found for product ${item.productId}`);
+      // 🔥 Optimización: procesar devoluciones en batches de 15 (3 ops × items)
+      await processInBatches(data.items, 15, (item) => {
+        const orderItemId = orderItemMap.get(item.productId);
+        if (!orderItemId) throw new Error(`OrderItem not found for product ${item.productId}`);
 
-          return Promise.all([
-            tx.product.update({
-              where: { id: item.productId },
-              data: { amount: { increment: item.quantity } },
-            }),
-            tx.stockMovement.create({
-              data: {
-                type: "RETURN",
-                quantity: item.quantity,
-                productId: item.productId,
-                businessId,
-                reason: `Devolución #${returnRecord.id} (Ref: Venta #${data.orderId})`,
-              },
-            }),
-            tx.saleReturnItem.create({
-              data: {
-                returnId: returnRecord.id,
-                orderItemId,
-                productId: item.productId,
-                quantity: item.quantity,
-                refundAmount: item.refundAmount,
-              },
-            }),
-          ]);
-        })
-      );
+        return [
+          tx.product.update({
+            where: { id: item.productId },
+            data: { amount: { increment: item.quantity } },
+          }),
+          tx.stockMovement.create({
+            data: {
+              type: "RETURN",
+              quantity: item.quantity,
+              productId: item.productId,
+              businessId,
+              reason: `Devolución #${returnRecord.id} (Ref: Venta #${data.orderId})`,
+            },
+          }),
+          tx.saleReturnItem.create({
+            data: {
+              returnId: returnRecord.id,
+              orderItemId,
+              productId: item.productId,
+              quantity: item.quantity,
+              refundAmount: item.refundAmount,
+            },
+          }),
+        ];
+      });
 
       const totalRefund = data.items.reduce((acc, item) => acc + item.refundAmount, 0);
       await tx.cashBox.update({
@@ -317,12 +315,19 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
       return returnRecord;
     }, { maxWait: 10000, timeout: 60000 });
 
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
+    // ⏰ Respuesta inmediata — non-critical en background
+    after(async () => {
+      try {
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CASHBOX, "max");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.SALES, "max");
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
+    });
+
     return { success: true, returnId: result.id };
   } catch (error) {
     console.error("Error processing return:", error);
@@ -411,29 +416,24 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 revertir stock anterior (en paralelo)
-      await Promise.all(
-        existingOrder.items
-          .filter((item) => item.productId)
-          .map((item) =>
-            Promise.all([
-              tx.product.update({
-                where: { id: item.productId! },
-                data: { amount: { increment: item.quantity } },
-              }),
-              tx.stockMovement.create({
-                data: {
-                  type: "ADJUSTMENT",
-                  quantity: item.quantity,
-                  productId: item.productId!,
-                  orderId,
-                  businessId,
-                  reason: `Reversión por edición de Venta #${orderId}`,
-                },
-              }),
-            ])
-          )
-      );
+      // 🔹 revertir stock anterior (en batches de 15)
+      const revertItems = existingOrder.items.filter((item) => item.productId);
+      await processInBatches(revertItems, 15, (item) => [
+        tx.product.update({
+          where: { id: item.productId! },
+          data: { amount: { increment: item.quantity } },
+        }),
+        tx.stockMovement.create({
+          data: {
+            type: "ADJUSTMENT",
+            quantity: item.quantity,
+            productId: item.productId!,
+            orderId,
+            businessId,
+            reason: `Reversión por edición de Venta #${orderId}`,
+          },
+        }),
+      ]);
 
       // 🔹 recalcular totales
       const discountPercent = Number(updatedData.discount) || 0;
@@ -469,39 +469,39 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 descontar stock nuevo (en paralelo)
-      await Promise.all(
-        updatedData.products.map((item) =>
-          Promise.all([
-            tx.product.update({
-              where: { id: item.id },
-              data: { amount: { decrement: item.amount } },
-            }),
-            tx.stockMovement.create({
-              data: {
-                type: "SALE",
-                quantity: -item.amount,
-                productId: item.id,
-                orderId,
-                businessId,
-                reason: `Actualización por edición de Venta #${orderId}`,
-              },
-            }),
-          ])
-        )
-      );
+      // 🔹 descontar stock nuevo (en batches de 15)
+      await processInBatches(updatedData.products, 15, (item) => [
+        tx.product.update({
+          where: { id: item.id },
+          data: { amount: { decrement: item.amount } },
+        }),
+        tx.stockMovement.create({
+          data: {
+            type: "SALE",
+            quantity: -item.amount,
+            productId: item.id,
+            orderId,
+            businessId,
+            reason: `Actualización por edición de Venta #${orderId}`,
+          },
+        }),
+      ]);
 
       return { success: true };
     }, { maxWait: 10000, timeout: 60000 });
 
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
+    // ⏰ Respuesta inmediata — non-critical en background
+    after(async () => {
+      try {
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CASHBOX, "max");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.SALES, "max");
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
+    });
 
     return result;
   } catch (error) {

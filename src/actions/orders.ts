@@ -6,6 +6,7 @@ import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 import { fail } from "@/lib/action-result";
+import { after } from "next/server";
 import { processInBatches } from "@/lib/batch-utils";
 
 // Type definitions for input to avoid circular dependencies with models
@@ -45,8 +46,8 @@ export const createOrder = async (order: OrderInput) => {
       if (!featureResult.success) return { error: featureResult.error };
     }
 
-    return await db.$transaction(async (tx) => {
-      // 1. Validate and Update Stock
+    const result = await db.$transaction(async (tx) => {
+      // 1a. Validate Stock (rápido, sin escrituras — solo lecturas en memoria)
       const productIds = order.products.map(p => p.id).filter(Boolean);
       const products = await tx.product.findMany({
         where: { id: { in: productIds } },
@@ -64,40 +65,44 @@ export const createOrder = async (order: OrderInput) => {
 
         const newAmount = dbProduct.amount - product.amount;
         if (!allowNegativeStock && newAmount < 0) {
-             throw new Error(`No hay suficiente stock para ${product.description || product.id}`);
+          throw new Error(`No hay suficiente stock para ${product.description || product.id}`);
         }
-
-        await tx.product.update({
-          where: { id: product.id },
-          data: { 
-            amount: newAmount, 
-            last_update: new Date() 
-          },
-        });
       }
 
+      // 1b. Update Stock en batches (evita saturar la conexión de la transacción interactiva)
+      const stockUpdates = order.products.filter(p => p.id);
+      await processInBatches(stockUpdates, 15, (product) => [
+        tx.product.update({
+          where: { id: product.id },
+          data: { 
+            amount: { decrement: product.amount },
+            last_update: new Date(),
+          },
+        }),
+      ]);
+
       // 2. Create Order and Items
-const newOrder = await tx.order.create({
-  data: {
-    businessId: order.businessId, // 👈 esto falta
-    clientId: order.client.id,
-    date: order.date ? new Date(order.date) : new Date(),
-    total: order.total,
-    status: order.status || "confirmado",
-    paidStatus: order.paidStatus || "inpago",
-    seller: order.seller,
-    items: {
-      create: order.products.map((p) => ({
-        productId: p.id || undefined,
-        quantity: p.amount,
-        price: p.price,
-        subTotal: p.price * p.amount,
-        description: p.description,
-        code: p.code,
-      })),
-    },
-  },
-});
+      const newOrder = await tx.order.create({
+        data: {
+          businessId: order.businessId,
+          clientId: order.client.id,
+          date: order.date ? new Date(order.date) : new Date(),
+          total: order.total,
+          status: order.status || "confirmado",
+          paidStatus: order.paidStatus || "inpago",
+          seller: order.seller,
+          items: {
+            create: order.products.map((p) => ({
+              productId: p.id || undefined,
+              quantity: p.amount,
+              price: p.price,
+              subTotal: p.price * p.amount,
+              description: p.description,
+              code: p.code,
+            })),
+          },
+        },
+      });
 
       // 3. Update Client Balance
       // Logic from firebase: balance = balance + (-1 * total) (Buying reduces balance/increases debt)
@@ -110,11 +115,20 @@ const newOrder = await tx.order.create({
       });
 
       return { success: "Orden creada", orderId: newOrder.id };
+    }, { timeout: 60000 });
+
+    // ⏰ Respuesta inmediata — cache revalidation en background
+    after(async () => {
+      try {
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CLIENTS, "max");
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
     });
-    
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CLIENTS, "max");
+
+    return result;
   } catch (error) {
     console.error("Transaction failed: ", error);
     return fail(error instanceof Error ? error.message : "Error al guardar Orden");
@@ -126,6 +140,10 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
         const permissionResult = await assertWritePermission();
         if (!permissionResult.success) return { error: permissionResult.error };
         const allowNegativeStock = (permissionResult.data?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
+
+        // Datos necesarios para el after() (ranking en background)
+        let pendingRankingData: { businessId: string; items: { productId: string; quantity: number; price: number }[] } | null = null;
+
         await db.$transaction(async (tx) => {
             const order = await tx.order.findUnique({
                 where: { id: orderId },
@@ -147,11 +165,7 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                     });
                 }
 
-                // Decrement stock, create stock movements, and update product ranking
-                const now = new Date();
-                const month = now.getMonth() + 1;
-                const year = now.getFullYear();
-
+                // Decrement stock, create stock movements (ranking va en after())
                 const orderItemProductIds = order.items.map(i => i.productId).filter((id): id is string => id !== null);
                 const existingProducts = await tx.product.findMany({
                     where: { id: { in: orderItemProductIds } },
@@ -172,7 +186,7 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                     }
                 }
 
-                // 2. Procesar escrituras en batches (evita saturar la conexión)
+                // 2. Procesar SOLO stock + movement en batches (ranking → after())
                 const itemsWithProductId = order.items.filter((i): i is typeof i & { productId: string } => i.productId !== null);
                 await processInBatches(itemsWithProductId, 15, (item) => [
                     tx.product.update({
@@ -189,29 +203,17 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                             reason: `Confirmación de Pedido #${order.id}`
                         }
                     }),
-                    tx.productRanking.upsert({
-                        where: {
-                            productId_month_year_businessId: {
-                                productId: item.productId,
-                                month,
-                                year,
-                                businessId: order.businessId,
-                            },
-                        },
-                        update: { 
-                            totalSold: { increment: item.quantity },
-                            totalIncome: { increment: item.quantity * item.price }
-                        },
-                        create: {
-                            productId: item.productId,
-                            month,
-                            year,
-                            businessId: order.businessId,
-                            totalSold: item.quantity,
-                            totalIncome: item.quantity * item.price,
-                        },
-                    }),
                 ]);
+
+                // Guardamos datos para el ranking en background
+                pendingRankingData = {
+                    businessId: order.businessId,
+                    items: itemsWithProductId.map(i => ({
+                        productId: i.productId,
+                        quantity: i.quantity,
+                        price: i.price,
+                    })),
+                };
             }
 
             // Finally, update the status
@@ -219,11 +221,54 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                 where: { id: orderId },
                 data: { status: newStatus }
             });
+        }, { timeout: 60000 });
+
+        // ⏰ Transacción completada — respuesta al cliente ya!
+        // Ranking + cache en background (no crítico)
+        after(async () => {
+            try {
+                const rankingData = pendingRankingData;
+                if (rankingData) {
+                    const now = new Date();
+                    const month = now.getMonth() + 1;
+                    const year = now.getFullYear();
+
+                    await db.$transaction(async (tx) => {
+                        await processInBatches(rankingData.items, 15, (item) => [
+                            tx.productRanking.upsert({
+                                where: {
+                                    productId_month_year_businessId: {
+                                        productId: item.productId,
+                                        month,
+                                        year,
+                                        businessId: rankingData.businessId,
+                                    },
+                                },
+                                update: {
+                                    totalSold: { increment: item.quantity },
+                                    totalIncome: { increment: item.quantity * item.price }
+                                },
+                                create: {
+                                    productId: item.productId,
+                                    month,
+                                    year,
+                                    businessId: pendingRankingData!.businessId,
+                                    totalSold: item.quantity,
+                                    totalIncome: item.quantity * item.price,
+                                },
+                            }),
+                        ]);
+                    });
+                }
+
+                revalidateTag(CACHE_TAGS.ORDERS, "max");
+                revalidateTag(CACHE_TAGS.STOCK, "max");
+                revalidateTag(CACHE_TAGS.CLIENTS, "max");
+            } catch (bgError) {
+                console.error("Background after() error (non-critical):", bgError);
+            }
         });
 
-        revalidateTag(CACHE_TAGS.ORDERS, "max");
-        revalidateTag(CACHE_TAGS.STOCK, "max");
-        revalidateTag(CACHE_TAGS.CLIENTS, "max");
         return { success: true };
     } catch (error) {
         console.error(error);
