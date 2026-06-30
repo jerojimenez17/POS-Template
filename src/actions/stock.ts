@@ -142,6 +142,7 @@ export interface PreviewProductsBulkResult {
     updatedCount: number;
     ignoredCount: number;
     items: PreviewProductItem[];
+    totalItems: number; // Total before truncation (for UI display)
   };
 }
 
@@ -240,7 +241,9 @@ export const previewProductsBulk = async (
         createdCount,
         updatedCount,
         ignoredCount,
-        items
+        // 🔥 Solo devolver primeros 100 items para la vista previa (evita payloads de MB)
+        items: items.slice(0, 100),
+        totalItems: items.length,
       }
     };
   } catch (error) {
