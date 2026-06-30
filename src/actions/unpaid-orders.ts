@@ -8,6 +8,7 @@ import { PaidStatus } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
 import { requireFeature } from "@/lib/auth-gates";
+import { processInBatches } from "@/lib/batch-utils";
 
 interface ActionResult<T = unknown> {
   success: boolean;
@@ -150,8 +151,7 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
 
       // 🔥 OPTIMIZACIÓN: Procesar en batches secuenciales para no saturar
       // la conexión de PostgreSQL con N×3 queries simultáneas.
-      const { processInBatches } = await import("@/lib/batch-utils");
-      await processInBatches(input.items, 10, (item) => [
+      await processInBatches(input.items, 15, (item) => [
         // 1. Actualizar stock
         tx.product.update({
           where: { id: item.productId },
@@ -480,8 +480,7 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
 
       // 🔥 OPTIMIZACIÓN: Procesar en batches secuenciales para no saturar
       // la conexión de PostgreSQL con N×4 queries simultáneas.
-      const { processInBatches } = await import("@/lib/batch-utils");
-      await processInBatches(validatedInput.items, 10, (item) => [
+      await processInBatches(validatedInput.items, 15, (item) => [
         // 1. Crear orderItem
         tx.orderItem.create({
           data: {

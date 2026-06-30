@@ -8,6 +8,7 @@ import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
+import { processInBatches } from "@/lib/batch-utils";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -41,11 +42,10 @@ interface ProcessSaleInput {
 }
 
 export const processSaleAction = async (billState: ProcessSaleInput) => {
-  const session = await auth();
-  const businessId = session?.user?.businessId;
-  if (!businessId) return { error: "No autorizado" };
-
   try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    if (!businessId) return { error: "No autorizado" };
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
@@ -99,10 +99,8 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
 
       // 🔥 OPTIMIZACIÓN: Procesar en batches secuenciales para no saturar
       // la conexión de PostgreSQL con N×3 queries simultáneas.
-      // Cada batch de 10 productos ejecuta stock + movement + ranking en paralelo,
-      // pero los batches se ejecutan uno tras otro.
-      const { processInBatches } = await import("@/lib/batch-utils");
-      await processInBatches(billState.products, 10, (item) => [
+      // Batch size 15: 30 productos → solo 2 batches (vs 3 con tamaño 10)
+      await processInBatches(billState.products, 15, (item) => [
         // 1. Actualizar stock
         tx.product.update({
           where: { id: item.id },
@@ -224,11 +222,10 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
 };
 
 export const processReturnAction = async (data: { orderId: string; items: { productId: string; quantity: number; refundAmount: number }[]; reason: string }) => {
-  const session = await auth();
-  const businessId = session?.user?.businessId;
-  if (!businessId) return { error: "No autorizado" };
-
   try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    if (!businessId) return { error: "No autorizado" };
     const result = await db.$transaction(async (tx) => {
       const activeSession = await tx.cashboxSession.findFirst({
         where: { userId: session.user!.id, status: "OPEN" },
@@ -323,16 +320,15 @@ export const updateOrderAction = async (
   orderId: string,
   updatedData: ProcessSaleInput
 ) => {
-  const session = await auth();
-  const businessId = session?.user?.businessId;
-  const userId = session?.user?.id;
-  const userRole = session?.user?.role;
-
-  if (!businessId || !userId) return { error: "No autorizado" };
-  if (userRole !== "ADMIN")
-    return { error: "Solo los administradores pueden editar ventas" };
-
   try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    const userId = session?.user?.id;
+    const userRole = session?.user?.role;
+
+    if (!businessId || !userId) return { error: "No autorizado" };
+    if (userRole !== "ADMIN")
+      return { error: "Solo los administradores pueden editar ventas" };
     const result = await db.$transaction(async (tx) => {
       const existingOrder = await tx.order.findFirst({
         where: { id: orderId, businessId },

@@ -6,6 +6,7 @@ import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 import { fail } from "@/lib/action-result";
+import { processInBatches } from "@/lib/batch-utils";
 
 // Type definitions for input to avoid circular dependencies with models
 interface OrderProductInput {
@@ -173,8 +174,7 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
 
                 // 2. Procesar escrituras en batches (evita saturar la conexión)
                 const itemsWithProductId = order.items.filter((i): i is typeof i & { productId: string } => i.productId !== null);
-                const { processInBatches } = await import("@/lib/batch-utils");
-                await processInBatches(itemsWithProductId, 10, (item) => [
+                await processInBatches(itemsWithProductId, 15, (item) => [
                     tx.product.update({
                         where: { id: item.productId },
                         data: { amount: { decrement: item.quantity } }
