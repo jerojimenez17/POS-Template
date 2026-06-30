@@ -175,21 +175,37 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     }
   };
 
-  const handleSaveSale = async (billState: typeBillState) => {
-    if (!checkConnection()) return;
+  /** Minimal product fields needed by server actions */
+  const toMinimalProducts = (products: typeBillState["products"]) =>
+    products.map((p) => ({
+      id: p.id,
+      code: p.code,
+      description: p.description,
+      price: p.price,
+      salePrice: p.salePrice,
+      amount: p.amount,
+    }));
+
+  const handleSaveSale = async (billState: typeBillState): Promise<boolean> => {
+    if (!checkConnection()) return false;
     try {
-      const result = await processSaleAction(billState);
+      // Send only minimal product data to reduce Server Action payload
+      const result = await processSaleAction({
+        ...billState,
+        products: toMinimalProducts(billState.products),
+      });
       if ('error' in result && result.error) {
         toast.error(result.error as string);
         setSaveError(true);
+        return false;
       } else {
         setSaveError(false);
+        return true;
       }
-      setBlockButton(false);
     } catch (err) {
       console.error(err);
-      setBlockButton(false);
       setSaveError(true);
+      return false;
     }
   };
 
@@ -234,6 +250,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
       if (isUpdate && orderId) {
         const updateResult = await updateOrderAction(orderId, {
           ...BillState,
+          products: toMinimalProducts(BillState.products),
           totalWithDiscount: totalAmount,
         });
 
@@ -244,12 +261,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         toast.success("Venta actualizada correctamente");
         router.push(`/sales/${orderId}`);
       } else {
-        await handleSaveSale({
+        const saveSuccess = await handleSaveSale({
           ...BillState,
           CAE: caeData || localCAE,
           totalWithDiscount: totalAmount,
         });
-        toast.success("Factura guardada correctamente");
+        if (saveSuccess) {
+          toast.success("Factura guardada correctamente");
+        }
       }
       return caeData || localCAE;
     } catch (err) {
