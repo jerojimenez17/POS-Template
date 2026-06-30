@@ -6,6 +6,7 @@ import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
+import { after } from "next/server";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
 import { processInBatches } from "@/lib/batch-utils";
@@ -97,16 +98,16 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         include: { items: true },
       });
 
-      // 🔥 OPTIMIZACIÓN: Procesar en batches secuenciales para no saturar
-      // la conexión de PostgreSQL con N×3 queries simultáneas.
-      // Batch size 15: 30 productos → solo 2 batches (vs 3 con tamaño 10)
+      // 🔥 OPTIMIZACIÓN CRÍTICA: Para entrar en 10s (Vercel Hobby):
+      // - Stock update + stock movement en 1 proceso de batches (2 ops × items)
+      // - Ranking upsert → se mueve a after() (no crítico, eventual consistency)
+      // Antes: 3 ops × 30 items = 90 queries en transacción
+      // Ahora: 2 ops × 30 items = 60 queries + ranking en after()
       await processInBatches(billState.products, 15, (item) => [
-        // 1. Actualizar stock
         tx.product.update({
           where: { id: item.id },
           data: { amount: { decrement: item.amount } },
         }),
-        // 2. Crear movimiento de stock
         tx.stockMovement.create({
           data: {
             type: "SALE",
@@ -115,29 +116,6 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
             orderId: order.id,
             businessId: businessId,
             reason: `Venta #${order.id}`,
-          },
-        }),
-        // 3. Actualizar ranking de productos
-        tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
-              productId: item.id,
-              month,
-              year,
-              businessId,
-            },
-          },
-          update: {
-            totalSold: { increment: item.amount },
-            totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
-          },
-          create: {
-            productId: item.id,
-            month,
-            year,
-            businessId,
-            totalSold: item.amount,
-            totalIncome: item.amount * (item.salePrice || item.price || 0),
           },
         }),
       ]);
@@ -203,17 +181,53 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       return { order, movements };
     }, { maxWait: 10000, timeout: 60000 });
 
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+    // ⏰ Respuesta al cliente ya!
+    // El resto (ranking, pusher, cache) va en after() — no crítico para el usuario
+    after(async () => {
+      try {
+        // Ranking de productos (eventual consistency — analytics no crítico)
+        await db.$transaction(async (tx) => {
+          await processInBatches(billState.products, 15, (item) => [
+            tx.productRanking.upsert({
+              where: {
+                productId_month_year_businessId: {
+                  productId: item.id,
+                  month,
+                  year,
+                  businessId,
+                },
+              },
+              update: {
+                totalSold: { increment: item.amount },
+                totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
+              },
+              create: {
+                productId: item.id,
+                month,
+                year,
+                businessId,
+                totalSold: item.amount,
+                totalIncome: item.amount * (item.salePrice || item.price || 0),
+              },
+            }),
+          ]);
+        });
 
-    for (const movement of result.movements) {
-      await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
-    }
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
+        for (const movement of result.movements) {
+          await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+        }
+
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CASHBOX, "max");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.SALES, "max");
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
+    });
+
     return { success: true, orderId: result.order.id };
   } catch (error) {
     console.error("Error processing sale:", error);
