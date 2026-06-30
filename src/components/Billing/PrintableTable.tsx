@@ -4,6 +4,7 @@ import { BillContext } from "@/context/BillContext";
 import Product from "@/models/Product";
 import BillState from "@/models/BillState";
 import DecimalInput from "./DecimalInput";
+import InlineAmountInput from "./InlineAmountInput";
 import ProductSearchBar from "./ProductSearchBar";
 import { Session } from "next-auth";
 import { cn } from "@/lib/utils";
@@ -300,7 +301,7 @@ const PrintableTable = ({
                     <div className="text-sm text-gray-500 dark:text-gray-400">{product.code}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2 print:hidden">
+                    <div className="flex items-center justify-center gap-2 print:hidden" style={{ touchAction: "manipulation" }}>
                       {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
                         <>
                           <button
@@ -310,7 +311,11 @@ const PrintableTable = ({
                           >
                             −
                           </button>
-                          <span className="w-12 text-center font-medium tabular-nums">{product.amount}</span>
+                          <InlineAmountInput
+                            amount={product.amount}
+                            productId={product.id}
+                            updateAmount={updateProductAmount}
+                          />
                           <button
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
                             onClick={() => updateProductAmount(product.id, product.amount + 1)}
