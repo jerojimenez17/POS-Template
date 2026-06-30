@@ -205,6 +205,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     } catch (err) {
       console.error(err);
       setSaveError(true);
+      toast.error(
+        "Error al guardar la venta: " +
+          (err instanceof Error ? err.message : "Error inesperado"),
+      );
       return false;
     }
   };
@@ -268,6 +272,11 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         });
         if (saveSuccess) {
           toast.success("Factura guardada correctamente");
+          setBlockButton(false);
+        } else {
+          // Save failed but error was already shown by handleSaveSale
+          setBlockButton(false);
+          return undefined;
         }
       }
       return caeData || localCAE;
