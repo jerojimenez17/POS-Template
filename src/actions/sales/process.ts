@@ -7,9 +7,10 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
 import { after } from "next/server";
+import { MovementType } from "@prisma/client";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
-import { processInBatches } from "@/lib/batch-utils";
+import { processInBatches, bulkUpdateStock } from "@/lib/batch-utils";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -95,30 +96,32 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
             })),
           },
         },
-        include: { items: true },
       });
 
-      // 🔥 OPTIMIZACIÓN CRÍTICA: Para entrar en 10s (Vercel Hobby):
-      // - Stock update + stock movement en 1 proceso de batches (2 ops × items)
-      // - Ranking upsert → se mueve a after() (no crítico, eventual consistency)
-      // Antes: 3 ops × 30 items = 90 queries en transacción
-      // Ahora: 2 ops × 30 items = 60 queries + ranking en after()
-      await processInBatches(billState.products, 15, (item) => [
-        tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        }),
-        tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.amount,
-            productId: item.id,
-            orderId: order.id,
-            businessId: businessId,
-            reason: `Venta #${order.id}`,
-          },
-        }),
-      ]);
+      // 🚀 FASE 1+2: Bulk UPDATE (raw SQL) + Bulk INSERT (createMany)
+      // Antes: 2 ops × N productos = 2N queries
+      // Ahora: 1 bulk UPDATE + 1 bulk INSERT = 2 queries total
+      const stockMovements: {
+        type: MovementType;
+        quantity: number;
+        productId: string;
+        orderId: string;
+        businessId: string;
+        reason: string;
+      }[] = [];
+      for (const item of billState.products) {
+        stockMovements.push({
+          type: "SALE",
+          quantity: -item.amount,
+          productId: item.id,
+          orderId: order.id,
+          businessId: businessId,
+          reason: `Venta #${order.id}`,
+        });
+      }
+
+      await bulkUpdateStock(tx, billState.products.map(p => ({ id: p.id, change: -p.amount })));
+      await tx.stockMovement.createMany({ data: stockMovements });
 
       let cashToIncrement = 0;
       if (billState.paidMethod === "Efectivo") {
@@ -264,36 +267,37 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
       });
       const orderItemMap = new Map(orderItems.map((oi) => [oi.productId, oi.id]));
 
-      // 🔥 Optimización: procesar devoluciones en batches de 15 (3 ops × items)
-      await processInBatches(data.items, 15, (item) => {
-        const orderItemId = orderItemMap.get(item.productId);
-        if (!orderItemId) throw new Error(`OrderItem not found for product ${item.productId}`);
+      // 🚀 FASE 1+2: Bulk UPDATE (raw SQL) + Bulk INSERT (createMany)
+      // Antes: 3 ops × N productos = 3N queries
+      // Ahora: 1 bulk UPDATE + 2× createMany = 3 queries total
+      {
+        const stockMovements: { type: MovementType; quantity: number; productId: string; businessId: string; reason: string }[] = [];
+        const returnItems: { returnId: string; orderItemId: string; productId: string; quantity: number; refundAmount: number }[] = [];
 
-        return [
-          tx.product.update({
-            where: { id: item.productId },
-            data: { amount: { increment: item.quantity } },
-          }),
-          tx.stockMovement.create({
-            data: {
-              type: "RETURN",
-              quantity: item.quantity,
-              productId: item.productId,
-              businessId,
-              reason: `Devolución #${returnRecord.id} (Ref: Venta #${data.orderId})`,
-            },
-          }),
-          tx.saleReturnItem.create({
-            data: {
-              returnId: returnRecord.id,
-              orderItemId,
-              productId: item.productId,
-              quantity: item.quantity,
-              refundAmount: item.refundAmount,
-            },
-          }),
-        ];
-      });
+        for (const item of data.items) {
+          const orderItemId = orderItemMap.get(item.productId);
+          if (!orderItemId) throw new Error(`OrderItem not found for product ${item.productId}`);
+
+          stockMovements.push({
+            type: "RETURN",
+            quantity: item.quantity,
+            productId: item.productId,
+            businessId,
+            reason: `Devolución #${returnRecord.id} (Ref: Venta #${data.orderId})`,
+          });
+          returnItems.push({
+            returnId: returnRecord.id,
+            orderItemId,
+            productId: item.productId,
+            quantity: item.quantity,
+            refundAmount: item.refundAmount,
+          });
+        }
+
+        await bulkUpdateStock(tx, data.items.map(i => ({ id: i.productId, change: i.quantity })));
+        await tx.stockMovement.createMany({ data: stockMovements });
+        await tx.saleReturnItem.createMany({ data: returnItems });
+      }
 
       const totalRefund = data.items.reduce((acc, item) => acc + item.refundAmount, 0);
       await tx.cashBox.update({
@@ -416,24 +420,23 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 revertir stock anterior (en batches de 15)
-      const revertItems = existingOrder.items.filter((item) => item.productId);
-      await processInBatches(revertItems, 15, (item) => [
-        tx.product.update({
-          where: { id: item.productId! },
-          data: { amount: { increment: item.quantity } },
-        }),
-        tx.stockMovement.create({
-          data: {
+      // 🚀 FASE 1+2: revertir stock anterior (bulk UPDATE + createMany)
+      {
+        const revertItems = existingOrder.items.filter((item) => item.productId);
+        const stockMovementsRevert: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string; reason: string }[] = [];
+        for (const item of revertItems) {
+          stockMovementsRevert.push({
             type: "ADJUSTMENT",
             quantity: item.quantity,
             productId: item.productId!,
             orderId,
             businessId,
             reason: `Reversión por edición de Venta #${orderId}`,
-          },
-        }),
-      ]);
+          });
+        }
+        await bulkUpdateStock(tx, revertItems.map(i => ({ id: i.productId!, change: i.quantity })));
+        await tx.stockMovement.createMany({ data: stockMovementsRevert });
+      }
 
       // 🔹 recalcular totales
       const discountPercent = Number(updatedData.discount) || 0;
@@ -469,23 +472,22 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 descontar stock nuevo (en batches de 15)
-      await processInBatches(updatedData.products, 15, (item) => [
-        tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        }),
-        tx.stockMovement.create({
-          data: {
+      // 🚀 FASE 1+2: descontar stock nuevo (bulk UPDATE + createMany)
+      {
+        const stockMovementsApply: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string; reason: string }[] = [];
+        for (const item of updatedData.products) {
+          stockMovementsApply.push({
             type: "SALE",
             quantity: -item.amount,
             productId: item.id,
             orderId,
             businessId,
             reason: `Actualización por edición de Venta #${orderId}`,
-          },
-        }),
-      ]);
+          });
+        }
+        await bulkUpdateStock(tx, updatedData.products.map(p => ({ id: p.id, change: -p.amount })));
+        await tx.stockMovement.createMany({ data: stockMovementsApply });
+      }
 
       return { success: true };
     }, { maxWait: 10000, timeout: 60000 });
