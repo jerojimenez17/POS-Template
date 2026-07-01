@@ -1,13 +1,13 @@
  "use server";
 
 import { db } from "@/lib/db";
-import { OrderStatus, PaidStatus } from "@prisma/client";
+import { MovementType, OrderStatus, PaidStatus } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 import { fail } from "@/lib/action-result";
 import { after } from "next/server";
-import { processInBatches } from "@/lib/batch-utils";
+import { processInBatches, bulkUpdateStock } from "@/lib/batch-utils";
 
 // Type definitions for input to avoid circular dependencies with models
 interface OrderProductInput {
@@ -69,17 +69,9 @@ export const createOrder = async (order: OrderInput) => {
         }
       }
 
-      // 1b. Update Stock en batches (evita saturar la conexión de la transacción interactiva)
+      // 🚀 FASE 2: Bulk UPDATE (raw SQL) — 1 query en vez de N individuales
       const stockUpdates = order.products.filter(p => p.id);
-      await processInBatches(stockUpdates, 15, (product) => [
-        tx.product.update({
-          where: { id: product.id },
-          data: { 
-            amount: { decrement: product.amount },
-            last_update: new Date(),
-          },
-        }),
-      ]);
+      await bulkUpdateStock(tx, stockUpdates.map(p => ({ id: p.id, change: -p.amount })));
 
       // 2. Create Order and Items
       const newOrder = await tx.order.create({
@@ -186,24 +178,23 @@ export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus)
                     }
                 }
 
-                // 2. Procesar SOLO stock + movement en batches (ranking → after())
+                // 🚀 FASE 1+2: Bulk UPDATE + createMany
                 const itemsWithProductId = order.items.filter((i): i is typeof i & { productId: string } => i.productId !== null);
-                await processInBatches(itemsWithProductId, 15, (item) => [
-                    tx.product.update({
-                        where: { id: item.productId },
-                        data: { amount: { decrement: item.quantity } }
-                    }),
-                    tx.stockMovement.create({
-                        data: {
+                {
+                    const stockMovements: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string; reason: string }[] = [];
+                    for (const item of itemsWithProductId) {
+                        stockMovements.push({
                             type: "SALE",
                             quantity: -item.quantity,
                             productId: item.productId,
                             orderId: order.id,
                             businessId: order.businessId,
                             reason: `Confirmación de Pedido #${order.id}`
-                        }
-                    }),
-                ]);
+                        });
+                    }
+                    await bulkUpdateStock(tx, itemsWithProductId.map(i => ({ id: i.productId, change: -i.quantity })));
+                    await tx.stockMovement.createMany({ data: stockMovements });
+                }
 
                 // Guardamos datos para el ranking en background
                 pendingRankingData = {
