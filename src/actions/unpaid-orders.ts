@@ -434,7 +434,7 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
   }
 };
 
-export const getClientUnpaidOrders = async (clientId: string, businessId: string): Promise<ActionResult<{ id: string; total: number; date: Date; itemsCount: number }[]>> => {
+export const getClientUnpaidOrders = async (clientId: string, businessId: string): Promise<ActionResult<{ id: string; total: number; date: Date; itemsCount: number; status: string; paidStatus: string }[]>> => {
   try {
     const session = await auth();
     const businessIdFinal = session?.user?.businessId || businessId;
@@ -445,6 +445,7 @@ export const getClientUnpaidOrders = async (clientId: string, businessId: string
         clientId,
         businessId: businessIdFinal,
         paidStatus: "inpago",
+        status: { in: ["pendiente", "confirmado", "consignacion"] },
       },
       include: {
         _count: { select: { items: true } },
@@ -459,6 +460,8 @@ export const getClientUnpaidOrders = async (clientId: string, businessId: string
         total: o.total,
         date: o.date,
         itemsCount: o._count.items,
+        status: o.status,
+        paidStatus: o.paidStatus,
       })),
     };
   } catch (error) {
