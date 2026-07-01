@@ -89,7 +89,7 @@ export default function ClientSelectionModal({
   const [orderClientIva, setOrderClientIva] = useState("");
 
   // Smart client selection state (R3)
-  const [existingOrders, setExistingOrders] = useState<{ id: string; total: number; date: Date; itemsCount: number }[]>([]);
+  const [existingOrders, setExistingOrders] = useState<{ id: string; total: number; date: Date; itemsCount: number; status: string; paidStatus: string }[]>([]);
   const [selectedExistingOrderId, setSelectedExistingOrderId] = useState<string | null>(null);
   const [showExistingOrderDialog, setShowExistingOrderDialog] = useState(false);
   const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
@@ -541,6 +541,19 @@ export default function ClientSelectionModal({
         <div className="py-2 space-y-3 max-h-[260px] overflow-y-auto">
           {existingOrders.map((order) => {
             const isSelected = selectedExistingOrderId === order.id;
+
+            const statusLabel = order.status === "pendiente"
+              ? "Presupuesto / Por confirmar"
+              : order.status === "consignacion"
+              ? "En consignación"
+              : "Confirmada / A cuenta";
+
+            const statusColor = order.status === "pendiente"
+              ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+              : order.status === "consignacion"
+              ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+              : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+
             return (
               <button
                 key={order.id}
@@ -553,22 +566,27 @@ export default function ClientSelectionModal({
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
                       isSelected ? "border-primary" : "border-muted-foreground"
                     }`}>
                       {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">
-                        Orden #{order.id.slice(-6).toUpperCase()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium">
+                          Orden #{order.id.slice(-6).toUpperCase()}
+                        </p>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusColor}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {new Date(order.date).toLocaleDateString("es-AR")} · {order.itemsCount} {order.itemsCount === 1 ? "item" : "items"}
                       </p>
                     </div>
                   </div>
-                  <p className="text-sm font-bold">
+                  <p className="text-sm font-bold shrink-0 ml-2">
                     ${order.total.toLocaleString("es-AR")}
                   </p>
                 </div>
