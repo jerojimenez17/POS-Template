@@ -16,7 +16,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, User, Search, Plus } from "lucide-react";
 import { createClient } from "@/actions/clients";
-import { getClientUnpaidOrder, addItemsToOrder } from "@/actions/unpaid-orders";
+import { getClientUnpaidOrders, addItemsToOrder } from "@/actions/unpaid-orders";
 
 interface Client {
   id: string;
@@ -35,20 +35,6 @@ interface UnpaidOrderItem {
   price: number;
   quantity: number;
   subTotal: number;
-}
-
-interface OrderItem {
-  id: string;
-  quantity: number;
-  price: number;
-  subTotal: number;
-  addedAt: Date;
-}
-
-interface ExistingOrder {
-  id: string;
-  total: number;
-  items: OrderItem[];
 }
 
 interface ClientSelectionModalProps {
@@ -103,7 +89,8 @@ export default function ClientSelectionModal({
   const [orderClientIva, setOrderClientIva] = useState("");
 
   // Smart client selection state (R3)
-  const [existingOrder, setExistingOrder] = useState<ExistingOrder | null>(null);
+  const [existingOrders, setExistingOrders] = useState<{ id: string; total: number; date: Date; itemsCount: number }[]>([]);
+  const [selectedExistingOrderId, setSelectedExistingOrderId] = useState<string | null>(null);
   const [showExistingOrderDialog, setShowExistingOrderDialog] = useState(false);
   const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
 
@@ -113,7 +100,8 @@ export default function ClientSelectionModal({
       setSelectedClientId("");
       setOrderClientCuit("");
       setOrderClientIva("");
-      setExistingOrder(null);
+      setExistingOrders([]);
+      setSelectedExistingOrderId(null);
       setShowExistingOrderDialog(false);
     }
   }, [open]);
@@ -186,10 +174,11 @@ export default function ClientSelectionModal({
 
     setIsCheckingExistingOrder(true);
     try {
-      const result = await getClientUnpaidOrder(selectedClientId, businessId);
+      const result = await getClientUnpaidOrders(selectedClientId, businessId);
       
-      if (result.success && result.data) {
-        setExistingOrder(result.data as ExistingOrder);
+      if (result.success && result.data && result.data.length > 0) {
+        setExistingOrders(result.data);
+        setSelectedExistingOrderId(result.data[0].id);
         setShowExistingOrderDialog(true);
         setIsCheckingExistingOrder(false);
         return;
@@ -197,7 +186,7 @@ export default function ClientSelectionModal({
 
       await createNewOrder(selectedClientId);
     } catch (error) {
-      console.error("Error checking existing order:", error);
+      console.error("Error checking existing orders:", error);
       await createNewOrder(selectedClientId);
     } finally {
       setIsCheckingExistingOrder(false);
@@ -278,7 +267,7 @@ export default function ClientSelectionModal({
   };
 
   const addToExistingOrder = async () => {
-    if (!existingOrder) return;
+    if (!selectedExistingOrderId) return;
 
     setIsLoading(true);
     try {
@@ -292,7 +281,7 @@ export default function ClientSelectionModal({
       }));
 
       const result = await addItemsToOrder({
-        orderId: existingOrder.id,
+        orderId: selectedExistingOrderId,
         businessId,
         items: orderItems,
       });
@@ -537,36 +526,68 @@ export default function ClientSelectionModal({
     <Dialog open={showExistingOrderDialog} onOpenChange={setShowExistingOrderDialog}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Orden Pendiente Existente</DialogTitle>
+          <DialogTitle>
+            {existingOrders.length > 1
+              ? `${existingOrders.length} Órdenes Pendientes`
+              : "Orden Pendiente Existente"}
+          </DialogTitle>
           <DialogDescription>
-            Este cliente ya tiene una orden pendiente
+            {existingOrders.length > 1
+              ? "El cliente tiene varias órdenes pendientes. Seleccione a cuál desea agregar los productos."
+              : "Este cliente ya tiene una orden pendiente"}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4 space-y-4">
-          <div className="p-4 bg-muted rounded-lg">
-            <p className="text-sm text-muted-foreground">Orden actual:</p>
-            <p className="text-lg font-bold">
-              ${existingOrder?.total.toLocaleString("es-AR") || "0"}
-            </p>
-          </div>
-          
-          <div className="p-4 bg-muted rounded-lg">
-            <p className="text-sm text-muted-foreground">Total a agregar:</p>
-            <p className="text-lg font-bold">
-              ${total.toLocaleString("es-AR")}
-            </p>
-          </div>
+        <div className="py-2 space-y-3 max-h-[260px] overflow-y-auto">
+          {existingOrders.map((order) => {
+            const isSelected = selectedExistingOrderId === order.id;
+            return (
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => setSelectedExistingOrderId(order.id)}
+                className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${
+                  isSelected
+                    ? "border-primary bg-primary/5"
+                    : "border-muted bg-muted/30 hover:border-muted-foreground/30"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      isSelected ? "border-primary" : "border-muted-foreground"
+                    }`}>
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        Orden #{order.id.slice(-6).toUpperCase()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(order.date).toLocaleDateString("es-AR")} · {order.itemsCount} {order.itemsCount === 1 ? "item" : "items"}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-sm font-bold">
+                    ${order.total.toLocaleString("es-AR")}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
 
-          <p className="text-sm text-muted-foreground">
-            ¿Qué desea hacer con los productos seleccionados?
+        <div className="p-3 bg-muted rounded-lg">
+          <p className="text-sm text-muted-foreground">Total a agregar:</p>
+          <p className="text-lg font-bold">
+            ${total.toLocaleString("es-AR")}
           </p>
         </div>
 
         <DialogFooter className="flex-col gap-2">
           <Button 
             onClick={addToExistingOrder} 
-            disabled={isLoading}
+            disabled={isLoading || !selectedExistingOrderId}
             className="w-full"
           >
             {isLoading ? (

@@ -434,33 +434,38 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
   }
 };
 
-export const getClientUnpaidOrder = async (clientId: string, businessId: string): Promise<ActionResult> => {
+export const getClientUnpaidOrders = async (clientId: string, businessId: string): Promise<ActionResult<{ id: string; total: number; date: Date; itemsCount: number }[]>> => {
   try {
     const session = await auth();
     const businessIdFinal = session?.user?.businessId || businessId;
     if (!businessIdFinal) return { success: false, error: "No autorizado" };
 
-    return await db.$transaction(async (tx) => {
-      const order = await tx.order.findFirst({
-        where: {
-          clientId,
-          businessId: businessIdFinal,
-          paidStatus: "inpago",
-        },
-        include: {
-          items: true,
-          client: true,
-        },
-        orderBy: { date: "desc" },
-      });
-
-      return { success: true, data: order };
+    const orders = await db.order.findMany({
+      where: {
+        clientId,
+        businessId: businessIdFinal,
+        paidStatus: "inpago",
+      },
+      include: {
+        _count: { select: { items: true } },
+      },
+      orderBy: { date: "desc" },
     });
+
+    return {
+      success: true,
+      data: orders.map(o => ({
+        id: o.id,
+        total: o.total,
+        date: o.date,
+        itemsCount: o._count.items,
+      })),
+    };
   } catch (error) {
-    console.error("Error getting client unpaid order:", error);
+    console.error("Error getting client unpaid orders:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al obtener la orden",
+      error: error instanceof Error ? error.message : "Error al obtener las órdenes",
     };
   }
 };
@@ -485,10 +490,13 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
       if (!order) throw new Error("Orden no encontrada");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
 
+      const products = await tx.product.findMany({
+        where: { id: { in: validatedInput.items.map(i => i.productId) } },
+      });
+      const productMap = new Map(products.map(p => [p.id, p]));
+
       for (const item of validatedInput.items) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-        });
+        const product = productMap.get(item.productId);
         if (!product) {
           throw new Error(`Producto ${item.description || item.productId} no encontrado`);
         }
@@ -513,6 +521,20 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
 
       await bulkUpdateStock(tx, validatedInput.items.map(i => ({ id: i.productId, change: -i.quantity })));
       await tx.stockMovement.createMany({ data: stockMovements });
+
+      // ✅ Crear los OrderItem para que aparezcan en el detalle de la orden
+      await tx.orderItem.createMany({
+        data: validatedInput.items.map((item) => ({
+          orderId: validatedInput.orderId,
+          productId: item.productId,
+          code: item.code || null,
+          description: item.description || null,
+          costPrice: item.costPrice || 0,
+          price: item.price,
+          quantity: item.quantity,
+          subTotal: item.subTotal,
+        })),
+      });
 
       const itemsTotal = validatedInput.items.reduce((sum, item) => sum + item.subTotal, 0);
       const newTotal = order.total + itemsTotal;
