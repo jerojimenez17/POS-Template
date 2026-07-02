@@ -60,12 +60,18 @@ const ProductDashboard = () => {
   }, []);
 
   useEffect(() => {
-    fetchProducts(1, "");
+    const timer = setTimeout(() => {
+      fetchProducts(1, "");
+    }, 0);
+    return () => clearTimeout(timer);
   }, [fetchProducts]);
 
   useEffect(() => {
-    fetchProducts(page, debouncedSearch, codeOnly, exactCode);
-  }, [debouncedSearch, codeOnly, exactCode]);
+    const timer = setTimeout(() => {
+      fetchProducts(page, debouncedSearch, codeOnly, exactCode);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [page, debouncedSearch, codeOnly, exactCode, fetchProducts]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
@@ -139,7 +145,7 @@ const ProductDashboard = () => {
           onRefresh={handleRefresh}
           hasActiveFilter={search !== ""}
         />
-      </div>
+      </div> 
     </div>
   );
 };

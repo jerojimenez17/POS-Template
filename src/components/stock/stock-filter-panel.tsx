@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { useRouter } from "next/navigation";
 import { ScanBarcode, Search, X, FileSpreadsheet, PackagePlus, CheckSquare } from "lucide-react";
@@ -42,83 +44,117 @@ const StockFilterPanel = ({
     }
   };
 
+  const handleClearSearch = () => {
+    setDescriptionFilterInput("");
+    onSearchChange("");
+  };
+
   return (
-    <div className="w-full flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+    <div className="w-full flex flex-col gap-4 p-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
       
-      {/* Search Bar - Takes available width */}
-      <div className="relative flex-1 min-w-0">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-        <Input
-          className="pl-10 h-10 w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all rounded-lg"
-          type="search"
-          placeholder="Buscar productos por nombre o código..."
-          value={descriptionFilterInput}
-          onChange={handleSearchChange}
-          onKeyDown={handleKeyDown}
-        />
-          <div className="flex items-center gap-4 mt-2">
-            <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 select-none">
-              <input
-                type="checkbox"
-                checked={codeOnly}
-                onChange={(e) => onCodeOnlyChange(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600"
-              />
-              Solo código
-            </label>
-            {onExactCodeChange && (
-              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 select-none">
-                <input
-                  type="checkbox"
-                  checked={exactCode}
-                  onChange={(e) => onExactCodeChange(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600"
-                />
-                Código exacto
-              </label>
-            )}
-          </div>
+      {/* Top Row: Search input and Action buttons */}
+      <div className="w-full flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+        
+        {/* Search Bar - Takes available width */}
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            className="pl-10 pr-10 h-10 w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all rounded-lg"
+            type="text"
+            placeholder="Buscar productos por nombre o código..."
+            value={descriptionFilterInput}
+            onChange={handleSearchChange}
+            onKeyDown={handleKeyDown}
+          />
+          {descriptionFilterInput && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              title="Limpiar búsqueda"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Actions Container */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => setScannerOpen(true)}
+            className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap text-gray-600 dark:text-gray-300"
+            title="Escanear código de barras"
+          >
+            <ScanBarcode className="h-4 w-4" />
+            <span className="hidden sm:inline">Escanear</span>
+          </Button>
+
+          <Button
+            onClick={handleOpenModal}
+            className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-gray-900 font-medium rounded-lg h-10 px-4 flex items-center gap-2 transition-all shadow-sm whitespace-nowrap"
+          >
+            <PackagePlus className="h-4 w-4" />
+            <span>Nuevo</span>
+          </Button>
+
+          {handleOpenExcelModal && (
+            <Button
+              onClick={handleOpenExcelModal}
+              variant="outline"
+              className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap text-green-700 dark:text-green-400"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span className="hidden sm:inline">Carga</span>
+            </Button>
+          )}
+
+          <Button
+            variant="secondary"
+            onClick={() => router.push("/stock/bulk-update")}
+            className="hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap"
+          >
+            <CheckSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">Actualización en Lote</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex w-full md:w-auto items-center gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar shrink-0">
-        <Button
-          variant="outline"
-          onClick={() => setScannerOpen(true)}
-          className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap text-gray-600 dark:text-gray-300"
-          title="Escanear código de barras"
-        >
-          <ScanBarcode className="h-4 w-4" />
-          <span className="hidden sm:inline">Escanear</span>
-        </Button>
-
-        <Button
-          onClick={handleOpenModal}
-          className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-gray-900 font-medium rounded-lg h-10 px-4 flex items-center gap-2 transition-all shadow-sm whitespace-nowrap"
-        >
-          <PackagePlus className="h-4 w-4" />
-          <span>Nuevo</span>
-        </Button>
-
-        {handleOpenExcelModal && (
-          <Button
-            onClick={handleOpenExcelModal}
-            variant="outline"
-            className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap text-green-700 dark:text-green-400"
+      {/* Bottom Row: Checkboxes aligned below the search inputs */}
+      <div className="flex items-center gap-6 px-1 py-1 border-t border-gray-100 dark:border-gray-800/60 pt-3">
+        <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider select-none">
+          Filtros:
+        </span>
+        
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="code-only"
+            checked={codeOnly}
+            onCheckedChange={(checked) => onCodeOnlyChange(checked === true)}
+          />
+          <Label
+            htmlFor="code-only"
+            className="text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 cursor-pointer select-none transition-colors"
           >
-            <FileSpreadsheet className="h-4 w-4" />
-            <span className="hidden sm:inline">Carga</span>
-          </Button>
-        )}
+            Solo código
+          </Label>
+        </div>
 
-         <Button
-           variant="secondary"
-           onClick={() => router.push("/stock/bulk-update")}
-           className="hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium h-10 px-3 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap"
-         >
-           <CheckSquare className="h-4 w-4" />
-           <span className="hidden sm:inline">Actualización en Lote</span>
-         </Button>
+        {onExactCodeChange && (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="exact-code"
+              checked={exactCode}
+              onCheckedChange={(checked) => onExactCodeChange(checked === true)}
+            />
+            <Label
+              htmlFor="exact-code"
+              className="text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 cursor-pointer select-none transition-colors"
+            >
+              Código exacto
+            </Label>
+          </div>
+        )}
       </div>
 
       {/* Scanner Modal Overlay */}
@@ -131,7 +167,7 @@ const StockFilterPanel = ({
           >
             <X className="h-6 w-6" />
           </Button>
-          
+
           <div className="w-full max-w-md aspect-square bg-black rounded-2xl overflow-hidden relative border border-white/20 shadow-2xl">
             <Scanner
               formats={["code_128", "codabar", "qr_code", "ean_13", "ean_8"]}
