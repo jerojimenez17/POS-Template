@@ -11,8 +11,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
-    execArgv: ['--experimental-require-module'],
-    pool: 'forks',
+    exclude: ['**/node_modules/**', 'e2e/**', '.opencode/**', 'pos-api/**'],
   },
   resolve: {
     alias: {

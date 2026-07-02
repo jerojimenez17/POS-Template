@@ -10,6 +10,32 @@ vi.mock('@/lib/db', () => ({
     business: {
       update: vi.fn(),
     },
+    businessFeatures: {
+      findUnique: vi.fn().mockResolvedValue({
+        planDefinition: {
+          name: 'PRO',
+          features: {
+            hasAfipBilling: true,
+            hasPublicCatalog: true,
+            hasClientLedger: true,
+            hasMultiCashbox: true,
+            hasSupplierFilter: true,
+            hasBudget: true,
+          },
+          limits: {
+            maxUsers: 5,
+            maxProducts: 1000,
+            maxCashboxes: 3,
+            maxClients: 500,
+            dailySalesLimit: 999999,
+            dailyProductsLimit: 999999,
+            dailyClientsLimit: 999999,
+          },
+        },
+        overrides: null,
+        business: { trialEndsAt: null },
+      }),
+    },
   },
 }));
 
@@ -18,7 +44,7 @@ vi.mock('../../../auth', () => ({
 }));
 
 vi.mock('next/cache', () => ({
-  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
 }));
 
 describe('updateBusinessArcaData Action', () => {

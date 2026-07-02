@@ -23,14 +23,14 @@ const SearchBillHeader = ({ initialParams }: SearchBillHeaderProps) => {
     const parsed: { startDate?: Date; endDate?: Date; showAll?: boolean } = {};
 
     if (from) {
-      const fromDate = new Date(from);
+      const fromDate = new Date(from + "T00:00:00");
       if (!isNaN(fromDate.getTime())) {
         parsed.startDate = fromDate;
       }
     }
 
     if (to) {
-      const toDate = new Date(to);
+      const toDate = new Date(to + "T00:00:00");
       if (!isNaN(toDate.getTime())) {
         // Sumar 1 día para incluir todo el día (el filtro usa <= endDate)
         toDate.setDate(toDate.getDate() + 1);

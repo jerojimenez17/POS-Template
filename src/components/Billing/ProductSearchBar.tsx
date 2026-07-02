@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { getProductByCode, getProductsByCode, getProductsBySearch, getSuppliersForFilter } from "@/actions/stock";
+import { getProductByCode, getProductsByCode, getProductsFiltered, getSuppliersForFilter } from "@/actions/stock";
 import { ProductPrismaAdapter } from "@/models/ProductPrismaAdapter";
 import Product from "@/models/Product";
 import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
@@ -29,7 +29,6 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   const [supplierSearch, setSupplierSearch] = useState("");
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [duplicateProducts, setDuplicateProducts] = useState<Product[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const supplierContainerRef = useRef<HTMLDivElement>(null);
@@ -88,18 +87,13 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   }, []);
 
   const performSearch = async (value: string, supId: string) => {
-    try {
-      const results = await getProductsBySearch(value, supId || undefined);
-      setSuggestions(results.map(ProductPrismaAdapter.toDomain));
-    } finally {
-      setIsSearching(false);
-    }
+    const results = await getProductsFiltered({ search: value, supplierId: supId || undefined });
+    setSuggestions(results.map(ProductPrismaAdapter.toDomain));
   };
 
   // Refresh suggestions when supplier changes and there's an active search
   useEffect(() => {
     if (searchCodeRef.current.length >= 2) {
-      setIsSearching(true);
       performSearch(searchCodeRef.current, supplierId);
     }
   }, [supplierId]);
@@ -146,14 +140,11 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
     }
 
     if (value.length >= 2) {
-      // Show searching state immediately; the debounced search will reset it
-      setIsSearching(true);
       searchTimeout.current = setTimeout(() => {
         performSearch(value, supplierId);
-      }, 400);
+      }, 300);
     } else {
       setSuggestions([]);
-      setIsSearching(false);
     }
   };
 
@@ -171,7 +162,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   const processBarcode = async (code: string) => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (supplierId) {
-      const product = await getProductByCode(code, supplierId);
+      const product = await getProductByCode(code);
       if (!product) {
         setErrorMessage("Producto no encontrado");
       } else {
@@ -200,7 +191,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (barcodeTimeout.current) clearTimeout(barcodeTimeout.current);
     if (supplierId) {
-      const product = await getProductByCode(code, supplierId);
+      const product = await getProductByCode(code);
       if (!product) {
         setErrorMessage("Producto no encontrado");
         return;
@@ -278,7 +269,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
               } else if (e.key === "ArrowDown") {
                 e.preventDefault();
                 if (suggestions.length === 0) {
-                  getProductsBySearch("", supplierId || undefined).then(results => {
+                  getProductsFiltered({ search: "", supplierId: supplierId || undefined }).then(results => {
                     setSuggestions(results.map(ProductPrismaAdapter.toDomain));
                     setSelectedIndex(0);
                   });
@@ -296,11 +287,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
             autoComplete="off"
             spellCheck={false}
           />
-          {isSearching && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-              <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
-            </div>
-          )}
+          {/* Overlay to dim table when suggestions are open */}
           {suggestions.length > 0 && (
             <div className="fixed inset-0 bg-black/10 dark:bg-black/30 z-10" onClick={() => { setSuggestions([]); setSelectedIndex(-1); }} />
           )}

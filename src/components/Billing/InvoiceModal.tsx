@@ -128,10 +128,14 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
         toast.success("Factura emitida correctamente");
         onOpenChange(false);
         window.location.reload();
+      } else {
+        toast.error("Error inesperado al procesar la facturación");
+        console.error("Unhandled invoice result:", result);
       }
     } catch (error) {
-      toast.error("Error al facturar");
-      console.error("Invoice error:", error);
+        const message = error instanceof Error ? error.message : "Error desconocido";
+        toast.error("Error al facturar: " + message);
+        console.error("Invoice error:", error);
     } finally {
       setInvoicing(false);
     }

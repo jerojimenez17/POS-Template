@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { assertWritePermission } from "@/lib/auth-gates";
 
 interface CaeData {
   CAE: string;
@@ -33,6 +34,9 @@ export const updateOrderCaeAction = async (
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
     await db.$transaction(async (tx) => {
@@ -121,6 +125,9 @@ export const deleteOrderAction = async (orderId: string) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
     const order = await db.order.findFirst({

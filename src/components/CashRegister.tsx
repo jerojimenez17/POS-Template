@@ -12,7 +12,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, ChevronLeft, ChevronRight } from "lucide-react";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ArrowLeft, Calculator } from "lucide-react";
 import Link from "next/link";
 import TotalPanel from "@/components/TotalPanel";
 import EditButton from "@/components/EditButton";
@@ -21,8 +22,6 @@ import AddButton from "@/components/AddButton";
 import { Session } from "next-auth";
 import { formatLocalDate } from "@/utils/date";
 import { cn } from "@/lib/utils";
-
-const ITEMS_PER_PAGE = 25;
 
 interface props {
   session: Session | null;
@@ -33,6 +32,7 @@ const CashRegister = ({ session }: props) => {
   const [refreshTotal, setRefreshTotal] = useState(0);
   const [showOnlyCash, setShowOnlyCash] = useState(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   useEffect(() => {
     const fetchMovements = async () => {
@@ -74,11 +74,18 @@ const CashRegister = ({ session }: props) => {
   }, [movements, showOnlyCash]);
 
   // Paginate
-  const totalPages = Math.ceil(filteredMovements.length / ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filteredMovements.length / pageSize));
   const paginatedMovements = useMemo(() => {
-    const start = (page - 1) * ITEMS_PER_PAGE;
-    return filteredMovements.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredMovements, page]);
+    const start = (page - 1) * pageSize;
+    return filteredMovements.slice(start, start + pageSize);
+  }, [filteredMovements, page, pageSize]);
+
+  // Reset page when pageSize or filter changes
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [filteredMovements.length, page, totalPages, pageSize]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
@@ -216,36 +223,19 @@ const CashRegister = ({ session }: props) => {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                {filteredMovements.length} movimiento{filteredMovements.length !== 1 ? "s" : ""}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm text-gray-500 dark:text-gray-400 px-2 min-w-[60px] text-center">
-                  {page} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
+          <PaginationControls
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={filteredMovements.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 25, 50]}
+            itemLabel="movimientos"
+          />
         </div>
       </div>
     </div>

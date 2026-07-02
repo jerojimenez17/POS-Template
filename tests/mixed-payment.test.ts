@@ -15,6 +15,9 @@ vi.mock('../src/lib/db', () => {
     db: {
       $transaction: vi.fn().mockImplementation(async (callback) => {
         return callback({
+          cashboxSession: {
+            findFirst: vi.fn().mockResolvedValue({ id: 'session-1', cashboxId: 'cashbox-1' }),
+          },
           order: {
             create: vi.fn().mockResolvedValue({
               id: 'order-1',
@@ -37,7 +40,7 @@ vi.mock('../src/lib/db', () => {
             upsert: vi.fn().mockResolvedValue({ id: 'ranking-1' }),
           },
           cashBox: {
-            upsert: vi.fn().mockResolvedValue({ id: 'cashbox-1' }),
+            update: vi.fn().mockResolvedValue({ id: 'cashbox-1' }),
           },
           cashMovement: {
             create: mockCashMovementCreate,
@@ -50,12 +53,24 @@ vi.mock('../src/lib/db', () => {
 
 vi.mock('../auth', () => ({
   auth: vi.fn().mockResolvedValue({
-    user: { businessId: 'business-123', name: 'seller-1' }
+    user: { id: 'user-1', businessId: 'business-123', name: 'seller-1' }
   }),
 }));
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock('../src/lib/auth-gates', () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+  requireFeature: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock('../src/lib/daily-limits', () => ({
+  getDailyUsage: vi.fn().mockResolvedValue({ salesCount: 0 }),
+  checkDailyLimit: vi.fn().mockResolvedValue({ allowed: true, limit: 999999 }),
+  incrementDailyUsage: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../src/lib/pusher-server', () => ({

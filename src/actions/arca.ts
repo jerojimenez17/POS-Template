@@ -6,6 +6,7 @@ import { auth } from "../../auth";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { encrypt } from "@/lib/encryption";
+import { requireFeature } from "@/lib/auth-gates";
 import * as z from "zod";
 import { ArcaFieldsSchema } from "@/schemas";
 import { ArcaUpdateInput, ArcaData } from "@/models/Arca";
@@ -24,13 +25,20 @@ export const updateBusinessArcaData = async (
     return { error: "No autorizado para modificar otro negocio" };
   }
 
+  // FR-025: businesses without hasAfipBilling may not mutate ARCA config.
+  const feature = await requireFeature("hasAfipBilling");
+  if (!feature.success) {
+    return { error: feature.error || "Esta función no está habilitada en tu plan actual." };
+  }
+
   const validatedFields = ArcaFieldsSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return { error: "Campos inválidos" };
   }
 
-  const { cuit, razonSocial, inicioActividades, condicionIva, cert, key, ptoVenta } = validatedFields.data;
+  const { cuit: rawCuit, razonSocial, inicioActividades, condicionIva, cert, key, ptoVenta } = validatedFields.data;
+  const cuit = rawCuit.replace(/\D/g, ""); // Normalizar: guardar solo dígitos
 
   try {
     const updateData: ArcaUpdateInput = {
@@ -77,6 +85,12 @@ export const getBusinessArcaData = async (
         return { error: "No autorizado para ver otro negocio" };
     }
 
+    // FR-025: businesses without hasAfipBilling may not read ARCA config.
+    const feature = await requireFeature("hasAfipBilling");
+    if (!feature.success) {
+        return { error: feature.error || "Esta función no está habilitada en tu plan actual." };
+    }
+
     try {
         const business = await db.business.findUnique({
             where: { id: businessId },
@@ -108,6 +122,12 @@ export const getArcaCredentialsForBilling = async () => {
 
     if (!businessId) {
         return { error: "No autorizado" };
+    }
+
+    // FR-025: ARCA credentials are only readable when AFIP billing is enabled.
+    const feature = await requireFeature("hasAfipBilling");
+    if (!feature.success) {
+        return { error: feature.error || "Esta función no está habilitada en tu plan actual." };
     }
 
     try {

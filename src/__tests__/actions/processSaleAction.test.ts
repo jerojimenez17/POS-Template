@@ -13,6 +13,9 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
     },
+    orderUpdate: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
   },
 }));
 
@@ -27,6 +30,13 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@/lib/auth-gates", () => ({
   requireFeature: vi.fn().mockResolvedValue({ success: true, data: { businessId: "business-123" } }),
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/lib/daily-limits", () => ({
+  getDailyUsage: vi.fn().mockResolvedValue({ salesCreated: 0, productsCreated: 0, clientsCreated: 0 }),
+  checkDailyLimit: vi.fn().mockResolvedValue({ allowed: true, limit: 999999 }),
+  incrementDailyUsage: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/pusher-server", () => ({
@@ -772,6 +782,7 @@ describe("updateOrderAction — CAE validation", () => {
       CAE: null,
       discountAmount: 0,
       discountPercentage: 0,
+      date: new Date(),
       items: [],
     };
 
@@ -789,6 +800,9 @@ describe("updateOrderAction — CAE validation", () => {
           },
           product: {
             update: vi.fn().mockResolvedValue({}),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({}),
           },
           stockMovement: {
             create: vi.fn().mockResolvedValue({}),

@@ -1,6 +1,6 @@
 export interface ParsedPlanError {
   isPlanError: boolean;
-  variant: "feature" | "limit" | "delinquent" | null;
+  variant: "feature" | "limit" | null;
   feature?: string;
   resource?: string;
   limitValue?: number;

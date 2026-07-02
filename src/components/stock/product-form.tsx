@@ -295,11 +295,22 @@ const ProductForm = ({ product, onClose }: Props) => {
       try {
         if (product) {
           const updateData = {
-            ...values,
-            brandId: values.brand,
-            categoryId: values.category,
-            subCategoryId: values.subCategory,
-            supplierId: values.supplier,
+            code: values.code,
+            codebar: values.codebar,
+            description: values.description,
+            price: Number(values.price),
+            gain: Number(values.gain),
+            amount: values.amount,
+            unit: values.unit,
+            brandId: values.brand || null,
+            categoryId: values.category || null,
+            subCategoryId: values.subCategory || null,
+            supplierId: values.supplier || null,
+            client_bonus: values.client_bonus,
+            catalog: values.catalog,
+            details: values.details || null,
+            image: typeof values.image === "string" ? values.image : null,
+            imageName: typeof values.imageName === "string" ? values.imageName : null,
             imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
             imagesToDelete: imagesToDelete.length > 0 ? imagesToDelete : undefined,
           };

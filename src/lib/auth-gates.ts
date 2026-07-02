@@ -23,7 +23,7 @@ export const assertWritePermission = async (): Promise<ActionResult<{ id: string
  * resolves the effective plan via getCachedPlan() which merges PlanDefinition
  * defaults with BusinessFeatures overrides — single source of truth.
  *
- * Falls back to "allowed" for sessions without a businessId (tests, edge cases).
+ * Requires a valid businessId — sessions without one are rejected.
  */
 export const requireFeature = async (featureName: string): Promise<ActionResult<{ id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null }>> => {
   const userResult = await assertWritePermission();
@@ -31,9 +31,9 @@ export const requireFeature = async (featureName: string): Promise<ActionResult<
 
   const { businessId } = userResult.data;
 
-  // Fallback for test/barebones sessions where business is not fully loaded
+  // Require valid businessId for plan validation
   if (!businessId) {
-    return ok(userResult.data);
+    return fail("Sesión inválida. Por favor, iniciá sesión nuevamente.", "UNAUTHENTICATED");
   }
 
   const plan = await getCachedPlan(businessId);
@@ -52,7 +52,7 @@ export const requireFeature = async (featureName: string): Promise<ActionResult<
  * Uses the same plan resolver as requireFeature — single source of truth
  * for both feature flags and numeric limits.
  *
- * Falls back to "allowed" for sessions without a businessId (tests, edge cases).
+ * Requires a valid businessId — sessions without one are rejected.
  */
 export const assertLimit = async (limitName: string, value: number): Promise<ActionResult<{ id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null }>> => {
   const userResult = await assertWritePermission();
@@ -60,9 +60,9 @@ export const assertLimit = async (limitName: string, value: number): Promise<Act
 
   const { businessId } = userResult.data;
 
-  // Fallback for test/barebones sessions where business is not fully loaded
+  // Require valid businessId for limit validation
   if (!businessId) {
-    return ok(userResult.data);
+    return fail("Sesión inválida. Por favor, iniciá sesión nuevamente.", "UNAUTHENTICATED");
   }
 
   const plan = await getCachedPlan(businessId);

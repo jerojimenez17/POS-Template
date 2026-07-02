@@ -4,7 +4,6 @@ import { BillContext } from "@/context/BillContext";
 import Product from "@/models/Product";
 import BillState from "@/models/BillState";
 import DecimalInput from "./DecimalInput";
-import InlineAmountInput from "./InlineAmountInput";
 import ProductSearchBar from "./ProductSearchBar";
 import { Session } from "next-auth";
 import { cn } from "@/lib/utils";
@@ -18,8 +17,16 @@ import { useFeatures } from "@/hooks/useFeatures";
 import { Trash2 } from "lucide-react";
 import QRCode from "qrcode";
 import CAE from "@/models/CAE";
-import PriceEditInput from "./PriceEditInput";
-
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 interface Props {
   printTrigger: number;
   className: string;
@@ -64,7 +71,7 @@ const PrintableTable = ({
   forceCae,
   targetWindowRef,
 }: Props) => {
-  const { BillState, addItem, removeItem, printMode, qzTrayActive, focusPriceProductId, setFocusPriceProductId } = React.useContext(BillContext);
+  const { BillState, addItem, removeItem, printMode, qzTrayActive } = React.useContext(BillContext);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
   const [isClient, setIsClient] = useState(false);
   const [billingInfo, setBillingInfo] = useState<{
@@ -77,6 +84,7 @@ const PrintableTable = ({
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const lastPrintTrigger = useRef(0);
 
@@ -110,7 +118,7 @@ const PrintableTable = ({
 
   const handlePrint = useCallback(async () => {
     const activeCae = forceCae || state.CAE;
-    const subtotal = Math.round(state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
+    const subtotal = state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0);
     const receiptData: ThermalReceiptData = {
       businessName: session?.user?.businessName || "Mi Comercio",
       businessInfo: billingInfo ? {
@@ -131,12 +139,12 @@ const PrintableTable = ({
         description: p.description,
         amount: p.amount,
         unitPrice: p.salePrice,
-        subtotal: Math.round(p.salePrice * p.amount),
+        subtotal: p.salePrice * p.amount,
       })),
       subtotal,
       discount: state.discount > 0 ? state.discount : undefined,
-      discountAmount: state.discount > 0 ? Math.round(subtotal * (state.discount / 100)) : undefined,
-      total: Math.round(Number(state.totalWithDiscount || subtotal * (1 - state.discount / 100))),
+      discountAmount: state.discount > 0 ? subtotal * (state.discount / 100) : undefined,
+      total: state.totalWithDiscount || subtotal * (1 - state.discount / 100),
       cae: activeCae?.CAE ? {
         cae: activeCae.CAE,
         vencimiento: activeCae.vencimiento,
@@ -189,17 +197,6 @@ const PrintableTable = ({
     }
   }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, forceCae, state.CAE, state.CAE?.qrData]);
 
-  // Prevent browser defaults for F1/F2/F3 (Chrome opens help on F1)
-  useEffect(() => {
-    const preventFunctionKeys = (e: KeyboardEvent) => {
-      if (["F1", "F2", "F3"].includes(e.key)) {
-        e.preventDefault();
-      }
-    };
-    window.addEventListener("keydown", preventFunctionKeys, { capture: true });
-    return () => window.removeEventListener("keydown", preventFunctionKeys, { capture: true });
-  }, []);
-
   const handleProductAdd = useCallback((product: Product) => {
     if (product.amount <= 0) {
       toast.error("Cantidad corregida a 1 (mínimo permitido)");
@@ -224,11 +221,9 @@ const PrintableTable = ({
   );
 
   const totals = useMemo(() => {
-    const subtotal = Math.round(state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
-    const discountAmount = state.discount > 0 ? Math.round(subtotal * (state.discount / 100)) : 0;
-    const total = state.totalWithDiscount !== undefined
-      ? Math.round(Number(state.totalWithDiscount))
-      : Math.round(subtotal * (1 - state.discount / 100));
+    const subtotal = state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0);
+    const discountAmount = state.discount > 0 ? subtotal * (state.discount / 100) : 0;
+    const total = state.totalWithDiscount || subtotal * (1 - state.discount / 100);
     return { subtotal, discountAmount, total };
   }, [state.products, state.discount, state.totalWithDiscount]);
 
@@ -327,7 +322,7 @@ const PrintableTable = ({
                     <div className="text-sm text-gray-500 dark:text-gray-400">{product.code}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2 print:hidden" style={{ touchAction: "manipulation" }}>
+                    <div className="flex items-center justify-center gap-2 print:hidden">
                       {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
                         <>
                           <button
@@ -338,11 +333,45 @@ const PrintableTable = ({
                           >
                             −
                           </button>
-                          <InlineAmountInput
-                            amount={product.amount}
-                            productId={product.id}
-                            updateAmount={updateProductAmount}
-                          />
+                          {editingProductId === product.id ? (
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              autoFocus
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onBlur={() => {
+                                const val = Math.max(1, Number(editValue) || 1);
+                                if (Number(editValue) < 1) {
+                                  toast.error("La cantidad mínima es 1");
+                                }
+                                if (val !== product.amount) {
+                                  updateProductAmount(product.id, val);
+                                }
+                                setEditingProductId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  (e.target as HTMLInputElement).blur();
+                                } else if (e.key === "Escape") {
+                                  setEditingProductId(null);
+                                }
+                              }}
+                              className="w-16 text-center font-medium tabular-nums border rounded-md px-1 py-0.5"
+                            />
+                          ) : (
+                            <span
+                              className="w-12 text-center font-medium tabular-nums cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1 py-0.5"
+                              onClick={() => {
+                                setEditingProductId(product.id);
+                                setEditValue(String(product.amount));
+                              }}
+                              title="Click para editar cantidad"
+                            >
+                              {product.amount}
+                            </span>
+                          )}
                           <button
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
                             onClick={() => updateProductAmount(product.id, product.amount + 1)}
@@ -364,20 +393,20 @@ const PrintableTable = ({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">
-                    <PriceEditInput
-                      productId={product.id}
-                      salePrice={product.salePrice}
-                    />
+                    ${product.salePrice.toLocaleString("es-AR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                    ${Math.round(product.salePrice * product.amount).toLocaleString("es-AR", {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 0,
+                    ${(product.salePrice * product.amount).toLocaleString("es-AR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
                     })}
                   </td>
                    <td className="px-4 py-3 print:hidden text-center align-middle w-12">
                     <button
-                      onClick={() => removeItem(product)}
+                      onClick={() => setDeleteTarget(product)}
                       className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                       aria-label={`Eliminar ${product.description}`}
                     >
@@ -414,8 +443,8 @@ const PrintableTable = ({
                 <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
                 <span className="font-medium tabular-nums">
                   ${totals.subtotal.toLocaleString("es-AR", {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0,
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
                   })}
                 </span>
               </div>
@@ -425,8 +454,8 @@ const PrintableTable = ({
                   <span className="text-gray-500 dark:text-gray-400">Descuento ({state.discount}%)</span>
                   <span className="font-medium text-green-600 dark:text-green-400 tabular-nums">
                     -${totals.discountAmount.toLocaleString("es-AR", {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 0,
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
                     })}
                   </span>
                 </div>
@@ -436,8 +465,8 @@ const PrintableTable = ({
                 <span>Total</span>
                 <span className="font-mono tabular-nums tracking-tight text-primary">
                   ${totals.total.toLocaleString("es-AR", {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0,
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
                   })}
                 </span>
               </div>
@@ -482,6 +511,31 @@ const PrintableTable = ({
           </div>
         </div>
       )}
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar producto</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Eliminar "{deleteTarget?.description}" de la factura?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteTarget) removeItem(deleteTarget);
+                setDeleteTarget(null);
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

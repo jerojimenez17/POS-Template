@@ -28,12 +28,7 @@ import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useFeatures } from "@/hooks/useFeatures";
 import { createBudgetAction } from "@/actions/budget";
-import {
-  getShortcutConfigsAction,
-  getProductByShortcutAction,
-} from "@/actions/shortcuts";
-import type { ShortcutMap, ShortcutKey } from "@/models/ShortcutConfig";
-import Product from "@/models/Product";
+import { parsePlanError } from "@/lib/plan-error";
 
 interface props {
   session: Session | null;
@@ -57,24 +52,18 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [openEditModal, setOpenEditModal] = useState(false);
   const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
-  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem } =
+  const { BillState, dispatch, onOrderResetRef, printMode } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const [openFeatureBlockedModal, setOpenFeatureBlockedModal] = useState(false);
   const [openLedgerBlockedModal, setOpenLedgerBlockedModal] = useState(false);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== "undefined" ? navigator.onLine : true
   );
-  const businessId = (session?.user as { businessId?: string })?.businessId;
-  const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
-  const shortcutMapRef = useRef(shortcutMap);
-  // Sync ref with state after render
-  useEffect(() => {
-    shortcutMapRef.current = shortcutMap;
-  }, [shortcutMap]);
 
   const checkSession = () => {
     if (!hasActiveSession) {
@@ -84,25 +73,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     }
     return true;
   };
-
-  // Fetch shortcut configs on mount
-  useEffect(() => {
-    if (isEditing) return;
-    if (!businessId) return;
-    getShortcutConfigsAction(businessId).then((result) => {
-      if ("success" in result && result.success) {
-        const map: ShortcutMap = {};
-        for (const config of result.data) {
-          if (config.key && config.productId) {
-            map[config.key as ShortcutKey] = config.productId;
-          }
-        }
-        setShortcutMap(map);
-      } else {
-        console.error("Error fetching shortcut configs:", result);
-      }
-    });
-  }, [isEditing, session, businessId]);
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
@@ -118,92 +88,53 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     };
   }, []);
 
-  // Global keydown listeners for keyboard shortcuts
+  const [facturaKey, setFacturaKey] = useState(0);
+  const [remitoKey, setRemitoKey] = useState(0);
+
+  // Global keydown listeners for F1, F2, F3 shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isEditing) return; // Disable shortcuts while editing sale (has different buttons)
-
-      const currentShortcutMap = shortcutMapRef.current;
-
-      // F1, F2, F3 — shortcut product lookup (if configured)
-      if (["F1", "F2", "F3"].includes(e.key)) {
-        e.preventDefault(); // Always prevent browser defaults (Chrome opens help on F1)
-        const shortcutKey = e.key as ShortcutKey;
-        const productId = currentShortcutMap[shortcutKey];
-        if (!productId) return; // No shortcut configured → no-op
-        if (!checkSession()) return;
-        if (session?.user.email) {
-          dispatch({ type: "sellerName", payload: session.user.email || "" });
-        }
-        // Fetch product and add to bill
-        getProductByShortcutAction(shortcutKey, businessId).then((result) => {
-          if ("success" in result && result.success && result.data) {
-            const productToAdd = {
-              ...result.data,
-              salePrice: 0,
-              amount: 1,
-            } as Product;
-            addItem(productToAdd);
-            if (setFocusPriceProductId) {
-              setFocusPriceProductId(productToAdd.id);
-            }
-            toast.success("Producto agregado — ingrese el precio");
-          } else if ("success" in result && result.success && !result.data) {
-            // Config exists but product is null (deleted) — show error
-            toast.error("El producto configurado para este atajo ya no existe");
-          } else {
-            const errResult = result as { error?: string };
-            toast.error(errResult.error || "Error al obtener producto");
-          }
-        });
-        return;
-      }
-
-      // F4 — Factura modal (was F1)
-      if (e.key === 'F4') {
+      
+      if (e.key === 'F1') {
         e.preventDefault();
         if (!checkSession()) return;
+        if (BillState.products?.length === 0) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
         setFacturaKey(k => k + 1);
         setOpenFacturaModal(true);
-        return;
       }
-      // F9 — Remito modal (was F2)
-      if (e.key === 'F9') {
+      if (e.key === 'F2') {
         e.preventDefault();
         if (!checkSession()) return;
+        if (BillState.products?.length === 0) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
         setRemitoKey(k => k + 1);
         setOpenRemitoModal(true);
-        return;
       }
-      // F10 — A cuenta modal (was F3)
-      if (e.key === 'F10') {
+      if (e.key === 'F3') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length > 0) {
           setOpenAcuentaModal(true);
         }
-        return;
       }
-      // F5 — Presupuesto modal (was F4, feature-gated)
-      if (e.key === 'F5') {
+      if (e.key === 'F4') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length > 0) {
           setOpenBudgetModal(true);
         }
-        return;
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, dispatch, BillState.products?.length, isEditing, addItem, setFocusPriceProductId, checkSession, businessId]);
+  }, [session, dispatch, BillState.products?.length, isEditing, hasActiveSession, setIsOpeningModalOpen]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {
@@ -221,6 +152,15 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       const resp = await createAfipVoucherAction(BillState);
 
       if (resp.error) {
+        // Check if it's a plan error
+        const parsed = parsePlanError(resp.error);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+          setOpenFeatureBlockedModal(true);
+        } else {
+          // Not a plan error (e.g., missing credentials) - show as toast
+          toast.error(resp.error);
+        }
         setBlockButton(false);
         return null;
       }
@@ -257,41 +197,21 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     }
   };
 
-  /** Minimal product fields needed by server actions */
-  const toMinimalProducts = (products: typeBillState["products"]) =>
-    products.map((p) => ({
-      id: p.id,
-      code: p.code,
-      description: p.description,
-      price: p.price,
-      salePrice: p.salePrice,
-      amount: p.amount,
-    }));
-
-  const handleSaveSale = async (billState: typeBillState): Promise<boolean> => {
-    if (!checkConnection()) return false;
+  const handleSaveSale = async (billState: typeBillState) => {
+    if (!checkConnection()) { setBlockButton(false); return; }
     try {
-      // Send only minimal product data to reduce Server Action payload
-      const result = await processSaleAction({
-        ...billState,
-        products: toMinimalProducts(billState.products),
-      });
+      const result = await processSaleAction(billState);
       if ('error' in result && result.error) {
         toast.error(result.error as string);
         setSaveError(true);
-        return false;
       } else {
         setSaveError(false);
-        return true;
       }
+      setBlockButton(false);
     } catch (err) {
       console.error(err);
+      setBlockButton(false);
       setSaveError(true);
-      toast.error(
-        "Error al guardar la venta: " +
-          (err instanceof Error ? err.message : "Error inesperado"),
-      );
-      return false;
     }
   };
 
@@ -302,13 +222,12 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       setOpenRemitoModal(false);
       setOpenEditModal(false);
 
-      const totalAmount = Math.round(
+      const totalAmount =
         BillState.products.reduce(
           (acc, act) => acc + act.salePrice * act.amount,
           0,
         ) *
-        (1 - BillState.discount * 0.01)
-      );
+        (1 - BillState.discount * 0.01);
 
       if (totalAmount <= 0) {
         setErrorMessage("El monto debe ser mayor a 0");
@@ -350,19 +269,17 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       let caeData: CAE | null = null;
       if (afip && !isUpdate) {
         caeData = await handleCreateVoucher();
-      }
-
-      // NEW: Abort if AFIP feature is disabled or credentials missing
-      if (afip && !caeData) {
-        setBlockButton(false);
-        setOpenFeatureBlockedModal(true);
-        return undefined;
+        // If AFIP billing was requested but failed (plan error, missing credentials, etc.),
+        // do NOT save the sale — abort immediately.
+        if (!caeData) {
+          setBlockButton(false);
+          return undefined;
+        }
       }
 
       if (isUpdate && orderId) {
         const updateResult = await updateOrderAction(orderId, {
           ...BillState,
-          products: toMinimalProducts(BillState.products),
           totalWithDiscount: totalAmount,
         });
 
@@ -373,19 +290,12 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         toast.success("Venta actualizada correctamente");
         router.push(`/sales/${orderId}`);
       } else {
-        const saveSuccess = await handleSaveSale({
+        await handleSaveSale({
           ...BillState,
           CAE: caeData || localCAE,
           totalWithDiscount: totalAmount,
         });
-        if (saveSuccess) {
-          toast.success(afip ? "Factura guardada correctamente" : "Remito guardado correctamente");
-          setBlockButton(false);
-        } else {
-          // Save failed but error was already shown by handleSaveSale
-          setBlockButton(false);
-          return undefined;
-        }
+        toast.success(afip ? "Factura guardada correctamente" : "Remito guardado correctamente");
       }
       return caeData || localCAE;
     } catch (err) {
@@ -450,7 +360,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <line x1="16" y1="17" x2="8" y2="17" />
             </svg>
             Facturar
-            <kbd className="ml-1 text-[10px] bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded border border-white/10">F4</kbd>
+            <kbd className="ml-1 text-[10px] bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded border border-white/10">F1</kbd>
           </Button>
 
           <Button
@@ -481,7 +391,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <path d="M12 18h.01" />
             </svg>
             Remito
-            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F9</kbd>
+            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F2</kbd>
           </Button>
 
           <Button
@@ -514,7 +424,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
             A cuenta
-            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F10</kbd>
+            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F3</kbd>
           </Button>
 
           {canUseBudget && (
@@ -535,7 +445,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
                   <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
                 </svg>
                 Presupuesto
-                <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F5</kbd>
               </Button>
               <ClientSelectionModal
                 mode="budget"
@@ -549,12 +458,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
                   amount: p.amount,
                 }))}
                 total={BillState.total}
-                totalWithDiscount={Math.round(
-                  BillState.products.reduce(
-                    (acc, act) => acc + act.salePrice * act.amount,
-                    0,
-                  ) * (1 - BillState.discount * 0.01)
-                )}
+                totalWithDiscount={BillState.products.reduce(
+                  (acc, act) => acc + act.salePrice * act.amount,
+                  0,
+                ) * (1 - BillState.discount * 0.01)}
                 discount={BillState.discount}
                 seller={session?.user?.email || ""}
                 businessId={session?.user?.businessId || ""}
@@ -694,7 +601,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <Button
                 autoFocus
                 variant="default"
-                className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+                className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white"
                 onClick={async () => {
                   const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
                   if (targetWin) {
@@ -735,9 +642,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
 
       <FeatureBlockedModal
         open={openFeatureBlockedModal}
-        onOpenChange={setOpenFeatureBlockedModal}
-        variant="feature"
-        feature="Facturación electrónica (ARCA)"
+        onOpenChange={(open) => {
+          setOpenFeatureBlockedModal(open);
+          if (!open) setPlanError(null);
+        }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature ?? "Facturación electrónica (ARCA)"}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
       />
 
       <FeatureBlockedModal

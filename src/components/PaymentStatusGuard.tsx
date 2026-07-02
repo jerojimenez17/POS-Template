@@ -1,11 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { getBusinessStatusAction } from "@/actions/business";
 import { toast } from "sonner";
 import { AlertTriangle, Lock } from "lucide-react";
+import { OverduePaymentBlocker } from "@/components/OverduePaymentBlocker";
+import { useDelinquentStore } from "@/stores/useDelinquentStore";
 
 export const PaymentStatusGuard = () => {
+  const { data: session } = useSession();
+  const setDelinquent = useDelinquentStore((s) => s.setDelinquent);
+
+  // Synchronous session check — renders blocker on first paint
+  const isMoroso = session?.user?.business?.accountStatus === "MOROSO";
+
+  useEffect(() => {
+    if (isMoroso) {
+      setDelinquent(true);
+    }
+  }, [isMoroso, setDelinquent]);
+
   const [status, setStatus] = useState<{
     message: string | null;
     type: "error" | "warning" | "info";
@@ -18,7 +33,12 @@ export const PaymentStatusGuard = () => {
       if (res && res.message) {
         setStatus(res);
         if (res.type === "error") {
+          // MOROSO no muestra toast — el bloqueador lo cubre
+          if (res.status === "MOROSO") {
+            setDelinquent(true);
+          } else {
             toast.error(res.message, { id: "payment-error", duration: Infinity });
+          }
         } else if (res.type === "warning") {
             toast.error(res.message, { id: "payment-warning", icon: <AlertTriangle className="text-orange-500" /> });
         } else {
@@ -29,6 +49,12 @@ export const PaymentStatusGuard = () => {
     checkStatus();
   }, []);
 
+  // MOROSO → render blocker immediately (synchronous)
+  if (isMoroso) {
+    return <OverduePaymentBlocker />;
+  }
+
+  // DESACTIVADO → existing blocking overlay
   if (status?.shouldBlock) {
     return (
       <div className="fixed inset-0 z-[9999] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4">

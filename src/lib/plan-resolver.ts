@@ -79,7 +79,7 @@ export async function getEffectivePlan(businessId: string): Promise<ResolvedFeat
       ) : {}),
     } as unknown as ResolvedFeatures;
   }
-
+console.log("BusinessFeatures loaded:", bf);
   // Auto-downgrade DEMO if trial expired
   if (bf.planDefinition.name === "DEMO" && bf.business.trialEndsAt && bf.business.trialEndsAt < new Date()) {
     const basicPlan = await db.planDefinition.findUnique({ where: { name: "BASIC" } });

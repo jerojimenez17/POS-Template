@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { CashBox, UserRole } from "@prisma/client";
 
 export interface UserType {
@@ -49,6 +50,21 @@ export const UsersTable = ({ users, cashboxes }: UsersTableProps) => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [userPage, setUserPage] = useState(1);
+  const [userPageSize, setUserPageSize] = useState(10);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (userPage - 1) * userPageSize;
+    return users.slice(start, start + userPageSize);
+  }, [users, userPage, userPageSize]);
+
+  const totalUserPages = Math.max(1, Math.ceil(users.length / userPageSize));
+
+  useEffect(() => {
+    if (userPage > totalUserPages) {
+      setUserPage(totalUserPages);
+    }
+  }, [users.length, userPage, totalUserPages]);
 
   const handleCreate = () => {
     setSelectedUser(null);
@@ -110,7 +126,7 @@ export const UsersTable = ({ users, cashboxes }: UsersTableProps) => {
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
+              paginatedUsers.map((user) => (
                 <TableRow key={user.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                   <TableCell className="font-medium">{user.name || "Sin nombre"}</TableCell>
                   <TableCell>{user.email}</TableCell>
@@ -148,6 +164,21 @@ export const UsersTable = ({ users, cashboxes }: UsersTableProps) => {
             )}
           </TableBody>
         </Table>
+
+        {/* Pagination */}
+        <PaginationControls
+          currentPage={userPage}
+          totalPages={totalUserPages}
+          totalItems={users.length}
+          pageSize={userPageSize}
+          onPageChange={setUserPage}
+          onPageSizeChange={(size) => {
+            setUserPageSize(size);
+            setUserPage(1);
+          }}
+          pageSizeOptions={[10, 20, 50]}
+          itemLabel="vendedores"
+        />
       </div>
 
       <UserModal

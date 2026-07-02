@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useContext, useMemo, useEffect } from "react";
+import { useState, useContext, useMemo } from "react";
 import { BillContext } from "@/context/BillContext";
 import {
   Dialog,
@@ -11,25 +11,15 @@ import {
   DialogClose,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
-import { Search, User, Plus, Loader2, FileText, Receipt, Calculator } from "lucide-react";
-import { toast } from "sonner";
-import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
-import { parsePlanError } from "@/lib/plan-error";
-import { createClient } from "@/actions/clients";
+import { FileText, Receipt, Calculator } from "lucide-react";
+
+
 import BillTypes from "@/models/billType";
 import ClientConditions from "@/models/ClientConditions";
 import PaidMethods from "@/models/PaidMethods";
 import Product from "@/models/Product";
-
-interface Client {
-  id: string;
-  name: string;
-  cellPhone?: string;
-  address?: string;
-}
 
 interface CheckoutModalProps {
   open: boolean;
@@ -71,21 +61,6 @@ export default function CheckoutModal({
   );
   const [discount, setDiscount] = useState(BillState.discount || 0);
 
-  // --- Cliente ---
-  const [clients, setClients] = useState<Client[]>([]);
-  const [search, setSearch] = useState("");
-  const [selectedClientId, setSelectedClientId] = useState(
-    BillState.clientId || ""
-  );
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [isFetchingClients, setIsFetchingClients] = useState(true);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newPhone, setNewPhone] = useState("");
-  const [newAddress, setNewAddress] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
-  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
-
   // --- Derived totals ---
   const subtotal = useMemo(
     () =>
@@ -98,89 +73,6 @@ export default function CheckoutModal({
   );
   const discountAmount = subtotal * discount / 100;
   const totalFinal = subtotal - discountAmount;
-
-  const filteredClients = useMemo(
-    () =>
-      clients.filter((c) =>
-        c.name.toLowerCase().includes(search.toLowerCase())
-      ),
-    [search, clients]
-  );
-
-  const fetchClients = useCallback(async () => {
-    setIsFetchingClients(true);
-    try {
-      const res = await fetch("/api/clients");
-      const data = await res.json();
-      const raw: Client[] = data.clients || data;
-      setClients(
-        raw.map((c: Client) => ({
-          id: c.id,
-          name: c.name,
-          cellPhone: c.cellPhone ?? undefined,
-          address: c.address ?? undefined,
-        }))
-      );
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsFetchingClients(false);
-    }
-  }, []);
-
-  // Fetch clients and reset search when modal opens
-  useEffect(() => {
-    if (!open) return;
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setSearch("");
-    setSelectedClient(null);
-    /* eslint-enable react-hooks/set-state-in-effect */
-    fetchClients();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const handleCreateClient = async () => {
-    if (!newName.trim()) {
-      toast.error("El nombre es obligatorio");
-      return;
-    }
-    setIsCreating(true);
-    try {
-      const result = await createClient({
-        name: newName.trim(),
-        cellPhone: newPhone.trim() || undefined,
-        address: newAddress.trim() || undefined,
-      });
-      if (result.error) {
-        const parsed = parsePlanError(result.error);
-        if (parsed.isPlanError) {
-          setPlanError(parsed);
-        } else {
-          toast.error(result.error);
-        }
-      } else {
-        toast.success(result.success || "Cliente creado");
-        setIsCreateOpen(false);
-        setNewName("");
-        setNewPhone("");
-        setNewAddress("");
-        await fetchClients();
-        if (result.client) {
-          setSelectedClientId(result.client.id);
-          setSelectedClient({
-            id: result.client.id,
-            name: result.client.name,
-            cellPhone: result.client.cellPhone ?? undefined,
-            address: result.client.address ?? undefined,
-          });
-        }
-      }
-    } catch {
-      toast.error("Error al crear cliente");
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   const handleConfirm = () => {
     const current = BillState;
@@ -198,8 +90,6 @@ export default function CheckoutModal({
         totalSecondMethod: twoMethods ? totalSecondMethod : undefined,
         discount,
         ptoVenta,
-        clientId: selectedClientId || current.clientId || "",
-        client: selectedClient?.name || current.client || "",
         clientIvaCondition: ivaCondition,
         clientDocumentNumber: String(documentNumber),
         totalWithDiscount: totalFinal,
@@ -239,7 +129,7 @@ export default function CheckoutModal({
           <div className="py-4">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
               {/* ──── DATOS DEL COMPROBANTE ──── */}
-              <section className="lg:col-span-3 bg-card border rounded-xl p-5 shadow-sm">
+              <section className="lg:col-span-5 bg-card border rounded-xl p-5 shadow-sm">
                   <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     Datos del comprobante
@@ -322,88 +212,6 @@ export default function CheckoutModal({
                           Consumidor Final — no requiere documento
                         </span>
                       </div>
-                    )}
-                  </div>
-                </section>
-
-              {/* ──── CLIENTE ──── */}
-              <section className="lg:col-span-2 bg-card border rounded-xl p-5 shadow-sm h-full">
-                  <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    Cliente
-                    <span className="text-xs font-normal text-muted-foreground normal-case ml-1">
-                      — opcional
-                    </span>
-                  </h3>
-
-                  <div className="flex gap-2 mb-3">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      <input
-                        placeholder="Buscar cliente por nombre..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className={`${inputClass} pl-9`}
-                      />
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setIsCreateOpen(true)}
-                      title="Crear nuevo cliente"
-                      className="h-9 w-9 shrink-0 rounded-md"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="max-h-[320px] overflow-y-auto border border-border rounded-lg bg-background">
-                    {isFetchingClients ? (
-                      <div className="flex items-center justify-center py-10">
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : filteredClients.length === 0 ? (
-                      <div className="text-center py-8 text-sm text-muted-foreground">
-                        {search
-                          ? "No se encontraron clientes"
-                          : "No hay clientes cargados"}
-                      </div>
-                    ) : (
-                      filteredClients.map((client) => (
-                        <div
-                          key={client.id}
-                          onClick={() => {
-                            setSelectedClientId(client.id);
-                            setSelectedClient(client);
-                          }}
-                          className={`px-4 py-3 cursor-pointer border-b border-border last:border-b-0 transition-colors ${
-                            selectedClientId === client.id
-                              ? "bg-primary/5 border-l-2 border-l-primary"
-                              : "hover:bg-accent"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <User className={`h-4 w-4 shrink-0 ${
-                              selectedClientId === client.id
-                                ? "text-primary"
-                                : "text-muted-foreground"
-                            }`} />
-                            <span className="font-medium text-sm">
-                              {client.name}
-                            </span>
-                            {selectedClientId === client.id && (
-                              <span className="ml-auto text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                                Seleccionado
-                              </span>
-                            )}
-                          </div>
-                          {client.cellPhone && (
-                            <p className="text-xs text-muted-foreground ml-6 mt-0.5">
-                              {client.cellPhone}
-                            </p>
-                          )}
-                        </div>
-                      ))
                     )}
                   </div>
                 </section>
@@ -554,73 +362,6 @@ export default function CheckoutModal({
         </DialogContent>
       </Dialog>
 
-      {/* ────── CREAR CLIENTE ────── */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Crear nuevo cliente</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label>
-                Nombre <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Juan Pérez"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Teléfono</Label>
-              <Input
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                placeholder="341 123 4567"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Dirección</Label>
-              <Input
-                value={newAddress}
-                onChange={(e) => setNewAddress(e.target.value)}
-                placeholder="Calle 123, Ciudad"
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <DialogClose asChild>
-              <Button variant="outline" disabled={isCreating}>
-                Cancelar
-              </Button>
-            </DialogClose>
-            <Button
-              variant="default"
-              onClick={handleCreateClient}
-              disabled={isCreating || !newName.trim()}
-            >
-              {isCreating && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Crear cliente
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <FeatureBlockedModal
-        open={!!planError}
-        onOpenChange={(open) => {
-          if (!open) setPlanError(null);
-        }}
-        variant={planError?.variant ?? "feature"}
-        feature={planError?.feature}
-        resource={planError?.resource}
-        limitValue={planError?.limitValue}
-      />
     </>
   );
 }

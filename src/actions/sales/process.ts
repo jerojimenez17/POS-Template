@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
-import { requireFeature } from "@/lib/auth-gates";
+import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 import { fail } from "@/lib/action-result";
 import { getDailyUsage, checkDailyLimit, incrementDailyUsage } from "@/lib/daily-limits";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
@@ -47,6 +47,10 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
+
+  // Gate: check payment status (MOROSO) — blocks ALL sales unconditionally
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error };
 
   // Gate: check AFIP billing feature when CAE is present (CAE is Json?, check actual number)
   const billCae = billState.CAE as { CAE?: string } | null | undefined;
@@ -246,6 +250,9 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
 
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
+
   try {
     const result = await db.$transaction(async (tx) => {
       const activeSession = await tx.cashboxSession.findFirst({
@@ -343,6 +350,10 @@ export const updateOrderAction = async (
   const userRole = session?.user?.role;
 
   if (!businessId || !userId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
+
   if (userRole !== "ADMIN")
     return { error: "Solo los administradores pueden editar ventas" };
 
@@ -492,22 +503,144 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 revertir stock anterior
-      for (const item of existingOrder.items) {
-        if (item.productId) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { amount: { increment: item.quantity } },
-          });
+      // 🔹 ajustar stock por delta (en vez de revertir todo + recrear todo)
+      // Calcula la diferencia neta por producto y registra UN SOLO movimiento
+      const oldQtyMap = new Map(existingOrder.items.map(i => [i.productId, i.quantity]));
+      const newQtyMap = new Map(updatedData.products.map(p => [p.id, p.amount]));
+      const allProductIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()]);
 
+      for (const productId of allProductIds) {
+        const oldQty = oldQtyMap.get(productId) ?? 0;
+        const newQty = newQtyMap.get(productId) ?? 0;
+        const delta = newQty - oldQty;
+
+        if (delta > 0) {
+          // Se vendieron más unidades que antes
+          await tx.product.update({
+            where: { id: productId },
+            data: { amount: { decrement: delta } },
+          });
+          await tx.stockMovement.create({
+            data: {
+              type: "SALE",
+              quantity: -delta,
+              productId,
+              orderId,
+              businessId,
+              reason: `Actualización por edición de Venta #${orderId}`,
+            },
+          });
+        } else if (delta < 0) {
+          // Se vendieron menos unidades que antes (se devuelven)
+          const absDelta = Math.abs(delta);
+          await tx.product.update({
+            where: { id: productId },
+            data: { amount: { increment: absDelta } },
+          });
           await tx.stockMovement.create({
             data: {
               type: "ADJUSTMENT",
-              quantity: item.quantity,
-              productId: item.productId,
+              quantity: absDelta,
+              productId,
               orderId,
               businessId,
               reason: `Reversión por edición de Venta #${orderId}`,
+            },
+          });
+        }
+        // delta === 0: sin cambios, no se registra movimiento
+      }
+
+      // 🔹 ajustar rankings de productos (Fix 7A)
+      const orderDate = existingOrder.date;
+      const orderMonth = orderDate.getMonth() + 1;
+      const orderYear = orderDate.getFullYear();
+
+      // Decrement rankings for removed/reduced old items
+      for (const item of existingOrder.items) {
+        if (item.productId) {
+          const newItem = updatedData.products.find(p => p.id === item.productId);
+          const newQuantity = newItem?.amount ?? 0;
+          const delta = item.quantity - newQuantity;
+
+          if (delta > 0) {
+            await tx.productRanking.upsert({
+              where: {
+                productId_month_year_businessId: {
+                  productId: item.productId,
+                  month: orderMonth,
+                  year: orderYear,
+                  businessId,
+                },
+              },
+              update: {
+                totalSold: { decrement: delta },
+                totalIncome: { decrement: delta * item.price },
+              },
+              create: {
+                productId: item.productId,
+                month: orderMonth,
+                year: orderYear,
+                businessId,
+                totalSold: 0,
+                totalIncome: 0,
+              },
+            });
+          }
+
+          if (delta < 0) {
+            const addedQuantity = Math.abs(delta);
+            const newItemPrice = updatedData.products.find(p => p.id === item.productId)?.salePrice || item.price;
+            await tx.productRanking.upsert({
+              where: {
+                productId_month_year_businessId: {
+                  productId: item.productId,
+                  month: orderMonth,
+                  year: orderYear,
+                  businessId,
+                },
+              },
+              update: {
+                totalSold: { increment: addedQuantity },
+                totalIncome: { increment: addedQuantity * newItemPrice },
+              },
+              create: {
+                productId: item.productId,
+                month: orderMonth,
+                year: orderYear,
+                businessId,
+                totalSold: addedQuantity,
+                totalIncome: addedQuantity * newItemPrice,
+              },
+            });
+          }
+        }
+      }
+
+      // Increment rankings for brand new items (not in old order)
+      for (const item of updatedData.products) {
+        const oldItem = existingOrder.items.find(i => i.productId === item.id);
+        if (!oldItem) {
+          await tx.productRanking.upsert({
+            where: {
+              productId_month_year_businessId: {
+                productId: item.id,
+                month: orderMonth,
+                year: orderYear,
+                businessId,
+              },
+            },
+            update: {
+              totalSold: { increment: item.amount },
+              totalIncome: { increment: (item.salePrice || item.price || 0) * item.amount },
+            },
+            create: {
+              productId: item.id,
+              month: orderMonth,
+              year: orderYear,
+              businessId,
+              totalSold: item.amount,
+              totalIncome: (item.salePrice || item.price || 0) * item.amount,
             },
           });
         }
@@ -549,23 +682,126 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 descontar stock nuevo
-      for (const item of updatedData.products) {
-        await tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        });
+      // 🔹 ajustar balance de cliente (Fix 7B)
+      const oldTotal = existingOrder.total;
+      const newTotal = total;
+      const totalDiff = newTotal - oldTotal;
 
-        await tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.amount,
-            productId: item.id,
-            orderId,
-            businessId,
-            reason: `Actualización por edición de Venta #${orderId}`,
-          },
+      const oldClientId = existingOrder.clientId;
+      const newClientId = updatedData.clientId;
+
+      // If client changed, remove balance from old client, add to new client
+      if (oldClientId !== newClientId) {
+        if (oldClientId) {
+          await tx.client.update({
+            where: { id: oldClientId },
+            data: { balance: { decrement: oldTotal } },
+          });
+        }
+        if (newClientId) {
+          await tx.client.update({
+            where: { id: newClientId },
+            data: { balance: { increment: newTotal } },
+          });
+        }
+      } else if (oldClientId && totalDiff !== 0) {
+        // Same client, different total
+        await tx.client.update({
+          where: { id: oldClientId },
+          data: { balance: { increment: totalDiff } },
         });
+      }
+
+      // 🔹 ajustar CashMovements y CashBox por edición (Fix 7C)
+      const oldCashMovements = await tx.cashMovement.findMany({
+        where: { orderId },
+      });
+
+      const oldCashTotal = oldCashMovements.reduce((sum, m) => sum + m.total, 0);
+
+      // Calcular nuevo total en efectivo según medios de pago actualizados
+      const isTwoMethodsEdit = !!updatedData.twoMethods;
+      const totalSecondMethodEdit = isTwoMethodsEdit ? (Number(updatedData.totalSecondMethod) || 0) : 0;
+      const totalEdit = updatedData.totalWithDiscount || updatedData.total;
+
+      let newCashTotal = 0;
+      if (updatedData.paidMethod === "Efectivo") {
+        newCashTotal += totalEdit - totalSecondMethodEdit;
+      }
+      if (isTwoMethodsEdit && updatedData.secondPaidMethod === "Efectivo") {
+        newCashTotal += totalSecondMethodEdit;
+      }
+
+      const cashDelta = newCashTotal - oldCashTotal;
+
+      // Solo tocar CashBox/CashMovement si realmente cambió algo en efectivo
+      if (cashDelta !== 0 || oldCashMovements.length > 0 || newCashTotal > 0) {
+        // Encontrar sesión activa del usuario que edita
+        const activeSession = await tx.cashboxSession.findFirst({
+          where: { userId, status: "OPEN" },
+        });
+        if (!activeSession) {
+          throw new Error("No hay una sesión de caja abierta.");
+        }
+
+        // Ajustar CashBox por el delta (puede ser positivo o negativo)
+        if (cashDelta !== 0) {
+          await tx.cashBox.update({
+            where: { id: activeSession.cashboxId },
+            data: { total: { increment: cashDelta } },
+          });
+        }
+
+        // Eliminar movimientos viejos (son reemplazados por los nuevos)
+        if (oldCashMovements.length > 0) {
+          await tx.cashMovement.deleteMany({
+            where: { orderId },
+          });
+        }
+
+        // Crear nuevos movimientos si hay efectivo involucrado
+        if (newCashTotal > 0) {
+          if (isTwoMethodsEdit) {
+            if (totalEdit - totalSecondMethodEdit > 0 && updatedData.paidMethod === "Efectivo") {
+              await tx.cashMovement.create({
+                data: {
+                  total: totalEdit - totalSecondMethodEdit,
+                  seller: updatedData.seller,
+                  paidMethod: updatedData.paidMethod || "Efectivo",
+                  businessId,
+                  cashboxSessionId: activeSession.id,
+                  orderId,
+                  date: new Date(),
+                },
+              });
+            }
+            if (totalSecondMethodEdit > 0 && updatedData.secondPaidMethod === "Efectivo") {
+              await tx.cashMovement.create({
+                data: {
+                  total: totalSecondMethodEdit,
+                  seller: updatedData.seller,
+                  paidMethod: updatedData.secondPaidMethod || "Efectivo",
+                  businessId,
+                  cashboxSessionId: activeSession.id,
+                  orderId,
+                  date: new Date(),
+                },
+              });
+            }
+          } else if (updatedData.paidMethod === "Efectivo") {
+            await tx.cashMovement.create({
+              data: {
+                total: totalEdit,
+                seller: updatedData.seller,
+                paidMethod: updatedData.paidMethod || "Efectivo",
+                businessId,
+                cashboxSessionId: activeSession.id,
+                orderId,
+                date: new Date(),
+              },
+            });
+          }
+        }
       }
 
       return { success: true };
