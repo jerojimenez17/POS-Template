@@ -353,10 +353,14 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
               >
                 {/* Product Image */}
                 <div className="w-20 h-20 shrink-0 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
-                  {(product.images?.[0]?.url || product.image) && (product.images?.[0]?.url || product.image).includes("https") ? (
+                  {(() => {
+                    const rawUrl = product.images?.[0]?.url || product.image;
+                    const imgUrl = rawUrl ?? "";
+                    return imgUrl && imgUrl.includes("https");
+                  })() ? (
                     <Image
                       className="w-full h-full object-cover"
-                      src={product.images?.[0]?.url || product.image}
+                      src={(product.images?.[0]?.url || product.image) ?? ""}
                       alt={product.description || "Product"}
                       height={80}
                       width={80}

@@ -64,6 +64,7 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
     hasMultiCashbox: boolean;
     hasSupplierFilter: boolean;
     hasBudget: boolean;
+    hasNegativeStock: boolean;
     maxUsers: number;
     maxProducts: number;
     maxCashboxes: number;
@@ -94,6 +95,7 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
       hasMultiCashbox: resolved.hasMultiCashbox,
       hasSupplierFilter: resolved.hasSupplierFilter,
       hasBudget: resolved.hasBudget,
+      hasNegativeStock: resolved.hasNegativeStock ?? false,
       maxUsers: resolved.maxUsers,
       maxProducts: resolved.maxProducts,
       maxCashboxes: resolved.maxCashboxes,
@@ -113,6 +115,7 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
       hasMultiCashbox: false,
       hasSupplierFilter: false,
       hasBudget: false,
+      hasNegativeStock: false,
       maxUsers: 1,
       maxProducts: 100,
       maxCashboxes: 1,

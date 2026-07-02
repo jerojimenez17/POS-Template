@@ -88,7 +88,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
 
   const performSearch = async (value: string, supId: string) => {
     const results = await getProductsFiltered({ search: value, supplierId: supId || undefined });
-    setSuggestions(results.map(ProductPrismaAdapter.toDomain));
+    setSuggestions(results.products.map(ProductPrismaAdapter.toDomain));
   };
 
   // Refresh suggestions when supplier changes and there's an active search
@@ -270,7 +270,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                 e.preventDefault();
                 if (suggestions.length === 0) {
                   getProductsFiltered({ search: "", supplierId: supplierId || undefined }).then(results => {
-                    setSuggestions(results.map(ProductPrismaAdapter.toDomain));
+                    setSuggestions(results.products.map(ProductPrismaAdapter.toDomain));
                     setSelectedIndex(0);
                   });
                 } else {

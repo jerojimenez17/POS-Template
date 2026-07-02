@@ -6,6 +6,7 @@ export interface ResolvedFeatures {
   hasMultiCashbox: boolean;
   hasSupplierFilter: boolean;
   hasBudget: boolean;
+  hasNegativeStock: boolean;
   maxUsers: number;
   maxProducts: number;
   maxCashboxes: number;
@@ -36,6 +37,7 @@ export const PLAN_SEEDS: PlanSeed[] = [
       hasMultiCashbox: false,
       hasSupplierFilter: false,
       hasBudget: false,
+      hasNegativeStock: false,
     },
     limits: {
       maxUsers: 1,
@@ -59,6 +61,7 @@ export const PLAN_SEEDS: PlanSeed[] = [
       hasMultiCashbox: true,
       hasSupplierFilter: true,
       hasBudget: true,
+      hasNegativeStock: false,
     },
     limits: {
       maxUsers: 5,
@@ -81,6 +84,7 @@ export const PLAN_SEEDS: PlanSeed[] = [
       hasMultiCashbox: true,
       hasSupplierFilter: true,
       hasBudget: true,
+      hasNegativeStock: true,
     },
     limits: {
       maxUsers: 999999,
@@ -103,6 +107,7 @@ export const PLAN_SEEDS: PlanSeed[] = [
       hasMultiCashbox: true,
       hasSupplierFilter: true,
       hasBudget: true,
+      hasNegativeStock: false,
     },
     limits: {
       maxUsers: 2,
@@ -125,6 +130,7 @@ export const PLAN_SEEDS: PlanSeed[] = [
       hasMultiCashbox: true,
       hasSupplierFilter: true,
       hasBudget: true,
+      hasNegativeStock: true,
     },
     limits: {
       maxUsers: 999999,

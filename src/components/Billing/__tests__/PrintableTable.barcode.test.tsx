@@ -21,6 +21,7 @@ vi.mock("@/actions/stock", () => ({
   getProductByCode: vi.fn().mockResolvedValue(null),
   getProductsByCode: (...args: unknown[]) => mockGetProductsByCode(...args),
   getProductsBySearch: (...args: unknown[]) => mockGetProductsBySearch(...args),
+  getProductsFiltered: vi.fn().mockResolvedValue({ products: [], total: 0, page: 1, pageSize: 25, totalPages: 0 }),
   getSuppliersForFilter: vi.fn().mockResolvedValue([]),
 }));
 

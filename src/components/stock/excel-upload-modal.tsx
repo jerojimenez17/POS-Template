@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { BulkProductInput, previewProductsBulk, PreviewProductsBulkResult, processBulkProductBatch, finalizeBulkImport } from "@/actions/stock";
+import { parseExcelIva } from "@/utils/iva-parser";
 import { toast } from "sonner";
 import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
 import { parsePlanError } from "@/lib/plan-error";
@@ -13,7 +14,7 @@ import * as XLSX from 'xlsx';
 import { UploadCloud, CheckCircle2, ArrowRight, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { getSuppliers, createSupplier as createSupplierAction } from "@/actions/stock";
+import { getSuppliers } from "@/actions/stock";
 import type { Supplier } from "@prisma/client";
 import CreateAttributeModal from "./create-attribute-modal";
 
@@ -40,7 +41,6 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [adjustmentIva, setAdjustmentIva] = useState("0");
   const [adjustmentGain, setAdjustmentGain] = useState(0);
   const [updateOnly, setUpdateOnly] = useState(false);
-  const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
   useEffect(() => {
@@ -81,6 +81,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [colCategory, setColCategory] = useState("");
   const [colSubCategory, setColSubCategory] = useState("");
   const [colCodebar, setColCodebar] = useState("");
+  const [colIva, setColIva] = useState("");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -127,12 +128,13 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         category: ["categoría", "categoria", "cat", "rubro"],
         subCategory: ["subcategoría", "subcategoria", "sub", "subrubro"],
         codebar: ["codebar", "ean", "barcode", "upc", "código de barras", "cod barras"],
+        iva: ["iva", "alícuota", "alicuota", "tasa"],
       };
 
       const detectColumns = (headerRow: unknown[]) => {
         const detected: Record<string, number> = {
           code: -1, description: -1, price: -1,
-          amount: -1, brand: -1, category: -1, subCategory: -1, codebar: -1,
+          amount: -1, brand: -1, category: -1, subCategory: -1, codebar: -1, iva: -1,
         };
         for (let col = 0; col < headerRow.length; col++) {
           const cell = String(headerRow[col] ?? "").trim().toLowerCase();
@@ -157,6 +159,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         category: getColIndex(colCategory),
         subCategory: getColIndex(colSubCategory),
         codebar: getColIndex(colCodebar),
+        iva: getColIndex(colIva),
       };
 
       const parsedProducts: BulkProductInput[] = [];
@@ -211,6 +214,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
             categoryName: indices.category >= 0 ? String(row[indices.category] || "") : undefined,
             subCategoryName: indices.subCategory >= 0 ? String(row[indices.subCategory] || "") : undefined,
             codebar: indices.codebar >= 0 && row[indices.codebar] ? String(row[indices.codebar]) : undefined,
+            iva: indices.iva >= 0 && row[indices.iva] !== undefined && row[indices.iva] !== null && row[indices.iva] !== "" ? String(row[indices.iva]) : undefined,
           });
         }
       }
@@ -489,6 +493,10 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                   <Label>Código de Barras (EAN/UPC)</Label>
                   <Input value={colCodebar} onChange={e => setColCodebar(e.target.value)} placeholder="Ej: H" />
                 </div>
+                <div className="grid gap-2">
+                  <Label>IVA (Letra o Porcentaje)</Label>
+                  <Input value={colIva} onChange={e => setColIva(e.target.value)} placeholder="Ej: I" />
+                </div>
              </div>
            </div>
 
@@ -628,8 +636,10 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                       <TableCell>${item.price.toLocaleString("es-AR")}</TableCell>
                       <TableCell>
                         ${(() => {
+                          const parsed = parseExcelIva(item.iva);
+                          const rowIva = parsed.percent !== null ? parsed.percent : parseFloat(adjustmentIva);
                           const withDiscount = item.price * (1 - adjustmentDiscount / 100);
-                          const withIva = withDiscount * (1 + parseFloat(adjustmentIva) / 100);
+                          const withIva = withDiscount * (1 + rowIva / 100);
                           const withGain = withIva * (1 + adjustmentGain / 100);
                           return withGain.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         })()}
@@ -640,9 +650,9 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                 </TableBody>
               </Table>
             </div>
-            {previewData && previewData.items.length > 100 && (
+            {previewData && previewData.totalItems > 100 && (
               <p className="text-sm text-muted-foreground text-center">
-                Mostrando los primeros 100 productos de {previewData.items.length}
+                Mostrando los primeros 100 productos de {previewData.totalItems}
               </p>
             )}
           </div>

@@ -2,7 +2,7 @@ import { vi } from 'vitest';
 import '@testing-library/jest-dom';
 
 export const mockDb = {
-  $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+  $executeRawUnsafe: vi.fn().mockResolvedValue(0),
   $transaction: vi.fn().mockImplementation(async (arg) => {
     if (typeof arg === 'function') {
       return arg(mockDb);
@@ -122,6 +122,7 @@ vi.mock('../auth', () => ({
 
 vi.mock('next/server', () => ({
   revalidatePath: vi.fn(),
+  after: vi.fn(), // No-op en tests — el after() corre en background en prod
 }));
 
 vi.mock('pusher', () => ({
