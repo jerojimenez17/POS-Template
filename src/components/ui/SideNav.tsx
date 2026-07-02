@@ -81,7 +81,7 @@ const SideNav = () => {
   return (
     <>
       {/* Desktop sidebar */}
-      <nav className="fixed left-0 top-12 h-[calc(100vh-3rem)] z-40 hidden md:flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-200 w-14 hover:w-48 group/sidebar">
+      <nav className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] z-40 hidden md:flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-200 w-14 hover:w-48 group/sidebar">
         <div className="flex flex-col gap-1 p-2 pt-4 overflow-hidden">
           {visibleItems.map((item) => (
             <NavLink key={item.label} item={item} active={isActive(item.href)} />
