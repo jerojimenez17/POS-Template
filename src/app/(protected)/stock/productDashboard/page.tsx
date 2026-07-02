@@ -7,7 +7,7 @@ const ProductDashboardPage = async () => {
   await auth();
 
   return <Suspense fallback={<Spinner/>}> 
-   <ProductDashboad />;
+   <ProductDashboad />
    </Suspense>
 };
 
