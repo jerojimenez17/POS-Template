@@ -7,6 +7,7 @@ import { pusherServer } from "@/lib/pusher-server";
 import { Product, Prisma } from "@prisma/client";
 import { PAGINATION } from "@/lib/pagination";
 import { parseExcelIva } from "@/utils/iva-parser";
+import { roundToNearest10 } from "@/utils/round-to-nearest-10";
 
 
 // Supplier Actions
@@ -198,8 +199,8 @@ export const previewProductsBulk = async (
         if (applyPriceFormula || hasExcelIva) {
           const d = discount ?? 0;
           const g = gain ?? 0;
-          costPrice = filePrice * (1 - d / 100) * (1 + rowIva / 100);
-          salePrice = costPrice * (1 + g / 100);
+          costPrice = roundToNearest10(filePrice * (1 - d / 100) * (1 + rowIva / 100));
+          salePrice = roundToNearest10(costPrice * (1 + g / 100));
         }
 
         const priceSame = isPriceValid &&
@@ -417,8 +418,8 @@ export const processBulkProductBatch = async (
       if (applyPriceFormula || hasExcelIva) {
         const d = discount ?? 0;
         const g = gain ?? 0;
-        costPrice = filePrice * (1 - d / 100) * (1 + rowIva / 100);
-        salePrice = costPrice * (1 + g / 100);
+        costPrice = roundToNearest10(filePrice * (1 - d / 100) * (1 + rowIva / 100));
+        salePrice = roundToNearest10(costPrice * (1 + g / 100));
         gainValue = g;
       }
 

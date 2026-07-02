@@ -280,8 +280,8 @@ describe('createProductsBulk with price adjustments', () => {
       expect.objectContaining({
         data: expect.arrayContaining([
           expect.objectContaining({
-            price: 114.95,
-            salePrice: 172.425,
+            price: 110,
+            salePrice: 170,
             gain: 50,
           }),
         ]),
@@ -306,7 +306,7 @@ describe('createProductsBulk with price adjustments', () => {
         data: expect.arrayContaining([
           expect.objectContaining({
             price: 180,
-            salePrice: 234,
+            salePrice: 230,
             gain: 30,
           }),
         ]),
@@ -330,8 +330,8 @@ describe('createProductsBulk with price adjustments', () => {
       expect.objectContaining({
         data: expect.arrayContaining([
           expect.objectContaining({
-            price: 110.5,
-            salePrice: 132.6,
+            price: 110,
+            salePrice: 130,
             gain: 20,
           }),
         ]),
@@ -518,7 +518,7 @@ describe('createProductsBulk con IVA de Excel', () => {
       expect.objectContaining({
         data: expect.arrayContaining([
           expect.objectContaining({
-            price: 121, // 100 * 1.21
+            price: 120, // roundToNearest10(100 * 1.21)
             supplierId: 'supplier-1',
           }),
         ]),
@@ -538,7 +538,7 @@ describe('createProductsBulk con IVA de Excel', () => {
       expect.objectContaining({
         data: expect.arrayContaining([
           expect.objectContaining({
-            price: 110.5, // 100 * 1.105
+            price: 110, // roundToNearest10(100 * 1.105)
             supplierId: 'supplier-1',
           }),
         ]),
@@ -578,7 +578,7 @@ describe('createProductsBulk con IVA de Excel', () => {
       expect.objectContaining({
         data: expect.arrayContaining([
           expect.objectContaining({
-            price: 121, // 100 * 1.21 (aplica IVA del proveedor)
+            price: 120, // roundToNearest10(100 * 1.21) — aplica IVA del proveedor
             supplierId: 'supplier-1',
           }),
         ]),
