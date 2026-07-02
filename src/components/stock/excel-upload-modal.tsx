@@ -110,14 +110,12 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
       return;
     }
 
-    setLoading(true);
-    console.log("Iniciando procesamiento de archivo:", file.name);
+    setLoading(true); 
 
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       
-      console.log("Hojas encontradas:", workbook.SheetNames.join(", "));
 
       // Auto-detect column index from header text
       const headerKeywords: Record<string, string[]> = {
@@ -168,7 +166,6 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         const sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
 
         if (sheetRows.length === 0) {
-          console.log(`Hoja "${sheetName}" está vacía, saltando.`);
           continue;
         }
 
@@ -179,10 +176,6 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
 
         const indices = hasAutoDetect ? detected : fallbackIndices;
         const dataStartRow = hasAutoDetect ? 1 : Math.max(0, startRow - 1);
-
-        console.log(`Hoja "${sheetName}": ${sheetRows.length} filas, ` +
-          `columnas ${hasAutoDetect ? "auto-detectadas" : "manuales"}: ` +
-          `cod=${indices.code}, desc=${indices.description}, precio=${indices.price}`);
 
         const eRow = endRow !== "" && !hasAutoDetect
           ? Math.min(sheetRows.length, Number(endRow))
@@ -195,7 +188,6 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
           const codeVal = row[indices.code];
           const descVal = row[indices.description];
           const priceVal = row[indices.price];
-
           if (codeVal === undefined || descVal === undefined || priceVal === undefined ||
               codeVal === "" || descVal === "") {
             continue;

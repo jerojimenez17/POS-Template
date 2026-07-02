@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { getProductByCode, getProductsByCode, getProductsBySearch, getSuppliersForFilter } from "@/actions/stock";
+import { getProductByCode, getProductsByCode, getProductsFiltered, getSuppliersForFilter } from "@/actions/stock";
 import { ProductPrismaAdapter } from "@/models/ProductPrismaAdapter";
 import Product from "@/models/Product";
 import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
@@ -87,7 +87,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   }, []);
 
   const performSearch = async (value: string, supId: string) => {
-    const results = await getProductsBySearch(value, supId || undefined);
+    const results = await getProductsFiltered({ search: value, supplierId: supId || undefined });
     setSuggestions(results.map(ProductPrismaAdapter.toDomain));
   };
 
@@ -162,7 +162,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   const processBarcode = async (code: string) => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (supplierId) {
-      const product = await getProductByCode(code, supplierId);
+      const product = await getProductByCode(code);
       if (!product) {
         setErrorMessage("Producto no encontrado");
       } else {
@@ -191,7 +191,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (barcodeTimeout.current) clearTimeout(barcodeTimeout.current);
     if (supplierId) {
-      const product = await getProductByCode(code, supplierId);
+      const product = await getProductByCode(code);
       if (!product) {
         setErrorMessage("Producto no encontrado");
         return;
@@ -269,7 +269,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
               } else if (e.key === "ArrowDown") {
                 e.preventDefault();
                 if (suggestions.length === 0) {
-                  getProductsBySearch("", supplierId || undefined).then(results => {
+                  getProductsFiltered({ search: "", supplierId: supplierId || undefined }).then(results => {
                     setSuggestions(results.map(ProductPrismaAdapter.toDomain));
                     setSelectedIndex(0);
                   });

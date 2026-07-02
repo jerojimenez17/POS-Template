@@ -6,6 +6,7 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "../../auth";
 
 import { pusherServer } from "@/lib/pusher-server";
+import { assertWritePermission } from "@/lib/auth-gates";
 
 export const createMovement = async (data: {
   total: number;
@@ -15,6 +16,9 @@ export const createMovement = async (data: {
 }) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
     const movement = await db.cashMovement.create({

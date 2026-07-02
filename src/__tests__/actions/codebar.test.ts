@@ -1,26 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getProductByCode, createProduct, updateProduct, getProductsBySearch, getProductsFiltered, getProductsPaginated } from "@/actions/stock";
 
-vi.mock("@/lib/db", () => ({
-  db: {
-    product: {
-      findFirst: vi.fn(),
-      findMany: vi.fn(),
-      count: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-    },
-    supplier: {
-      findUnique: vi.fn(),
-    },
-    $transaction: vi.fn().mockImplementation(async (promises) => {
-      if (Array.isArray(promises)) {
-        return Promise.all(promises);
-      }
-      return typeof promises === "function" ? promises() : promises;
+vi.mock("@/lib/db", () => {
+  const productMock = {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    count: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  };
+  const stockMovementMock = { create: vi.fn().mockResolvedValue({ id: "sm-1" }) };
+  const dbMock = {
+    product: productMock,
+    supplier: { findUnique: vi.fn() },
+    stockMovement: stockMovementMock,
+    // For createProduct/updateProduct we use the callback form of $transaction
+    // (passing `tx` == db itself). getProductsPaginated uses the array form.
+    $transaction: vi.fn().mockImplementation(async (x: unknown) => {
+      if (Array.isArray(x)) return Promise.all(x);
+      return typeof x === "function" ? x(dbMock) : x;
     }),
-  },
-}));
+  };
+  return { db: dbMock };
+});
 
 vi.mock("../../../auth", () => ({
   auth: vi.fn().mockResolvedValue({ user: { id: "user-1", businessId: "business-123" } }),
@@ -28,12 +31,17 @@ vi.mock("../../../auth", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
 }));
 
 vi.mock("@/lib/pusher-server", () => ({
   pusherServer: {
     trigger: vi.fn().mockResolvedValue({}),
   },
+}));
+
+vi.mock("@/lib/plan-resolver", () => ({
+  checkLimit: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe("Product Codebar Feature Server Actions", () => {

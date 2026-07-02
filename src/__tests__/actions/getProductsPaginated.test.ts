@@ -115,15 +115,17 @@ describe("getProductsPaginated Server Action", () => {
     (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
     (db.product.count as ReturnType<typeof vi.fn>).mockResolvedValue(0);
 
-    await getProductsPaginated({ search: "Manzana" });
+await getProductsPaginated({ search: "Manzana" });
 
     expect(db.product.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          OR: [
+          businessId: "business-123",
+          OR: expect.arrayContaining([
             { code: { contains: "Manzana", mode: "insensitive" } },
+            { codebar: { contains: "Manzana", mode: "insensitive" } },
             { description: { contains: "Manzana", mode: "insensitive" } },
-          ],
+          ]),
         }),
       })
     );

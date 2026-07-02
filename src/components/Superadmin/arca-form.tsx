@@ -7,6 +7,16 @@ import { useState, useTransition } from "react";
 import { ArcaFieldsSchema } from "@/schemas";
 import { CheckCircle2, XCircle, Plus, Trash2 } from "lucide-react";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -28,6 +38,8 @@ import { FormError } from "@/components/ui/form-error";
 import { FormSuccess } from "@/components/ui/form-success";
 import { updateBusinessArcaData } from "@/actions/arca";
 import { Card, CardContent } from "@/components/ui/card";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 
 interface ArcaFormProps {
   businessId: string;
@@ -38,6 +50,7 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
   const [error, setError] = useState<string | undefined>("");
   const [success, setSuccess] = useState<string | undefined>("");
   const [isPending, startTransition] = useTransition();
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
 
   const form = useForm<z.infer<typeof ArcaFieldsSchema>>({
     resolver: zodResolver(ArcaFieldsSchema),
@@ -54,8 +67,14 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
 
   const [ptoVentaValues, setPtoVentaValues] = useState<number[]>(initialData?.ptoVenta || []);
 
+  // Delete confirmation state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [ptoVentaToRemove, setPtoVentaToRemove] = useState<number | null>(null);
+
   const addPtoVenta = () => {
-    const newValues = [...ptoVentaValues, 1];
+    const maxPto = ptoVentaValues.length > 0 ? Math.max(...ptoVentaValues) : 0;
+    const newValue = maxPto + 1;
+    const newValues = [...ptoVentaValues, newValue];
     setPtoVentaValues(newValues);
     form.setValue("ptoVenta", newValues);
   };
@@ -67,10 +86,18 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
     form.setValue("ptoVenta", newValues);
   };
 
-  const removePtoVenta = (index: number) => {
-    const newValues = ptoVentaValues.filter((_, i) => i !== index);
+  const confirmRemovePtoVenta = (index: number) => {
+    setPtoVentaToRemove(index);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmRemove = () => {
+    if (ptoVentaToRemove === null) return;
+    const newValues = ptoVentaValues.filter((_, i) => i !== ptoVentaToRemove);
     setPtoVentaValues(newValues);
     form.setValue("ptoVenta", newValues);
+    setPtoVentaToRemove(null);
+    setDeleteConfirmOpen(false);
   };
 
   const hasCert = initialData?.cert === "CONFIGURADO" || initialData?.cert && initialData.cert.length > 0;
@@ -79,12 +106,18 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
   const onSubmit = (values: z.infer<typeof ArcaFieldsSchema>) => {
     setError("");
     setSuccess("");
+    setPlanError(null);
 
     startTransition(() => {
       updateBusinessArcaData(businessId, values)
         .then((data) => {
           if (data.error) {
-            setError(data.error);
+            const parsed = parsePlanError(data.error);
+            if (parsed.isPlanError) {
+              setPlanError(parsed);
+            } else {
+              setError(data.error);
+            }
           }
           if (data.success) {
             setSuccess(data.success);
@@ -212,7 +245,7 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
                       type="button"
                       variant="destructive"
                       size="icon"
-                      onClick={() => removePtoVenta(index)}
+                      onClick={() => confirmRemovePtoVenta(index)}
                       disabled={isPending}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -293,6 +326,37 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
             </Button>
           </form>
         </Form>
+
+        <FeatureBlockedModal
+          open={!!planError}
+          onOpenChange={(open) => { if (!open) setPlanError(null); }}
+          variant={planError?.variant ?? "feature"}
+          feature={planError?.feature}
+          resource={planError?.resource}
+          limitValue={planError?.limitValue}
+        />
+
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar punto de venta?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Vas a eliminar el punto de venta <strong>N° {ptoVentaToRemove !== null ? ptoVentaValues[ptoVentaToRemove] : ""}</strong>.
+                Los cambios se guardarán cuando envíes el formulario.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); handleConfirmRemove(); }}
+                disabled={isPending}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              >
+                {isPending ? "Eliminando..." : "Sí, eliminar"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

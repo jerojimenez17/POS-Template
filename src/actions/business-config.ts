@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { assertWritePermission } from "@/lib/auth-gates";
 
 export async function getBusinessConfig() {
   const session = await auth();
@@ -45,6 +46,9 @@ export async function updateBusinessConfig(data: {
 }) {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
     await db.business.update({

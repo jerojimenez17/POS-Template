@@ -7,9 +7,17 @@ import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import CAE from "@/models/CAE";
 
+vi.mock("@/hooks/useFeatures", () => ({
+  useFeatures: vi.fn(),
+}));
+
+import { useFeatures } from "@/hooks/useFeatures";
+
 vi.mock("@/actions/stock", () => ({
   getProductByCode: vi.fn().mockResolvedValue(null),
+  getProductsByCode: vi.fn().mockResolvedValue([]),
   getProductsBySearch: vi.fn().mockResolvedValue([]),
+  getSuppliersForFilter: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/actions/business", () => ({
@@ -28,6 +36,10 @@ vi.mock("@yudiel/react-qr-scanner", () => ({
 
 vi.mock("@/lib/print", () => ({
   printElement: vi.fn().mockResolvedValue(true),
+  printThermalReceipt: vi.fn().mockResolvedValue(undefined),
+  exportToPDF: vi.fn().mockResolvedValue(undefined),
+  buildPDFHTML: vi.fn().mockReturnValue("<div></div>"),
+  PDF_STYLES: "",
 }));
 
 vi.mock("next/font/google", () => ({
@@ -105,6 +117,13 @@ const mockSession = {
 describe("PrintableTable Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useFeatures).mockReturnValue({
+      plan: "PRO",
+      hasFeature: () => false,
+      isDelinquent: false,
+      isPlanAtLeast: () => true,
+      isOverLimit: () => false,
+    } as any);
   });
 
   afterEach(() => {
@@ -181,8 +200,9 @@ describe("PrintableTable Component", () => {
 
   describe("CA-02: Print function is called when trigger is activated", () => {
     it("should call handlePrint when printTrigger increases", async () => {
-      const { printElement } = await import("@/lib/print");
-      (printElement as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      // Production uses printThermalReceipt (thermal mode) or exportToPDF (pdf mode),
+      // not the old printElement. We verify the correct function is called.
+      const { printThermalReceipt } = await import("@/lib/print");
 
       const billState = createMockBillState({
         products: [createMockProduct({ description: "Test Product" })],
@@ -202,6 +222,9 @@ describe("PrintableTable Component", () => {
         expect(screen.getByText("Test Product")).toBeTruthy();
       });
 
+      // isClient becomes true after useEffect — flush it
+      await waitFor(() => {});
+
       rerender(
         <BillContext.Provider value={{ ...mockContextValue, BillState: billState }}>
           <PrintableTable
@@ -215,13 +238,12 @@ describe("PrintableTable Component", () => {
       );
 
       await waitFor(() => {
-        expect(printElement).toHaveBeenCalled();
+        expect(printThermalReceipt).toHaveBeenCalled();
       });
     });
 
-    it("should not trigger print when scanner is open", async () => {
-      const { printElement } = await import("@/lib/print");
-      (printElement as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    it("should not trigger print when printTrigger is 0", async () => {
+      const { printThermalReceipt, exportToPDF } = await import("@/lib/print");
 
       const billState = createMockBillState({
         products: [createMockProduct({ description: "Test Product" })],
@@ -242,23 +264,35 @@ describe("PrintableTable Component", () => {
         expect(screen.getByText("Test Product")).toBeTruthy();
       });
 
-      expect(printElement).not.toHaveBeenCalled();
+      expect(printThermalReceipt).not.toHaveBeenCalled();
+      expect(exportToPDF).not.toHaveBeenCalled();
     });
   });
 
   describe("CA-03: Print styles are applied correctly", () => {
-    it("should have print-visible class for header section", () => {
+    it("should have print-visible class for header section when CAE is present", async () => {
+      // The print-visible header is gated behind isClient (useEffect) AND requires CAE.
+      // Wait for the client effect to run before querying.
+      const cae = createMockCAE();
+      const billState = createMockBillState({
+        products: [createMockProduct({ description: "Test Product" })],
+        CAE: cae,
+      });
+
       renderWithContext(
         <PrintableTable
           printTrigger={0}
           className=""
           handleClose={vi.fn()}
           session={mockSession as never}
+          externalState={billState}
         />
       );
 
-      const headerElements = document.querySelectorAll(".print-visible");
-      expect(headerElements.length).toBeGreaterThan(0);
+      await waitFor(() => {
+        const headerElements = document.querySelectorAll(".print-visible");
+        expect(headerElements.length).toBeGreaterThan(0);
+      });
     });
 
     it("should have print:hidden class for interactive elements", () => {
@@ -285,7 +319,8 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      const searchInput = screen.getByPlaceholderText("Buscar producto por codigo o nombre...");
+      // Actual placeholder includes the keyboard shortcut hint
+      const searchInput = screen.getByPlaceholderText(/Buscar producto por codigo o nombre/);
       expect(searchInput).toBeTruthy();
       expect(searchInput.closest(".print\\:hidden")).toBeTruthy();
     });
@@ -579,7 +614,8 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      const searchInput = screen.getByPlaceholderText("Buscar producto por codigo o nombre...");
+      // Actual placeholder: "Buscar producto por codigo o nombre (Presiona '/' para buscar)..."
+      const searchInput = screen.getByPlaceholderText(/Buscar producto por codigo o nombre/);
       expect(searchInput).toBeTruthy();
     });
 
@@ -743,9 +779,9 @@ describe("PrintableTable Component", () => {
   });
 
   describe("CA-12: Print page styles configuration", () => {
-    it("should call printElement with correct configuration when triggered", async () => {
-      const { printElement } = await import("@/lib/print");
-      (printElement as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    it("should call printThermalReceipt with receipt data when triggered (thermal mode)", async () => {
+      // Production uses printThermalReceipt (thermal) / exportToPDF (pdf), not printElement.
+      const { printThermalReceipt } = await import("@/lib/print");
 
       const billState = createMockBillState({
         products: [createMockProduct({ description: "Test Product" })],
@@ -761,6 +797,9 @@ describe("PrintableTable Component", () => {
         />
       );
 
+      // Let isClient become true
+      await waitFor(() => {});
+
       rerender(
         <BillContext.Provider value={{ ...mockContextValue, BillState: billState }}>
           <PrintableTable
@@ -774,16 +813,15 @@ describe("PrintableTable Component", () => {
       );
 
       await waitFor(() => {
-        expect(printElement).toHaveBeenCalled();
+        expect(printThermalReceipt).toHaveBeenCalled();
       });
 
-      const call = (printElement as ReturnType<typeof vi.fn>).mock.calls[0];
-      const options = call[1] as Record<string, unknown>;
-      expect(options).toHaveProperty("documentTitle");
-      expect(options).toHaveProperty("pageStyle");
-      expect(options.pageStyle).toContain("@page { size: auto; margin: 10mm; }");
-      expect(options.pageStyle).toContain("@media print");
-      expect(options.pageStyle).toContain("-webkit-print-color-adjust: exact");
+      const call = (printThermalReceipt as ReturnType<typeof vi.fn>).mock.calls[0];
+      const receiptData = call[0] as Record<string, unknown>;
+      // Verify receipt data has the expected shape
+      expect(receiptData).toHaveProperty("businessName");
+      expect(receiptData).toHaveProperty("products");
+      expect(receiptData).toHaveProperty("total");
     });
   });
 });

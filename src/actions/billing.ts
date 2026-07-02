@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { auth } from "../../auth";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { assertWritePermission } from "@/lib/auth-gates";
 
 /**
  * Updates the business balance in the CashBox model.
@@ -12,6 +13,9 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 export const updateBusinessBalance = async (amount: number) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
     // 1. Try to find active session for this user
@@ -60,6 +64,9 @@ export const updateProductsStock = async (items: { id: string; amount: number }[
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
+
   try {
     // Perform updates in a transaction for atomicity
     await db.$transaction(
@@ -84,6 +91,9 @@ export const updateProductsStock = async (items: { id: string; amount: number }[
 export const updateMonthlyRankingAction = async (items: { id: string; amount: number; salePrice: number }[]) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
   const now = new Date();
   const month = now.getMonth() + 1; // 1-12
@@ -148,6 +158,9 @@ interface BillStateInput {
 export const saveOrderAction = async (billState: BillStateInput) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
     const order = await db.order.create({

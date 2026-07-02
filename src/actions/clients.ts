@@ -7,6 +7,7 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { fail } from "@/lib/action-result";
 import { checkLimit } from "@/lib/plan-resolver";
 import { getDailyUsage, checkDailyLimit, incrementDailyUsage } from "@/lib/daily-limits";
+import { assertWritePermission, requireFeature } from "@/lib/auth-gates";
 
 export const createClient = async (data: {
   name: string;
@@ -18,6 +19,14 @@ export const createClient = async (data: {
 }) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
+
+  const featureCheck = await requireFeature("hasClientLedger");
+  if (!featureCheck.success) {
+    return { error: featureCheck.error || "El plan actual no incluye cuentas corrientes." };
+  }
 
   const currentCount = await db.client.count({ where: { businessId: session.user.businessId } });
   try {
@@ -67,6 +76,12 @@ export const getClients = async () => {
 }
 
 export const updateClientBalance = async (clientId: string, amountToAdd: number) => {
+    const session = await auth();
+    if (!session?.user?.businessId) return { error: "No autorizado" };
+
+    const permission = await assertWritePermission();
+    if (!permission.success) return { error: permission.error, code: permission.code };
+
     try {
         const client = await db.client.findUnique({ where: { id: clientId } });
         if (!client) return fail("Cliente no encontrado", "NOT_FOUND");

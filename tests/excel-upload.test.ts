@@ -2,8 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createProductsBulk, previewProductsBulk } from '../src/actions/stock';
 import { mockDb } from './setup';
 
-vi.mock('next/server', () => ({
-  revalidatePath: vi.fn(),
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock('../src/lib/auth-gates', () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+  assertLimit: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 const { db } = { db: mockDb };
@@ -58,13 +63,10 @@ describe('createProductsBulk with updateExisting', () => {
           code: expect.objectContaining({ in: ['PROD001'] }),
         }),
       }));
-      expect(db.product.update).toHaveBeenCalledWith(expect.objectContaining({
-        where: { id: 'product-id-1' },
-        data: expect.objectContaining({
-          price: 100,
-          salePrice: 100,
-        }),
-      }));
+      expect(db.$executeRawUnsafe).toHaveBeenCalled();
+      expect(vi.mocked(db.$executeRawUnsafe).mock.calls[0]).toEqual(
+        expect.arrayContaining(['product-id-1', 100, 100])
+      );
       expect(db.product.createMany).not.toHaveBeenCalled();
       expect(result.success).toContain('1');
     });
@@ -235,12 +237,8 @@ describe('createProductsBulk with updateExisting', () => {
 
         await createProductsBulk(productWithAmount, true);
 
-        expect(db.product.update).toHaveBeenCalledWith(expect.objectContaining({
-          where: { id: 'product-id-1' },
-          data: expect.objectContaining({
-            amount: 75,
-          }),
-        }));
+        expect(db.$executeRawUnsafe).toHaveBeenCalled();
+        expect(vi.mocked(db.$executeRawUnsafe).mock.calls[0]).toContain(75);
       });
 
       it('cuando colAmount NO está definido (undefined) → mantener stock actual', async () => {
@@ -262,17 +260,10 @@ describe('createProductsBulk with updateExisting', () => {
 
         await createProductsBulk(productWithoutAmount, true);
 
-        expect(db.product.update).toHaveBeenCalledWith(expect.objectContaining({
-          where: { id: 'product-id-1' },
-          data: expect.objectContaining({
-            amount: 100,
-          }),
-        }));
-        expect(db.product.update).not.toHaveBeenCalledWith(expect.objectContaining({
-          data: expect.objectContaining({
-            amount: 0,
-          }),
-        }));
+        expect(db.$executeRawUnsafe).toHaveBeenCalled();
+        const rawArgs = vi.mocked(db.$executeRawUnsafe).mock.calls[0];
+        expect(rawArgs).toContain('product-id-1');
+        expect(rawArgs[10]).toBeNull();
       });
     });
   });
@@ -397,7 +388,7 @@ describe('createProductsBulk with price adjustments', () => {
 
     await createProductsBulk(productInput, true, true);
 
-    expect(db.product.update).toHaveBeenCalled();
+    expect(db.$executeRawUnsafe).toHaveBeenCalled();
     expect(db.product.createMany).not.toHaveBeenCalled();
   });
 

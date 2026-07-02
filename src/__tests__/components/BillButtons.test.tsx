@@ -4,6 +4,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import BillButtonsDefault from "@/components/Billing/BillButtons";
 import { BillContext } from "@/context/BillContext";
+import { useFeatures } from "@/hooks/useFeatures";
+
+vi.mock("@/hooks/useFeatures", () => ({
+  useFeatures: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ push: vi.fn(), refresh: vi.fn() })),
@@ -38,6 +43,7 @@ vi.mock("lucide-react", () => ({
   Wallet: () => <svg data-testid="wallet-icon" />,
   CheckCircle: () => <svg data-testid="check-circle-icon" />,
   MessageCircle: () => <svg data-testid="message-circle-icon" />,
+  Ban: () => <svg data-testid="ban-icon" />,
   Search: () => <svg data-testid="search-icon" />,
   User: () => <svg data-testid="user-icon" />,
   Plus: () => <svg data-testid="plus-icon" />,
@@ -128,6 +134,13 @@ const mockSession = {
 describe("BillButtonsDefault - AFIP abort on feature disabled", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useFeatures).mockReturnValue({
+      plan: "ENTERPRISE",
+      hasFeature: () => true,
+      isDelinquent: false,
+      isPlanAtLeast: () => true,
+      isOverLimit: () => false,
+    } as any);
     // jsdom does not implement window.open, mock it
     window.open = vi.fn().mockReturnValue({
       document: { write: vi.fn() },

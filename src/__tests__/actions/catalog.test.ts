@@ -28,6 +28,20 @@ vi.mock("@/lib/plan-resolver", () => ({
     maxClients: 50,
     dailySalesLimit: 999999,
   }),
+  getCachedPlan: vi.fn().mockResolvedValue({
+    plan: "BASIC",
+    hasAfipBilling: false,
+    hasPublicCatalog: true,
+    hasClientLedger: false,
+    hasMultiCashbox: false,
+    hasSupplierFilter: false,
+    hasBudget: false,
+    maxUsers: 1,
+    maxProducts: 100,
+    maxCashboxes: 1,
+    maxClients: 50,
+    dailySalesLimit: 999999,
+  }),
 }));
 
 describe("getBusinessBySlug", () => {

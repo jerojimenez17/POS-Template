@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -35,6 +35,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 
 interface CashboxType {
   id: string;
@@ -59,6 +60,22 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
   const [cashboxToDelete, setCashboxToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
+  const [cashboxPage, setCashboxPage] = useState(1);
+  const [cashboxPageSize, setCashboxPageSize] = useState(10);
+
+  const paginatedCashboxes = useMemo(() => {
+    const start = (cashboxPage - 1) * cashboxPageSize;
+    return cashboxes.slice(start, start + cashboxPageSize);
+  }, [cashboxes, cashboxPage, cashboxPageSize]);
+
+  const totalCashboxPages = Math.max(1, Math.ceil(cashboxes.length / cashboxPageSize));
+
+  // Reset page when data changes
+  useEffect(() => {
+    if (cashboxPage > totalCashboxPages) {
+      setCashboxPage(totalCashboxPages);
+    }
+  }, [cashboxes.length, cashboxPage, totalCashboxPages]);
 
   const handleCreate = () => {
     setEditingCashbox(null);
@@ -162,7 +179,7 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
                 </TableCell>
               </TableRow>
             ) : (
-              cashboxes.map((cashbox) => (
+              paginatedCashboxes.map((cashbox) => (
                 <TableRow 
                   key={cashbox.id} 
                   className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer"
@@ -202,6 +219,21 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
             )}
           </TableBody>
         </Table>
+
+        {/* Pagination */}
+        <PaginationControls
+          currentPage={cashboxPage}
+          totalPages={totalCashboxPages}
+          totalItems={cashboxes.length}
+          pageSize={cashboxPageSize}
+          onPageChange={setCashboxPage}
+          onPageSizeChange={(size) => {
+            setCashboxPageSize(size);
+            setCashboxPage(1);
+          }}
+          pageSizeOptions={[10, 20, 50]}
+          itemLabel="cajas"
+        />
       </div>
 
       {/* Create/Edit Modal */}

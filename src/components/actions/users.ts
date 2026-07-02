@@ -59,7 +59,8 @@ export const createBusinessUser = async (values: z.infer<typeof BusinessUserSche
     return { error: "Datos inválidos" };
   }
 
-  const { name, email, password, role, cashboxId } = validateFields.data;
+  const { name, email, password, role, cashboxId: rawCashboxId } = validateFields.data;
+  const cashboxId = rawCashboxId || null;
 
   // Verify email is not in use
   const existingUser = await db.user.findUnique({ where: { email } });
@@ -102,7 +103,8 @@ export const updateBusinessUser = async (id: string, values: z.infer<typeof Busi
     return { error: "Datos inválidos" };
   }
 
-  const { name, email, password, role, cashboxId } = validateFields.data;
+  const { name, email, password, role, cashboxId: rawCashboxId } = validateFields.data;
+  const cashboxId = rawCashboxId || null;
 
   // Verify user belongs to same business
   const existingUser = await db.user.findUnique({ where: { id } });

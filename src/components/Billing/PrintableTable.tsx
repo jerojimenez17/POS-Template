@@ -17,7 +17,16 @@ import { useFeatures } from "@/hooks/useFeatures";
 import { Trash2 } from "lucide-react";
 import QRCode from "qrcode";
 import CAE from "@/models/CAE";
-
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 interface Props {
   printTrigger: number;
   className: string;
@@ -75,6 +84,7 @@ const PrintableTable = ({
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const lastPrintTrigger = useRef(0);
 
@@ -396,7 +406,7 @@ const PrintableTable = ({
                   </td>
                    <td className="px-4 py-3 print:hidden text-center align-middle w-12">
                     <button
-                      onClick={() => removeItem(product)}
+                      onClick={() => setDeleteTarget(product)}
                       className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                       aria-label={`Eliminar ${product.description}`}
                     >
@@ -501,6 +511,31 @@ const PrintableTable = ({
           </div>
         </div>
       )}
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar producto</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Eliminar "{deleteTarget?.description}" de la factura?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteTarget) removeItem(deleteTarget);
+                setDeleteTarget(null);
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

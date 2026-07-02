@@ -103,14 +103,19 @@ export default function BarcodeModal({
   const handleSave = () => {
     if (!barcodeInput.trim()) return;
     startTransition(async () => {
-      const result = await updateProduct(productId, { codebar: barcodeInput.trim() });
-      if (result.error) {
-        toast.error(result.error);
-      } else {
-        toast.success("Código guardado");
-        setSavedCodebar(barcodeInput.trim());
-        setIsEditing(false);
-        onSuccess?.(barcodeInput.trim());
+      try {
+        const result = await updateProduct(productId, { codebar: barcodeInput.trim() });
+        if (result.error) {
+          toast.error(result.error);
+        } else {
+          toast.success("Código de barras guardado");
+          setSavedCodebar(barcodeInput.trim());
+          setIsEditing(false);
+          onSuccess?.(barcodeInput.trim());
+        }
+      } catch (error) {
+        console.error("Error saving barcode:", error);
+        toast.error("Error al guardar el código de barras");
       }
     });
   };
@@ -186,7 +191,7 @@ export default function BarcodeModal({
             size="icon"
             onClick={(e) => e.stopPropagation()}
             title="Código de barras"
-            className="h-8 w-8 text-slate-500 hover:text-gray-600"
+            className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
           >
             <Barcode className={`h-4 w-4`} />
           </Button>

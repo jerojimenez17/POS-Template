@@ -7,12 +7,13 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { PaidStatus } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
-import { requireFeature } from "@/lib/auth-gates";
+import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 
 interface ActionResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  code?: string;
 }
 
 interface UnpaidOrderItem {
@@ -215,6 +216,9 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
     const businessId = session?.user?.businessId || input.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
 
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
+
     const movement = await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: input.orderId },
@@ -279,6 +283,9 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
     const session = await auth();
     const businessId = session?.user?.businessId || input.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
     return await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
@@ -445,6 +452,9 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
     const businessId = session?.user?.businessId || validatedInput.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
 
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
+
     return await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: validatedInput.orderId },
@@ -562,6 +572,9 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
     const session = await auth();
     const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
     return await db.$transaction(async (tx) => {
       const orderItem = await tx.orderItem.findUnique({
@@ -691,6 +704,9 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
     const session = await auth();
     const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
     return await db.$transaction(async (tx) => {
       const orderItem = await tx.orderItem.findUnique({

@@ -15,8 +15,14 @@ vi.mock('../auth', () => ({
   }),
 }));
 
-vi.mock('next/server', () => ({
+vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock('../src/lib/auth-gates', () => ({
+  requireFeature: vi.fn().mockResolvedValue({ success: true }),
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 const { db } = { db: mockDb };
@@ -53,6 +59,11 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(db.product.findMany).mockResolvedValue([mockProduct] as any);
+    vi.mocked(db.productRanking.upsert).mockResolvedValue({ id: 'ranking-1' } as any);
+    vi.mocked(db.stockMovement.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(db.cashMovement.deleteMany).mockResolvedValue({ count: 0 } as any);
+    vi.mocked(db.order.delete).mockResolvedValue({ id: 'order-1' } as any);
   });
 
   describe('createUnpaidOrder', () => {
@@ -65,7 +76,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
 
     it('AC1: Creates order with paidStatus:inpago', async () => {
       vi.mocked(db.client.findUnique).mockResolvedValue(mockClient as any);
-      vi.mocked(db.product.findUnique).mockResolvedValue(mockProduct as any);
+      vi.mocked(db.product.findMany).mockResolvedValue([mockProduct] as any);
       vi.mocked(db.order.create).mockResolvedValue({
         id: 'order-1',
         paidStatus: 'inpago',
@@ -99,7 +110,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
 
     it('AC3: Deducts stock for each product', async () => {
       vi.mocked(db.client.findUnique).mockResolvedValue(mockClient as any);
-      vi.mocked(db.product.findUnique).mockResolvedValue(mockProduct as any);
+      vi.mocked(db.product.findMany).mockResolvedValue([mockProduct] as any);
       vi.mocked(db.order.create).mockResolvedValue({
         id: 'order-1',
         paidStatus: 'inpago',
@@ -139,7 +150,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
 
     it('AC1: Does NOT create CashMovement', async () => {
       vi.mocked(db.client.findUnique).mockResolvedValue(mockClient as any);
-      vi.mocked(db.product.findUnique).mockResolvedValue(mockProduct as any);
+      vi.mocked(db.product.findMany).mockResolvedValue([mockProduct] as any);
       vi.mocked(db.order.create).mockResolvedValue({
         id: 'order-1',
         paidStatus: 'inpago',
@@ -164,7 +175,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
 
     it('AC2: Updates Client.balance with order total', async () => {
       vi.mocked(db.client.findUnique).mockResolvedValue(mockClient as any);
-      vi.mocked(db.product.findUnique).mockResolvedValue(mockProduct as any);
+      vi.mocked(db.product.findMany).mockResolvedValue([mockProduct] as any);
       vi.mocked(db.order.create).mockResolvedValue({
         id: 'order-1',
         paidStatus: 'inpago',
@@ -193,7 +204,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
     it('AC3: Fails when stock is insufficient', async () => {
       const lowStockProduct = { ...mockProduct, amount: 1 };
       vi.mocked(db.client.findUnique).mockResolvedValue(mockClient as any);
-      vi.mocked(db.product.findUnique).mockResolvedValue(lowStockProduct as any);
+      vi.mocked(db.product.findMany).mockResolvedValue([lowStockProduct] as any);
 
       const result = await createUnpaidOrder(input);
 
@@ -352,7 +363,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
       ],
     };
 
-    it('AC7: Creates StockMovement RETURN to restore stock', async () => {
+    it('AC7: Deletes related StockMovement records when canceling order', async () => {
       vi.mocked(db.order.findUnique).mockResolvedValue(mockOrderToCancel as any);
       vi.mocked(db.stockMovement.create).mockResolvedValue({
         id: 'stock-1',
@@ -373,15 +384,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
 
       await cancelUnpaidOrder(cancelInput);
 
-      expect(db.stockMovement.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            type: 'RETURN',
-            quantity: 2,
-            productId: 'product-1',
-          }),
-        })
-      );
+      expect(db.stockMovement.deleteMany).toHaveBeenCalledWith({ where: { orderId: 'order-1' } });
     });
 
     it('AC7: Restores product stock amount', async () => {
@@ -474,7 +477,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             businessId: 'business-123',
-            paidStatus: 'inpago',
+            status: { not: 'pendiente' },
           }),
         })
       );

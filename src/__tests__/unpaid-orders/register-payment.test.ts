@@ -15,6 +15,17 @@ vi.mock("../auth", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-gates", () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/lib/pusher-server", () => ({
+  pusherServer: {
+    trigger: vi.fn().mockResolvedValue({}),
+  },
 }));
 
 describe("registerPayment", () => {

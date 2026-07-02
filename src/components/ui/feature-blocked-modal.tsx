@@ -4,12 +4,11 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Lock, MessageCircle, AlertTriangle, Ban } from "lucide-react";
+import { Lock, MessageCircle, Ban } from "lucide-react";
 
-type ModalVariant = "feature" | "limit" | "delinquent";
+type ModalVariant = "feature" | "limit";
 
 interface FeatureBlockedModalProps {
   open: boolean;
@@ -57,16 +56,6 @@ const VARIANTS: Record<
       limitValue
         ? `Has superado el límite de ${resource ?? "recursos"} permitido (${limitValue}). Mejorá tu plan para ampliarlo.`
         : `Has superado el límite de ${resource ?? "recursos"} permitido. Mejorá tu plan para ampliarlo.`,
-  },
-  delinquent: {
-    icon: (
-      <div className="w-14 h-14 rounded-full bg-orange-50 dark:bg-orange-950/50 flex items-center justify-center">
-        <AlertTriangle className="h-7 w-7 text-orange-400 dark:text-orange-400" />
-      </div>
-    ),
-    title: "Cuenta con deuda",
-    getDescription: () =>
-      "Tu cuenta posee facturas vencidas impagas. Regularizá tu situación para seguir operando.",
   },
 };
 

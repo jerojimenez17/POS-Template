@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import BillButtonsDefault from "@/components/Billing/BillButtons";
 import { BillContext } from "@/context/BillContext";
+import { useFeatures } from "@/hooks/useFeatures";
+
+vi.mock("@/hooks/useFeatures", () => ({
+  useFeatures: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ push: vi.fn(), refresh: vi.fn() })),
@@ -36,6 +41,14 @@ vi.mock("lucide-react", () => ({
   FileText: () => <svg data-testid="file-text-icon" />,
   Wallet: () => <svg data-testid="wallet-icon" />,
   CheckCircle: () => <svg data-testid="check-circle-icon" />,
+  MessageCircle: () => <svg data-testid="message-circle-icon" />,
+  Ban: () => <svg data-testid="ban-icon" />,
+  Search: () => <svg data-testid="search-icon" />,
+  User: () => <svg data-testid="user-icon" />,
+  Plus: () => <svg data-testid="plus-icon" />,
+  Loader2: () => <svg data-testid="loader-icon" />,
+  Receipt: () => <svg data-testid="receipt-icon" />,
+  Calculator: () => <svg data-testid="calculator-icon" />,
 }));
 
 vi.mock("@radix-ui/react-tooltip", () => ({
@@ -127,6 +140,13 @@ describe("BudgetButton in BillButtonsDefault", () => {
   });
 
   it("should render the Presupuesto button when hasBudget is enabled", () => {
+    vi.mocked(useFeatures).mockReturnValue({
+      plan: "ENTERPRISE",
+      hasFeature: (key: string) => key === "hasBudget",
+      isDelinquent: false,
+      isPlanAtLeast: () => true,
+      isOverLimit: () => false,
+    } as any);
     const mockCtx = createMockBillContext(2);
 
     render(
@@ -142,6 +162,13 @@ describe("BudgetButton in BillButtonsDefault", () => {
   });
 
   it("should NOT render the Presupuesto button when hasBudget is disabled", () => {
+    vi.mocked(useFeatures).mockReturnValue({
+      plan: "BASIC",
+      hasFeature: () => false,
+      isDelinquent: false,
+      isPlanAtLeast: () => false,
+      isOverLimit: () => false,
+    } as any);
     const mockCtx = createMockBillContext(2);
 
     render(

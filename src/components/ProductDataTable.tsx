@@ -68,7 +68,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
       accessorKey: "image",
       header: "Foto",
       cell: ({ row }) => {
-        const imageUrl = row.original.image;
+        const imageUrl = row.original.images?.[0]?.url || row.original.image;
         return (
           <div className="flex justify-center items-center">
             {imageUrl && imageUrl.includes("https") ? (
@@ -173,7 +173,7 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                 setProductToEdit(product);
                 setOpenEditModal(true);
               }}
-              className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+              className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -353,10 +353,10 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
               >
                 {/* Product Image */}
                 <div className="w-20 h-20 shrink-0 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
-                  {product.image && product.image.includes("https") ? (
+                  {(product.images?.[0]?.url || product.image) && (product.images?.[0]?.url || product.image).includes("https") ? (
                     <Image
                       className="w-full h-full object-cover"
-                      src={product.image}
+                      src={product.images?.[0]?.url || product.image}
                       alt={product.description || "Product"}
                       height={80}
                       width={80}
@@ -422,8 +422,8 @@ const ProductDataTable: React.FC<ProductDataTableProps> = ({
                       e.stopPropagation();
                       setProductToEdit(product);
                       setOpenEditModal(true);
-                    }}
-                    className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+}}
+                    className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"

@@ -34,8 +34,8 @@ export default function SaleDetailActions({ sale, session }: SaleDetailActionsPr
       </h3>
 
       {/* Print */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">Imprimir comprobante</span>
+      <div className="flex items-center justify-between"> 
+        <span className="text-sm text-muted-foreground">Imprimir comprobante:</span>
         <PrintOptionsPopover sale={sale} session={session} />
       </div>
 

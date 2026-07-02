@@ -1,10 +1,12 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { revalidateTag } from "next/cache";
+import { revalidateTag, revalidatePath } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/auth";
 import { pusherServer } from "@/lib/pusher-server";
+import { assertWritePermission, assertLimit } from "@/lib/auth-gates";
+import { Prisma } from "@prisma/client";
 
 export interface BulkProductInput {
   code: string;
@@ -18,6 +20,7 @@ export interface BulkProductInput {
   catalog?: boolean;
   details?: string;
   supplierId?: string;
+  codebar?: string;
 }
 
 export interface PreviewProductItem extends BulkProductInput {
@@ -148,246 +151,19 @@ export const createProductsBulk = async (
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
-  const businessId = session.user.businessId;
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
-    let createdCount = 0;
-    let updatedCount = 0;
-
-    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
-
-    // ── Step 1: Pre-load ALL reference data in 3 parallel queries ──
-    const [allBrands, allCategories, allSubCategories] = await Promise.all([
-      db.brand.findMany({ where: { businessId } }),
-      db.category.findMany({ where: { businessId } }),
-      db.subcategory.findMany({ where: { businessId } }),
-    ]);
-
-    // Build O(1) lookup maps
-    const brandMap = new Map(allBrands.map(b => [b.name.toLowerCase(), b]));
-    const categoryMap = new Map(allCategories.map(c => [c.name.toLowerCase(), c]));
-    const subCategoryMap = new Map(
-      allSubCategories.map(s => [`${s.name.toLowerCase()}|${s.categoryId}`, s])
+    const result = await processBulkProductBatch(
+      productsData, updateExisting, updateOnly, discount, iva, gain, supplierId
     );
 
-    // Pre-load ALL existing products by code in 1 query
-    const allCodes = productsData.map(p => p.code.toString());
-    const existingProducts = await db.product.findMany({
-      where: { businessId, code: { in: allCodes }, ...(supplierId ? { supplierId } : {}) },
-      select: { id: true, code: true, price: true, salePrice: true, gain: true, amount: true, supplierId: true },
-    });
-    const existingByCode = new Map(existingProducts.map(p => [p.code, p]));
+    if ("error" in result) return { error: result.error };
 
-    // ── Step 2: Batch create missing reference data ──
+    await finalizeBulkImport(supplierId, discount, iva, gain);
 
-    // Brands (no dependencies)
-    const missingBrandNames = [...new Set(
-      productsData
-        .map(p => p.brandName?.trim())
-        .filter((name): name is string => !!name && !brandMap.has(name.toLowerCase()))
-    )];
-    if (missingBrandNames.length > 0) {
-      const createdBrands = await db.$transaction(
-        missingBrandNames.map(name => db.brand.create({ data: { name, businessId } }))
-      );
-      createdBrands.forEach(b => brandMap.set(b.name.toLowerCase(), b));
-    }
-
-    // Categories (no dependencies)
-    const missingCategoryNames = [...new Set(
-      productsData
-        .map(p => p.categoryName?.trim())
-        .filter((name): name is string => !!name && !categoryMap.has(name.toLowerCase()))
-    )];
-    if (missingCategoryNames.length > 0) {
-      const createdCategories = await db.$transaction(
-        missingCategoryNames.map(name => db.category.create({ data: { name, businessId } }))
-      );
-      createdCategories.forEach(c => categoryMap.set(c.name.toLowerCase(), c));
-    }
-
-    // SubCategories (depends on categories being fully populated)
-    const subCategoryEntries = [
-      ...new Map(
-        productsData
-          .filter(p => p.subCategoryName?.trim() && p.categoryName?.trim())
-          .map(p => {
-            const cat = categoryMap.get(p.categoryName!.trim().toLowerCase());
-            if (!cat) return null;
-            const key = `${p.subCategoryName!.trim().toLowerCase()}|${cat.id}`;
-            return [key, { name: p.subCategoryName!.trim(), categoryId: cat.id }] as const;
-          })
-          .filter((e): e is readonly [string, { name: string; categoryId: string }] => e !== null)
-      ).values()
-    ]
-      .filter(e => !subCategoryMap.has(`${e.name.toLowerCase()}|${e.categoryId}`));
-
-    if (subCategoryEntries.length > 0) {
-      const createdSubCategories = await db.$transaction(
-        subCategoryEntries.map(e =>
-          db.subcategory.create({ data: { name: e.name, categoryId: e.categoryId, businessId } })
-        )
-      );
-      createdSubCategories.forEach(s =>
-        subCategoryMap.set(`${s.name.toLowerCase()}|${s.categoryId}`, s)
-      );
-    }
-
-    // ── Step 3: Process products in chunks of 100 ──
-    const CHUNK_SIZE = 100;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bulkOps: any[] = [];
-    const processedCodes = new Set<string>();
-
-    for (const item of productsData) {
-      const code = item.code.toString();
-
-      // Skip duplicate codes within the same chunk to avoid unique constraint violations
-      if (processedCodes.has(code)) continue;
-      processedCodes.add(code);
-
-      // Resolve reference IDs from pre-loaded maps (O(1))
-      const brandId = item.brandName?.trim()
-        ? brandMap.get(item.brandName.trim().toLowerCase())?.id
-        : undefined;
-
-      const categoryId = item.categoryName?.trim()
-        ? categoryMap.get(item.categoryName.trim().toLowerCase())?.id
-        : undefined;
-
-      const subCategoryId = item.subCategoryName?.trim() && categoryId
-        ? subCategoryMap.get(`${item.subCategoryName.trim().toLowerCase()}|${categoryId}`)?.id
-        : undefined;
-
-      // Price calculations (unchanged)
-      const priceStr = item.price.toString().replace(',', '.');
-      const filePrice = parseFloat(priceStr);
-      const isPriceValid = !isNaN(filePrice);
-
-      let costPrice = filePrice;
-      let salePrice = filePrice;
-      let gainValue = 0;
-
-      if (applyPriceFormula) {
-        const d = discount ?? 0;
-        const i = iva ?? 0;
-        const g = gain ?? 0;
-        costPrice = filePrice * (1 - d / 100) * (1 + i / 100);
-        salePrice = costPrice * (1 + g / 100);
-        gainValue = g;
-      }
-
-      const amountStr = item.amount?.toString().replace(',', '.');
-      const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
-
-      const supplierConnect = supplierId ? { connect: { id: supplierId } } : undefined;
-
-      const existingProduct = existingByCode.get(code);
-
-      if (existingProduct) {
-        const priceSame = isPriceValid &&
-          Math.abs(costPrice - existingProduct.price) < 0.001 &&
-          Math.abs(salePrice - existingProduct.salePrice) < 0.001;
-
-        const supplierSame =
-          (supplierId === undefined && existingProduct.supplierId === null) ||
-          supplierId === existingProduct.supplierId;
-
-        if (supplierSame && priceSame) continue;
-
-        if (updateExisting || updateOnly) {
-          const updateData: Parameters<typeof db.product.update>[0]["data"] = {
-            description: item.description.toString(),
-            price: isPriceValid ? costPrice : 0,
-            salePrice: isPriceValid ? salePrice : 0,
-            gain: applyPriceFormula ? gainValue : existingProduct.gain,
-            unit: item.unit || "unidades",
-            brand: brandId ? { connect: { id: brandId } } : { disconnect: true },
-            category: categoryId ? { connect: { id: categoryId } } : { disconnect: true },
-            subCategory: subCategoryId ? { connect: { id: subCategoryId } } : { disconnect: true },
-            last_update: new Date(),
-            catalog: item.catalog !== undefined ? item.catalog : undefined,
-            details: item.details !== undefined ? item.details : undefined,
-            supplier: supplierConnect,
-          };
-
-          if (item.amount !== null && item.amount !== undefined) {
-            updateData.amount = isNaN(parsedAmount) ? 0 : parsedAmount;
-          } else if (item.amount === undefined) {
-            updateData.amount = existingProduct.amount;
-          }
-
-          bulkOps.push(db.product.update({
-            where: { id: existingProduct.id },
-            data: updateData,
-          }));
-          updatedCount++;
-        }
-      } else {
-        if (updateOnly) continue;
-
-        bulkOps.push(db.product.create({
-          data: {
-            code: item.code.toString(),
-            description: item.description.toString(),
-            price: isPriceValid ? costPrice : 0,
-            salePrice: isPriceValid ? salePrice : 0,
-            gain: applyPriceFormula ? gainValue : 0,
-            amount: isNaN(parsedAmount) ? 0 : parsedAmount,
-            unit: item.unit || "unidades",
-            brand: brandId ? { connect: { id: brandId } } : undefined,
-            category: categoryId ? { connect: { id: categoryId } } : undefined,
-            subCategory: subCategoryId ? { connect: { id: subCategoryId } } : undefined,
-            business: { connect: { id: businessId } },
-            catalog: item.catalog !== undefined ? item.catalog : true,
-            details: item.details || null,
-            supplier: supplierConnect,
-          }
-        }));
-        createdCount++;
-      }
-
-      // Flush operations in chunks
-      if (bulkOps.length >= CHUNK_SIZE) {
-        const results = await db.$transaction(bulkOps);
-        // Update existingByCode so subsequent chunks see newly created products
-        for (const result of results) {
-          if (result.code) existingByCode.set(result.code, result);
-        }
-        bulkOps.length = 0;
-        processedCodes.clear();
-      }
-    }
-
-    // Flush remaining operations
-    if (bulkOps.length > 0) {
-      const results = await db.$transaction(bulkOps);
-      for (const result of results) {
-        if (result.code) existingByCode.set(result.code, result);
-      }
-    }
-
-    if (supplierId && applyPriceFormula) {
-      await db.supplier.update({
-        where: { id: supplierId },
-        data: { discount, iva, gain }
-      });
-    }
-
-    const totalCount = updatedCount > 0 || createdCount > 0;
-    if (totalCount) {
-      try {
-        await pusherServer.trigger(
-          `movements-${businessId}`,
-          "refresh",
-          { type: "product-created" }
-        );
-      } catch {}
-    }
-
-    try {
-      revalidateTag(CACHE_TAGS.STOCK, "max");
-    } catch {}
+    const { createdCount, updatedCount } = result;
 
     if (updatedCount > 0) {
       return { success: `Se actualizaron ${updatedCount} productos y se crearon ${createdCount} productos exitosamente` };
@@ -413,6 +189,9 @@ export const bulkUpdatePrices = async (
 
   const session = await auth();
   if (!session?.user?.businessId) return { success: false, error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
   try {
     const factor = (100 + percentage) / 100;
@@ -470,53 +249,476 @@ export const bulkUpdateAmounts = async (
   const session = await auth();
   if (!session?.user?.businessId) return { success: false, error: "No autorizado" };
 
+  const permission = await assertWritePermission();
+  if (!permission.success) return { success: false, error: permission.error, code: permission.code };
+
+  const businessId = session.user.businessId;
+
   try {
-    const products = await db.product.findMany({
-      where: { id: { in: productIds } },
-      select: { id: true },
-    });
+    // FR-026B: validate every product up-front (compute and reject any that
+    // would go negative) so the per-product ADJUSTMENT writes are batched in
+    // one transaction and the whole batch aborts atomically on any negative.
+    await db.$transaction(async (tx) => {
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds }, businessId },
+        select: { id: true, amount: true },
+      });
 
-    const existingIds = new Set(products.map((p) => p.id));
+      // Pass 1: compute and validate — no writes yet.
+      const plan = products.map((p) => {
+        let next: number;
+        switch (mode) {
+          case 'set':
+            next = amountChange;
+            break;
+          case 'add':
+            next = p.amount + amountChange;
+            break;
+          case 'subtract':
+            next = p.amount - amountChange;
+            break;
+        }
+        return { p, next };
+      });
 
-    const updates: ReturnType<typeof db.product.update>[] = [];
+      const negative = plan.find((entry) => entry.next < 0);
+      if (negative) throw new Error("Stock insuficiente");
 
-    productIds.forEach((id) => {
-      if (!existingIds.has(id)) return;
+      // Pass 2: apply writes + movements inside the same transaction.
+      for (const { p, next } of plan) {
+        await tx.product.update({
+          where: { id: p.id },
+          data: { amount: next, last_update: new Date() },
+        });
 
-      let amountData: number | { decrement: number } | {increment: number};
-
-      switch (mode) {
-        case 'set':
-          amountData = amountChange;
-          break;
-        case 'add':
-          amountData = { increment: amountChange };
-          break;
-        case 'subtract':
-          amountData = { decrement: amountChange };
-          break;
+        const delta = next - p.amount;
+        if (delta !== 0) {
+          await tx.stockMovement.create({
+            data: {
+              type: "ADJUSTMENT",
+              quantity: delta,
+              productId: p.id,
+              businessId,
+              reason: `Ajuste masivo (${mode})`,
+            },
+          });
+        }
       }
-
-      updates.push(
-        db.product.update({
-          where: { id },
-          data: {
-            amount: amountData,
-            last_update: new Date(),
-          },
-        })
-      );
     });
-
-    await db.$transaction(updates);
 
     revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: true };
   } catch (error) {
     console.error("Error updating amounts:", error);
-    return { 
-      success: false, 
-      error: "Error al actualizar stock" 
+    return {
+      success: false,
+      error: "Error al actualizar stock"
     };
+  }
+};
+
+/**
+ * Process a bulk-import batch of products: resolves/creates brand/category/
+ * subcategory references and writes products in bulk (createMany + raw UPDATE).
+ *
+ * Returns `{ createdCount, updatedCount }` on success, or `{ error }` on failure.
+ */
+export const processBulkProductBatch = async (
+  productsData: BulkProductInput[],
+  updateExisting?: boolean,
+  updateOnly?: boolean,
+  discount?: number,
+  iva?: number,
+  gain?: number,
+  supplierId?: string
+): Promise<{ createdCount: number; updatedCount: number } | { error: string }> => {
+  const session = await auth();
+  if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const generateCuid = () => {
+    return "c" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  };
+
+  try {
+    const businessId = session.user.businessId;
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    // Check limit before processing bulk
+    const newProductsCount = productsData.length;
+    if (newProductsCount > 0) {
+      const currentCount = await db.product.count({ where: { businessId } });
+      const limitCheck = await assertLimit("maxProducts", currentCount + newProductsCount);
+      if (!limitCheck.success) {
+        return { error: limitCheck.error || "Has alcanzado el límite de productos de tu plan." };
+      }
+    }
+
+    // FR-026B: Validate no negative amounts before processing
+    for (const item of productsData) {
+      const amountStr = item.amount?.toString().replace(',', '.');
+      const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
+      if (!isNaN(parsedAmount) && parsedAmount < 0) {
+        return { error: `El producto "${item.code}" tiene una cantidad negativa (${parsedAmount}).` };
+      }
+    }
+
+    // 1. Gather all unique names for Brands, Categories, and Subcategories
+    const brandNames = Array.from(new Set(productsData.map(p => p.brandName?.trim()).filter(Boolean))) as string[];
+    const categoryNames = Array.from(new Set(productsData.map(p => p.categoryName?.trim()).filter(Boolean))) as string[];
+    const subCategoryNames = Array.from(new Set(productsData.map(p => p.subCategoryName?.trim()).filter(Boolean))) as string[];
+
+    // 2. Resolve Brands
+    const existingBrands = await db.brand.findMany({
+      where: { businessId, name: { in: brandNames, mode: "insensitive" } }
+    });
+    const existingBrandNamesLower = new Set(existingBrands.map(b => b.name.trim().toLowerCase()));
+    const missingBrandNames = brandNames.filter(name => !existingBrandNamesLower.has(name.toLowerCase()));
+
+    if (missingBrandNames.length > 0) {
+      await db.brand.createMany({
+        data: missingBrandNames.map(name => ({ name: name.trim(), businessId })),
+        skipDuplicates: true
+      });
+    }
+
+    const allBrands = await db.brand.findMany({
+      where: { businessId, name: { in: brandNames, mode: "insensitive" } }
+    });
+    const brandMap = new Map(allBrands.map(b => [b.name.trim().toLowerCase(), b.id]));
+
+    // 3. Resolve Categories
+    const existingCategories = await db.category.findMany({
+      where: { businessId, name: { in: categoryNames, mode: "insensitive" } }
+    });
+    const existingCategoryNamesLower = new Set(existingCategories.map(c => c.name.trim().toLowerCase()));
+    const missingCategoryNames = categoryNames.filter(name => !existingCategoryNamesLower.has(name.toLowerCase()));
+
+    if (missingCategoryNames.length > 0) {
+      await db.category.createMany({
+        data: missingCategoryNames.map(name => ({ name: name.trim(), businessId })),
+        skipDuplicates: true
+      });
+    }
+
+    const allCategories = await db.category.findMany({
+      where: { businessId, name: { in: categoryNames, mode: "insensitive" } }
+    });
+    const categoryMap = new Map(allCategories.map(c => [c.name.trim().toLowerCase(), c.id]));
+
+    // 4. Resolve Subcategories
+    const existingSubcategories = await db.subcategory.findMany({
+      where: { businessId, name: { in: subCategoryNames, mode: "insensitive" } }
+    });
+    const subcategoryMap = new Map(existingSubcategories.map(sc => [`${sc.categoryId}:${sc.name.trim().toLowerCase()}`, sc.id]));
+
+    const missingSubcategoriesData: { name: string; categoryId: string; businessId: string }[] = [];
+    const seenSubcategoryKeys = new Set<string>();
+
+    for (const item of productsData) {
+      if (item.categoryName && item.categoryName.trim() !== "" && item.subCategoryName && item.subCategoryName.trim() !== "") {
+        const catNameLower = item.categoryName.trim().toLowerCase();
+        const subNameTrimmed = item.subCategoryName.trim();
+        const subNameLower = subNameTrimmed.toLowerCase();
+        const categoryId = categoryMap.get(catNameLower);
+        if (categoryId) {
+          const key = `${categoryId}:${subNameLower}`;
+          if (!subcategoryMap.has(key) && !seenSubcategoryKeys.has(key)) {
+            seenSubcategoryKeys.add(key);
+            missingSubcategoriesData.push({
+              name: subNameTrimmed,
+              categoryId,
+              businessId
+            });
+          }
+        }
+      }
+    }
+
+    if (missingSubcategoriesData.length > 0) {
+      await db.subcategory.createMany({
+        data: missingSubcategoriesData,
+        skipDuplicates: true
+      });
+    }
+
+    const allSubcategories = await db.subcategory.findMany({
+      where: { businessId, name: { in: subCategoryNames, mode: "insensitive" } }
+    });
+    const subcategoryMapUpdated = new Map(allSubcategories.map(sc => [`${sc.categoryId}:${sc.name.trim().toLowerCase()}`, sc.id]));
+
+    // 5. Fetch Existing Products
+    const codes = productsData.map(p => p.code.toString());
+    const existingProducts = await db.product.findMany({
+      where: { businessId, code: { in: codes }, ...(supplierId ? { supplierId } : {}) }
+    });
+    const existingProductMap = new Map<string, typeof existingProducts[number]>();
+    for (const p of existingProducts) {
+      if (p.code !== null && p.code !== undefined) {
+        existingProductMap.set(p.code.toString(), p);
+      }
+    }
+
+    // 6. Partition Products to Create/Update
+    const toCreate: Prisma.ProductCreateManyInput[] = [];
+    const toUpdate: Array<{
+      id: string;
+      description: string;
+      price: number;
+      salePrice: number;
+      gain: number;
+      unit: string;
+      brandId: string | null;
+      categoryId: string | null;
+      subCategoryId: string | null;
+      amount: number | null;
+      supplierId: string | null;
+    }> = [];
+    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
+
+    for (const item of productsData) {
+      let resolvedBrandId: string | null = null;
+      if (item.brandName && item.brandName.trim() !== "") {
+        resolvedBrandId = brandMap.get(item.brandName.trim().toLowerCase()) || null;
+      }
+
+      let resolvedCategoryId: string | null = null;
+      let resolvedSubCategoryId: string | null = null;
+      if (item.categoryName && item.categoryName.trim() !== "") {
+        resolvedCategoryId = categoryMap.get(item.categoryName.trim().toLowerCase()) || null;
+        if (resolvedCategoryId && item.subCategoryName && item.subCategoryName.trim() !== "") {
+          const subKey = `${resolvedCategoryId}:${item.subCategoryName.trim().toLowerCase()}`;
+          resolvedSubCategoryId = subcategoryMapUpdated.get(subKey) || null;
+        }
+      }
+
+      const priceStr = item.price.toString().replace(',', '.');
+      const filePrice = parseFloat(priceStr);
+      const isPriceValid = !isNaN(filePrice);
+
+      let costPrice = filePrice;
+      let salePrice = filePrice;
+      let gainValue = 0;
+
+      if (applyPriceFormula) {
+        const d = discount ?? 0;
+        const i = iva ?? 0;
+        const g = gain ?? 0;
+        costPrice = filePrice * (1 - d / 100) * (1 + i / 100);
+        salePrice = costPrice * (1 + g / 100);
+        gainValue = g;
+      }
+
+      const amountStr = item.amount?.toString().replace(',', '.');
+      const parsedAmount = amountStr ? parseFloat(amountStr) : 0;
+
+      const existingProduct = existingProductMap.get(item.code.toString());
+
+      if (existingProduct) {
+        const priceSame = isPriceValid &&
+          Math.abs(costPrice - existingProduct.price) < 0.001 &&
+          Math.abs(salePrice - existingProduct.salePrice) < 0.001;
+
+        const supplierSame =
+          (supplierId === undefined && existingProduct.supplierId === null) ||
+          supplierId === existingProduct.supplierId;
+
+        if (supplierSame && priceSame) {
+          continue;
+        }
+
+        if (updateExisting || updateOnly) {
+          toUpdate.push({
+            id: existingProduct.id,
+            description: item.description.toString(),
+            price: isPriceValid ? costPrice : 0,
+            salePrice: isPriceValid ? salePrice : 0,
+            gain: applyPriceFormula ? gainValue : existingProduct.gain,
+            unit: item.unit || "unidades",
+            brandId: resolvedBrandId,
+            categoryId: resolvedCategoryId,
+            subCategoryId: resolvedSubCategoryId,
+            amount: item.amount !== null && item.amount !== undefined
+              ? (isNaN(parsedAmount) ? 0 : parsedAmount)
+              : null,
+            supplierId: supplierId || null,
+          });
+          updatedCount++;
+        }
+      } else {
+        if (updateOnly) {
+          continue;
+        }
+
+        toCreate.push({
+          id: generateCuid(),
+          code: item.code.toString(),
+          description: item.description.toString(),
+          price: isPriceValid ? costPrice : 0,
+          salePrice: isPriceValid ? salePrice : 0,
+          gain: applyPriceFormula ? gainValue : 0,
+          amount: isNaN(parsedAmount) ? 0 : parsedAmount,
+          unit: item.unit || "unidades",
+          brandId: resolvedBrandId,
+          categoryId: resolvedCategoryId,
+          subCategoryId: resolvedSubCategoryId,
+          businessId: businessId,
+          catalog: item.catalog !== undefined ? item.catalog : true,
+          details: item.details || null,
+          supplierId: supplierId || null,
+          creation_date: new Date(),
+          last_update: new Date(),
+        });
+        createdCount++;
+      }
+    }
+
+    // 7. Write to database in bulk (inside transaction with StockMovement tracking)
+    await db.$transaction(async (tx) => {
+      // 7a. Create products in bulk
+      if (toCreate.length > 0) {
+        await tx.product.createMany({
+          data: toCreate,
+        });
+      }
+
+      // 7b. Create PURCHASE movements for newly created products with stock
+      if (toCreate.length > 0) {
+        const createdWithStock = toCreate.filter(c => (c.amount ?? 0) > 0);
+        if (createdWithStock.length > 0) {
+          const createdIds = createdWithStock.map(c => c.id).filter(Boolean) as string[];
+          const created = await tx.product.findMany({
+            where: { id: { in: createdIds } },
+            select: { id: true, amount: true, description: true },
+          });
+          if (created.length > 0) {
+            await tx.stockMovement.createMany({
+              data: created.map(p => ({
+                type: "PURCHASE" as const,
+                quantity: p.amount,
+                productId: p.id,
+                businessId,
+                reason: "Importación masiva",
+              })),
+            });
+          }
+        }
+      }
+
+      // 7c. Capture old amounts before update (to compute ADJUSTMENT delta)
+      let oldAmounts: Map<string, number> = new Map();
+      if (toUpdate.length > 0) {
+        const updateIds = toUpdate.map(u => u.id);
+        const existingForUpdate = await tx.product.findMany({
+          where: { id: { in: updateIds } },
+          select: { id: true, amount: true },
+        });
+        oldAmounts = new Map(existingForUpdate.map(p => [p.id, p.amount ?? 0]));
+      }
+
+      // 7d. Update products in bulk using Prisma updates (within existing transaction)
+      if (toUpdate.length > 0) {
+        for (const u of toUpdate) {
+          const updateData: Record<string, unknown> = {
+            description: u.description,
+            price: u.price,
+            salePrice: u.salePrice,
+            gain: u.gain,
+            unit: u.unit,
+            brandId: u.brandId,
+            categoryId: u.categoryId,
+            subCategoryId: u.subCategoryId,
+            supplierId: u.supplierId,
+            last_update: new Date(),
+          };
+          // Only update amount if explicitly provided
+          if (u.amount !== null && u.amount !== undefined) {
+            updateData.amount = u.amount;
+          }
+          await tx.product.update({
+            where: { id: u.id },
+            data: updateData,
+          });
+        }
+      }
+
+      // 7e. Create ADJUSTMENT movements for products whose amount changed
+      if (toUpdate.length > 0) {
+        const adjustments = toUpdate
+          .filter(u => u.amount !== null && u.amount !== undefined)
+          .map(u => {
+            const oldAmount = oldAmounts.get(u.id) ?? 0;
+            const delta = u.amount! - oldAmount;
+            if (delta === 0) return null;
+            return {
+              type: "ADJUSTMENT" as const,
+              quantity: delta,
+              productId: u.id,
+              businessId,
+              reason: "Importación masiva",
+            };
+          })
+          .filter(Boolean) as Array<{
+            type: "ADJUSTMENT";
+            quantity: number;
+            productId: string;
+            businessId: string;
+            reason: string;
+          }>;
+
+        if (adjustments.length > 0) {
+          await tx.stockMovement.createMany({
+            data: adjustments,
+          });
+        }
+      }
+    });
+
+    return { createdCount, updatedCount };
+  } catch (error) {
+    console.error("Batch processing error:", error);
+    return { error: "Error al procesar lote de productos" };
+  }
+};
+
+/**
+ * Post-processing hook for bulk imports: persists the supplier pricing formula
+ * (discount/iva/gain) and broadcasts a stock refresh.
+ */
+export const finalizeBulkImport = async (
+  supplierId?: string,
+  discount?: number,
+  iva?: number,
+  gain?: number,
+): Promise<{ success?: string; error?: string }> => {
+  const session = await auth();
+  if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  try {
+    const applyPriceFormula = discount !== undefined || iva !== undefined || gain !== undefined;
+
+    if (supplierId && applyPriceFormula) {
+      await db.supplier.update({
+        where: { id: supplierId },
+        data: { discount, iva, gain }
+      });
+    }
+
+    try {
+      await pusherServer.trigger(
+        `movements-${session.user.businessId}`,
+        "refresh",
+        { type: "product-created" }
+      );
+    } catch { }
+
+    try {
+      revalidatePath("/stock");
+    } catch { }
+
+    return { success: "Importación finalizada" };
+  } catch (error) {
+    console.error("Finalization error:", error);
+    return { error: "Error al finalizar importación" };
   }
 };

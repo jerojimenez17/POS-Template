@@ -28,6 +28,7 @@ import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useFeatures } from "@/hooks/useFeatures";
 import { createBudgetAction } from "@/actions/budget";
+import { parsePlanError } from "@/lib/plan-error";
 
 interface props {
   session: Session | null;
@@ -57,6 +58,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const [openFeatureBlockedModal, setOpenFeatureBlockedModal] = useState(false);
   const [openLedgerBlockedModal, setOpenLedgerBlockedModal] = useState(false);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(
@@ -97,6 +99,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       if (e.key === 'F1') {
         e.preventDefault();
         if (!checkSession()) return;
+        if (BillState.products?.length === 0) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
@@ -106,6 +109,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       if (e.key === 'F2') {
         e.preventDefault();
         if (!checkSession()) return;
+        if (BillState.products?.length === 0) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
@@ -130,7 +134,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, dispatch, BillState.products?.length, isEditing, setOpenBudgetModal]);
+  }, [session, dispatch, BillState.products?.length, isEditing, hasActiveSession, setIsOpeningModalOpen]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {
@@ -148,6 +152,15 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       const resp = await createAfipVoucherAction(BillState);
 
       if (resp.error) {
+        // Check if it's a plan error
+        const parsed = parsePlanError(resp.error);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+          setOpenFeatureBlockedModal(true);
+        } else {
+          // Not a plan error (e.g., missing credentials) - show as toast
+          toast.error(resp.error);
+        }
         setBlockButton(false);
         return null;
       }
@@ -256,13 +269,12 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       let caeData: CAE | null = null;
       if (afip && !isUpdate) {
         caeData = await handleCreateVoucher();
-      }
-
-      // NEW: Abort if AFIP feature is disabled or credentials missing
-      if (afip && !caeData) {
-        setBlockButton(false);
-        setOpenFeatureBlockedModal(true);
-        return undefined;
+        // If AFIP billing was requested but failed (plan error, missing credentials, etc.),
+        // do NOT save the sale — abort immediately.
+        if (!caeData) {
+          setBlockButton(false);
+          return undefined;
+        }
       }
 
       if (isUpdate && orderId) {
@@ -589,7 +601,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <Button
                 autoFocus
                 variant="default"
-                className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+                className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white"
                 onClick={async () => {
                   const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
                   if (targetWin) {
@@ -630,9 +642,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
 
       <FeatureBlockedModal
         open={openFeatureBlockedModal}
-        onOpenChange={setOpenFeatureBlockedModal}
-        variant="feature"
-        feature="Facturación electrónica (ARCA)"
+        onOpenChange={(open) => {
+          setOpenFeatureBlockedModal(open);
+          if (!open) setPlanError(null);
+        }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature ?? "Facturación electrónica (ARCA)"}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
       />
 
       <FeatureBlockedModal

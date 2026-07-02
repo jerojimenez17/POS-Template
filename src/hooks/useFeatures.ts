@@ -17,6 +17,7 @@ export const useFeatures = () => {
   const isDelinquent = business?.accountStatus === BusinessStatus.MOROSO;
 
   const hasFeature = (featureName: string): boolean => {
+    if (!features) return false;
     const f = features as unknown as Record<string, unknown>;
     return !!f[featureName];
   };
@@ -33,6 +34,7 @@ export const useFeatures = () => {
   };
 
   const isOverLimit = (limitName: string, value: number): boolean => {
+    if (!features) return false;
     const f = features as unknown as Record<string, unknown>;
     const limit = f[limitName] as number | undefined;
     return limit !== undefined && value >= limit;
