@@ -98,7 +98,7 @@ export default async function AccountLedgerDetailPage({
   }
 
   const totalPaid = order.cashMovements.reduce((sum, pm) => sum + pm.total, 0);
-  const remainingBalance = order.total - totalPaid;
+  const remainingBalance = Math.round(order.total) - Math.round(totalPaid);
 
 
 
@@ -255,7 +255,7 @@ export default async function AccountLedgerDetailPage({
                       </div>
                       <div className="text-right">
                         <span className="font-medium text-green-700 dark:text-green-400">
-                          +${payment.total.toLocaleString("es-AR")}
+                          +${Math.round(payment.total).toLocaleString("es-AR")}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2">
                           <LocalDate date={payment.date} />
@@ -278,12 +278,12 @@ export default async function AccountLedgerDetailPage({
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total Orden</span>
-                <span className="font-medium">${order.total.toLocaleString("es-AR")}</span>
+                <span className="font-medium">${Math.round(order.total).toLocaleString("es-AR")}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Pagado</span>
                 <span className="font-medium text-green-600">
-                  -${totalPaid.toLocaleString("es-AR")}
+                  -${Math.round(totalPaid).toLocaleString("es-AR")}
                 </span>
               </div>
               <Separator />

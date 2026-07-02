@@ -600,7 +600,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                           const withDiscount = item.price * (1 - adjustmentDiscount / 100);
                           const withIva = withDiscount * (1 + rowIva / 100);
                           const withGain = withIva * (1 + adjustmentGain / 100);
-                          return withGain.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                          return (Math.round(withGain / 10) * 10).toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                         })()}
                       </TableCell>
                       <TableCell>{item.amount ?? "-"}</TableCell>

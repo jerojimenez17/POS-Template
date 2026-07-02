@@ -105,7 +105,7 @@ const PrintableTable = ({
 
   const handlePrint = useCallback(async () => {
     const activeCae = forceCae || state.CAE;
-    const subtotal = state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0);
+    const subtotal = Math.round(state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
     const receiptData: ThermalReceiptData = {
       businessName: session?.user?.businessName || "Mi Comercio",
       businessInfo: billingInfo ? {
@@ -126,12 +126,12 @@ const PrintableTable = ({
         description: p.description,
         amount: p.amount,
         unitPrice: p.salePrice,
-        subtotal: p.salePrice * p.amount,
+        subtotal: Math.round(p.salePrice * p.amount),
       })),
       subtotal,
       discount: state.discount > 0 ? state.discount : undefined,
-      discountAmount: state.discount > 0 ? subtotal * (state.discount / 100) : undefined,
-      total: state.totalWithDiscount || subtotal * (1 - state.discount / 100),
+      discountAmount: state.discount > 0 ? Math.round(subtotal * (state.discount / 100)) : undefined,
+      total: Math.round(Number(state.totalWithDiscount || subtotal * (1 - state.discount / 100))),
       cae: activeCae?.CAE ? {
         cae: activeCae.CAE,
         vencimiento: activeCae.vencimiento,
@@ -203,9 +203,11 @@ const PrintableTable = ({
   );
 
   const totals = useMemo(() => {
-    const subtotal = state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0);
-    const discountAmount = state.discount > 0 ? subtotal * (state.discount / 100) : 0;
-    const total = state.totalWithDiscount || subtotal * (1 - state.discount / 100);
+    const subtotal = Math.round(state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
+    const discountAmount = state.discount > 0 ? Math.round(subtotal * (state.discount / 100)) : 0;
+    const total = state.totalWithDiscount !== undefined
+      ? Math.round(Number(state.totalWithDiscount))
+      : Math.round(subtotal * (1 - state.discount / 100));
     return { subtotal, discountAmount, total };
   }, [state.products, state.discount, state.totalWithDiscount]);
 
@@ -337,15 +339,15 @@ const PrintableTable = ({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">
-                    ${product.salePrice.toLocaleString("es-AR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
+                    ${Math.round(product.salePrice).toLocaleString("es-AR", {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
                     })}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                    ${(product.salePrice * product.amount).toLocaleString("es-AR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
+                    ${Math.round(product.salePrice * product.amount).toLocaleString("es-AR", {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
                     })}
                   </td>
                   <td className="px-4 py-3 print:hidden">
@@ -390,8 +392,8 @@ const PrintableTable = ({
                 <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
                 <span className="font-medium tabular-nums">
                   ${totals.subtotal.toLocaleString("es-AR", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0,
                   })}
                 </span>
               </div>
@@ -401,8 +403,8 @@ const PrintableTable = ({
                   <span className="text-gray-500 dark:text-gray-400">Descuento ({state.discount}%)</span>
                   <span className="font-medium text-green-600 dark:text-green-400 tabular-nums">
                     -${totals.discountAmount.toLocaleString("es-AR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
                     })}
                   </span>
                 </div>
@@ -412,8 +414,8 @@ const PrintableTable = ({
                 <span>Total</span>
                 <span className="tabular-nums">
                   ${totals.total.toLocaleString("es-AR", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0,
                   })}
                 </span>
               </div>
