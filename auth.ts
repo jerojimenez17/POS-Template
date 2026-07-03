@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import NextAuth from "next-auth";
 import authConfig from "./auth.config";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -39,7 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account, profile }) {
       if (account?.provider === "google" && user.email) {
         const existingUser = await getUserByEmail(user.email);
-        const imageUrl = user.image || (profile as any)?.picture;
+        const imageUrl = user.image || (profile as Record<string, unknown>)?.picture as string | undefined;
         if (existingUser && imageUrl && existingUser.image !== imageUrl) {
           await db.user.update({
             where: { id: existingUser.id },
@@ -67,7 +66,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.businessName = token.businessName as string | null;
         session.user.businessSlug = token.businessSlug as string | null;
         session.user.image = token.image as string | null;
-        session.user.business = token.business as any;
+        session.user.business = token.business;
       }
       return session;
     },
@@ -101,6 +100,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             maxCashboxes: 1,
             maxClients: 50,
             dailySalesLimit: 999999,
+            dailyProductsLimit: 999999,
+            dailyClientsLimit: 999999,
           },
         };
       } else {
