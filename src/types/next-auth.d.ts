@@ -25,6 +25,8 @@ export type ExtendedUser = DefaultSession["user"] & {
       maxCashboxes: number;
       maxClients: number;
       dailySalesLimit: number;
+      dailyProductsLimit: number;
+      dailyClientsLimit: number;
     };
   } | null;
 };

@@ -1,10 +1,6 @@
-# Plan Definition Specification
+# Delta for plan-definition
 
-## Purpose
-
-Define how business feature sets and operational limits are derived from plan templates with per-business overrides. Replaces hardcoded feature columns with a `PlanDefinition`-driven model.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: PlanDefinition Seeding
 
@@ -15,10 +11,12 @@ The system **MUST** produce exactly 5 `PlanDefinition` rows with their defaults 
 | BASIC | All `false` | maxUsers:1, maxProducts:100, maxCashboxes:1, maxClients:50 |
 | PRO | All `true` | maxUsers:5, maxProducts:1000, maxCashboxes:3, maxClients:500 |
 | ENTERPRISE | All `true` | maxUsers:999999, maxProducts:999999, maxCashboxes:999999, maxClients:999999 |
-| DEMO | All `true` | maxUsers:2, maxProducts:10, maxCashboxes:2, maxClients:2, dailySalesLimit:3 |
+| DEMO | All `true` | maxUsers:2, maxProducts:10, maxCashboxes:2, maxClients:2, dailySalesLimit:2 |
 | CUSTOM | All `true` | maxUsers:999999, maxProducts:999999, maxCashboxes:999999, maxClients:999999 |
 
 Features: `hasAfipBilling`, `hasPublicCatalog`, `hasClientLedger`, `hasMultiCashbox`, `hasSupplierFilter`, `hasBudget`.
+
+(Previously: only covered the seed path; migration now also inserts the plan catalog)
 
 #### Scenario: Migration produces the plan catalog
 
@@ -39,55 +37,13 @@ Features: `hasAfipBilling`, `hasPublicCatalog`, `hasClientLedger`, `hasMultiCash
 - WHEN seed runs again
 - THEN no duplicate plans are created (upsert by name)
 
-### Requirement: Feature Resolution
-
-The system **MUST** resolve effective features by merging `PlanDefinition.defaults` with `BusinessFeatures.overrides`.
-
-- Fields present in `overrides` override the plan default
-- Fields absent from `overrides` inherit the plan default
-- Null `overrides` means 100% plan defaults
-
-#### Scenario: No overrides
-
-- GIVEN a business with plan BASIC and no overrides
-- WHEN `resolveFeatures()` is called
-- THEN all features match BASIC defaults (`hasAfipBilling=false`, `maxUsers=1`, etc.)
-
-#### Scenario: Partial overrides
-
-- GIVEN a business with plan BASIC and overrides `{ maxUsers: 5 }`
-- WHEN `resolveFeatures()` is called
-- THEN `maxUsers=5` and all other fields match BASIC defaults
-
-#### Scenario: Full overrides (CUSTOM plan)
-
-- GIVEN a business with plan CUSTOM
-- WHEN `resolveFeatures()` is called
-- THEN all features default to `true` and all limits to `999999`
-- AND any override field changes the resolved value
-
-### Requirement: Backward Compatible Shape
-
-The resolved features **MUST** expose the same shape as the old `BusinessFeatures` model: flat object with `plan`, `hasAfipBilling`, `hasPublicCatalog`, `hasClientLedger`, `hasMultiCashbox`, `hasSupplierFilter`, `hasBudget`, `maxUsers`, `maxProducts`.
-
-#### Scenario: JWT token shape
-
-- GIVEN a user logging in with plan BASIC
-- WHEN JWT is generated
-- THEN `token.business.features` contains all 9 fields with correct BASIC defaults
-
-#### Scenario: useFeatures hook unchanged
-
-- GIVEN a client component using `useFeatures()`
-- WHEN it calls `hasFeature("hasAfipBilling")`
-- THEN it returns the resolved value from the new system
-- AND `isPlanAtLeast(Plan.BASIC)` continues working via plan hierarchy
-
 ### Requirement: Migration — Zero Data Loss
 
-The migration **MUST** preserve all existing business feature configurations with no data loss. Two migrations are applied: (1) `{ts}_add_plan_definition` (DDL + seed + backfill), (2) `20260626000001_add_pg_trgm_search` (extension + indexes).
+The migration **MUST** preserve all existing business feature configurations with no data loss. Two migrations are applied: (1) `{ts}_add_plan_definition_and_pg_trgm` (DDL + seed + backfill), (2) `20260626000001_add_pg_trgm_search` (extension + indexes).
 
 The backfill algorithm maps each old `(plan, hasAfipBilling, ..., maxProducts)` row to a `(planDefinitionId, overrides)` pair such that `resolveFeatures(planDefinitionId, overrides)` returns byte-equivalent `ResolvedFeatures` vs the old columns. Rows matching plan defaults get `overrides = NULL`.
+
+(Previously: single migration; now split into one file with DDL/seed/backfill sections plus a separate pg_trgm migration)
 
 #### Scenario: Exact match migrates to no overrides
 
@@ -116,6 +72,8 @@ The backfill algorithm maps each old `(plan, hasAfipBilling, ..., maxProducts)` 
 - WHEN a SQL backup of `BusinessFeatures` table is taken
 - THEN the backup can restore all 8 columns + plan enum exactly
 
+## ADDED Requirements
+
 ### Requirement: Plan Catalog Consistency (REQ-PLAN-DELTA-003)
 
 Any change to `PLAN_SEEDS` in `src/types/plan.ts` **MUST** be paired with a new migration that updates the `PlanDefinition` rows to match. Conversely, any migration change to `PlanDefinition` defaults **MUST** update `PLAN_SEEDS`.
@@ -137,4 +95,13 @@ The orphan migration `0001_add_pos_core_models` — physically applied to produc
 - THEN `_prisma_migrations` contains the row
 - AND `prisma migrate status` reports all migrations applied
 
-*Note: The existing spec previously had `dailySalesLimit: 2` for DEMO. This was corrected to `3` to match `PLAN_SEEDS`. The migration and PLAN_SEEDS are now consistent.*
+### Requirement: DEMO dailySalesLimit Inconsistency
+
+The existing spec declares `dailySalesLimit: 2` for DEMO, but `PLAN_SEEDS` in `src/types/plan.ts` does NOT set `dailySalesLimit`. This inconsistency **SHOULD** be resolved — either correct the spec table to remove `dailySalesLimit` from DEMO, or add it to `PLAN_SEEDS`. (P3, non-blocking for this change.)
+
+#### Scenario: Inconsistency flagged
+
+- GIVEN the DEMO row in the spec table includes `dailySalesLimit: 2`
+- WHEN compared against `PLAN_SEEDS["DEMO"]` in `src/types/plan.ts`
+- THEN `PLAN_SEEDS` lacks the `dailySalesLimit` field
+- AND this is a known open question for a follow-up
