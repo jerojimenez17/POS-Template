@@ -31,8 +31,6 @@ export const createAfipVoucherAction = async (billState: BillState) => {
   }
 
   try {
-    console.log("AFIP SDK API KEY:", process.env.AFIPSDK_API_KEY);
-    console.log("Function URL:", functionUrl);
     // 2. Call the Cloud Function from the server
     const { ptoVenta, ...billStateWithoutPtoVenta } = billState;
 

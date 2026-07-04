@@ -8,6 +8,7 @@ import { fail } from "@/lib/action-result";
 import { checkLimit } from "@/lib/plan-resolver";
 import { getDailyUsage, checkDailyLimit, incrementDailyUsage } from "@/lib/daily-limits";
 import { assertWritePermission, requireFeature } from "@/lib/auth-gates";
+import { UserRole } from "@prisma/client";
 
 export const createClient = async (data: {
   name: string;
@@ -65,37 +66,42 @@ export const createClient = async (data: {
 };
 
 export const getClients = async () => {
-    try {
-        return await db.client.findMany({
-            orderBy: { name: 'asc' }
-        });
-    } catch (error) {
-        console.error(error);
-        return [];
-    }
+  const session = await auth();
+  if (!session || (session.user.role !== UserRole.SUPER_ADMIN)) {
+    return { error: "No autorizado" };
+  }
+
+  try {
+    return await db.client.findMany({
+      orderBy: { name: 'asc' }
+    });
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
 }
 
 export const updateClientBalance = async (clientId: string, amountToAdd: number) => {
-    const session = await auth();
-    if (!session?.user?.businessId) return { error: "No autorizado" };
+  const session = await auth();
+  if (!session?.user?.businessId) return { error: "No autorizado" };
 
-    const permission = await assertWritePermission();
-    if (!permission.success) return { error: permission.error, code: permission.code };
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
-    try {
-        const client = await db.client.findUnique({ where: { id: clientId } });
-        if (!client) return fail("Cliente no encontrado", "NOT_FOUND");
-        
-        await db.client.update({
-            where: { id: clientId },
-            data: { 
-                balance: { increment: amountToAdd },
-                last_update: new Date()
-            }
-        });
-        return { success: true };
-    } catch (error) {
-        console.error("Error updating client balance:", error);
-        return fail("Error al actualizar saldo del cliente");
-    }
+  try {
+    const client = await db.client.findUnique({ where: { id: clientId } });
+    if (!client) return fail("Cliente no encontrado", "NOT_FOUND");
+
+    await db.client.update({
+      where: { id: clientId },
+      data: {
+        balance: { increment: amountToAdd },
+        last_update: new Date()
+      }
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating client balance:", error);
+    return fail("Error al actualizar saldo del cliente");
+  }
 }
