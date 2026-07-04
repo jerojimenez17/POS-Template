@@ -115,7 +115,7 @@ describe("resolveFeatures — overrides", () => {
     expect(resolved.hasAfipBilling).toBe(false);
 
     // Non-existent key is nowhere to be found
-    expect((resolved as Record<string, unknown>).nonExistentKey).toBeUndefined();
+    expect((resolved as unknown as Record<string, unknown>).nonExistentKey).toBeUndefined();
   });
 
   it("does not crash when overrides is null", () => {
@@ -161,7 +161,7 @@ describe("resolveFeatures — overrides", () => {
     expect(resolved.maxProducts).toBe(999);
 
     // Fake keys not injected
-    const anyResolved = resolved as Record<string, unknown>;
+    const anyResolved = resolved as unknown as Record<string, unknown>;
     expect(anyResolved.definitelyNotARealKey).toBeUndefined();
     expect(anyResolved.alsoFake).toBeUndefined();
   });

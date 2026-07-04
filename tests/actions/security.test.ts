@@ -80,9 +80,6 @@ describe("Server-Side Action Security Gates Test Suite", () => {
     (db as any).cashboxSession.findFirst = (db as any).cashboxSession.findFirst || vi.fn();
     (db as any).cashboxSession.create = (db as any).cashboxSession.create || vi.fn();
 
-    (db as any).businessFeatures = (db as any).businessFeatures || {};
-    (db as any).businessFeatures.findUnique = (db as any).businessFeatures.findUnique || vi.fn();
-
     (db as any).product = (db as any).product || {};
     (db as any).product.findMany = (db as any).product.findMany || vi.fn().mockResolvedValue([]);
   });
@@ -317,6 +314,9 @@ describe("Server-Side Action Security Gates Test Suite", () => {
           maxCashboxes: 1,
           maxClients: 50,
           dailySalesLimit: 999999,
+          hasNegativeStock: false,
+          dailyProductsLimit: 999999,
+          dailyClientsLimit: 999999,
         });
 
         await expect(getPublicProductsByBusinessId("business_123")).rejects.toThrowError(

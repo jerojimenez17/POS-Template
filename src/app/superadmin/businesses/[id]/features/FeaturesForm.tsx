@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
-import { updateBusinessFeaturesAction } from "@/actions/superadmin";
+import { useState, useTransition } from "react";
+import { updateBusinessPlanAction } from "@/actions/superadmin";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -38,11 +38,9 @@ interface FeaturesFormProps {
     displayOrder: number;
   }>;
   initialFeatures: {
-    id?: string;
     businessId: string;
     planDefinitionId: string;
     plan: string;
-    overrides: any;
     hasAfipBilling: boolean;
     hasPublicCatalog: boolean;
     hasClientLedger: boolean;
@@ -179,28 +177,8 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
   const [maxUsers, setMaxUsers] = useState(initialFeatures.maxUsers);
   const [maxProducts, setMaxProducts] = useState(initialFeatures.maxProducts);
 
-  const [isCustomOverride, setIsCustomOverride] = useState(false);
-
   // Resolve the selected plan name from planDefinitions for matching
   const selectedPlanName = planDefinitions.find((p) => p.id === selectedPlanDefinitionId)?.name ?? "";
-
-  // Check if current states match any standard preset exactly
-  useEffect(() => {
-    const matchingPreset = PRESETS.find(
-      (p) =>
-        p.planName === selectedPlanName &&
-        p.hasAfipBilling === hasAfipBilling &&
-        p.hasPublicCatalog === hasPublicCatalog &&
-        p.hasClientLedger === hasClientLedger &&
-        p.hasMultiCashbox === hasMultiCashbox &&
-        p.hasSupplierFilter === hasSupplierFilter &&
-        p.hasBudget === hasBudget &&
-        p.hasNegativeStock === hasNegativeStock &&
-        p.maxUsers === maxUsers &&
-        p.maxProducts === maxProducts
-    );
-    setIsCustomOverride(!matchingPreset);
-  }, [selectedPlanName, hasAfipBilling, hasPublicCatalog, hasClientLedger, hasMultiCashbox, hasSupplierFilter, hasBudget, hasNegativeStock, maxUsers, maxProducts]);
 
   // Handle preset selection
   const handlePresetSelect = (preset: PlanPreset) => {
@@ -221,51 +199,18 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
     toast.success(`Preset "${preset.name}" aplicado automáticamente.`);
   };
 
-  // Build overrides by comparing form state against selected PlanDefinition defaults
-  const buildOverrides = (): Record<string, any> | undefined => {
-    const selectedPlanDef = planDefinitions.find((p) => p.id === selectedPlanDefinitionId);
-    if (!selectedPlanDef) return undefined;
-
-    const defaults: Record<string, any> = {
-      ...(selectedPlanDef.features as Record<string, any>),
-      ...(selectedPlanDef.limits as Record<string, any>),
-    };
-
-    const currentValues: Record<string, any> = {
-      hasAfipBilling,
-      hasPublicCatalog,
-      hasClientLedger,
-      hasMultiCashbox,
-      hasSupplierFilter,
-      hasBudget,
-      maxUsers,
-      maxProducts,
-    };
-
-    const overrides: Record<string, any> = {};
-    for (const [key, value] of Object.entries(currentValues)) {
-      if (value !== defaults[key]) {
-        overrides[key] = value;
-      }
-    }
-
-    return Object.keys(overrides).length > 0 ? overrides : undefined;
-  };
-
   // Submit action
   const handleSave = () => {
     startTransition(async () => {
-      const overrides = buildOverrides();
       const payload = {
         businessId,
         planDefinitionId: selectedPlanDefinitionId,
-        overrides,
       };
 
-      const result = await updateBusinessFeaturesAction(payload);
+      const result = await updateBusinessPlanAction(payload);
 
       if (result.success) {
-        toast.success("Características del negocio actualizadas con éxito.");
+        toast.success("Plan del negocio actualizado con éxito.");
         router.refresh();
       } else {
         toast.error(result.error || "Hubo un problema al guardar los cambios.");
@@ -287,13 +232,6 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
               Seleccione un plan para alinear instantáneamente todos los toggles y límites operativos.
             </p>
           </div>
-
-          {isCustomOverride && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-600 dark:text-amber-400 animate-pulse">
-              <Settings2 className="w-3.5 h-3.5" />
-              Overrides Activos (Personalizado)
-            </span>
-          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

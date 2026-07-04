@@ -71,30 +71,27 @@ export const mockDb = {
     findUnique: vi.fn().mockResolvedValue(null),
     upsert: vi.fn().mockResolvedValue({ id: 'cashbox-1', businessId: 'business-123', total: 0 }),
   },
-  businessFeatures: {
+  planDefinition: {
     findUnique: vi.fn().mockResolvedValue({
-      planDefinition: {
-        name: 'PRO',
-        features: {
-          hasAfipBilling: true,
-          hasPublicCatalog: true,
-          hasClientLedger: true,
-          hasMultiCashbox: true,
-          hasSupplierFilter: true,
-          hasBudget: true,
-        },
-        limits: {
-          maxUsers: 5,
-          maxProducts: 1000,
-          maxCashboxes: 3,
-          maxClients: 500,
-          dailySalesLimit: 999999,
-          dailyProductsLimit: 999999,
-          dailyClientsLimit: 999999,
-        },
+      id: 'plan_pro',
+      name: 'PRO',
+      features: {
+        hasAfipBilling: true,
+        hasPublicCatalog: true,
+        hasClientLedger: true,
+        hasMultiCashbox: true,
+        hasSupplierFilter: true,
+        hasBudget: true,
       },
-      overrides: null,
-      business: { trialEndsAt: null },
+      limits: {
+        maxUsers: 5,
+        maxProducts: 1000,
+        maxCashboxes: 3,
+        maxClients: 500,
+        dailySalesLimit: 999999,
+        dailyProductsLimit: 999999,
+        dailyClientsLimit: 999999,
+      },
     }),
   },
   dailyUsage: {
@@ -106,9 +103,6 @@ export const mockDb = {
   },
   orderUpdate: {
     findFirst: vi.fn().mockResolvedValue(null),
-  },
-  planDefinition: {
-    findUnique: vi.fn().mockResolvedValue(null),
   },
 };
 

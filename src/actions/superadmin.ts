@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { UserRole, Prisma } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/lib/auth";
@@ -99,10 +99,9 @@ export const deleteBusiness = async (businessId: string) => {
     }
 };
 
-export const updateBusinessFeaturesAction = async (payload: {
+export const updateBusinessPlanAction = async (payload: {
   businessId: string;
   planDefinitionId: string;
-  overrides?: Record<string, any>;
 }) => {
   const session = await auth();
 
@@ -111,31 +110,12 @@ export const updateBusinessFeaturesAction = async (payload: {
   }
 
   try {
-    // Load PlanDefinition to validate override keys
+    // Validate PlanDefinition exists
     const planDef = await db.planDefinition.findUnique({
       where: { id: payload.planDefinitionId },
     });
     if (!planDef) {
       return { success: false, error: "Plan no encontrado" };
-    }
-
-    // Build set of valid keys from PlanDefinition features + limits
-    const validKeys = new Set<string>();
-    const features = planDef.features as Record<string, any>;
-    Object.keys(features).forEach((k) => validKeys.add(k));
-    const limits = planDef.limits as Record<string, any>;
-    Object.keys(limits).forEach((k) => validKeys.add(k));
-
-    // Validate that all override keys exist in the PlanDefinition
-    if (payload.overrides) {
-      for (const key of Object.keys(payload.overrides)) {
-        if (!validKeys.has(key)) {
-          return {
-            success: false,
-            error: `Override inválido: '${key}' no existe en el plan ${planDef.name}`,
-          };
-        }
-      }
     }
 
     await db.$transaction(async (tx) => {
@@ -147,17 +127,9 @@ export const updateBusinessFeaturesAction = async (payload: {
         throw new Error("Negocio no encontrado");
       }
 
-      await tx.businessFeatures.upsert({
-        where: { businessId: payload.businessId },
-        update: {
-          planDefinitionId: payload.planDefinitionId,
-          overrides: payload.overrides ?? Prisma.JsonNull,
-        },
-        create: {
-          businessId: payload.businessId,
-          planDefinitionId: payload.planDefinitionId,
-          overrides: payload.overrides ?? Prisma.JsonNull,
-        },
+      await tx.business.update({
+        where: { id: payload.businessId },
+        data: { planDefinitionId: payload.planDefinitionId },
       });
     });
 
@@ -169,8 +141,8 @@ export const updateBusinessFeaturesAction = async (payload: {
     return { success: true };
   } catch (error) {
     const err = error as Error;
-    console.error("Error updating business features:", error);
-    return fail(err.message || "Error al actualizar características del negocio");
+    console.error("Error updating business plan:", error);
+    return fail(err.message || "Error al actualizar el plan del negocio");
   }
 };
 
