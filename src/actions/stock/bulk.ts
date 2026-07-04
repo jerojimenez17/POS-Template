@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { assertWritePermission, assertLimit } from "@/lib/auth-gates";
 import { Prisma } from "@prisma/client";
+import { roundToNearest10 } from "@/utils/round-to-nearest-10";
 
 export interface BulkProductInput {
   code: string;
@@ -87,8 +88,8 @@ export const previewProductsBulk = async (
           const d = discount ?? 0;
           const i = iva ?? 0;
           const g = gain ?? 0;
-          costPrice = filePrice * (1 - d / 100) * (1 + i / 100);
-          salePrice = costPrice * (1 + g / 100);
+          costPrice = roundToNearest10(filePrice * (1 - d / 100) * (1 + i / 100));
+          salePrice = roundToNearest10(costPrice * (1 + g / 100));
         }
         
         const priceSame = isPriceValid &&
@@ -504,8 +505,8 @@ export const processBulkProductBatch = async (
         const d = discount ?? 0;
         const i = iva ?? 0;
         const g = gain ?? 0;
-        costPrice = filePrice * (1 - d / 100) * (1 + i / 100);
-        salePrice = costPrice * (1 + g / 100);
+        costPrice = roundToNearest10(filePrice * (1 - d / 100) * (1 + i / 100));
+        salePrice = roundToNearest10(costPrice * (1 + g / 100));
         gainValue = g;
       }
 

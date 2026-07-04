@@ -242,11 +242,17 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
         (sum, cm) => sum + cm.total,
         0
       );
-      const remainingBalance = order.total - (totalPaidBefore + input.amount);
 
-      if (input.amount > order.total - totalPaidBefore) {
-        throw new Error("El pago no puede exceder el saldo remaining");
+      // Round to integers to handle legacy decimal totals that prevent payment completion
+      const roundedTotal = Math.round(order.total);
+      const roundedPaidBefore = Math.round(totalPaidBefore);
+      const roundedInput = Math.round(input.amount);
+
+      if (roundedInput > roundedTotal - roundedPaidBefore) {
+        throw new Error("El pago no puede exceder el saldo pendiente");
       }
+
+      const remainingBalance = roundedTotal - (roundedPaidBefore + roundedInput);
 
       const cashMovementData = {
         total: input.amount,

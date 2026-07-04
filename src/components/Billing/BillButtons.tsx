@@ -222,12 +222,13 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       setOpenRemitoModal(false);
       setOpenEditModal(false);
 
-      const totalAmount =
+      const totalAmount = Math.round(
         BillState.products.reduce(
           (acc, act) => acc + act.salePrice * act.amount,
           0,
         ) *
-        (1 - BillState.discount * 0.01);
+        (1 - BillState.discount * 0.01)
+      );
 
       if (totalAmount <= 0) {
         setErrorMessage("El monto debe ser mayor a 0");
@@ -458,10 +459,12 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
                   amount: p.amount,
                 }))}
                 total={BillState.total}
-                totalWithDiscount={BillState.products.reduce(
-                  (acc, act) => acc + act.salePrice * act.amount,
-                  0,
-                ) * (1 - BillState.discount * 0.01)}
+                totalWithDiscount={Math.round(
+                  BillState.products.reduce(
+                    (acc, act) => acc + act.salePrice * act.amount,
+                    0,
+                  ) * (1 - BillState.discount * 0.01)
+                )}
                 discount={BillState.discount}
                 seller={session?.user?.email || ""}
                 businessId={session?.user?.businessId || ""}

@@ -34,79 +34,93 @@ export const BillReducer = (
   action: BillAction
 ): BillState => {
   switch (action.type) {
-    case "addItem":
+    case "addItem": {
       const isPresent = state.products.find(
         (product) => product.id === action.payload.id
       );
-
+      let updatedProducts;
       if (isPresent) {
-        return {
-          ...state,
-          total: state.total + action.payload.salePrice * action.payload.amount,
-          totalWithDiscount:
-            state.totalWithDiscount +
-            action.payload.salePrice * action.payload.amount * state.discount,
-          products: state.products.map((product) => {
-            if (product.id === action.payload.id) {
-              return {
-                ...product,
-                amount: product.amount + action.payload.amount,
-              };
-            } else {
-              return product;
-            }
-          }),
-        };
-      } else {
-        return {
-          ...state,
-          totalWithDiscount:
-            state.totalWithDiscount +
-            action.payload.salePrice * action.payload.amount * state.discount,
-          total: state.total + action.payload.salePrice * action.payload.amount,
-          products: state.products.concat({
-            ...action.payload,
-          }),
-        };
-      }
-    case "addUnit":
-      return {
-        ...state,
-        totalWithDiscount:
-          state.totalWithDiscount +
-          action.payload.salePrice * action.payload.amount * state.discount,
-        total: state.total + action.payload.salePrice * action.payload.amount,
-        products: state.products.map(({ ...product }) => {
+        updatedProducts = state.products.map((product) => {
           if (product.id === action.payload.id) {
-            product.amount++;
+            return { ...product, amount: product.amount + action.payload.amount };
           }
           return product;
-        }),
-      };
-    case "removeUnit":
+        });
+      } else {
+        updatedProducts = state.products.concat({ ...action.payload });
+      }
+      const rawTotal = updatedProducts.reduce(
+        (acc, cur) => acc + cur.salePrice * cur.amount, 0
+      );
+      const newTotal = Math.round(rawTotal);
+      const newTotalWithDiscount = state.discount > 0
+        ? Math.round(rawTotal * (1 - state.discount / 100))
+        : newTotal;
       return {
         ...state,
-        products: state.products.map(({ ...product }) => {
-          if (product.id === action.payload.id && product.amount > 1) {
-            product.amount = product.amount - 1;
-          }
-
-          return product;
-        }),
+        products: updatedProducts,
+        total: newTotal,
+        totalWithDiscount: newTotalWithDiscount,
       };
+    }
+    case "addUnit": {
+      const updatedProducts = state.products.map((product) => {
+        if (product.id === action.payload.id) {
+          return { ...product, amount: product.amount + 1 };
+        }
+        return product;
+      });
+      const rawTotal = updatedProducts.reduce(
+        (acc, cur) => acc + cur.salePrice * cur.amount, 0
+      );
+      const newTotal = Math.round(rawTotal);
+      const newTotalWithDiscount = state.discount > 0
+        ? Math.round(rawTotal * (1 - state.discount / 100))
+        : newTotal;
+      return {
+        ...state,
+        products: updatedProducts,
+        total: newTotal,
+        totalWithDiscount: newTotalWithDiscount,
+      };
+    }
+    case "removeUnit": {
+      const updatedProducts = state.products.map((product) => {
+        if (product.id === action.payload.id && product.amount > 1) {
+          return { ...product, amount: product.amount - 1 };
+        }
+        return product;
+      });
+      const rawTotal = updatedProducts.reduce(
+        (acc, cur) => acc + cur.salePrice * cur.amount, 0
+      );
+      const newTotal = Math.round(rawTotal);
+      const newTotalWithDiscount = state.discount > 0
+        ? Math.round(rawTotal * (1 - state.discount / 100))
+        : newTotal;
+      return {
+        ...state,
+        products: updatedProducts,
+        total: newTotal,
+        totalWithDiscount: newTotalWithDiscount,
+      };
+    }
     case "removeItem": {
-      const filtered = state.products.filter(
-        (product: Product) => product.id !== action.payload.id
+      const updatedProducts = state.products.filter(
+        (product) => product.id !== action.payload.id
       );
-      const recalculatedTotal = filtered.reduce(
-        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
-        0
+      const rawTotal = updatedProducts.reduce(
+        (acc, cur) => acc + cur.salePrice * cur.amount, 0
       );
+      const newTotal = Math.round(rawTotal);
+      const newTotalWithDiscount = state.discount > 0
+        ? Math.round(rawTotal * (1 - state.discount / 100))
+        : newTotal;
       return {
         ...state,
-        products: filtered,
-        total: recalculatedTotal,
-        totalWithDiscount: recalculatedTotal * (1 - (state.discount || 0) * 0.01),
+        products: updatedProducts,
+        total: newTotal,
+        totalWithDiscount: newTotalWithDiscount,
       };
     }
     case "removeAll":
@@ -149,47 +163,50 @@ export const BillReducer = (
       };
     }
     case "changeUnit": {
-      const unitChanged = state.products.map(({ ...product }) => {
+      const updatedProducts = state.products.map((product) => {
         if (product.id === action.payload.id) {
-          product.amount = action.payload.amount;
+          return { ...product, amount: action.payload.amount };
         }
         return product;
       });
-      const unitTotal = unitChanged.reduce(
-        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
-        0
+      const rawTotal = updatedProducts.reduce(
+        (acc, cur) => acc + cur.salePrice * cur.amount, 0
       );
+      const newTotal = Math.round(rawTotal);
+      const newTotalWithDiscount = state.discount > 0
+        ? Math.round(rawTotal * (1 - state.discount / 100))
+        : newTotal;
       return {
         ...state,
-        products: unitChanged,
-        total: unitTotal,
-        totalWithDiscount: unitTotal * (1 - (state.discount || 0) * 0.01),
+        products: updatedProducts,
+        total: newTotal,
+        totalWithDiscount: newTotalWithDiscount,
       };
     }
     case "total":
       return {
         ...state,
-        total: state.products.reduce(
-          (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
-          0
+        total: Math.round(
+          state.products.reduce(
+            (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+            0
+          )
         ),
       };
-    case "discount":
+    case "discount": {
+      const rawTotal = state.products.reduce(
+        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+        0
+      );
       return {
         ...state,
         discount: action.payload,
         totalWithDiscount:
-          state.products.reduce(
-            (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
-            0
-          ) -
-          state.products.reduce(
-            (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
-            0
-          ) *
-            action.payload *
-            0.01,
+          action.payload > 0
+            ? Math.round(rawTotal * (1 - action.payload / 100))
+            : Math.round(rawTotal),
       };
+    }
     case "sellerName":
       return {
         ...state,
