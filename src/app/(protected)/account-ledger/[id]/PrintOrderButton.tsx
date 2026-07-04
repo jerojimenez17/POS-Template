@@ -113,7 +113,8 @@ export default function PrintOrderButton({ order, session }: Props) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline"
+          className="w-full">
           <Printer className="h-4 w-4 mr-1" />
           Imprimir
         </Button>
