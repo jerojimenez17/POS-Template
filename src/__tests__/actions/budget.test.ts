@@ -3,18 +3,12 @@ import { createBudgetAction } from "@/actions/budget";
 
 vi.mock("@/lib/db", () => ({
   db: {
-    order: {
-      create: vi.fn().mockResolvedValue({ id: "budget-order-1" }),
-    },
-    stockMovement: {
-      create: vi.fn(),
-    },
-    cashMovement: {
-      create: vi.fn(),
-    },
-    businessFeatures: {
+    business: {
       findUnique: vi.fn().mockResolvedValue({
+        id: "business-123",
+        trialEndsAt: null,
         planDefinition: {
+          id: "plan_pro",
           name: "PRO",
           features: {
             hasAfipBilling: true,
@@ -34,8 +28,38 @@ vi.mock("@/lib/db", () => ({
             dailyClientsLimit: 999999,
           },
         },
-        overrides: null,
-        business: { trialEndsAt: null },
+      }),
+    },
+    order: {
+      create: vi.fn().mockResolvedValue({ id: "budget-order-1" }),
+    },
+    stockMovement: {
+      create: vi.fn(),
+    },
+    cashMovement: {
+      create: vi.fn(),
+    },
+    planDefinition: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "plan_pro",
+        name: "PRO",
+        features: {
+          hasAfipBilling: true,
+          hasPublicCatalog: true,
+          hasClientLedger: true,
+          hasMultiCashbox: true,
+          hasSupplierFilter: true,
+          hasBudget: true,
+        },
+        limits: {
+          maxUsers: 5,
+          maxProducts: 1000,
+          maxCashboxes: 3,
+          maxClients: 500,
+          dailySalesLimit: 999999,
+          dailyProductsLimit: 999999,
+          dailyClientsLimit: 999999,
+        },
       }),
     },
   },

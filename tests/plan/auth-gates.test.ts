@@ -122,14 +122,14 @@ describe("requireFeature", () => {
 
   // ── No-businessId fallback ────────────────────────────────────────────────
 
-  it("should succeed without checking plan when businessId is null (test/barebones fallback)", async () => {
+  it("should fail with UNAUTHENTICATED when businessId is null", async () => {
     mockAuth.mockResolvedValue(bareboneSession() as any);
 
     const result = await requireFeature("hasAfipBilling");
 
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.businessId).toBeNull();
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.code).toBe("UNAUTHENTICATED");
     }
     expect(getCachedPlan).not.toHaveBeenCalled();
   });
@@ -237,14 +237,14 @@ describe("assertLimit — auth gates", () => {
     expect(getCachedPlan).not.toHaveBeenCalled();
   });
 
-  it("should succeed without checking plan when businessId is null", async () => {
+  it("should fail with UNAUTHENTICATED when businessId is null", async () => {
     mockAuth.mockResolvedValue(bareboneSession() as any);
 
     const result = await assertLimit("maxProducts", 999);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.businessId).toBeNull();
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.code).toBe("UNAUTHENTICATED");
     }
     expect(getCachedPlan).not.toHaveBeenCalled();
   });
@@ -334,7 +334,7 @@ describe.each(LIMIT_NAMES)("assertLimit — resource: %s", (limitName) => {
   });
 
   it("should fail with LIMIT_EXCEEDED when value equals limit", async () => {
-    const limit = BASIC_PLAN[limitName as keyof typeof BASIC_PLAN];
+    const limit = BASIC_PLAN[limitName as keyof typeof BASIC_PLAN] as number;
 
     const result = await assertLimit(limitName, limit);
 
@@ -346,7 +346,7 @@ describe.each(LIMIT_NAMES)("assertLimit — resource: %s", (limitName) => {
   });
 
   it("should succeed when value is one below limit", async () => {
-    const limit = BASIC_PLAN[limitName as keyof typeof BASIC_PLAN];
+    const limit = BASIC_PLAN[limitName as keyof typeof BASIC_PLAN] as number;
 
     const result = await assertLimit(limitName, limit - 1);
 

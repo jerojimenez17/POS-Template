@@ -5,17 +5,19 @@ import { checkDailyLimit, getDailyUsage, incrementDailyUsage } from "@/lib/daily
 // ─── Helpers ─────────────────────────────────────────────────────────────────────
 // checkDailyLimit uses a dynamic import (import("./plan-resolver")) at runtime,
 // so test-level vi.mock won't intercept it. Instead we mock the DB directly:
-// getEffectivePlan reads from db.businessFeatures.findUnique, which we control.
+// getEffectivePlan reads from db.business.findUnique, which we control.
 // The plan-resolver module imports db from @/lib/db, which is already mocked
 // at the module level in tests/setup.ts — we just need to wire up the responses.
 
 /**
- * Makes findUnique return a full DEMO plan definition.
+ * Makes findUnique return a full Business with DEMO plan definition.
  * DEMO daily limits: dailySalesLimit=3, dailyProductsLimit=5, dailyClientsLimit=2.
  */
 function mockDemoPlan() {
-  (db as any).businessFeatures = {
+  (db as any).business = {
     findUnique: vi.fn().mockResolvedValue({
+      id: "biz-demo",
+      trialEndsAt: null,
       planDefinition: {
         name: "DEMO",
         features: {
@@ -36,8 +38,6 @@ function mockDemoPlan() {
           dailyClientsLimit: 2,
         },
       },
-      overrides: null,
-      business: { trialEndsAt: null },
     }),
   };
 }
@@ -47,8 +47,10 @@ function mockDemoPlan() {
  * This tests the 999999 fallback in checkDailyLimit.
  */
 function mockPlanWithoutDailyLimits() {
-  (db as any).businessFeatures = {
+  (db as any).business = {
     findUnique: vi.fn().mockResolvedValue({
+      id: "biz-custom",
+      trialEndsAt: null,
       planDefinition: {
         name: "CUSTOM",
         features: {
@@ -66,8 +68,6 @@ function mockPlanWithoutDailyLimits() {
           // and dailyClientsLimit are all absent from the plan definition
         },
       },
-      overrides: null,
-      business: { trialEndsAt: null },
     }),
   };
 }

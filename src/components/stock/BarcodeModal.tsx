@@ -6,6 +6,7 @@ import JsBarcode from "jsbarcode";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -273,9 +274,9 @@ function formatPrice(price: number, unit?: string | null): string {
               <Barcode className="h-4 w-4 text-blue-500" />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <DialogTitle className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 Código de Barras
-              </h2>
+              </DialogTitle>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate font-medium">
                 {description}
               </p>

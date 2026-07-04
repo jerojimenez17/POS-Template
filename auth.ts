@@ -3,7 +3,8 @@ import authConfig from "./auth.config";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
 import { resolvePlanFromBusiness } from "@/lib/plan-resolver";
-import { getUserById, getUserByEmail } from "./data/user";
+import { getUserById, getUserByEmail } from "@/data/user";
+import { type ExtendedUser } from "@/types/next-auth";
 import { UserRole, BusinessStatus } from "@prisma/client";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { LoginSchema } from "@/schemas";
@@ -66,7 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.businessName = token.businessName as string | null;
         session.user.businessSlug = token.businessSlug as string | null;
         session.user.image = token.image as string | null;
-        session.user.business = token.business;
+        session.user.business = token.business as ExtendedUser["business"];
       }
       return session;
     },

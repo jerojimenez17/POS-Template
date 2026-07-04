@@ -31,11 +31,11 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
     where: { isActive: true },
   });
 
-  // Eager-load the target business features from the database
+  // Eager-load the target business with its plan definition
   const business = await db.business.findUnique({
     where: { id },
     include: {
-      features: { include: { planDefinition: true } },
+      planDefinition: true,
       users: {
         select: {
           id: true,
@@ -51,13 +51,11 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
     redirect("/superadmin/businesses");
   }
 
-  // Resolve initial features: if BusinessFeatures exists with PlanDefinition, merge defaults + overrides
+  // Resolve initial features: if PlanDefinition exists, resolve defaults directly
   type InitialBusinessFeatures = {
-    id?: string;
     businessId: string;
     planDefinitionId: string;
     plan: string;
-    overrides: any;
     hasAfipBilling: boolean;
     hasPublicCatalog: boolean;
     hasClientLedger: boolean;
@@ -73,21 +71,19 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
 
   let businessFeatures: InitialBusinessFeatures;
 
-  if (business.features?.planDefinition) {
+  if (business.planDefinition) {
     const resolved = resolveFeatures(
       {
-        features: business.features.planDefinition.features as Record<string, any>,
-        limits: business.features.planDefinition.limits as Record<string, any>,
+        features: business.planDefinition.features as Record<string, any>,
+        limits: business.planDefinition.limits as Record<string, any>,
       },
-      business.features.overrides as Record<string, any> | null,
+      null,
     );
 
     businessFeatures = {
-      id: business.features.id,
       businessId: business.id,
-      planDefinitionId: business.features.planDefinitionId,
-      plan: business.features.planDefinition.name,
-      overrides: business.features.overrides,
+      planDefinitionId: business.planDefinition.id,
+      plan: business.planDefinition.name,
       hasAfipBilling: resolved.hasAfipBilling,
       hasPublicCatalog: resolved.hasPublicCatalog,
       hasClientLedger: resolved.hasClientLedger,
@@ -102,11 +98,9 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
     };
   } else {
     businessFeatures = {
-      id: "",
       businessId: business.id,
       planDefinitionId: planDefinitions.find((p) => p.name === "BASIC")?.id ?? "",
       plan: "BASIC",
-      overrides: null,
       hasAfipBilling: false,
       hasPublicCatalog: false,
       hasClientLedger: false,

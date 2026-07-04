@@ -3,9 +3,9 @@ import { checkLimit, getEffectivePlan } from "@/lib/plan-resolver";
 import { db } from "@/lib/db";
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
-// We control what getEffectivePlan returns by mocking db.businessFeatures.findUnique.
+// We control what getEffectivePlan returns by mocking db.business.findUnique.
 // When findUnique returns null, getEffectivePlan falls back to BASIC defaults.
-// For other plans, we return a full BusinessFeatures object with the plan definition.
+// For other plans, we return a full Business object with planDefinition loaded.
 
 type DeepMock<T> = { [K in keyof T]: T[K] extends (...args: never[]) => unknown ? ReturnType<typeof vi.fn> & T[K] : T[K] };
 
@@ -14,18 +14,20 @@ type DeepMock<T> = { [K in keyof T]: T[K] extends (...args: never[]) => unknown 
  * BASIC limits: maxProducts=100, maxUsers=1, maxClients=50, maxCashboxes=1.
  */
 function mockBasicFallback() {
-  (db as any).businessFeatures = {
+  (db as any).business = {
     findUnique: vi.fn().mockResolvedValue(null),
   };
 }
 
 /**
- * Makes findUnique return a full business-features record for PRO plan.
+ * Makes findUnique return a full Business with planDefinition for PRO plan.
  * PRO limits: maxProducts=1000, maxUsers=5, maxClients=500, maxCashboxes=3.
  */
 function mockProPlan() {
-  (db as any).businessFeatures = {
+  (db as any).business = {
     findUnique: vi.fn().mockResolvedValue({
+      id: "biz-pro",
+      trialEndsAt: null,
       planDefinition: {
         name: "PRO",
         features: {
@@ -46,18 +48,18 @@ function mockProPlan() {
           dailyClientsLimit: 999999,
         },
       },
-      business: { trialEndsAt: null },
-      overrides: null,
     }),
   };
 }
 
 /**
- * Makes findUnique return a plan with null limits across all resources.
+ * Makes findUnique return a business with null limits across all resources.
  */
 function mockNullLimits() {
-  (db as any).businessFeatures = {
+  (db as any).business = {
     findUnique: vi.fn().mockResolvedValue({
+      id: "biz-null",
+      trialEndsAt: null,
       planDefinition: {
         name: "CUSTOM",
         features: {
@@ -78,18 +80,18 @@ function mockNullLimits() {
           dailyClientsLimit: null,
         },
       },
-      business: { trialEndsAt: null },
-      overrides: null,
     }),
   };
 }
 
 /**
- * Makes findUnique return a plan with undefined limits across all resources.
+ * Makes findUnique return a business with undefined limits across all resources.
  */
 function mockUndefinedLimits() {
-  (db as any).businessFeatures = {
+  (db as any).business = {
     findUnique: vi.fn().mockResolvedValue({
+      id: "biz-undefined",
+      trialEndsAt: null,
       planDefinition: {
         name: "CUSTOM",
         features: {
@@ -104,8 +106,6 @@ function mockUndefinedLimits() {
           // All values explicitly undefined
         },
       },
-      business: { trialEndsAt: null },
-      overrides: null,
     }),
   };
 }
@@ -116,8 +116,10 @@ function mockUndefinedLimits() {
  * getEffectivePlan should auto-downgrade to BASIC.
  */
 function mockExpiredDemoPlan() {
-  (db as any).businessFeatures = {
+  (db as any).business = {
     findUnique: vi.fn().mockResolvedValue({
+      id: "biz-demo-expired",
+      trialEndsAt: new Date("2020-01-01"), // Expired!
       planDefinition: {
         name: "DEMO",
         features: {
@@ -138,8 +140,6 @@ function mockExpiredDemoPlan() {
           dailyClientsLimit: 2,
         },
       },
-      overrides: null,
-      business: { trialEndsAt: new Date("2020-01-01") }, // Expired!
     }),
   };
   (db as any).planDefinition = {
@@ -173,8 +173,10 @@ function mockExpiredDemoPlan() {
 function mockActiveDemoPlan() {
   const future = new Date();
   future.setFullYear(future.getFullYear() + 1);
-  (db as any).businessFeatures = {
+  (db as any).business = {
     findUnique: vi.fn().mockResolvedValue({
+      id: "biz-demo-active",
+      trialEndsAt: future,
       planDefinition: {
         name: "DEMO",
         features: {
@@ -195,8 +197,6 @@ function mockActiveDemoPlan() {
           dailyClientsLimit: 2,
         },
       },
-      overrides: null,
-      business: { trialEndsAt: future },
     }),
   };
 }
@@ -372,9 +372,9 @@ describe("checkLimit", () => {
       mockBasicFallback();
       await expect(checkLimit("business-123", "products", 0)).resolves.toBeUndefined();
 
-      const findUnique = (db as any).businessFeatures.findUnique;
+      const findUnique = (db as any).business.findUnique;
       expect(findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { businessId: "business-123" } }),
+        expect.objectContaining({ where: { id: "business-123" } }),
       );
     });
   });

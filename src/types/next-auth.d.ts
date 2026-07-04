@@ -46,3 +46,13 @@ declare module "next-auth/jwt" {
     business?: ExtendedUser["business"];
   }
 }
+
+declare module "@auth/core/jwt" {
+  interface JWT {
+    role?: UserRole;
+    businessId?: string | null;
+    businessName?: string | null;
+    businessSlug?: string | null;
+    business?: ExtendedUser["business"];
+  }
+}

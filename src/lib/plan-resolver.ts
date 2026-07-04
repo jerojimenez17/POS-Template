@@ -55,33 +55,26 @@ export function resolveFeatures(
  * Falls back to BASIC defaults if PlanDefinition is not found.
  */
 export async function getEffectivePlan(businessId: string): Promise<ResolvedFeatures> {
-  const bf = await db.businessFeatures.findUnique({
-    where: { businessId },
-    include: {
-      planDefinition: true,
-      business: { select: { trialEndsAt: true } },
-    },
+  const business = await db.business.findUnique({
+    where: { id: businessId },
+    include: { planDefinition: true },
   });
 
-  if (!bf) {
-    // BusinessFeatures missing (shouldn't happen, but fallback gracefully)
+  if (!business) {
+    // Business not found (shouldn't happen, but fallback gracefully)
     return BASIC_DEFAULTS as unknown as ResolvedFeatures;
   }
 
-  if (!bf.planDefinition) {
+  if (!business.planDefinition) {
     // PlanDefinition not seeded yet — fall back to BASIC defaults
     console.warn(`PlanDefinition not found for business ${businessId}, falling back to BASIC`);
     return {
       ...BASIC_DEFAULTS,
-      // Apply overrides even in fallback mode
-      ...(bf.overrides ? Object.fromEntries(
-        Object.entries(bf.overrides as JsonRecord).filter(([k]) => k in BASIC_DEFAULTS)
-      ) : {}),
     } as unknown as ResolvedFeatures;
   }
-console.log("BusinessFeatures loaded:", bf);
+
   // Auto-downgrade DEMO if trial expired
-  if (bf.planDefinition.name === "DEMO" && bf.business.trialEndsAt && bf.business.trialEndsAt < new Date()) {
+  if (business.planDefinition.name === "DEMO" && business.trialEndsAt && business.trialEndsAt < new Date()) {
     const basicPlan = await db.planDefinition.findUnique({ where: { name: "BASIC" } });
     if (basicPlan) {
       return resolveFeatures(
@@ -96,11 +89,11 @@ console.log("BusinessFeatures loaded:", bf);
   }
 
   const planDef = {
-    features: bf.planDefinition.features as JsonRecord,
-    limits: bf.planDefinition.limits as JsonRecord,
+    features: business.planDefinition.features as JsonRecord,
+    limits: business.planDefinition.limits as JsonRecord,
   };
 
-  const resolved = resolveFeatures(planDef, bf.overrides as JsonRecord | null, bf.planDefinition.name);
+  const resolved = resolveFeatures(planDef, null, business.planDefinition.name);
 
   return resolved;
 }
@@ -136,26 +129,23 @@ export async function checkLimit(
 
 /**
  * Resolves plan from a user object (used in JWT callback).
- * The user object already has business.features with planDefinition loaded.
+ * The user object already has business.planDefinition loaded.
  */
 export function resolvePlanFromBusiness(
   business: {
-    features: {
-      planDefinition: { name?: string; features: unknown; limits: unknown } | null;
-      overrides: unknown;
-    } | null;
+    planDefinition: { name?: string; features: unknown; limits: unknown } | null;
   }
 ): ResolvedFeatures | null {
-  if (!business.features?.planDefinition) return null;
+  if (!business.planDefinition) return null;
 
   const planDef = {
-    features: business.features.planDefinition.features as JsonRecord,
-    limits: business.features.planDefinition.limits as JsonRecord,
+    features: business.planDefinition.features as JsonRecord,
+    limits: business.planDefinition.limits as JsonRecord,
   };
 
   return resolveFeatures(
     planDef,
-    business.features.overrides as JsonRecord | null,
-    business.features.planDefinition.name ?? "UNKNOWN"
+    null,
+    business.planDefinition.name ?? "UNKNOWN"
   );
 }

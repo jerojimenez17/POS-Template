@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
-import { updateBusinessFeaturesAction } from "@/actions/superadmin";
+import { useState, useTransition } from "react";
+import { updateBusinessPlanAction } from "@/actions/superadmin";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -19,6 +19,7 @@ import {
   Settings2,
   RefreshCw,
   Info,
+  MinusCircle,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,17 +38,16 @@ interface FeaturesFormProps {
     displayOrder: number;
   }>;
   initialFeatures: {
-    id?: string;
     businessId: string;
     planDefinitionId: string;
     plan: string;
-    overrides: any;
     hasAfipBilling: boolean;
     hasPublicCatalog: boolean;
     hasClientLedger: boolean;
     hasMultiCashbox: boolean;
     hasSupplierFilter: boolean;
     hasBudget: boolean;
+    hasNegativeStock: boolean;
     maxUsers: number;
     maxProducts: number;
   };
@@ -65,6 +65,7 @@ interface PlanPreset {
   hasMultiCashbox: boolean;
   hasSupplierFilter: boolean;
   hasBudget: boolean;
+  hasNegativeStock: boolean;
   maxUsers: number;
   maxProducts: number;
   featuresList: { text: string; included: boolean }[];
@@ -85,6 +86,7 @@ const PRESETS: PlanPreset[] = [
     hasMultiCashbox: false,
     hasSupplierFilter: false,
     hasBudget: false,
+    hasNegativeStock: false,
     maxUsers: 1,
     maxProducts: 100,
     accentColor: "from-blue-500/10 to-indigo-500/5 text-blue-500 border-blue-200/50 dark:border-blue-800/40",
@@ -111,6 +113,7 @@ const PRESETS: PlanPreset[] = [
     hasMultiCashbox: false,
     hasSupplierFilter: false,
     hasBudget: false,
+    hasNegativeStock: true,
     maxUsers: 5,
     maxProducts: 1000,
     accentColor: "from-amber-500/10 to-orange-500/5 text-amber-600 dark:text-amber-400 border-amber-200/50 dark:border-amber-800/40",
@@ -137,6 +140,7 @@ const PRESETS: PlanPreset[] = [
     hasMultiCashbox: true,
     hasSupplierFilter: true,
     hasBudget: true,
+    hasNegativeStock: true,
     maxUsers: 999,
     maxProducts: 99999,
     accentColor: "from-purple-500/10 to-pink-500/5 text-purple-500 border-purple-200/50 dark:border-purple-800/40",
@@ -169,30 +173,12 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
   const [hasMultiCashbox, setHasMultiCashbox] = useState(initialFeatures.hasMultiCashbox);
   const [hasSupplierFilter, setHasSupplierFilter] = useState(initialFeatures.hasSupplierFilter);
   const [hasBudget, setHasBudget] = useState(initialFeatures.hasBudget);
+  const [hasNegativeStock, setHasNegativeStock] = useState(initialFeatures.hasNegativeStock);
   const [maxUsers, setMaxUsers] = useState(initialFeatures.maxUsers);
   const [maxProducts, setMaxProducts] = useState(initialFeatures.maxProducts);
 
-  const [isCustomOverride, setIsCustomOverride] = useState(false);
-
   // Resolve the selected plan name from planDefinitions for matching
   const selectedPlanName = planDefinitions.find((p) => p.id === selectedPlanDefinitionId)?.name ?? "";
-
-  // Check if current states match any standard preset exactly
-  useEffect(() => {
-    const matchingPreset = PRESETS.find(
-      (p) =>
-        p.planName === selectedPlanName &&
-        p.hasAfipBilling === hasAfipBilling &&
-        p.hasPublicCatalog === hasPublicCatalog &&
-        p.hasClientLedger === hasClientLedger &&
-        p.hasMultiCashbox === hasMultiCashbox &&
-        p.hasSupplierFilter === hasSupplierFilter &&
-        p.hasBudget === hasBudget &&
-        p.maxUsers === maxUsers &&
-        p.maxProducts === maxProducts
-    );
-    setIsCustomOverride(!matchingPreset);
-  }, [selectedPlanName, hasAfipBilling, hasPublicCatalog, hasClientLedger, hasMultiCashbox, hasSupplierFilter, hasBudget, maxUsers, maxProducts]);
 
   // Handle preset selection
   const handlePresetSelect = (preset: PlanPreset) => {
@@ -207,56 +193,24 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
     setHasMultiCashbox(preset.hasMultiCashbox);
     setHasSupplierFilter(preset.hasSupplierFilter);
     setHasBudget(preset.hasBudget);
+    setHasNegativeStock(preset.hasNegativeStock);
     setMaxUsers(preset.maxUsers);
     setMaxProducts(preset.maxProducts);
     toast.success(`Preset "${preset.name}" aplicado automáticamente.`);
   };
 
-  // Build overrides by comparing form state against selected PlanDefinition defaults
-  const buildOverrides = (): Record<string, any> | undefined => {
-    const selectedPlanDef = planDefinitions.find((p) => p.id === selectedPlanDefinitionId);
-    if (!selectedPlanDef) return undefined;
-
-    const defaults: Record<string, any> = {
-      ...(selectedPlanDef.features as Record<string, any>),
-      ...(selectedPlanDef.limits as Record<string, any>),
-    };
-
-    const currentValues: Record<string, any> = {
-      hasAfipBilling,
-      hasPublicCatalog,
-      hasClientLedger,
-      hasMultiCashbox,
-      hasSupplierFilter,
-      hasBudget,
-      maxUsers,
-      maxProducts,
-    };
-
-    const overrides: Record<string, any> = {};
-    for (const [key, value] of Object.entries(currentValues)) {
-      if (value !== defaults[key]) {
-        overrides[key] = value;
-      }
-    }
-
-    return Object.keys(overrides).length > 0 ? overrides : undefined;
-  };
-
   // Submit action
   const handleSave = () => {
     startTransition(async () => {
-      const overrides = buildOverrides();
       const payload = {
         businessId,
         planDefinitionId: selectedPlanDefinitionId,
-        overrides,
       };
 
-      const result = await updateBusinessFeaturesAction(payload);
+      const result = await updateBusinessPlanAction(payload);
 
       if (result.success) {
-        toast.success("Características del negocio actualizadas con éxito.");
+        toast.success("Plan del negocio actualizado con éxito.");
         router.refresh();
       } else {
         toast.error(result.error || "Hubo un problema al guardar los cambios.");
@@ -278,13 +232,6 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
               Seleccione un plan para alinear instantáneamente todos los toggles y límites operativos.
             </p>
           </div>
-
-          {isCustomOverride && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-600 dark:text-amber-400 animate-pulse">
-              <Settings2 className="w-3.5 h-3.5" />
-              Overrides Activos (Personalizado)
-            </span>
-          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -481,6 +428,22 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
               </div>
               <Switch checked={hasBudget} onCheckedChange={setHasBudget} />
             </div>
+
+            {/* Negative Stock Toggle */}
+            <div className="flex items-start justify-between py-4 gap-4">
+              <div className="flex gap-3">
+                <div className="p-2 rounded-lg bg-red-500/10 text-red-600 shrink-0 mt-0.5">
+                  <MinusCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Stock Negativo</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Permite que el stock de productos quede en valores negativos al vender sin inventario suficiente.
+                  </p>
+                </div>
+              </div>
+              <Switch checked={hasNegativeStock} onCheckedChange={setHasNegativeStock} />
+            </div>
           </CardContent>
         </Card>
 
@@ -616,6 +579,7 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
                   setHasMultiCashbox(initialFeatures.hasMultiCashbox);
                   setHasSupplierFilter(initialFeatures.hasSupplierFilter);
                   setHasBudget(initialFeatures.hasBudget);
+                  setHasNegativeStock(initialFeatures.hasNegativeStock);
                   setMaxUsers(initialFeatures.maxUsers);
                   setMaxProducts(initialFeatures.maxProducts);
                   toast.info("Configuración revertida a los valores guardados.");

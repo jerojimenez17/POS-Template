@@ -43,24 +43,17 @@ export const register = async (values: z.infer<typeof RegisterSchema>) => {
 
      // Transaction to ensure both Business and User are created or neither
     await db.$transaction(async (tx) => {
-      // 1. Create Business with trial tracking
+      // 1. Create Business with DEMO plan and trial tracking
       const business = await tx.business.create({
         data: {
           name: businessName,
           slug: slug,
           trialEndsAt: trialEndsAt,
-        },
-      });
-
-      // 2. Create BusinessFeatures with DEMO plan
-      await tx.businessFeatures.create({
-        data: {
-          businessId: business.id,
           planDefinitionId: demoPlan.id,
         },
       });
 
-      // 3. Create User linked to Business as ADMIN
+      // 2. Create User linked to Business as ADMIN
       await tx.user.create({
         data: {
           name: registerName,
