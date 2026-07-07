@@ -107,7 +107,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
               width: 100%;
             }
             .label-price {
-              font-size: 16px;
+              font-size: 20px;
               font-weight: 800;
               text-align: center;
               margin-bottom: 2px;
@@ -229,7 +229,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
                   {description}
                 </div>
                 {showPrice && (
-                  <div className="text-center font-bold text-lg mt-1">
+                  <div className="text-center font-bold text-xl mt-1">
                     {formattedPrice}
                   </div>
                 )}

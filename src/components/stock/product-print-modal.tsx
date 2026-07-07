@@ -116,7 +116,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
               width: 100%;
             }
             .label-price {
-              font-size: 14px;
+              font-size: 20px;
               font-weight: 700;
               text-align: center;
               margin-bottom: 2px;
@@ -129,6 +129,12 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
               font-size: 10px;
               text-align: center;
               margin-top: 2px;
+            }
+            .no-barcode {
+              justify-content: space-between !important;
+            }
+            .no-barcode .label-code {
+              font-size: 8px;
             }
             .no-barcode:not(.has-price) .label-description {
               font-size: 20px;
@@ -162,7 +168,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
               width: 100%;
             }
             .label-price {
-              font-size: 14px;
+              font-size: 18px;
               font-weight: 700;
               text-align: center;
               margin-bottom: 2px;
@@ -178,6 +184,12 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
               font-size: 10px;
               text-align: center;
               margin-top: 2px;
+            }
+            .no-barcode {
+              justify-content: space-between !important;
+            }
+            .no-barcode .label-code {
+              font-size: 8px;
             }
             .no-barcode:not(.has-price) .label-description {
               font-size: 20px;
@@ -262,19 +274,19 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                   return (
                     <div
                       key={tag.key}
-                      className={`flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white ${!hasBarcode ? "no-barcode" : ""} ${showPrice ? "has-price" : ""} ${hasBarcode && !showPrice ? "justify-center flex-1" : ""}`}
+                      className={`flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white ${!hasBarcode ? "no-barcode justify-between" : ""} ${showPrice ? "has-price" : ""} ${hasBarcode && !showPrice ? "justify-center flex-1" : ""}`}
                       style={{
                         width: hasBarcode && !showPrice ? "55mm" : TAG_WIDTH,
                         height: !hasBarcode ? TAG_HEIGHT_WITHOUT_BARCODE : (showPrice ? undefined : "65mm"),
                         ...(globalIndex < allTags.length - 1 ? { pageBreakAfter: "always" } : {}),
                       }}
                     >
-                      <div className="label-description">
+                      <div className="label-description text-sm font-semibold">
                         {tag.product.description}
                       </div>
                       {showPrice && (
                         <div
-                          className="label-price outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
+                          className={`label-price outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors font-bold ${hasBarcode ? "text-xl" : "text-3xl"}`}
                           contentEditable
                           suppressContentEditableWarning
                           spellCheck={false}
@@ -283,7 +295,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                           {formattedPrice}
                         </div>
                       )}
-                      <div className="label-code">
+                      <div className={`label-code text-center ${!hasBarcode ? "text-[8px]" : "text-[10px]"}`}>
                         {tag.product.code}
                       </div>
                       {hasBarcode && (
@@ -324,11 +336,11 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                       return (
                         <div
                           key={tag.key}
-                          className={`flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white label-container ${!hasBarcode ? "no-barcode" : "has-barcode"} ${showPrice ? "has-price" : ""}`}
+                          className={`flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white label-container ${!hasBarcode ? "no-barcode justify-between" : "has-barcode"} ${showPrice ? "has-price" : ""}`}
                           style={{ width: TAG_WIDTH, minHeight: hasBarcode && showPrice ? TAG_HEIGHT_WITHOUT_BARCODE : hasBarcode ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE }}
                         >
                           <div
-                            className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
+                            className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors text-sm font-semibold"
                             contentEditable
                             suppressContentEditableWarning
                             spellCheck={false}
@@ -338,7 +350,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                           </div>
                           {showPrice && (
                             <div
-                              className="label-price outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors"
+                              className={`label-price outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors font-bold ${hasBarcode ? "text-lg" : "text-2xl"}`}
                               contentEditable
                               suppressContentEditableWarning
                               spellCheck={false}
@@ -347,7 +359,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                               {formattedPrice}
                             </div>
                           )}
-                          <div className="label-code">
+                          <div className={`label-code text-center ${!hasBarcode ? "text-[8px]" : "text-[10px]"}`}>
                             {tag.product.code}
                           </div>
                           {hasBarcode && (
