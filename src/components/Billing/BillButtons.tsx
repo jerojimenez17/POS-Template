@@ -246,21 +246,41 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     }
   };
 
-  const handleSaveSale = async (billState: typeBillState) => {
-    if (!checkConnection()) return;
+  /** Minimal product fields needed by server actions */
+  const toMinimalProducts = (products: typeBillState["products"]) =>
+    products.map((p) => ({
+      id: p.id,
+      code: p.code,
+      description: p.description,
+      price: p.price,
+      salePrice: p.salePrice,
+      amount: p.amount,
+    }));
+
+  const handleSaveSale = async (billState: typeBillState): Promise<boolean> => {
+    if (!checkConnection()) return false;
     try {
-      const result = await processSaleAction(billState);
+      // Send only minimal product data to reduce Server Action payload
+      const result = await processSaleAction({
+        ...billState,
+        products: toMinimalProducts(billState.products),
+      });
       if ('error' in result && result.error) {
         toast.error(result.error as string);
         setSaveError(true);
+        return false;
       } else {
         setSaveError(false);
+        return true;
       }
-      setBlockButton(false);
     } catch (err) {
       console.error(err);
-      setBlockButton(false);
       setSaveError(true);
+      toast.error(
+        "Error al guardar la venta: " +
+          (err instanceof Error ? err.message : "Error inesperado"),
+      );
+      return false;
     }
   };
 
@@ -271,12 +291,13 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
       setOpenRemitoModal(false);
       setOpenEditModal(false);
 
-      const totalAmount =
+      const totalAmount = Math.round(
         BillState.products.reduce(
           (acc, act) => acc + act.salePrice * act.amount,
           0,
         ) *
-        (1 - BillState.discount * 0.01);
+        (1 - BillState.discount * 0.01)
+      );
 
       if (totalAmount <= 0) {
         setErrorMessage("El monto debe ser mayor a 0");
@@ -305,6 +326,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
       if (isUpdate && orderId) {
         const updateResult = await updateOrderAction(orderId, {
           ...BillState,
+          products: toMinimalProducts(BillState.products),
           totalWithDiscount: totalAmount,
         });
 
@@ -315,12 +337,19 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         toast.success("Venta actualizada correctamente");
         router.push(`/sales/${orderId}`);
       } else {
-        await handleSaveSale({
+        const saveSuccess = await handleSaveSale({
           ...BillState,
           CAE: caeData || localCAE,
           totalWithDiscount: totalAmount,
         });
-        toast.success("Factura guardada correctamente");
+        if (saveSuccess) {
+          toast.success("Factura guardada correctamente");
+          setBlockButton(false);
+        } else {
+          // Save failed but error was already shown by handleSaveSale
+          setBlockButton(false);
+          return undefined;
+        }
       }
       return caeData || localCAE;
     } catch (err) {
@@ -485,10 +514,12 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                   amount: p.amount,
                 }))}
                 total={BillState.total}
-                totalWithDiscount={BillState.products.reduce(
-                  (acc, act) => acc + act.salePrice * act.amount,
-                  0,
-                ) * (1 - BillState.discount * 0.01)}
+                totalWithDiscount={Math.round(
+                  BillState.products.reduce(
+                    (acc, act) => acc + act.salePrice * act.amount,
+                    0,
+                  ) * (1 - BillState.discount * 0.01)
+                )}
                 discount={BillState.discount}
                 seller={session?.user?.email || ""}
                 businessId={session?.user?.businessId || ""}

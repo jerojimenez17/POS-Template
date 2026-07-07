@@ -17,6 +17,7 @@ const ProductDashboard = () => {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [codeOnly, setCodeOnly] = useState(false);
+  const [exactCode, setExactCode] = useState(false);
   const [products, setProducts] = useState<ProductExtended[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -33,7 +34,7 @@ const ProductDashboard = () => {
     }, 300);
   }, []);
 
-  const fetchProducts = useCallback(async (pageNum: number, searchTerm: string, codeOnlySearch?: boolean) => {
+  const fetchProducts = useCallback(async (pageNum: number, searchTerm: string, codeOnlySearch?: boolean, exactCodeSearch?: boolean) => {
     setLoading(true);
     try {
       const result = await getProductsPaginated({
@@ -41,6 +42,7 @@ const ProductDashboard = () => {
         pageSize: PAGE_SIZE,
         search: searchTerm || undefined,
         codeOnly: codeOnlySearch,
+        exactCode: exactCodeSearch,
       });
       setProducts(result.products as ProductExtended[]);
       setTotal(result.total);
@@ -58,17 +60,17 @@ const ProductDashboard = () => {
   }, [fetchProducts]);
 
   useEffect(() => {
-    fetchProducts(page, debouncedSearch, codeOnly);
-  }, [debouncedSearch, codeOnly]);
+    fetchProducts(page, debouncedSearch, codeOnly, exactCode);
+  }, [debouncedSearch, codeOnly, exactCode]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
-    fetchProducts(newPage, debouncedSearch, codeOnly);
-  }, [debouncedSearch, codeOnly, fetchProducts]);
+    fetchProducts(newPage, debouncedSearch, codeOnly, exactCode);
+  }, [debouncedSearch, codeOnly, exactCode, fetchProducts]);
 
   const handleRefresh = useCallback(() => {
-    fetchProducts(page, debouncedSearch, codeOnly);
-  }, [page, debouncedSearch, codeOnly, fetchProducts]);
+    fetchProducts(page, debouncedSearch, codeOnly, exactCode);
+  }, [page, debouncedSearch, codeOnly, exactCode, fetchProducts]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
@@ -96,6 +98,8 @@ const ProductDashboard = () => {
             handleOpenSelectionModal={() => {}}
             codeOnly={codeOnly}
             onCodeOnlyChange={setCodeOnly}
+            exactCode={exactCode}
+            onExactCodeChange={setExactCode}
           />
         </div>
 

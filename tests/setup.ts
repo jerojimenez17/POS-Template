@@ -8,6 +8,7 @@ export const mockDb = {
     }
     return Promise.all(arg);
   }),
+  $executeRawUnsafe: vi.fn().mockResolvedValue(0),
   brand: {
     findFirst: vi.fn().mockResolvedValue(null),
     findMany: vi.fn().mockResolvedValue([]),
@@ -55,6 +56,10 @@ export const mockDb = {
   },
   stockMovement: {
     create: vi.fn().mockResolvedValue({ id: 'stock-1' }),
+    createMany: vi.fn().mockResolvedValue({ count: 1 }),
+  },
+  productRanking: {
+    upsert: vi.fn().mockResolvedValue({ id: 'ranking-1' }),
   },
   cashMovement: {
     create: vi.fn().mockResolvedValue({ id: 'cash-1' }),
@@ -76,6 +81,7 @@ vi.mock('../auth', () => ({
 
 vi.mock('next/server', () => ({
   revalidatePath: vi.fn(),
+  after: vi.fn(), // No-op en tests — el after() corre en background en prod
 }));
 
 vi.mock('pusher', () => ({

@@ -6,8 +6,11 @@ import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
+import { after } from "next/server";
+import { MovementType } from "@prisma/client";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
+import { processInBatches, bulkUpdateStock } from "@/lib/batch-utils";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -41,11 +44,10 @@ interface ProcessSaleInput {
 }
 
 export const processSaleAction = async (billState: ProcessSaleInput) => {
-  const session = await auth();
-  const businessId = session?.user?.businessId;
-  if (!businessId) return { error: "No autorizado" };
-
   try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    if (!businessId) return { error: "No autorizado" };
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
@@ -94,49 +96,32 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
             })),
           },
         },
-        include: { items: true },
       });
 
+      // 🚀 FASE 1+2: Bulk UPDATE (raw SQL) + Bulk INSERT (createMany)
+      // Antes: 2 ops × N productos = 2N queries
+      // Ahora: 1 bulk UPDATE + 1 bulk INSERT = 2 queries total
+      const stockMovements: {
+        type: MovementType;
+        quantity: number;
+        productId: string;
+        orderId: string;
+        businessId: string;
+        reason: string;
+      }[] = [];
       for (const item of billState.products) {
-        await tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.amount,
-            productId: item.id,
-            orderId: order.id,
-            businessId: businessId,
-            reason: `Venta #${order.id}`,
-          },
-        });
-
-        await tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
-              productId: item.id,
-              month,
-              year,
-              businessId,
-            },
-          },
-          update: {
-            totalSold: { increment: item.amount },
-            totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
-          },
-          create: {
-            productId: item.id,
-            month,
-            year,
-            businessId,
-            totalSold: item.amount,
-            totalIncome: item.amount * (item.salePrice || item.price || 0),
-          },
+        stockMovements.push({
+          type: "SALE",
+          quantity: -item.amount,
+          productId: item.id,
+          orderId: order.id,
+          businessId: businessId,
+          reason: `Venta #${order.id}`,
         });
       }
+
+      await bulkUpdateStock(tx, billState.products.map(p => ({ id: p.id, change: -p.amount })));
+      await tx.stockMovement.createMany({ data: stockMovements });
 
       let cashToIncrement = 0;
       if (billState.paidMethod === "Efectivo") {
@@ -197,19 +182,55 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       }
 
       return { order, movements };
+    }, { maxWait: 10000, timeout: 60000 });
+
+    // ⏰ Respuesta al cliente ya!
+    // El resto (ranking, pusher, cache) va en after() — no crítico para el usuario
+    after(async () => {
+      try {
+        // Ranking de productos (eventual consistency — analytics no crítico)
+        await db.$transaction(async (tx) => {
+          await processInBatches(billState.products, 15, (item) => [
+            tx.productRanking.upsert({
+              where: {
+                productId_month_year_businessId: {
+                  productId: item.id,
+                  month,
+                  year,
+                  businessId,
+                },
+              },
+              update: {
+                totalSold: { increment: item.amount },
+                totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
+              },
+              create: {
+                productId: item.id,
+                month,
+                year,
+                businessId,
+                totalSold: item.amount,
+                totalIncome: item.amount * (item.salePrice || item.price || 0),
+              },
+            }),
+          ]);
+        });
+
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+
+        for (const movement of result.movements) {
+          await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+        }
+
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CASHBOX, "max");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.SALES, "max");
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
     });
 
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-
-    for (const movement of result.movements) {
-      await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
-    }
-
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
     return { success: true, orderId: result.order.id };
   } catch (error) {
     console.error("Error processing sale:", error);
@@ -218,11 +239,10 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
 };
 
 export const processReturnAction = async (data: { orderId: string; items: { productId: string; quantity: number; refundAmount: number }[]; reason: string }) => {
-  const session = await auth();
-  const businessId = session?.user?.businessId;
-  if (!businessId) return { error: "No autorizado" };
-
   try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    if (!businessId) return { error: "No autorizado" };
     const result = await db.$transaction(async (tx) => {
       const activeSession = await tx.cashboxSession.findFirst({
         where: { userId: session.user!.id, status: "OPEN" },
@@ -240,40 +260,43 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
         },
       });
 
-      for (const item of data.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { amount: { increment: item.quantity } },
-        });
+      // Buscar todos los orderItems de una sola vez
+      const orderItems = await tx.orderItem.findMany({
+        where: { orderId: data.orderId },
+        select: { id: true, productId: true },
+      });
+      const orderItemMap = new Map(orderItems.map((oi) => [oi.productId, oi.id]));
 
-        await tx.stockMovement.create({
-          data: {
+      // 🚀 FASE 1+2: Bulk UPDATE (raw SQL) + Bulk INSERT (createMany)
+      // Antes: 3 ops × N productos = 3N queries
+      // Ahora: 1 bulk UPDATE + 2× createMany = 3 queries total
+      {
+        const stockMovements: { type: MovementType; quantity: number; productId: string; businessId: string; reason: string }[] = [];
+        const returnItems: { returnId: string; orderItemId: string; productId: string; quantity: number; refundAmount: number }[] = [];
+
+        for (const item of data.items) {
+          const orderItemId = orderItemMap.get(item.productId);
+          if (!orderItemId) throw new Error(`OrderItem not found for product ${item.productId}`);
+
+          stockMovements.push({
             type: "RETURN",
             quantity: item.quantity,
             productId: item.productId,
             businessId,
             reason: `Devolución #${returnRecord.id} (Ref: Venta #${data.orderId})`,
-          },
-        });
-
-        const orderItem = await tx.orderItem.findFirst({
-          where: { 
-            orderId: data.orderId, 
-            productId: item.productId 
-          }
-        });
-
-        if (!orderItem) throw new Error("OrderItem not found");
-
-        await tx.saleReturnItem.create({
-          data: {
+          });
+          returnItems.push({
             returnId: returnRecord.id,
-            orderItemId: orderItem.id,
+            orderItemId,
             productId: item.productId,
             quantity: item.quantity,
             refundAmount: item.refundAmount,
-          }
-        });
+          });
+        }
+
+        await bulkUpdateStock(tx, data.items.map(i => ({ id: i.productId, change: i.quantity })));
+        await tx.stockMovement.createMany({ data: stockMovements });
+        await tx.saleReturnItem.createMany({ data: returnItems });
       }
 
       const totalRefund = data.items.reduce((acc, item) => acc + item.refundAmount, 0);
@@ -294,14 +317,21 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
       });
 
       return returnRecord;
+    }, { maxWait: 10000, timeout: 60000 });
+
+    // ⏰ Respuesta inmediata — non-critical en background
+    after(async () => {
+      try {
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CASHBOX, "max");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.SALES, "max");
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
     });
 
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
     return { success: true, returnId: result.id };
   } catch (error) {
     console.error("Error processing return:", error);
@@ -313,16 +343,15 @@ export const updateOrderAction = async (
   orderId: string,
   updatedData: ProcessSaleInput
 ) => {
-  const session = await auth();
-  const businessId = session?.user?.businessId;
-  const userId = session?.user?.id;
-  const userRole = session?.user?.role;
-
-  if (!businessId || !userId) return { error: "No autorizado" };
-  if (userRole !== "ADMIN")
-    return { error: "Solo los administradores pueden editar ventas" };
-
   try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    const userId = session?.user?.id;
+    const userRole = session?.user?.role;
+
+    if (!businessId || !userId) return { error: "No autorizado" };
+    if (userRole !== "ADMIN")
+      return { error: "Solo los administradores pueden editar ventas" };
     const result = await db.$transaction(async (tx) => {
       const existingOrder = await tx.order.findFirst({
         where: { id: orderId, businessId },
@@ -391,25 +420,22 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 revertir stock anterior
-      for (const item of existingOrder.items) {
-        if (item.productId) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { amount: { increment: item.quantity } },
-          });
-
-          await tx.stockMovement.create({
-            data: {
-              type: "ADJUSTMENT",
-              quantity: item.quantity,
-              productId: item.productId,
-              orderId,
-              businessId,
-              reason: `Reversión por edición de Venta #${orderId}`,
-            },
+      // 🚀 FASE 1+2: revertir stock anterior (bulk UPDATE + createMany)
+      {
+        const revertItems = existingOrder.items.filter((item) => item.productId);
+        const stockMovementsRevert: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string; reason: string }[] = [];
+        for (const item of revertItems) {
+          stockMovementsRevert.push({
+            type: "ADJUSTMENT",
+            quantity: item.quantity,
+            productId: item.productId!,
+            orderId,
+            businessId,
+            reason: `Reversión por edición de Venta #${orderId}`,
           });
         }
+        await bulkUpdateStock(tx, revertItems.map(i => ({ id: i.productId!, change: i.quantity })));
+        await tx.stockMovement.createMany({ data: stockMovementsRevert });
       }
 
       // 🔹 recalcular totales
@@ -446,36 +472,38 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 descontar stock nuevo
-      for (const item of updatedData.products) {
-        await tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
+      // 🚀 FASE 1+2: descontar stock nuevo (bulk UPDATE + createMany)
+      {
+        const stockMovementsApply: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string; reason: string }[] = [];
+        for (const item of updatedData.products) {
+          stockMovementsApply.push({
             type: "SALE",
             quantity: -item.amount,
             productId: item.id,
             orderId,
             businessId,
             reason: `Actualización por edición de Venta #${orderId}`,
-          },
-        });
+          });
+        }
+        await bulkUpdateStock(tx, updatedData.products.map(p => ({ id: p.id, change: -p.amount })));
+        await tx.stockMovement.createMany({ data: stockMovementsApply });
       }
 
       return { success: true };
+    }, { maxWait: 10000, timeout: 60000 });
+
+    // ⏰ Respuesta inmediata — non-critical en background
+    after(async () => {
+      try {
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CASHBOX, "max");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.SALES, "max");
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
     });
-
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
 
     return result;
   } catch (error) {

@@ -35,6 +35,20 @@ export const createAfipVoucherAction = async (billState: BillState) => {
     console.log("Function URL:", functionUrl);
     // 2. Call the Cloud Function from the server
     const { ptoVenta, ...billStateWithoutPtoVenta } = billState;
+
+    // Strip product data to only essential fields for the external API
+    const minimalBillState = {
+      ...billStateWithoutPtoVenta,
+      products: billStateWithoutPtoVenta.products.map((p) => ({
+        id: p.id,
+        code: p.code,
+        description: p.description,
+        price: p.price,
+        salePrice: p.salePrice,
+        amount: p.amount,
+      })),
+    };
+
     const response = await axios.post(
       functionUrl,
       {
@@ -46,7 +60,7 @@ export const createAfipVoucherAction = async (billState: BillState) => {
           cuit,
           puntoVenta: ptoVenta,
         },
-        billState: billStateWithoutPtoVenta,
+        billState: minimalBillState,
       },
       {
         headers: {

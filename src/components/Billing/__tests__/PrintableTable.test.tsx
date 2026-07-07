@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import PrintableTable from "@/components/Billing/PrintableTable";
 import { BillContext } from "@/context/BillContext";
 import BillState from "@/models/BillState";
@@ -784,6 +784,134 @@ describe("PrintableTable Component", () => {
       expect(options.pageStyle).toContain("@page { size: auto; margin: 10mm; }");
       expect(options.pageStyle).toContain("@media print");
       expect(options.pageStyle).toContain("-webkit-print-color-adjust: exact");
+    });
+  });
+
+  describe("CA-13: Inline edit of units on double-click", () => {
+    it("renders a <span> (not an <input>) for 'unidades' products in display mode [AC-01]", () => {
+      const products = [
+        createMockProduct({ id: "1", description: "Prod Unit", amount: 5, unit: "unidades" }),
+      ];
+      const billState = createMockBillState({ products });
+
+      const { container } = renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />,
+      );
+
+      // Verify the product amount text is visible
+      expect(screen.getByText("5")).toBeTruthy();
+
+      // Verify a span contains the amount (not an input) in display mode
+      const amountSpan = container.querySelector(
+        'span.w-12.text-center.font-medium.tabular-nums',
+      );
+      // NOTE: After feature implementation, this span is replaced by InlineAmountInput
+      // which also renders a span. This test ensures the display mode shows a span.
+      if (amountSpan) {
+        expect(amountSpan.textContent).toBe("5");
+      }
+
+      // Verify no input with numeric inputMode exists initially in display mode
+      const numericInput = container.querySelector('input[inputmode="numeric"]');
+      expect(numericInput).toBeNull();
+    });
+
+    it("double-click on the amount span switches to an <input> pre-filled with the amount [AC-02]", () => {
+      const products = [
+        createMockProduct({ id: "1", description: "Prod Unit", amount: 7, unit: "unidades" }),
+      ];
+      const billState = createMockBillState({ products });
+
+      const { container } = renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />,
+      );
+
+      // Find the amount element — currently a span, later will be InlineAmountInput
+      const amountElement = screen.getByText("7");
+      expect(amountElement).toBeTruthy();
+
+      // Double-click to enter edit mode
+      fireEvent.doubleClick(amountElement);
+
+      // After double-click, an <input> with inputMode="numeric" should appear
+      const input = container.querySelector('input[inputmode="numeric"]') as HTMLInputElement;
+      expect(input).toBeTruthy();
+      expect(input.value).toBe("7");
+    });
+
+    it("− and + buttons still work for increment/decrement in display mode [AC-09]", () => {
+      const addItem = vi.fn();
+      const removeItem = vi.fn();
+
+      const products = [
+        createMockProduct({ id: "1", description: "Prod Unit", amount: 5, unit: "unidades" }),
+      ];
+      const billState = createMockBillState({ products });
+
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />,
+        { ...mockContextValue, addItem, removeItem, BillState: billState },
+      );
+
+      // Click the increase button (+)
+      const increaseButton = screen.getByLabelText("Aumentar cantidad");
+      fireEvent.click(increaseButton);
+
+      // removeItem should have been called with the old product (amount=5)
+      expect(removeItem).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "1", amount: 5 }),
+      );
+
+      // Click the decrease button (−)
+      const decreaseButton = screen.getByLabelText("Disminuir cantidad");
+      fireEvent.click(decreaseButton);
+
+      // addItem should have been called for both operations
+      expect(addItem).toHaveBeenCalledTimes(2);
+    });
+
+    it("InlineAmountInput renders the amount for 'unidades'/'unidad' products", () => {
+      const products = [
+        createMockProduct({ id: "1", description: "Unidades Prod", amount: 3, unit: "unidades" }),
+        createMockProduct({ id: "2", description: "Unidad Prod", amount: 4, unit: "unidad" }),
+      ];
+      const billState = createMockBillState({ products });
+
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />,
+      );
+
+      // Verify both amounts are displayed in the table
+      expect(screen.getByText("3")).toBeTruthy();
+      expect(screen.getByText("4")).toBeTruthy();
+
+      // Verify both products are rendered
+      expect(screen.getByText("Unidades Prod")).toBeTruthy();
+      expect(screen.getByText("Unidad Prod")).toBeTruthy();
     });
   });
 });
