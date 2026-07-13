@@ -61,6 +61,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(true);
+  const businessId = (session?.user as { businessId?: string })?.businessId;
   const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
   const shortcutMapRef = useRef(shortcutMap);
   // Sync ref with state after render
@@ -80,7 +81,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   // Fetch shortcut configs on mount
   useEffect(() => {
     if (isEditing) return;
-    const businessId = (session?.user as { businessId?: string })?.businessId;
     if (!businessId) return;
     getShortcutConfigsAction(businessId).then((result) => {
       if ("success" in result && result.success) {
@@ -91,9 +91,11 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           }
         }
         setShortcutMap(map);
+      } else {
+        console.error("Error fetching shortcut configs:", result);
       }
     });
-  }, [isEditing, session]);
+  }, [isEditing, session, businessId]);
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
@@ -120,16 +122,16 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
 
       // F1, F2, F3 — shortcut product lookup (if configured)
       if (["F1", "F2", "F3"].includes(e.key)) {
+        e.preventDefault(); // Always prevent browser defaults (Chrome opens help on F1)
         const shortcutKey = e.key as ShortcutKey;
         const productId = currentShortcutMap[shortcutKey];
         if (!productId) return; // No shortcut configured → no-op
-        e.preventDefault();
         if (!checkSession()) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
         // Fetch product and add to bill
-        getProductByShortcutAction(shortcutKey).then((result) => {
+        getProductByShortcutAction(shortcutKey, businessId).then((result) => {
           if ("success" in result && result.success && result.data) {
             const productToAdd = {
               ...result.data,
@@ -141,7 +143,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               setFocusPriceProductId(productToAdd.id);
             }
             toast.success("Producto agregado — ingrese el precio");
-          } else if (!("success" in result) || !result.success) {
+          } else if ("success" in result && result.success && !result.data) {
+            // Config exists but product is null (deleted) — show error
+            toast.error("El producto configurado para este atajo ya no existe");
+          } else {
             const errResult = result as { error?: string };
             toast.error(errResult.error || "Error al obtener producto");
           }
@@ -191,7 +196,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, dispatch, BillState.products?.length, isEditing, addItem, setFocusPriceProductId, checkSession]);
+  }, [session, dispatch, BillState.products?.length, isEditing, addItem, setFocusPriceProductId, checkSession, businessId]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {

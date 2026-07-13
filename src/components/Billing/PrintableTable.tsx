@@ -6,6 +6,7 @@ import BillState from "@/models/BillState";
 import DecimalInput from "./DecimalInput";
 import InlineAmountInput from "./InlineAmountInput";
 import ProductSearchBar from "./ProductSearchBar";
+import ProductSearchSelect from "../AdminSettings/ProductSearchSelect";
 import { Session } from "next-auth";
 import { cn } from "@/lib/utils";
 import { Inter } from "next/font/google";
@@ -185,9 +186,22 @@ const PrintableTable = ({
     }
   }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, forceCae, state.CAE, state.CAE?.qrData]);
 
+  // Prevent browser defaults for F1/F2/F3 (Chrome opens help on F1)
+  useEffect(() => {
+    const preventFunctionKeys = (e: KeyboardEvent) => {
+      if (["F1", "F2", "F3"].includes(e.key)) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", preventFunctionKeys, { capture: true });
+    return () => window.removeEventListener("keydown", preventFunctionKeys, { capture: true });
+  }, []);
+
   const handleProductAdd = useCallback((product: Product) => {
     addItem(product);
   }, [addItem]);
+
+  const [showQuickSearch, setShowQuickSearch] = useState(false);
 
   const updateProductAmount = (productId: string, newAmount: number) => {
     const product = state.products.find((p) => p.id === productId);
@@ -279,6 +293,39 @@ const PrintableTable = ({
         onProductAdd={handleProductAdd}
         hasSupplierFilter={hasSupplierFilter}
       />
+
+      {/* Quick product search via ProductSearchSelect (reusable from settings) */}
+      <div className="mb-4 max-w-7xl mx-auto print:hidden">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowQuickSearch(!showQuickSearch)}
+            className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {showQuickSearch ? (
+                <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+              ) : (
+                <><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></>
+              )}
+            </svg>
+            {showQuickSearch ? "Cerrar búsqueda rápida" : "Búsqueda rápida de producto"}
+          </button>
+        </div>
+        {showQuickSearch && (
+          <div className="mt-2">
+            <ProductSearchSelect
+              onSelect={(product) => {
+                handleProductAdd({ ...product, amount: 1 });
+                setShowQuickSearch(false);
+              }}
+              showSelectedCard={false}
+              showStock
+              placeholder="Buscar producto por código o nombre..."
+            />
+          </div>
+        )}
+      </div>
 
       {/* Products Table */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">

@@ -258,7 +258,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       fireEvent.keyDown(window, { key: "F1" });
 
       await waitFor(() => {
-        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F1");
+        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F1", "business-123");
         expect(defaultBillContextMock.addItem).toHaveBeenCalledWith(
           expect.objectContaining({
             id: "shortcut-prod-1",
@@ -355,7 +355,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       fireEvent.keyDown(window, { key: "F2" });
 
       await waitFor(() => {
-        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F2");
+        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F2", "business-123");
         expect(defaultBillContextMock.addItem).toHaveBeenCalledWith(
           expect.objectContaining({
             id: "shortcut-prod-2",
@@ -406,7 +406,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       fireEvent.keyDown(window, { key: "F3" });
 
       await waitFor(() => {
-        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F3");
+        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F3", "business-123");
         expect(defaultBillContextMock.addItem).toHaveBeenCalledWith(
           expect.objectContaining({
             id: "shortcut-prod-3",
@@ -767,6 +767,103 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalled();
+      });
+    });
+
+    // ─── Bug A: Missing { success: true, data: null } handling (AC10/T8) ───
+
+    it("should show 'producto ya no existe' toast when getProductByShortcutAction returns success:true, data:null (Bug A / AC10)", async () => {
+      vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
+        success: true,
+        data: [
+          {
+            id: "cfg-1",
+            key: "F1",
+            productId: "shortcut-prod-1",
+            product: {
+              id: "shortcut-prod-1",
+              description: "Producto Precio Variable",
+              code: "VAR001",
+              salePrice: 0,
+            },
+          },
+        ],
+      });
+
+      // Simulate the case where the shortcut config exists but the related
+      // product was deleted — server returns { success: true, data: null }
+      vi.mocked(shortcutsActions.getProductByShortcutAction).mockResolvedValue({
+        success: true,
+        data: null,
+      });
+
+      const { toast } = await import("sonner");
+
+      render(
+        <BillButtonsDefault
+          session={sessionMock}
+          handlePrint={vi.fn()}
+          isEditing={false}
+        />,
+        { billContextMock: defaultBillContextMock, sessionMock }
+      );
+
+      await waitFor(() => {
+        expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
+      });
+
+      // Press F1 — should trigger the product lookup
+      fireEvent.keyDown(window, { key: "F1" });
+
+      // Currently the component has no branch for { success: true, data: null }
+      // so no toast is shown. This test expects the specific error toast
+      // message that will be added by the fix.
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          "El producto configurado para este atajo ya no existe"
+        );
+      });
+    });
+
+    // ─── AC12/T12: getShortcutConfigsAction error on mount ───
+
+    it("should handle getShortcutConfigsAction error on mount gracefully (AC12/T12)", async () => {
+      // Simulate a fetch failure — returns error instead of configs
+      vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
+        success: false,
+        error: "Error de conexión",
+      });
+
+      render(
+        <BillButtonsDefault
+          session={sessionMock}
+          handlePrint={vi.fn()}
+          isEditing={false}
+        />,
+        { billContextMock: defaultBillContextMock, sessionMock }
+      );
+
+      await waitFor(() => {
+        expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
+      });
+
+      // shortcutMap should be empty (no configs loaded)
+      // Pressing F1 should be a no-op since no shortcut configs are in the map
+      fireEvent.keyDown(window, { key: "F1" });
+
+      // No product lookup should be triggered
+      expect(
+        shortcutsActions.getProductByShortcutAction
+      ).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+
+      // Remapped keys should still work normally (F4 → factura)
+      fireEvent.keyDown(window, { key: "F4" });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Confirmar creación de Factura")
+        ).toBeInTheDocument();
       });
     });
   });

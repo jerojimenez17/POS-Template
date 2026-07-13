@@ -123,11 +123,12 @@ export async function deleteShortcutConfigAction(
 }
 
 export async function getProductByShortcutAction(
-  key: ShortcutKey
+  key: ShortcutKey,
+  overrideBusinessId?: string
 ) {
   try {
     const session = await auth();
-    const businessId = getSessionBusinessId(session);
+    const businessId = overrideBusinessId || getSessionBusinessId(session);
     if (!businessId) {
       return unauthorized();
     }
