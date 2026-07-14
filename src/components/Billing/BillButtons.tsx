@@ -28,6 +28,12 @@ import { Lock, FileText, Wallet, CheckCircle } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useFeatures } from "@/hooks/useFeatures";
 import { createBudgetAction } from "@/actions/budget";
+import {
+  getShortcutConfigsAction,
+  getProductByShortcutAction,
+} from "@/actions/shortcuts";
+import type { ShortcutMap, ShortcutKey } from "@/models/ShortcutConfig";
+import Product from "@/models/Product";
 
 interface props {
   session: Session | null;
@@ -48,13 +54,20 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [openEditModal, setOpenEditModal] = useState(false);
   const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
-  const { BillState, dispatch, onOrderResetRef, printMode } =
+  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(true);
+  const businessId = (session?.user as { businessId?: string })?.businessId;
+  const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
+  const shortcutMapRef = useRef(shortcutMap);
+  // Sync ref with state after render
+  useEffect(() => {
+    shortcutMapRef.current = shortcutMap;
+  }, [shortcutMap]);
 
   const checkSession = () => {
     if (!hasActiveSession) {
@@ -64,6 +77,25 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     }
     return true;
   };
+
+  // Fetch shortcut configs on mount
+  useEffect(() => {
+    if (isEditing) return;
+    if (!businessId) return;
+    getShortcutConfigsAction(businessId).then((result) => {
+      if ("success" in result && result.success) {
+        const map: ShortcutMap = {};
+        for (const config of result.data) {
+          if (config.key && config.productId) {
+            map[config.key as ShortcutKey] = config.productId;
+          }
+        }
+        setShortcutMap(map);
+      } else {
+        console.error("Error fetching shortcut configs:", result);
+      }
+    });
+  }, [isEditing, session, businessId]);
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
@@ -81,46 +113,90 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     };
   }, []);
 
-  // Global keydown listeners for F1, F2, F3 shortcuts
+  // Global keydown listeners for keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isEditing) return; // Disable shortcuts while editing sale (has different buttons)
-      
-      if (e.key === 'F1') {
+
+      const currentShortcutMap = shortcutMapRef.current;
+
+      // F1, F2, F3 — shortcut product lookup (if configured)
+      if (["F1", "F2", "F3"].includes(e.key)) {
+        e.preventDefault(); // Always prevent browser defaults (Chrome opens help on F1)
+        const shortcutKey = e.key as ShortcutKey;
+        const productId = currentShortcutMap[shortcutKey];
+        if (!productId) return; // No shortcut configured → no-op
+        if (!checkSession()) return;
+        if (session?.user.email) {
+          dispatch({ type: "sellerName", payload: session.user.email || "" });
+        }
+        // Fetch product and add to bill
+        getProductByShortcutAction(shortcutKey, businessId).then((result) => {
+          if ("success" in result && result.success && result.data) {
+            const productToAdd = {
+              ...result.data,
+              salePrice: 0,
+              amount: 1,
+            } as Product;
+            addItem(productToAdd);
+            if (setFocusPriceProductId) {
+              setFocusPriceProductId(productToAdd.id);
+            }
+            toast.success("Producto agregado — ingrese el precio");
+          } else if ("success" in result && result.success && !result.data) {
+            // Config exists but product is null (deleted) — show error
+            toast.error("El producto configurado para este atajo ya no existe");
+          } else {
+            const errResult = result as { error?: string };
+            toast.error(errResult.error || "Error al obtener producto");
+          }
+        });
+        return;
+      }
+
+      // F4 — Factura modal (was F1)
+      if (e.key === 'F4') {
         e.preventDefault();
         if (!checkSession()) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
         setOpenFacturaModal(true);
+        return;
       }
-      if (e.key === 'F2') {
+      // F9 — Remito modal (was F2)
+      if (e.key === 'F9') {
         e.preventDefault();
         if (!checkSession()) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
         setOpenRemitoModal(true);
+        return;
       }
-      if (e.key === 'F3') {
+      // F10 — A cuenta modal (was F3)
+      if (e.key === 'F10') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length > 0) {
           setOpenAcuentaModal(true);
         }
+        return;
       }
-      if (e.key === 'F4') {
+      // F5 — Presupuesto modal (was F4, feature-gated)
+      if (e.key === 'F5') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length > 0) {
           setOpenBudgetModal(true);
         }
+        return;
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, dispatch, BillState.products?.length, isEditing, setOpenBudgetModal]);
+  }, [session, dispatch, BillState.products?.length, isEditing, addItem, setFocusPriceProductId, checkSession, businessId]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {

@@ -15,6 +15,8 @@ export default interface BillContextProps {
   setPrintMode: (mode: PrintMode) => void;
   qzTrayActive: boolean;
   setQzTrayActive: (active: boolean) => void;
+  focusPriceProductId: string | null;
+  setFocusPriceProductId: (id: string | null) => void;
 }
 
 export const BillContext = createContext<BillContextProps>(

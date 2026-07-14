@@ -41,6 +41,7 @@ const BillProvider = ({ children }: props) => {
     return true;
   });
   const onOrderResetRef = useRef<(() => void) | null>(null);
+  const [focusPriceProductId, setFocusPriceProductId] = React.useState<string | null>(null);
 
   const handleSetQzTrayActive = (active: boolean) => {
     setQzTrayActive(active);
@@ -69,6 +70,8 @@ const BillProvider = ({ children }: props) => {
     setPrintMode: setPrintMode,
     qzTrayActive: qzTrayActive,
     setQzTrayActive: handleSetQzTrayActive,
+    focusPriceProductId,
+    setFocusPriceProductId,
   };
   return <BillContext.Provider value={values}>{children}</BillContext.Provider>;
 };
