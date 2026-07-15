@@ -54,6 +54,7 @@ export default function PrintOptionsPopover({
             cuit: info.cuit,
             condicionIva: info.condicionIva,
             address: info.address,
+            inicioActividades: info.inicioActividades,
           }
       : undefined,
     date: sale.date || new Date(),
@@ -109,7 +110,10 @@ export default function PrintOptionsPopover({
       invoiceNumber: sale.CAE?.nroComprobante,
       qrSvgDataUrl: qrSvgDataUrl,
     });
-    
+
+    // Fixed width so html2canvas always captures at the same size
+    content.style.cssText = "width:750px;margin:0 auto;background:#fff;";
+
     const styleEl = document.createElement("style");
     styleEl.textContent = PDF_STYLES;
     content.insertBefore(styleEl, content.firstChild);

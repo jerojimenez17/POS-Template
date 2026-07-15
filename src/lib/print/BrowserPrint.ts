@@ -60,6 +60,7 @@ export interface ThermalReceiptData {
     cuit?: string | null;
     condicionIva?: string | null;
     address?: string | null;
+    inicioActividades?: Date | string | null;
   };
   date: Date;
   documentType: string;

@@ -126,6 +126,7 @@ const PrintableTable = ({
         cuit: billingInfo.cuit,
         condicionIva: billingInfo.condicionIva,
         address: billingInfo.address,
+        inicioActividades: billingInfo.inicioActividades,
       } : undefined,
       date: state.date || new Date(),
       documentType: state.typeDocument || "DNI",
@@ -160,6 +161,9 @@ const PrintableTable = ({
         invoiceNumber: activeCae?.nroComprobante,
         qrSvgDataUrl: qrSvgDataUrl,
       });
+
+      // Fixed width so html2canvas always captures at the same size
+      content.style.cssText = "width:750px;margin:0 auto;background:#fff;";
 
       const styleEl = document.createElement("style");
       styleEl.textContent = PDF_STYLES;

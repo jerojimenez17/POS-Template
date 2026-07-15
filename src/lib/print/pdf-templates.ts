@@ -11,48 +11,91 @@ export const PDF_STYLES = `
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { 
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
-    font-size: 14px;
-    line-height: 1.4;
-    color: #1a1a1a;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #1e293b;
   }
-  .invoice-container { padding: 30px; width: 750px; max-width: 100%; margin: 0 auto; }
-  .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #2563EB; padding-bottom: 15px; }
-  .company-name { font-size: 26px; font-weight: 700; color: #2563EB; text-transform: uppercase; letter-spacing: 1px; line-height: 1.1; }
-  .company-details { font-size: 12px; color: #666; margin-top: 5px; }
-  .invoice-box { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 6px; padding: 15px 20px; margin: 15px 0; display: flex; justify-content: space-between; align-items: center; }
-  .invoice-box-left { text-align: left; }
-  .invoice-box-right { text-align: right; }
-  .invoice-type { font-size: 18px; font-weight: 700; color: #2563EB; margin-bottom: 4px; }
-  .invoice-number { font-size: 14px; color: #666; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; }
-  .info-section { background: #fff; border: 1px solid #E5E7EB; border-radius: 6px; padding: 12px; }
-  .info-section-title { font-size: 11px; font-weight: 600; color: #2563EB; text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
-  .info-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
-  .info-label { color: #666; font-weight: 500; }
-  .info-value { font-weight: 600; color: #1a1a1a; }
-  table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-  thead { background: #2563EB; color: #fff; }
-  th { padding: 10px 8px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .invoice-container { width: 750px; margin: 0 auto; padding: 30px 35px; background: #fff; }
+
+  /* ── Header ── */
+  .header { text-align: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 3px solid #0f172a; }
+  .company-name { font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: 0.3px; }
+  .company-details { font-size: 11px; color: #64748b; margin-top: 4px; }
+
+  /* ── Document type box ── */
+  .doc-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin: 14px 0; display: flex; justify-content: space-between; align-items: center; }
+  .doc-type { font-size: 16px; font-weight: 700; color: #0f172a; }
+  .doc-number { font-size: 11px; color: #64748b; margin-top: 3px; }
+  .doc-meta { font-size: 11px; color: #475569; }
+  .doc-meta strong { color: #0f172a; }
+
+  /* ── Info grid ── */
+  .info-grid { display: flex; gap: 14px; margin: 14px 0; }
+  .info-grid > * { flex: 1; }
+  .info-section { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 14px; }
+  .info-section-title { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
+  .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; }
+  .info-label { color: #64748b; }
+  .info-value { font-weight: 600; color: #0f172a; text-align: right; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+  thead { background: #1e293b; color: #fff; }
+  th { padding: 8px 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
   th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: right; }
-  tbody tr:nth-child(even) { background: #F9FAFB; }
-  td { padding: 10px 8px; font-size: 13px; border-bottom: 1px solid #E5E7EB; }
+  td { padding: 7px 8px; font-size: 11px; border-bottom: 1px solid #e2e8f0; color: #1e293b; }
   td:nth-child(2), td:nth-child(3), td:nth-child(4) { text-align: right; }
-  .totals-section { margin-top: 15px; border-top: 2px solid #2563EB; padding-top: 15px; }
-  .total-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; font-weight: 500; }
-  .total-row.grand-total { font-size: 20px; font-weight: 700; color: #2563EB; border-top: 1px solid #E5E7EB; padding-top: 10px; margin-top: 10px; }
-  .discount { color: #059669; }
-  .footer { margin-top: 20px; border-top: 1px solid #E5E7EB; padding-top: 15px; text-align: center; }
-  .cae-banner { display: flex; align-items: center; justify-content: space-between; gap: 20px; border-top: 2px solid #E5E7EB; margin-top: 30px; padding-top: 20px; }
-  .cae-qr { width: 110px; flex-shrink: 0; background: #fff; padding: 4px; border: 1px solid #eee; border-radius: 4px; }
-  .cae-info { flex: 1; text-align: center; }
-  .cae-info-title { font-weight: 700; font-size: 16px; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
-  .cae-info-text { font-size: 14px; margin-bottom: 4px; }
-  .cae-info-text span.label { font-weight: 700; color: #4B5563; }
-  .cae-logo { width: 110px; flex-shrink: 0; text-align: center; opacity: 0.6; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .cae-logo-inner { border: 2px dashed #D1D5DB; padding: 15px 10px; border-radius: 4px; font-weight: 700; font-size: 12px; color: #9CA3AF; width: 100%; }
-  .legal-text { font-size: 10px; color: #6B7280; font-style: italic; line-height: 1.3; margin-top: 12px; padding-top: 12px; border-top: 1px solid #E5E7EB; max-width: 400px; margin-left: auto; margin-right: auto; text-align: center; }
-  .thank-you { font-size: 16px; font-weight: 700; color: #2563EB; text-align: center; margin-top: 30px; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  /* ── Totals ── */
+  .totals-section { margin-top: 10px; border-top: 2px solid #1e293b; padding-top: 12px; width: 55%; margin-left: auto; }
+  .total-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
+  .total-label { color: #475569; }
+  .total-value { font-weight: 600; color: #1e293b; }
+  .total-row.grand-total { font-size: 16px; font-weight: 800; color: #0f172a; border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 6px; }
+  .discount .total-value { color: #059669; }
+
+  /* ── CAE section ── */
+  .cae-section { margin-top: 24px; padding-top: 16px; border-top: 2px solid #e2e8f0; display: flex; align-items: flex-start; gap: 16px; }
+  .cae-qr { width: 90px; flex-shrink: 0; background: #fff; padding: 4px; border: 1px solid #e2e8f0; border-radius: 4px; }
+  .cae-qr img { width: 100%; height: auto; display: block; }
+  .cae-body { flex: 1; }
+  .cae-title { font-weight: 700; font-size: 12px; color: #0f172a; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .cae-row { font-size: 11px; margin-bottom: 3px; color: #475569; }
+  .cae-row strong { color: #0f172a; font-weight: 700; }
+  .cae-legal { font-size: 9px; color: #94a3b8; font-style: italic; line-height: 1.4; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e2e8f0; }
+
+  /* ── Footer ── */
+  .footer { margin-top: 16px; padding-top: 10px; border-top: 1px solid #e2e8f0; text-align: center; }
+  .thanks { font-size: 13px; font-weight: 700; color: #1e293b; letter-spacing: 0.5px; padding-bottom: 8px; }
 `;
+
+function formatDate(date: Date): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function formatInicioActividades(date: Date | string | null | undefined): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("es-AR", {
+    year: "numeric",
+    month: "long",
+  }).format(d);
+}
+
+function getDocTitle(billType: string, cae: unknown): string {
+  const lower = billType.toLowerCase();
+  if (lower.includes("presupuesto")) return "Presupuesto";
+  if (lower.includes("factura") || cae) return "Factura";
+  return "Comprobante";
+}
+
+function formatCurrency(value: number): string {
+  return value.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 export function buildPDFHTML(
   receiptData: {
@@ -62,6 +105,7 @@ export function buildPDFHTML(
       cuit?: string | null;
       condicionIva?: string | null;
       address?: string | null;
+      inicioActividades?: Date | string | null;
     };
     date: Date;
     documentType?: string;
@@ -91,71 +135,72 @@ export function buildPDFHTML(
 ): string {
   const { qrSvgDataUrl, invoiceNumber } = options || {};
   const billType = receiptData.billType || "Comprobante";
-  const seller = receiptData.seller || "";
   const paidMethod = receiptData.paidMethod || "Efectivo";
   const subtotal = receiptData.subtotal ?? 0;
-
-  const dateFormatted = new Intl.DateTimeFormat("es-AR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(receiptData.date);
-
   const invoiceNumberFormatted = formatInvoiceNumberFull(invoiceNumber);
+  const docTitle = getDocTitle(billType, receiptData.cae);
 
+  // ── Client info ──
   const clientInfo = receiptData.client
     ? `<div class="info-section">
-        <div class="info-section-title">Datos del Cliente</div>
-        <div class="info-row"><span class="info-label">Nombre:</span><span class="info-value">${receiptData.client}</span></div>
+        <div class="info-section-title">Cliente</div>
+        <div class="info-row"><span class="info-label">Nombre</span><span class="info-value">${receiptData.client}</span></div>
         ${receiptData.clientIvaCondition && receiptData.clientIvaCondition.toLowerCase() !== "consumidor final" ? `
-          <div class="info-row"><span class="info-label">Cond. IVA:</span><span class="info-value">${receiptData.clientIvaCondition.replace(/_/g, " ")}</span></div>
-          <div class="info-row"><span class="info-label">${receiptData.documentType}:</span><span class="info-value">${receiptData.clientDocumentNumber || ""}</span></div>
+          <div class="info-row"><span class="info-label">Cond. IVA</span><span class="info-value">${receiptData.clientIvaCondition.replace(/_/g, " ")}</span></div>
+          <div class="info-row"><span class="info-label">${receiptData.documentType || "Doc."}</span><span class="info-value">${receiptData.clientDocumentNumber || ""}</span></div>
         ` : ""}
       </div>`
-    : "";
+    : `<div class="info-section">
+        <div class="info-section-title">Cliente</div>
+        <div class="info-row"><span class="info-label">Nombre</span><span class="info-value">Consumidor Final</span></div>
+      </div>`;
 
+  // ── Establishment info (without Vendedor) ──
+  const inicioStr = formatInicioActividades(receiptData.businessInfo?.inicioActividades);
   const businessInfo = `
     <div class="info-section">
-      <div class="info-section-title">Datos del Establecimiento</div>
-      ${receiptData.businessInfo?.cuit ? `<div class="info-row"><span class="info-label">CUIT:</span><span class="info-value">${receiptData.businessInfo.cuit}</span></div>` : ""}
-      ${receiptData.businessInfo?.condicionIva ? `<div class="info-row"><span class="info-label">Cond. IVA:</span><span class="info-value">${receiptData.businessInfo.condicionIva.replace(/_/g, " ")}</span></div>` : ""}
-      ${receiptData.businessInfo?.address ? `<div class="info-row"><span class="info-label">Dirección:</span><span class="info-value">${receiptData.businessInfo.address}</span></div>` : ""}
-      <div class="info-row"><span class="info-label">Vendedor:</span><span class="info-value">${seller}</span></div>
-      <div class="info-row"><span class="info-label">Medio de Pago:</span><span class="info-value">${paidMethod}</span></div>
+      <div class="info-section-title">Establecimiento</div>
+      ${receiptData.businessInfo?.cuit ? `<div class="info-row"><span class="info-label">CUIT</span><span class="info-value">${receiptData.businessInfo.cuit}</span></div>` : ""}
+      ${receiptData.businessInfo?.condicionIva ? `<div class="info-row"><span class="info-label">Cond. IVA</span><span class="info-value">${receiptData.businessInfo.condicionIva.replace(/_/g, " ")}</span></div>` : ""}
+      ${receiptData.businessInfo?.address ? `<div class="info-row"><span class="info-label">Dirección</span><span class="info-value">${receiptData.businessInfo.address}</span></div>` : ""}
+      ${inicioStr ? `<div class="info-row"><span class="info-label">Inicio Act.</span><span class="info-value">${inicioStr}</span></div>` : ""}
+      <div class="info-row" style="margin-bottom: 0;"><span class="info-label">Pago</span><span class="info-value">${paidMethod}</span></div>
     </div>
   `;
 
+  // ── Products table ──
   const itemsRows = receiptData.products.map(p => `
     <tr>
       <td>${p.description}</td>
       <td>${p.amount}</td>
-      <td>$${p.unitPrice.toFixed(2)}</td>
-      <td>$${p.subtotal.toFixed(2)}</td>
+      <td>$${formatCurrency(p.unitPrice)}</td>
+      <td>$${formatCurrency(p.subtotal)}</td>
     </tr>
   `).join("");
 
+  // ── Totals ──
   const discountRow = receiptData.discountAmount
-    ? `<div class="total-row discount"><span>Descuento (${receiptData.discount}%)</span><span>-$${receiptData.discountAmount.toFixed(2)}</span></div>`
+    ? `<div class="total-row discount"><span class="total-label">Descuento (${receiptData.discount}%)</span><span class="total-value">-$${formatCurrency(receiptData.discountAmount)}</span></div>`
     : "";
 
+  // ── CAE section ──
   const caeSection = receiptData.cae
-    ? `<div class="cae-banner">
+    ? `<div class="cae-section">
         <div class="cae-qr">
-          ${qrSvgDataUrl ? `<img src="${qrSvgDataUrl}" alt="QR" style="width: 100%; height: auto; display: block;" />` : ""}
+          ${qrSvgDataUrl ? `<img src="${qrSvgDataUrl}" alt="QR" />` : ""}
         </div>
-        <div class="cae-info">
-          <div class="cae-info-title">Comprobante Autorizado</div>
-          <div class="cae-info-text"><span class="label">CAE:</span> ${receiptData.cae.cae}</div>
-          <div class="cae-info-text"><span class="label">Vencimiento:</span> ${receiptData.cae.vencimiento}</div>
-          <div class="legal-text">
-            El crédito fiscal discriminado en el presente comprobante, sólo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes de la Ley N°27.618
+        <div class="cae-body">
+          <div class="cae-title">Comprobante Autorizado</div>
+          <div class="cae-row"><strong>CAE:</strong> ${receiptData.cae.cae}</div>
+          <div class="cae-row"><strong>Vencimiento:</strong> ${receiptData.cae.vencimiento}</div>
+          <div class="cae-legal">
+            El crédito fiscal discriminado en el presente comprobante, sólo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes (Ley N°27.618).
           </div>
-        </div>
-        <div class="cae-logo">
-          <div class="cae-logo-inner">AFIP</div>
         </div>
       </div>`
     : "";
 
+  // ── Assemble ──
   return `
     <div class="invoice-container">
       <div class="header">
@@ -163,16 +208,13 @@ export function buildPDFHTML(
         ${receiptData.businessInfo?.razonSocial ? `<div class="company-details">${receiptData.businessInfo.razonSocial}</div>` : ""}
       </div>
 
-      <div class="invoice-box">
-        <div class="invoice-box-left">
-          <div class="invoice-type">${billType}</div>
-          ${invoiceNumberFormatted ? `<div class="invoice-number">N° ${invoiceNumberFormatted}</div>` : ""}
+      <div class="doc-box">
+        <div class="doc-box-left">
+          <div class="doc-type">${docTitle}</div>
+          ${invoiceNumberFormatted ? `<div class="doc-number">N° ${invoiceNumberFormatted}</div>` : ""}
         </div>
-        <div class="invoice-box-right">
-          <div class="info-row" style="margin: 0; justify-content: flex-end; gap: 6px;">
-            <span class="info-label">Fecha:</span>
-            <span class="info-value">${dateFormatted}</span>
-          </div>
+        <div class="doc-box-right">
+          <div class="doc-meta"><strong>Fecha:</strong> ${formatDate(receiptData.date)}</div>
         </div>
       </div>
 
@@ -196,14 +238,16 @@ export function buildPDFHTML(
       </table>
 
       <div class="totals-section">
-        <div class="total-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
+        <div class="total-row"><span class="total-label">Subtotal</span><span class="total-value">$${formatCurrency(subtotal)}</span></div>
         ${discountRow}
-        <div class="total-row grand-total"><span>TOTAL</span><span>$${receiptData.total.toFixed(2)}</span></div>
+        <div class="total-row grand-total"><span>TOTAL</span><span>$${formatCurrency(receiptData.total)}</span></div>
       </div>
 
       ${caeSection}
 
-      <div class="thank-you">¡Gracias por su compra!</div>
+      <div class="footer">
+        <div class="thanks">¡Gracias por su compra!</div>
+      </div>
     </div>
   `;
 }

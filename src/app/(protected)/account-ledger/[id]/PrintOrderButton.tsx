@@ -56,6 +56,7 @@ export default function PrintOrderButton({ order, session }: Props) {
         cuit: billingInfo.cuit as string,
         condicionIva: billingInfo.condicionIva as string,
         address: billingInfo.address as string,
+        inicioActividades: billingInfo.inicioActividades as Date | string | null | undefined,
       } : undefined,
       date: new Date(order.date),
       documentType: "DNI",
@@ -89,6 +90,7 @@ export default function PrintOrderButton({ order, session }: Props) {
     const receiptData = getPrintData();
     const content = document.createElement("div");
     content.innerHTML = buildPDFHTML(receiptData, {});
+    content.style.cssText = "width:750px;margin:0 auto;background:#fff;";
     const styleEl = document.createElement("style");
     styleEl.textContent = PDF_STYLES;
     content.insertBefore(styleEl, content.firstChild);
