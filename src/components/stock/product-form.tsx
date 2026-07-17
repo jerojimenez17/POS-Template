@@ -472,6 +472,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                 <FormControl>
                   <Input
                     {...field}
+                    onChange={(e) => field.onChange(e.target.value.replace(/"/g, "-"))}
                     placeholder=""
                     type="text"
                     className="border-black"
@@ -495,6 +496,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                   <div className="flex gap-2">
                     <Input
                       {...field}
+                      onChange={(e) => field.onChange(e.target.value.replace(/"/g, "-"))}
                       placeholder="Ej: 7790001234567"
                       type="text"
                       disabled={isPending}

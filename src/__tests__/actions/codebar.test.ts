@@ -19,6 +19,7 @@ vi.mock("@/lib/db", () => ({
       }
       return typeof promises === "function" ? promises() : promises;
     }),
+    $queryRaw: vi.fn().mockRejectedValue(new Error("pg_trgm not available")),
   },
 }));
 
@@ -54,10 +55,33 @@ describe("Product Codebar Feature Server Actions", () => {
         expect.objectContaining({
           where: expect.objectContaining({
             businessId: "business-123",
-            OR: [
+            OR: expect.arrayContaining([
               { code: "9876543210" },
               { codebar: "9876543210" },
-            ],
+            ]),
+          }),
+        })
+      );
+    });
+
+    it("should query normalized code replacing double quotes with hyphens", async () => {
+      const { db } = await import("@/lib/db");
+      const mockProduct = { id: "p-1", code: "tal-2992", codebar: "9876543210" };
+      (db.product.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(mockProduct);
+
+      const result = await getProductByCode("tal\"2992");
+
+      expect(result).toEqual(mockProduct);
+      expect(db.product.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            businessId: "business-123",
+            OR: expect.arrayContaining([
+              { code: "tal-2992" },
+              { codebar: "tal-2992" },
+              { code: "tal\"2992" },
+              { codebar: "tal\"2992" },
+            ]),
           }),
         })
       );
@@ -75,10 +99,14 @@ describe("Product Codebar Feature Server Actions", () => {
         expect.objectContaining({
           where: expect.objectContaining({
             businessId: "business-123",
-            OR: expect.arrayContaining([
-              { code: { contains: "9876", mode: "insensitive" } },
-              { codebar: { contains: "9876", mode: "insensitive" } },
-              { description: { contains: "9876", mode: "insensitive" } },
+            AND: expect.arrayContaining([
+              expect.objectContaining({
+                OR: expect.arrayContaining([
+                  { code: { contains: "9876", mode: "insensitive" } },
+                  { codebar: { contains: "9876", mode: "insensitive" } },
+                  { description: { contains: "9876", mode: "insensitive" } },
+                ]),
+              }),
             ]),
           }),
         })
@@ -116,10 +144,14 @@ describe("Product Codebar Feature Server Actions", () => {
         expect.objectContaining({
           where: expect.objectContaining({
             businessId: "business-123",
-            OR: expect.arrayContaining([
-              { code: { contains: "9876", mode: "insensitive" } },
-              { codebar: { contains: "9876", mode: "insensitive" } },
-              { description: { contains: "9876", mode: "insensitive" } },
+            AND: expect.arrayContaining([
+              expect.objectContaining({
+                OR: expect.arrayContaining([
+                  { code: { contains: "9876", mode: "insensitive" } },
+                  { codebar: { contains: "9876", mode: "insensitive" } },
+                  { description: { contains: "9876", mode: "insensitive" } },
+                ]),
+              }),
             ]),
           }),
         })
@@ -209,6 +241,39 @@ describe("Product Codebar Feature Server Actions", () => {
           data: expect.objectContaining({
             code: "tal-71",
             supplier: { connect: { id: "sup-1" } },
+          }),
+        })
+      );
+    });
+
+    it("should normalize double quotes to hyphens on creation", async () => {
+      const { db } = await import("@/lib/db");
+      (db.product.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "p-new" });
+
+      await createProduct({ ...baseProductInput, code: "tal\"2992", codebar: "1122\"3344" });
+
+      expect(db.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            code: "tal-2992",
+            codebar: "1122-3344",
+          }),
+        })
+      );
+    });
+
+    it("should normalize double quotes to hyphens on update", async () => {
+      const { db } = await import("@/lib/db");
+      (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "p-edit" });
+
+      await updateProduct("p-1", { ...baseProductInput, code: "tal\"2992", codebar: "1122\"3344" });
+
+      expect(db.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "p-1" },
+          data: expect.objectContaining({
+            code: "tal-2992",
+            codebar: "1122-3344",
           }),
         })
       );
