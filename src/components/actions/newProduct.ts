@@ -22,15 +22,6 @@ export const newProduct = async (values: NewProductInput) => {
   try {
     let finalCode = values.code ? values.code.replace(/"/g, "-") : "";
     const finalCodebar = values.codebar ? values.codebar.replace(/"/g, "-") : values.codebar;
-    if (values.supplier && finalCode) {
-      const supplier = await db.supplier.findUnique({ where: { id: values.supplier } });
-      if (supplier) {
-        const prefix = supplier.name.toLowerCase().replace(/\s+/g, '').slice(0, 3);
-        if (!finalCode.startsWith(`${prefix}-`)) {
-          finalCode = `${prefix}-${finalCode}`;
-        }
-      }
-    }
 
     const product = await db.product.create({
       data: {

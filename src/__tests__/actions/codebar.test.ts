@@ -206,56 +206,16 @@ describe("Product Codebar Feature Server Actions", () => {
       );
     });
 
-    it("should auto-prefix code when supplier is selected on creation", async () => {
-      const { db } = await import("@/lib/db");
-      (db.supplier.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
-        id: "sup-1",
-        name: "Taladros Industriales",
-      });
-      (db.product.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "p-new" });
-
-      await createProduct({ ...baseProductInput, supplierId: "sup-1" });
-
-      expect(db.product.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            code: "tal-71", // supplier Taladros Industriales -> tal
-            supplier: { connect: { id: "sup-1" } },
-          }),
-        })
-      );
-    });
-
-    it("should not double-prefix if prefix already exists on creation", async () => {
-      const { db } = await import("@/lib/db");
-      (db.supplier.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
-        id: "sup-1",
-        name: "Taladros Industriales",
-      });
-      (db.product.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "p-new" });
-
-      await createProduct({ ...baseProductInput, code: "tal-71", supplierId: "sup-1" });
-
-      expect(db.product.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            code: "tal-71",
-            supplier: { connect: { id: "sup-1" } },
-          }),
-        })
-      );
-    });
-
     it("should normalize double quotes to hyphens on creation", async () => {
       const { db } = await import("@/lib/db");
       (db.product.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "p-new" });
 
-      await createProduct({ ...baseProductInput, code: "tal\"2992", codebar: "1122\"3344" });
+      await createProduct({ ...baseProductInput, code: "29\"92", codebar: "1122\"3344" });
 
       expect(db.product.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            code: "tal-2992",
+            code: "29-92",
             codebar: "1122-3344",
           }),
         })
@@ -266,13 +226,13 @@ describe("Product Codebar Feature Server Actions", () => {
       const { db } = await import("@/lib/db");
       (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "p-edit" });
 
-      await updateProduct("p-1", { ...baseProductInput, code: "tal\"2992", codebar: "1122\"3344" });
+      await updateProduct("p-1", { ...baseProductInput, code: "29\"92", codebar: "1122\"3344" });
 
       expect(db.product.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: "p-1" },
           data: expect.objectContaining({
-            code: "tal-2992",
+            code: "29-92",
             codebar: "1122-3344",
           }),
         })
