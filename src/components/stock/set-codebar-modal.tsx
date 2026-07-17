@@ -86,7 +86,7 @@ const SetCodebarModal = ({ productId, currentCodebar, onSuccess }: Props) => {
                 <Input
                   id="codebar-input"
                   value={codebar}
-                  onChange={(e) => setCodebar(e.target.value)}
+                  onChange={(e) => setCodebar(e.target.value.replace(/"/g, "-"))}
                   placeholder="Ej: 7790001234567"
                   disabled={isPending}
                   onKeyDown={(e) => {

@@ -787,6 +787,46 @@ describe("PrintableTable Component", () => {
     });
   });
 
+  describe("CA-14: Redundant search removed", () => {
+    it("should NOT show 'Búsqueda rápida de producto' button text", () => {
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+        />
+      );
+
+      // Currently: the button with this text IS rendered → queryByText returns element → assertion fails
+      // After removal: button is gone → queryByText returns null → assertion passes
+      expect(screen.queryByText("Búsqueda rápida de producto")).toBeNull();
+    });
+
+    it("should have exactly ONE product search input", () => {
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+        />
+      );
+
+      // Currently: clicking this toggle reveals a redundant ProductSearchSelect input,
+      // so getAllByPlaceholderText returns 2 matches → assertion fails
+      // After removal: toggle is gone → conditional skips click → 1 match → assertion passes
+      const toggleBtn = screen.queryByText("Búsqueda rápida de producto");
+      if (toggleBtn) {
+        fireEvent.click(toggleBtn);
+      }
+
+      // After removal, only ProductSearchBar's input matches /Buscar producto/
+      const searchInputs = screen.getAllByPlaceholderText(/Buscar producto/);
+      expect(searchInputs).toHaveLength(1);
+    });
+  });
+
   describe("CA-13: Inline edit of units on double-click", () => {
     it("renders a <span> (not an <input>) for 'unidades' products in display mode [AC-01]", () => {
       const products = [

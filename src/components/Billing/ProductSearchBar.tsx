@@ -29,6 +29,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   const [supplierSearch, setSupplierSearch] = useState("");
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [duplicateProducts, setDuplicateProducts] = useState<Product[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const supplierContainerRef = useRef<HTMLDivElement>(null);
@@ -87,13 +88,18 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   }, []);
 
   const performSearch = async (value: string, supId: string) => {
-    const results = await getProductsBySearch(value, supId || undefined);
-    setSuggestions(results.map(ProductPrismaAdapter.toDomain));
+    try {
+      const results = await getProductsBySearch(value, supId || undefined);
+      setSuggestions(results.map(ProductPrismaAdapter.toDomain));
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   // Refresh suggestions when supplier changes and there's an active search
   useEffect(() => {
     if (searchCodeRef.current.length >= 2) {
+      setIsSearching(true);
       performSearch(searchCodeRef.current, supplierId);
     }
   }, [supplierId]);
@@ -140,11 +146,14 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
     }
 
     if (value.length >= 2) {
+      // Show searching state immediately; the debounced search will reset it
+      setIsSearching(true);
       searchTimeout.current = setTimeout(() => {
         performSearch(value, supplierId);
-      }, 300);
+      }, 400);
     } else {
       setSuggestions([]);
+      setIsSearching(false);
     }
   };
 
@@ -287,6 +296,11 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
             autoComplete="off"
             spellCheck={false}
           />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+            </div>
+          )}
           {suggestions.length > 0 && (
             <div className="absolute z-20 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl max-h-72 overflow-y-auto">
               {suggestions.map((product, index) => (

@@ -67,13 +67,14 @@ export const createProduct = async (data: Product) => {
   if (!session?.user?.businessId) return { error: "No autorizado" };
 
   try {
-    let finalCode = data.code;
-    if (data.supplierId && data.code) {
+    let finalCode = data.code ? data.code.replace(/"/g, "-") : "";
+    const finalCodebar = data.codebar ? data.codebar.replace(/"/g, "-") : data.codebar;
+    if (data.supplierId && finalCode) {
       const supplier = await db.supplier.findUnique({ where: { id: data.supplierId } });
       if (supplier) {
         const prefix = supplier.name.toLowerCase().replace(/\s+/g, '').slice(0, 3);
-        if (!data.code.startsWith(`${prefix}-`)) {
-          finalCode = `${prefix}-${data.code}`;
+        if (!finalCode.startsWith(`${prefix}-`)) {
+          finalCode = `${prefix}-${finalCode}`;
         }
       }
     }
@@ -81,7 +82,7 @@ export const createProduct = async (data: Product) => {
     const product = await db.product.create({
       data: {
         code: finalCode,
-        codebar: data.codebar || null,
+        codebar: finalCodebar || null,
         description: data.description,
         brand: data.brandId ? { connect: { id: data.brandId } } : undefined,
         category: data.categoryId ? { connect: { id: data.categoryId } } : undefined,
@@ -629,13 +630,14 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
   if (!session?.user?.businessId) return { error: "No authorized" };
 
   try {
-    let finalCode = data.code;
-    if (data.supplierId && data.code) {
+    let finalCode = data.code ? data.code.replace(/"/g, "-") : data.code;
+    const finalCodebar = data.codebar ? data.codebar.replace(/"/g, "-") : data.codebar;
+    if (data.supplierId && finalCode) {
       const supplier = await db.supplier.findUnique({ where: { id: data.supplierId } });
       if (supplier) {
         const prefix = supplier.name.toLowerCase().replace(/\s+/g, '').slice(0, 3);
-        if (!data.code.startsWith(`${prefix}-`)) {
-          finalCode = `${prefix}-${data.code}`;
+        if (!finalCode.startsWith(`${prefix}-`)) {
+          finalCode = `${prefix}-${finalCode}`;
         }
       }
     }
@@ -650,7 +652,7 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
       where: { id },
       data: {
         code: finalCode,
-        codebar: data.codebar !== undefined ? (data.codebar || null) : undefined,
+        codebar: data.codebar !== undefined ? (finalCodebar || null) : undefined,
         description: data.description,
         brand: data.brandId ? { connect: { id: data.brandId } } : { disconnect: true },
         category: data.categoryId ? { connect: { id: data.categoryId } } : { disconnect: true },
@@ -836,11 +838,14 @@ const getProductsExactCode = async (
   skip: number,
   filters: { categoryId?: string; brandId?: string; unit?: string; codeOnly?: boolean },
 ) => {
+  const normalizedSearch = search.replace(/"/g, "-");
   const where: Prisma.ProductWhereInput = {
     businessId,
     OR: [
       { code: { equals: search, mode: "insensitive" } },
+      { code: { equals: normalizedSearch, mode: "insensitive" } },
       { codebar: { equals: search, mode: "insensitive" } },
+      { codebar: { equals: normalizedSearch, mode: "insensitive" } },
     ],
     ...(filters.categoryId && { categoryId: filters.categoryId }),
     ...(filters.brandId && { brandId: filters.brandId }),
@@ -878,6 +883,7 @@ const getProductsPaginatedWithRanking = async (
     type IdResult = { id: string };
 
     const { codeOnly } = filters;
+    const normalizedSearch = search.replace(/"/g, "-");
 
     const idResults = await db.$queryRaw<IdResult[]>(
       Prisma.sql`
@@ -890,12 +896,16 @@ const getProductsPaginatedWithRanking = async (
             ${codeOnly
               ? Prisma.sql`
                   similarity(COALESCE(p.code, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.code, ''), ${normalizedSearch}) > 0.15
                   OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.codebar, ''), ${normalizedSearch}) > 0.15
                 `
               : Prisma.sql`
                   similarity(COALESCE(p.description, ''), ${search}) > 0.15
                   OR similarity(COALESCE(p.code, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.code, ''), ${normalizedSearch}) > 0.15
                   OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
+                  OR similarity(COALESCE(p.codebar, ''), ${normalizedSearch}) > 0.15
                   OR similarity(COALESCE(b.name, ''), ${search}) > 0.15
                   OR similarity(COALESCE(s.name, ''), ${search}) > 0.15
                 `
@@ -905,17 +915,21 @@ const getProductsPaginatedWithRanking = async (
           ${filters.brandId ? Prisma.sql`AND p."brandId" = ${filters.brandId}` : Prisma.empty}
           ${filters.unit ? Prisma.sql`AND p."unit" = ${filters.unit}` : Prisma.empty}
         ORDER BY
-          (p.code = ${search} OR p.codebar = ${search}) DESC,
+          (p.code = ${search} OR p.code = ${normalizedSearch} OR p.codebar = ${search} OR p.codebar = ${normalizedSearch}) DESC,
           GREATEST(
             ${codeOnly
               ? Prisma.sql`
                   similarity(COALESCE(p.code, ''), ${search}),
-                  similarity(COALESCE(p.codebar, ''), ${search})
+                  similarity(COALESCE(p.code, ''), ${normalizedSearch}),
+                  similarity(COALESCE(p.codebar, ''), ${search}),
+                  similarity(COALESCE(p.codebar, ''), ${normalizedSearch})
                 `
               : Prisma.sql`
                   similarity(COALESCE(p.description, ''), ${search}),
                   similarity(COALESCE(p.code, ''), ${search}),
+                  similarity(COALESCE(p.code, ''), ${normalizedSearch}),
                   similarity(COALESCE(p.codebar, ''), ${search}),
+                  similarity(COALESCE(p.codebar, ''), ${normalizedSearch}),
                   similarity(COALESCE(b.name, ''), ${search}),
                   similarity(COALESCE(s.name, ''), ${search})
                 `
@@ -979,13 +993,19 @@ export const getProductByCode = async (code: string, supplierId?: string) => {
   const session = await auth();
   if (!session?.user?.businessId) return null;
 
+  const normalizedCode = code ? code.replace(/"/g, "-") : code;
+
   try {
     const product = await db.product.findFirst({
       where: {
         businessId: session.user.businessId,
         OR: [
-          { code: code },
-          { codebar: code },
+          { code: normalizedCode },
+          { codebar: normalizedCode },
+          ...(normalizedCode !== code ? [
+            { code: code },
+            { codebar: code },
+          ] : [])
         ],
         ...(supplierId ? { supplierId } : {}),
       },
@@ -1003,13 +1023,19 @@ export const getProductsByCode = async (code: string) => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
 
+  const normalizedCode = code ? code.replace(/"/g, "-") : code;
+
   try {
     const products = await db.product.findMany({
       where: {
         businessId: session.user.businessId,
         OR: [
-          { code: code },
-          { codebar: code },
+          { code: normalizedCode },
+          { codebar: normalizedCode },
+          ...(normalizedCode !== code ? [
+            { code: code },
+            { codebar: code },
+          ] : [])
         ],
       },
       include: { supplier: true, brand: true, category: true, subCategory: true },
@@ -1037,20 +1063,32 @@ const buildSearchFilter = (search?: string, codeOnly = false): Prisma.ProductWhe
   if (!search) return {};
   const words = search.split(/\s+/).filter(Boolean);
   return {
-    AND: words.map((word) => ({
-      OR: codeOnly
-        ? [
-            { code: { contains: word, mode: "insensitive" } },
-            { codebar: { contains: word, mode: "insensitive" } },
-          ]
-        : [
-            { code: { contains: word, mode: "insensitive" } },
-            { codebar: { contains: word, mode: "insensitive" } },
-            { description: { contains: word, mode: "insensitive" } },
-            { brand: { name: { contains: word, mode: "insensitive" } } },
-            { supplier: { name: { contains: word, mode: "insensitive" } } },
-          ],
-    })),
+    AND: words.map((word) => {
+      const variations = [word];
+      if (word.includes("-")) {
+        variations.push(word.replace(/-/g, '"'));
+      }
+      if (word.includes('"')) {
+        variations.push(word.replace(/"/g, '-'));
+      }
+      const uniqueVariations = Array.from(new Set(variations));
+      return {
+        OR: uniqueVariations.flatMap((v) => 
+          codeOnly
+            ? [
+                { code: { contains: v, mode: "insensitive" } },
+                { codebar: { contains: v, mode: "insensitive" } },
+              ]
+            : [
+                { code: { contains: v, mode: "insensitive" } },
+                { codebar: { contains: v, mode: "insensitive" } },
+                { description: { contains: v, mode: "insensitive" } },
+                { brand: { name: { contains: v, mode: "insensitive" } } },
+                { supplier: { name: { contains: v, mode: "insensitive" } } },
+              ]
+        )
+      };
+    }),
   };
 };
 
@@ -1072,6 +1110,7 @@ export const getProductsBySearch = async (query: string, supplierId?: string) =>
 
   try {
     const businessId = session.user.businessId;
+    const normalizedQuery = query.replace(/"/g, "-");
 
     // Short queries (< 3 chars): pg_trgm needs at least 3 chars for trigrams, use ILIKE
     if (query.length < 3) {
@@ -1087,7 +1126,9 @@ export const getProductsBySearch = async (query: string, supplierId?: string) =>
           GREATEST(
             COALESCE(similarity(COALESCE(p.description, ''), ${query}), 0),
             COALESCE(similarity(COALESCE(p.code, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(p.code, ''), ${normalizedQuery}), 0),
             COALESCE(similarity(COALESCE(p.codebar, ''), ${query}), 0),
+            COALESCE(similarity(COALESCE(p.codebar, ''), ${normalizedQuery}), 0),
             COALESCE(similarity(COALESCE(b.name, ''), ${query}), 0),
             COALESCE(similarity(COALESCE(s.name, ''), ${query}), 0)
           ) AS similarity
@@ -1098,7 +1139,9 @@ export const getProductsBySearch = async (query: string, supplierId?: string) =>
           AND (
             similarity(COALESCE(p.description, ''), ${query}) > 0.15
             OR similarity(COALESCE(p.code, ''), ${query}) > 0.15
+            OR similarity(COALESCE(p.code, ''), ${normalizedQuery}) > 0.15
             OR similarity(COALESCE(p.codebar, ''), ${query}) > 0.15
+            OR similarity(COALESCE(p.codebar, ''), ${normalizedQuery}) > 0.15
             OR similarity(COALESCE(b.name, ''), ${query}) > 0.15
             OR similarity(COALESCE(s.name, ''), ${query}) > 0.15
           )
@@ -1165,13 +1208,20 @@ export const getProductsFiltered = async (filters: {
   const skip = (currentPage - 1) * currentPageSize;
 
   try {
+    const searchNormalized = filters.search ? filters.search.replace(/"/g, "-") : "";
     const where: Prisma.ProductWhereInput = {
       businessId: session.user.businessId,
       ...(filters.search
         ? {
           OR: [
             { code: { contains: filters.search, mode: "insensitive" as const } },
+            ...(searchNormalized !== filters.search ? [
+              { code: { contains: searchNormalized, mode: "insensitive" as const } }
+            ] : []),
             { codebar: { contains: filters.search, mode: "insensitive" as const } },
+            ...(searchNormalized !== filters.search ? [
+              { codebar: { contains: searchNormalized, mode: "insensitive" as const } }
+            ] : []),
             { description: { contains: filters.search, mode: "insensitive" as const } },
           ],
         }
@@ -1216,13 +1266,20 @@ export const getFilteredProductIds = async (filters: {
   const session = await auth();
   if (!session?.user?.businessId) return [];
 
+  const searchNormalized = filters.search ? filters.search.replace(/"/g, "-") : "";
   const where: Prisma.ProductWhereInput = {
     businessId: session.user.businessId,
     ...(filters.search
       ? {
           OR: [
             { code: { contains: filters.search, mode: "insensitive" as const } },
+            ...(searchNormalized !== filters.search ? [
+              { code: { contains: searchNormalized, mode: "insensitive" as const } }
+            ] : []),
             { codebar: { contains: filters.search, mode: "insensitive" as const } },
+            ...(searchNormalized !== filters.search ? [
+              { codebar: { contains: searchNormalized, mode: "insensitive" as const } }
+            ] : []),
             { description: { contains: filters.search, mode: "insensitive" as const } },
           ],
         }

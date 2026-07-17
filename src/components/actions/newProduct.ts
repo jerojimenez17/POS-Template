@@ -20,8 +20,9 @@ export const newProduct = async (values: NewProductInput) => {
   }
 
   try {
-    let finalCode = values.code;
-    if (values.supplier && values.code) {
+    let finalCode = values.code ? values.code.replace(/"/g, "-") : "";
+    const finalCodebar = values.codebar ? values.codebar.replace(/"/g, "-") : values.codebar;
+    if (values.supplier && finalCode) {
       const supplier = await db.supplier.findUnique({ where: { id: values.supplier } });
       if (supplier) {
         const prefix = supplier.name.toLowerCase().replace(/\s+/g, '').slice(0, 3);
@@ -34,7 +35,7 @@ export const newProduct = async (values: NewProductInput) => {
     const product = await db.product.create({
       data: {
         code: finalCode,
-        codebar: values.codebar || null,
+        codebar: finalCodebar || null,
         description: values.description,
         brandId: values.brand || undefined,
         categoryId: values.category || undefined,
