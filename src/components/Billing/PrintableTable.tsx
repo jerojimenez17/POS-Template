@@ -144,7 +144,7 @@ const PrintableTable = ({
       subtotal,
       discount: state.discount > 0 ? state.discount : undefined,
       discountAmount: state.discount > 0 ? subtotal * (state.discount / 100) : undefined,
-      total: state.totalWithDiscount || subtotal * (1 - state.discount / 100),
+      total: Number(state.totalWithDiscount || subtotal * (1 - state.discount / 100)),
       cae: activeCae?.CAE ? {
         cae: activeCae.CAE,
         vencimiento: activeCae.vencimiento,
@@ -223,7 +223,9 @@ const PrintableTable = ({
   const totals = useMemo(() => {
     const subtotal = state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0);
     const discountAmount = state.discount > 0 ? subtotal * (state.discount / 100) : 0;
-    const total = state.totalWithDiscount || subtotal * (1 - state.discount / 100);
+    const total = state.totalWithDiscount !== undefined
+      ? Number(state.totalWithDiscount)
+      : subtotal * (1 - state.discount / 100);
     return { subtotal, discountAmount, total };
   }, [state.products, state.discount, state.totalWithDiscount]);
 
@@ -393,7 +395,7 @@ const PrintableTable = ({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">
-                    ${product.salePrice.toLocaleString("es-AR", {
+                    ${(product.salePrice).toLocaleString("es-AR", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
