@@ -69,15 +69,6 @@ export const createProduct = async (data: Product) => {
   try {
     let finalCode = data.code ? data.code.replace(/"/g, "-") : "";
     const finalCodebar = data.codebar ? data.codebar.replace(/"/g, "-") : data.codebar;
-    if (data.supplierId && finalCode) {
-      const supplier = await db.supplier.findUnique({ where: { id: data.supplierId } });
-      if (supplier) {
-        const prefix = supplier.name.toLowerCase().replace(/\s+/g, '').slice(0, 3);
-        if (!finalCode.startsWith(`${prefix}-`)) {
-          finalCode = `${prefix}-${finalCode}`;
-        }
-      }
-    }
 
     const product = await db.product.create({
       data: {
@@ -632,15 +623,6 @@ export const updateProduct = async (id: string, data: UpdateProductInput) => {
   try {
     let finalCode = data.code ? data.code.replace(/"/g, "-") : data.code;
     const finalCodebar = data.codebar ? data.codebar.replace(/"/g, "-") : data.codebar;
-    if (data.supplierId && finalCode) {
-      const supplier = await db.supplier.findUnique({ where: { id: data.supplierId } });
-      if (supplier) {
-        const prefix = supplier.name.toLowerCase().replace(/\s+/g, '').slice(0, 3);
-        if (!finalCode.startsWith(`${prefix}-`)) {
-          finalCode = `${prefix}-${finalCode}`;
-        }
-      }
-    }
 
     if (data.imagesToDelete && data.imagesToDelete.length > 0) {
       await db.productImage.deleteMany({
