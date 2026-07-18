@@ -27,6 +27,8 @@ import { Suspense } from "react";
 import { PusherListener } from "./PusherListener";
 import ConfirmOrderButton from "./ConfirmOrderButton";
 import { LocalDate } from "@/components/ui/LocalDate";
+import { OverdueIndicator } from "@/components/ui/OverdueIndicator";
+import { isOrderOverdue } from "@/utils/overdue";
 import SearchLedger from "./SearchLedger";
 import type { Session } from "next-auth";
 
@@ -40,6 +42,7 @@ type OrderWithClient = {
   paidStatus: string;
   clientId: string | null;
   client: { id: string; name: string | null } | null;
+  notes?: string | null;
 };
 
 interface OrdersTableProps {
@@ -126,8 +129,18 @@ async function OrdersTable({ status, search, session }: OrdersTableProps) {
           <TableRow key={order.id}>
             <TableCell className="font-medium">
               <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                {order.client?.name || "Sin cliente"}
+                <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1">
+                    {isOrderOverdue(order) && <OverdueIndicator />}
+                    <span className="font-medium truncate">{order.client?.name || "Sin cliente"}</span>
+                  </div>
+                  {order.notes && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2" title={order.notes}>
+                      {order.notes}
+                    </p>
+                  )}
+                </div>
               </div>
             </TableCell>
             <TableCell>

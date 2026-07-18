@@ -34,6 +34,7 @@ interface CreateUnpaidOrderInput {
   total: number;
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
+  notes?: string;
 }
 
 interface RegisterPaymentInput {
@@ -131,6 +132,7 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
           status: "confirmado",
           paidStatus: "inpago",
           date: new Date(),
+          notes: input.notes || null,
           clientIvaCondition: input.clientIvaCondition,
           clientDocumentNumber: input.clientDocumentNumber,
           items: {
