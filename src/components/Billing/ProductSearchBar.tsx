@@ -364,6 +364,21 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
           )}
         </div>
 
+        {/* Scanner button */}
+        <button
+          className="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus-visible:ring-1 focus-visible:ring-ring"
+          onClick={() => setScannerOpen(true)}
+          aria-label="Escanear codigo"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+            <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+            <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+            <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+            <line x1="7" y1="12" x2="17" y2="12" />
+          </svg>
+        </button>
+
         {/* Supplier combobox */}
         {hasSupplierFilter && (
           <div ref={supplierContainerRef} className="relative">
@@ -432,21 +447,6 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
             )}
           </div>
         )}
-
-        {/* Scanner button */}
-        <button
-          className="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus-visible:ring-1 focus-visible:ring-ring"
-          onClick={() => setScannerOpen(true)}
-          aria-label="Escanear codigo"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-            <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-            <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-            <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-            <line x1="7" y1="12" x2="17" y2="12" />
-          </svg>
-        </button>
       </div>
 
       {errorMessage && (
