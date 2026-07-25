@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getUnpaidOrders } from "@/actions/unpaid-orders";
 import { getBusinessBillingInfoAction } from "@/actions/business";
@@ -99,6 +99,15 @@ export default function AccountLedgerContent({
       channel.unbind("orders-update", handleUpdate);
     };
   }, [businessId]);
+
+  // Optimistic UI update when an order is confirmed
+  const handleOrderConfirmed = useCallback((orderId: string) => {
+    setAllOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId ? { ...o, status: "confirmado" } : o
+      )
+    );
+  }, []);
 
   // Debounce search + reset page
   useEffect(() => {
@@ -295,7 +304,10 @@ export default function AccountLedgerContent({
                         onClick={(e) => e.stopPropagation()}
                       >
                         {order.status === "pendiente" && (
-                          <ConfirmOrderButton orderId={order.id} />
+                          <ConfirmOrderButton
+                            orderId={order.id}
+                            onConfirmed={handleOrderConfirmed}
+                          />
                         )}
                         <PrintRowButton
                           orderId={order.id}

@@ -6,7 +6,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { updateOrderStatus } from "@/actions/orders";
 
-export default function ConfirmOrderButton({ orderId }: { orderId: string }) {
+export default function ConfirmOrderButton({
+  orderId,
+  onConfirmed,
+}: {
+  orderId: string;
+  onConfirmed?: (orderId: string) => void;
+}) {
   const [isConfirming, setIsConfirming] = useState(false);
 
   const handleConfirm = async () => {
@@ -17,6 +23,7 @@ export default function ConfirmOrderButton({ orderId }: { orderId: string }) {
         toast.error(result.error as string);
       } else {
         toast.success("Pedido confirmado");
+        onConfirmed?.(orderId);
       }
     } catch (error) {
        console.error("Confirmation error:", error);
