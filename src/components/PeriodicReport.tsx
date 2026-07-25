@@ -76,9 +76,11 @@ const PeriodicReport: React.FC<PeriodicReportProps> = ({ period, session }) => {
     setLoading(false);
   }, [period]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     fetchReport(date);
   }, [date, period, refreshToggle, fetchReport]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (session?.user?.businessId) {

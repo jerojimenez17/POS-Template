@@ -453,6 +453,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                               key={`new-${i}`}
                               className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-green-300"
                             >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={URL.createObjectURL(file)}
                                 alt=""

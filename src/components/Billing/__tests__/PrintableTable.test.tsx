@@ -123,7 +123,7 @@ describe("PrintableTable Component", () => {
       isDelinquent: false,
       isPlanAtLeast: () => true,
       isOverLimit: () => false,
-    } as any);
+    } as never);
   });
 
   afterEach(() => {

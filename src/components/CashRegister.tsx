@@ -81,11 +81,13 @@ const CashRegister = ({ session }: props) => {
   }, [filteredMovements, page, pageSize]);
 
   // Reset page when pageSize or filter changes
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (page > totalPages) {
       setPage(totalPages);
     }
   }, [filteredMovements.length, page, totalPages, pageSize]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">

@@ -140,7 +140,7 @@ describe("BillButtonsDefault - AFIP abort on feature disabled", () => {
       isDelinquent: false,
       isPlanAtLeast: () => true,
       isOverLimit: () => false,
-    } as any);
+    } as never);
     // jsdom does not implement window.open, mock it
     window.open = vi.fn().mockReturnValue({
       document: { write: vi.fn() },
@@ -159,7 +159,7 @@ describe("BillButtonsDefault - AFIP abort on feature disabled", () => {
 
     const user = userEvent.setup();
     render(
-      <BillContext.Provider value={mockCtx as any}>
+      <BillContext.Provider value={mockCtx as never}>
         <BillButtonsDefault
           session={mockSession as never}
           handlePrint={vi.fn()}
@@ -201,7 +201,7 @@ describe("BillButtonsDefault - AFIP abort on feature disabled", () => {
 
     const user = userEvent.setup();
     render(
-      <BillContext.Provider value={mockCtx as any}>
+      <BillContext.Provider value={mockCtx as never}>
         <BillButtonsDefault
           session={mockSession as never}
           handlePrint={vi.fn()}

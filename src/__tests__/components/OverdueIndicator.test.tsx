@@ -12,7 +12,7 @@ import { OverdueIndicator } from "@/components/ui/OverdueIndicator";
 vi.mock("@radix-ui/react-tooltip", () => ({
   Provider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   Root: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  Trigger: ({ children, asChild, ...props }: any) => (
+  Trigger: ({ children, ...props }: any) => (
     <span data-testid="tooltip-trigger" {...props}>
       {children}
     </span>

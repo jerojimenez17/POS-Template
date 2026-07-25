@@ -38,7 +38,7 @@ const ProductDashboard = () => {
     }, 300);
   }, []);
 
-  const fetchProducts = useCallback(async (pageNum: number, searchTerm: string, _codeOnlySearch?: boolean, _exactCodeSearch?: boolean) => {
+  const fetchProducts = useCallback(async (pageNum: number, searchTerm: string) => {
     setLoading(true);
     try {
       const result = await getProductsPaginated({
@@ -66,19 +66,19 @@ const ProductDashboard = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchProducts(page, debouncedSearch, codeOnly, exactCode);
+      fetchProducts(page, debouncedSearch);
     }, 0);
     return () => clearTimeout(timer);
-  }, [page, debouncedSearch, codeOnly, exactCode, fetchProducts]);
+  }, [page, debouncedSearch, fetchProducts]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
-    fetchProducts(newPage, debouncedSearch, codeOnly, exactCode);
-  }, [debouncedSearch, codeOnly, exactCode, fetchProducts]);
+    fetchProducts(newPage, debouncedSearch);
+  }, [debouncedSearch, fetchProducts]);
 
   const handleRefresh = useCallback(() => {
-    fetchProducts(page, debouncedSearch, codeOnly, exactCode);
-  }, [page, debouncedSearch, codeOnly, exactCode, fetchProducts]);
+    fetchProducts(page, debouncedSearch);
+  }, [page, debouncedSearch, fetchProducts]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">

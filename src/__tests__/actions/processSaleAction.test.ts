@@ -658,7 +658,7 @@ describe("AFIP Feature Gate - processSaleAction", () => {
     };
 
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
-      async (callback: Function) => {
+      async (callback: (tx: unknown) => Promise<unknown>) => {
         const tx = {
           cashboxSession: {
             findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
@@ -719,7 +719,7 @@ describe("AFIP Feature Gate - processSaleAction", () => {
     };
 
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
-      async (callback: Function) => {
+      async (callback: (tx: unknown) => Promise<unknown>) => {
         const tx = {
           cashboxSession: {
             findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
@@ -786,9 +786,9 @@ describe("updateOrderAction — CAE validation", () => {
       items: [],
     };
 
-    let mockTx: any;
+    let mockTx: { order: { findFirst?: ReturnType<typeof vi.fn>; update?: ReturnType<typeof vi.fn> } };
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
-      async (callback: Function) => {
+      async (callback: (tx: unknown) => Promise<unknown>) => {
         const tx = {
           order: {
             findFirst: vi.fn().mockResolvedValue(existingOrder),
@@ -859,9 +859,9 @@ describe("updateOrderAction — CAE validation", () => {
       items: [],
     };
 
-    let mockTx: any;
+    let mockTx: { order: { findFirst?: ReturnType<typeof vi.fn>; update?: ReturnType<typeof vi.fn> } };
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
-      async (callback: Function) => {
+      async (callback: (tx: unknown) => Promise<unknown>) => {
         const tx = {
           order: {
             findFirst: vi.fn().mockResolvedValue(existingOrderWithCAE),

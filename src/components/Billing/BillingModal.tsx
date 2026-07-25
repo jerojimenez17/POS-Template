@@ -37,6 +37,7 @@ const BillingModal = ({
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
   const [discount, setDiscount] = useState<number>(0);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (sale) {
       setIvaCondition(sale.IVACondition || "Consumidor Final");
@@ -45,6 +46,7 @@ const BillingModal = ({
       setDiscount(sale.discount || 0);
     }
   }, [sale, open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleBilling = async () => {
     setLoading(true);

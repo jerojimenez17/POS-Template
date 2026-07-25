@@ -1,13 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  createProduct,
-  updateProduct,
-  updateStockAmount,
-  bulkUpdateAmounts,
-  deleteProduct,
-} from "@/actions/stock";
-import { processSaleAction, processReturnAction } from "@/actions/sales";
-import { getDailyReportAction } from "@/actions/sales/history";
 
 const BUSINESS_ID = "business-123";
 

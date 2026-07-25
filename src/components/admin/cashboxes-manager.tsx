@@ -71,11 +71,13 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
   const totalCashboxPages = Math.max(1, Math.ceil(cashboxes.length / cashboxPageSize));
 
   // Reset page when data changes
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (cashboxPage > totalCashboxPages) {
       setCashboxPage(totalCashboxPages);
     }
   }, [cashboxes.length, cashboxPage, totalCashboxPages]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleCreate = () => {
     setEditingCashbox(null);

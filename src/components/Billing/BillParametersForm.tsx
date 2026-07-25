@@ -83,7 +83,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
         ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
       });
     };
-  }, [form, onOrderResetRef]);
+  }, [form, onOrderResetRef, ptoVentas]);
 
   // Sync form from BillContext when in cards layout (edit mode)
   const syncKey = `${BillState.IVACondition}-${BillState.documentNumber}-${BillState.paidMethod}`;

@@ -116,6 +116,7 @@ export default function ClientSelectionModal({
     }
   };
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (open) {
       fetchClients();
@@ -128,6 +129,7 @@ export default function ClientSelectionModal({
       setShowExistingOrderDialog(false);
     }
   }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const filteredClients = useMemo(() =>
     clients.filter((client) =>

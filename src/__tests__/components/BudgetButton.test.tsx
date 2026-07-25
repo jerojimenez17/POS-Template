@@ -146,7 +146,7 @@ describe("BudgetButton in BillButtonsDefault", () => {
       isDelinquent: false,
       isPlanAtLeast: () => true,
       isOverLimit: () => false,
-    } as any);
+    } as never);
     const mockCtx = createMockBillContext(2);
 
     render(
@@ -168,7 +168,7 @@ describe("BudgetButton in BillButtonsDefault", () => {
       isDelinquent: false,
       isPlanAtLeast: () => false,
       isOverLimit: () => false,
-    } as any);
+    } as never);
     const mockCtx = createMockBillContext(2);
 
     render(

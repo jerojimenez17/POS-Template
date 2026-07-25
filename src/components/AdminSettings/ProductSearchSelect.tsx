@@ -15,9 +15,6 @@ export interface ProductSearchSelectProps {
   selectedProduct?: Product | null;
   /** Placeholder text for the search input */
   placeholder?: string;
-  /** Optional supplierId filter for the search */
-  supplierId?: string;
-  /** Whether to show stock info in suggestions */
   showStock?: boolean;
   /** Whether to show the selected product card before the input */
   showSelectedCard?: boolean;
@@ -34,7 +31,6 @@ const ProductSearchSelect: React.FC<ProductSearchSelectProps> = ({
   onClear,
   selectedProduct,
   placeholder = "Buscar producto por código o nombre...",
-  supplierId,
   showStock = false,
   showSelectedCard = false,
   className,
@@ -88,7 +84,7 @@ const ProductSearchSelect: React.FC<ProductSearchSelectProps> = ({
       setSuggestions([]);
     }
     setLoading(false);
-  }, [supplierId]);
+  }, []);
 
   const debouncedSearch = useCallback((value: string) => {
     if (searchTimeoutRef.current) {

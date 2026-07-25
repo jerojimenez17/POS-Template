@@ -26,11 +26,13 @@ const PriceEditInput = ({ productId, salePrice }: Props) => {
   }, [focusPriceProductId, productId, salePrice, setFocusPriceProductId]);
 
   // Sync value when salePrice changes externally
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!isEditing) {
       setValue(salePrice.toString());
     }
   }, [salePrice, isEditing]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleBlur = () => {
     setIsEditing(false);

@@ -49,9 +49,11 @@ const DailyReport = () => {
     setLoading(false);
   };
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     fetchReport(date);
   }, [date]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handlePrevDay = () => setDate(subDays(date, 1));
   const handleNextDay = () => setDate(addDays(date, 1));

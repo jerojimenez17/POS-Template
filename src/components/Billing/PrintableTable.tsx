@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import React, { useRef, useState, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 import { BillContext } from "@/context/BillContext";
 import Product from "@/models/Product";
 import BillState from "@/models/BillState";
@@ -73,7 +73,7 @@ const PrintableTable = ({
 }: Props) => {
   const { BillState, addItem, removeItem, printMode, qzTrayActive } = React.useContext(BillContext);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
-  const [isClient, setIsClient] = useState(false);
+
   const [billingInfo, setBillingInfo] = useState<{
     razonSocial?: string | null;
     cuit?: string | null;
@@ -89,9 +89,13 @@ const PrintableTable = ({
   const lastPrintTrigger = useRef(0);
 
   // Fix hydration: Only run on client
-  useEffect(() => {
-    setIsClient(true);
+  const isClient = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
+  useEffect(() => {
     const fetchBillingInfo = async () => {
       const info = await getBusinessBillingInfoAction();
       if (info) setBillingInfo(info);
@@ -99,6 +103,7 @@ const PrintableTable = ({
     fetchBillingInfo();
   }, []);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const activeCae = forceCae || state.CAE;
     if (activeCae?.qrData) {
@@ -112,6 +117,7 @@ const PrintableTable = ({
       setQrSvgDataUrl(null);
     }
   }, [state.CAE, state.CAE?.qrData, forceCae]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const isRemito = !(forceCae || state.CAE)?.CAE || (forceCae || state.CAE)?.CAE === "";
   const billTypeDisplay = getBillTypeDisplay(state.billType, (forceCae || state.CAE)?.CAE, isRemito);
@@ -185,11 +191,13 @@ const PrintableTable = ({
         document.body.removeChild(content);
       }
     }
-  }, [state, session, billingInfo, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef]);
+  }, [state, session, billingInfo, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef, qzTrayActive]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setState(externalState || BillState || defaultBillState);
   }, [externalState, BillState]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (printTrigger > lastPrintTrigger.current && isClient) {
@@ -526,7 +534,7 @@ const PrintableTable = ({
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminar producto</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Eliminar "{deleteTarget?.description}" de la factura?
+              ¿Eliminar &quot;{deleteTarget?.description}&quot; de la factura?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

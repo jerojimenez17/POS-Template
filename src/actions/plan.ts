@@ -44,9 +44,9 @@ export async function getTrialInfo(): Promise<TrialInfo | null> {
       daysLeft,
       trialEndsAt: business.trialEndsAt,
       dailyLimits: {
-        sales: (plan as any).dailySalesLimit ?? 999999,
-        products: (plan as any).dailyProductsLimit ?? 999999,
-        clients: (plan as any).dailyClientsLimit ?? 999999,
+        sales: plan.dailySalesLimit ?? 999999,
+        products: plan.dailyProductsLimit ?? 999999,
+        clients: plan.dailyClientsLimit ?? 999999,
       },
     };
   } catch (e) {

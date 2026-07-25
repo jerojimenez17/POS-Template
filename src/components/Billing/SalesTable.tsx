@@ -43,11 +43,13 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
     }
   }, [user, seller]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setLiveSales(sales);
     setCursor(initialCursor);
     setHasMore(initialCursor !== null);
   }, [sales, initialCursor]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (session?.user?.businessId) {
@@ -158,9 +160,11 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
     return filteredSales.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredSales, currentPage, itemsPerPage]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setCurrentPage(1);
   }, [filteredSales.length, itemsPerPage]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div className="flex flex-col w-full">

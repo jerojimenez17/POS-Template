@@ -32,8 +32,8 @@ interface FeaturesFormProps {
   planDefinitions: Array<{
     id: string;
     name: string;
-    features: any;
-    limits: any;
+    features: unknown;
+    limits: unknown;
     description: string | null;
     displayOrder: number;
   }>;

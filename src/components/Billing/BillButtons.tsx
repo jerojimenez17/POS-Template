@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Session } from "next-auth";
 import { Button } from "../ui/button";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, useCallback } from "react";
 import { BillContext } from "@/context/BillContext";
 import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
@@ -71,14 +71,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     () => typeof navigator !== "undefined" ? navigator.onLine : true
   );
 
-  const checkSession = () => {
+  const checkSession = useCallback(() => {
     if (!hasActiveSession) {
       toast.error("Debe abrir una sesión de caja antes de realizar esta operación");
       setIsOpeningModalOpen(true);
       return false;
     }
     return true;
-  };
+  }, [hasActiveSession, setIsOpeningModalOpen]);
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
@@ -115,7 +115,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       }
     };
     loadShortcuts();
-  }, []);
+  }, [session?.user?.businessId]);
 
   // Global keydown listeners for keyboard shortcuts
   useEffect(() => {

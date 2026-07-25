@@ -29,6 +29,7 @@ export default function PrintOptionsPopover({
 
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (sale.CAE?.qrData) {
       QRCode.toString(sale.CAE.qrData, { type: "svg", margin: 0, width: 60 })
@@ -41,6 +42,7 @@ export default function PrintOptionsPopover({
       setQrSvgDataUrl(null);
     }
   }, [sale.CAE?.qrData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const hasCAE = Boolean(sale.CAE?.CAE);
   const isRemito = !sale.CAE || sale.CAE.CAE === "";

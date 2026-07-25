@@ -130,7 +130,7 @@ describe("PrintableTable Barcode Scanning", () => {
       isDelinquent: false,
       isPlanAtLeast: () => true,
       isOverLimit: () => false,
-    } as any);
+    } as never);
     mockGetProductsByCode.mockResolvedValue([]);
     mockGetProductsBySearch.mockResolvedValue([]);
   });

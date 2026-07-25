@@ -80,9 +80,11 @@ const ShortcutConfigSection = ({ businessId }: Props) => {
     setLoading(false);
   }, [businessId]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     fetchConfigs();
   }, [fetchConfigs]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSelectProduct = (key: ShortcutKey, product: Product) => {
     setSelectedProducts((prev) => ({ ...prev, [key]: product }));

@@ -53,7 +53,7 @@ const BulkUpdatePage = () => {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [filterVersion, setFilterVersion] = useState(0);
-  const [selectAllLoading, setSelectAllLoading] = useState(false);
+  const [selectAllLoading] = useState(false);
   const isFirstLoadAfterFilter = useRef(true);
   const [dialogState, setDialogState] = useState<{
     open: boolean;
@@ -91,7 +91,7 @@ const BulkUpdatePage = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters, page, pageSize]);
+  }, [filters, pageSize]);
 
   const loadFiltersData = async () => {
     try {

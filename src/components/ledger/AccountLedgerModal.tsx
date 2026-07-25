@@ -228,12 +228,14 @@ const AccountLedgerModal = ({ billState }: props) => {
     });
   };
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const results = accounts.filter((account) =>
       account.clientName.toLowerCase().includes(search.toLowerCase())
     );
     setFilteredAccounts(results);
   }, [search, accounts]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div className="flex flex-col gap-4 w-full">

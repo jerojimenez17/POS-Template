@@ -47,7 +47,7 @@ export const PaymentStatusGuard = () => {
       }
     };
     checkStatus();
-  }, []);
+  }, [setDelinquent]);
 
   // MOROSO → render blocker immediately (synchronous)
   if (isMoroso) {
