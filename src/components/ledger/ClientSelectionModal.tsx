@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, startTransition } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
@@ -118,7 +118,6 @@ export default function ClientSelectionModal({
 
   useEffect(() => {
     if (open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchClients();
       setSelectedClientId("");
       setOrderClientCuit("");
@@ -135,31 +134,6 @@ export default function ClientSelectionModal({
       client.name.toLowerCase().includes(search.toLowerCase())
     ),
   [clients, search]);
-
-  useEffect(() => {
-    if (open) {
-      startTransition(() => {
-        setSelectedClientId("");
-        setExistingOrders([]);
-        setShowExistingOrderDialog(false);
-        setIsFetchingClients(true);
-      });
-      fetch("/api/clients")
-        .then((res) => res.json())
-        .then((data) => {
-          startTransition(() => {
-            setClients(data.clients || data);
-            setIsFetchingClients(false);
-          });
-        })
-        .catch((error) => {
-          console.error("Error fetching clients:", error);
-          startTransition(() => {
-            setIsFetchingClients(false);
-          });
-        });
-    }
-  }, [open]);
 
   const handleCreateClient = async () => {
     if (!newClientName.trim()) {

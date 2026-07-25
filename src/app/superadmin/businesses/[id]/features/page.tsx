@@ -91,7 +91,7 @@ export default async function BusinessFeaturesPage({ params }: FeaturesPageProps
       hasMultiCashbox: resolved.hasMultiCashbox,
       hasSupplierFilter: resolved.hasSupplierFilter,
       hasBudget: resolved.hasBudget,
-      hasNegativeStock: resolved.hasNegativeStock,
+      hasNegativeStock: resolved.hasNegativeStock ?? false,
       maxUsers: resolved.maxUsers,
       maxProducts: resolved.maxProducts,
       maxCashboxes: resolved.maxCashboxes,

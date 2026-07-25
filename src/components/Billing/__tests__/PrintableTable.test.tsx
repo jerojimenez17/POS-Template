@@ -917,8 +917,9 @@ describe("PrintableTable Component", () => {
       );
 
       // Find the amount element — currently a span, later will be InlineAmountInput
-      const amountElement = screen.getByText("7");
+      const amountElement = container.querySelector('span[title="Click para editar cantidad"]') as HTMLElement | null;
       expect(amountElement).toBeTruthy();
+      expect(amountElement?.textContent).toBe("7");
 
       // Double-click to enter edit mode
       fireEvent.doubleClick(amountElement);
@@ -984,8 +985,8 @@ describe("PrintableTable Component", () => {
       );
 
       // Verify both amounts are displayed in the table
-      expect(screen.getByText("3")).toBeTruthy();
-      expect(screen.getByText("4")).toBeTruthy();
+      expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("4").length).toBeGreaterThanOrEqual(1);
 
       // Verify both products are rendered
       expect(screen.getByText("Unidades Prod")).toBeTruthy();

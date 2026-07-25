@@ -12,6 +12,11 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     exclude: ['**/node_modules/**', 'e2e/**', '.opencode/**', 'pos-api/**'],
+    server: {
+      deps: {
+        inline: [/@csstools\/css-calc/, /@asamuzakjp\/css-color/],
+      },
+    },
   },
   resolve: {
     alias: {

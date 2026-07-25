@@ -2,7 +2,7 @@ import { vi } from 'vitest';
 import '@testing-library/jest-dom';
 
 export const mockDb = {
-  $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+  $executeRawUnsafe: vi.fn().mockResolvedValue(0),
   $transaction: vi.fn().mockImplementation(async (arg) => {
     if (typeof arg === 'function') {
       return arg(mockDb);

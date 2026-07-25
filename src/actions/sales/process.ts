@@ -8,6 +8,7 @@ import { pusherServer } from "@/lib/pusher-server";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 import { fail } from "@/lib/action-result";
 import { getDailyUsage, checkDailyLimit, incrementDailyUsage } from "@/lib/daily-limits";
+import { after } from "next/server";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
 
@@ -224,20 +225,20 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       return { order, movements };
     });
 
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-
-    for (const movement of result.movements) {
-      await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
-    }
-
-    // Track daily usage for DEMO plan limits
+    // Track daily usage for DEMO plan limits (before async after())
     await incrementDailyUsage(businessId, "salesCount");
 
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
+    // Defer Pusher/revalidation to background — non-blocking after response
+    after(async () => {
+      await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+      for (const movement of result.movements) {
+        await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+      }
+      revalidateTag(CACHE_TAGS.STOCK, "max");
+      revalidateTag(CACHE_TAGS.CASHBOX, "max");
+      revalidateTag(CACHE_TAGS.ORDERS, "max");
+      revalidateTag(CACHE_TAGS.SALES, "max");
+    });
     return { success: true, orderId: result.order.id };
   } catch (error) {
     console.error("Error processing sale:", error);
@@ -348,6 +349,7 @@ export const updateOrderAction = async (
   const businessId = session?.user?.businessId;
   const userId = session?.user?.id;
   const userRole = session?.user?.role;
+
 
   if (!businessId || !userId) return { error: "No autorizado" };
 
@@ -505,9 +507,9 @@ export const updateOrderAction = async (
 
       // 🔹 ajustar stock por delta (en vez de revertir todo + recrear todo)
       // Calcula la diferencia neta por producto y registra UN SOLO movimiento
-      const oldQtyMap = new Map(existingOrder.items.map(i => [i.productId, i.quantity]));
+      const oldQtyMap = new Map(existingOrder.items.filter(i => i.productId).map(i => [i.productId!, i.quantity]));
       const newQtyMap = new Map(updatedData.products.map(p => [p.id, p.amount]));
-      const allProductIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()].filter(Boolean) as string[]);
+      const allProductIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()]);
 
       for (const productId of allProductIds) {
         const oldQty = oldQtyMap.get(productId) ?? 0;
