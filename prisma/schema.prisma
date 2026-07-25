@@ -345,6 +345,7 @@ model Order {
   total      Float       @default(0)
   status     OrderStatus @default(confirmado)
   paidStatus PaidStatus  @default(inpago)
+  notes      String?
   seller     String?
 
   // Payment methods

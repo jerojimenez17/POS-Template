@@ -49,6 +49,7 @@ interface OrderWithRelations {
   client: { id: string; name: string | null; cellPhone: string | null; email: string | null; address: string | null } | null;
   items: Array<{ id: string; productId: string | null; description: string | null; code: string | null; price: number; quantity: number; subTotal: number; addedAt: Date }>;
   cashMovements: Array<{ id: string; date: Date; total: number; paidMethod: string | null }>;
+  notes?: string | null;
 }
 
 export default async function AccountLedgerDetailPage({
@@ -189,6 +190,11 @@ export default async function AccountLedgerDetailPage({
                 <div>
                   <p className="text-xs text-muted-foreground uppercase font-medium">Cliente</p>
                   <p className="font-medium">{order.client?.name || "Sin cliente"}</p>
+                  {order.notes && (
+                    <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+                      {order.notes}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">

@@ -94,6 +94,7 @@ export default function ClientSelectionModal({
   // Order-level CUIT/IVA overrides
   const [orderClientCuit, setOrderClientCuit] = useState("");
   const [orderClientIva, setOrderClientIva] = useState("");
+  const [orderNotes, setOrderNotes] = useState("");
 
   // Smart client selection state (R3)
   const [existingOrders, setExistingOrders] = useState<{ id: string; total: number; date: Date; itemsCount: number; status: string; paidStatus: string }[]>([]);
@@ -122,6 +123,7 @@ export default function ClientSelectionModal({
       setSelectedClientId("");
       setOrderClientCuit("");
       setOrderClientIva("");
+      setOrderNotes("");
       setExistingOrders([]);
       setSelectedExistingOrderId(null);
       setShowExistingOrderDialog(false);
@@ -302,6 +304,7 @@ export default function ClientSelectionModal({
           total: calculatedTotal,
             clientIvaCondition: orderClientIva || undefined,
             clientDocumentNumber: orderClientCuit || undefined,
+            notes: orderNotes.trim() || undefined,
           }),
         });
         const result = await response.json();
@@ -473,6 +476,17 @@ export default function ClientSelectionModal({
                   <option value="Monotributista">Monotributista</option>
                   <option value="Exento">Exento</option>
                 </select>
+              </div>
+              <div className="grid gap-2">
+                <label htmlFor="orderNotes" className="text-xs font-medium">Notas / Observaciones (opcional)</label>
+                <textarea
+                  id="orderNotes"
+                  placeholder="Ej: Retiró Juan Pérez, DNI 12345678"
+                  value={orderNotes}
+                  onChange={(e) => setOrderNotes(e.target.value)}
+                  rows={2}
+                  className="flex h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                />
               </div>
             </div>
           )}
