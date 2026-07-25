@@ -174,6 +174,13 @@ function isValidCuit(value: string): boolean {
  * Esquema de validación para los campos de ARCA/AFIP.
  * CUIT se valida con regex de formato + algoritmo de módulo 11.
  */
+export const ShortcutKeyEnum = z.enum(["F1", "F2", "F3"]);
+
+export const SaveShortcutConfigSchema = z.object({
+  key: ShortcutKeyEnum,
+  productId: z.string().min(1, "Producto es obligatorio"),
+});
+
 export const ArcaFieldsSchema = z.object({
   cuit: z
     .string()

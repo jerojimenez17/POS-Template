@@ -18,7 +18,7 @@ import { Loader2, User, Search, Plus } from "lucide-react";
 import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
 import { parsePlanError } from "@/lib/plan-error";
 import { createClient } from "@/actions/clients";
-import { getClientUnpaidOrders, addItemsToOrder } from "@/actions/unpaid-orders";
+import { getClientUnpaidOrder, addItemsToOrder } from "@/actions/unpaid-orders";
 
 interface Client {
   id: string;
@@ -102,24 +102,6 @@ export default function ClientSelectionModal({
   const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
   const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      fetchClients();
-      setSelectedClientId("");
-      setOrderClientCuit("");
-      setOrderClientIva("");
-      setExistingOrders([]);
-      setSelectedExistingOrderId(null);
-      setShowExistingOrderDialog(false);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    const results = clients.filter((client) =>
-      client.name.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [clients, search]);
-
   const fetchClients = async () => {
     setIsFetchingClients(true);
     try {
@@ -135,9 +117,28 @@ export default function ClientSelectionModal({
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchClients();
+      setSelectedClientId("");
+      setOrderClientCuit("");
+      setOrderClientIva("");
+      setExistingOrders([]);
+      setSelectedExistingOrderId(null);
+      setShowExistingOrderDialog(false);
+    }
+  }, [open]);
+
+  const filteredClients = useMemo(() =>
+    clients.filter((client) =>
+      client.name.toLowerCase().includes(search.toLowerCase())
+    ),
+  [clients, search]);
+
+  useEffect(() => {
+    if (open) {
       startTransition(() => {
         setSelectedClientId("");
-        setExistingOrder(null);
+        setExistingOrders([]);
         setShowExistingOrderDialog(false);
         setIsFetchingClients(true);
       });
@@ -215,11 +216,19 @@ export default function ClientSelectionModal({
 
     setIsCheckingExistingOrder(true);
     try {
-      const result = await getClientUnpaidOrders(selectedClientId, businessId);
+      const result = await getClientUnpaidOrder(selectedClientId, businessId);
       
-      if (result.success && result.data && result.data.length > 0) {
-        setExistingOrders(result.data);
-        setSelectedExistingOrderId(result.data[0].id);
+      if (result.success && result.data) {
+        const order = result.data as { id: string; total: number; date: Date; items: unknown[]; status: string; paidStatus: string };
+        setExistingOrders([{
+          id: order.id,
+          total: order.total,
+          date: order.date,
+          itemsCount: order.items?.length ?? 0,
+          status: order.status,
+          paidStatus: order.paidStatus,
+        }]);
+        setSelectedExistingOrderId(order.id);
         setShowExistingOrderDialog(true);
         setIsCheckingExistingOrder(false);
         return;

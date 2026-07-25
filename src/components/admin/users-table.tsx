@@ -62,6 +62,7 @@ export const UsersTable = ({ users, cashboxes }: UsersTableProps) => {
 
   useEffect(() => {
     if (userPage > totalUserPages) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUserPage(totalUserPages);
     }
   }, [users.length, userPage, totalUserPages]);
@@ -131,7 +132,11 @@ export const UsersTable = ({ users, cashboxes }: UsersTableProps) => {
                   <TableCell className="font-medium">{user.name || "Sin nombre"}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
-                    {user.role === "ADMIN" ? (
+                    {user.role === "SUPER_ADMIN" ? (
+                      <Badge variant="default" className="bg-red-600 hover:bg-red-700">
+                        <ShieldCheck className="w-3 h-3 mr-1" /> Super Admin
+                      </Badge>
+                    ) : user.role === "ADMIN" ? (
                       <Badge variant="default" className="bg-blue-600 hover:bg-blue-700">
                         <ShieldCheck className="w-3 h-3 mr-1" /> Administrador
                       </Badge>

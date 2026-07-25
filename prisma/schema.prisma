@@ -61,6 +61,7 @@ model Business {
   saleReturns     SaleReturn[]
   stockMovements  StockMovement[]
   dailyUsage      DailyUsage[]
+  shortcutConfigs ShortcutConfig[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -237,6 +238,7 @@ model Product {
   rankings        ProductRanking[]
   stockMovements  StockMovement[]
   saleReturnItems SaleReturnItem[]
+  shortcutConfigs ShortcutConfig[]
 
   @@index([businessId])
   @@index([businessId, description])
@@ -551,6 +553,21 @@ model PlanDefinition {
   updatedAt   DateTime @updatedAt
 
   businesses  Business[]
+}
+
+model ShortcutConfig {
+  id         String   @id @default(cuid())
+  businessId String
+  key        String
+  productId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, key])
+  @@index([businessId])
 }
 
 model DailyUsage {

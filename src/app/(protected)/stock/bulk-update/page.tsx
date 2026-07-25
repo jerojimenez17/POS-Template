@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +14,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { CheckSquare, Square, Printer, Percent, ArrowLeft, Filter, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
-import { getProductsFiltered, bulkUpdatePrices, getSuppliersForFilter, getFilteredProductIds } from "@/actions/stock";
+import { getProductsFiltered, bulkUpdatePrices, getSuppliersForFilter } from "@/actions/stock";
 import { getCategories } from "@/actions/categories";
 import { getBrands } from "@/actions/brands";
 import { ProductExtended } from "@/components/stock/product-form";
@@ -76,36 +76,22 @@ const BulkUpdatePage = () => {
         brandId: filters.brandId || undefined,
         unit: filters.unit || undefined,
         supplierId: filters.supplierId || undefined,
-        page,
-        pageSize,
       });
-      setFilteredProducts(result.products as ProductExtended[]);
+      const products = result as ProductExtended[];
+      setFilteredProducts(products);
+      setTotal(products.length);
+      setTotalPages(Math.ceil(products.length / pageSize));
       // On first load after applying filters, select all products on current page
       if (isFirstLoadAfterFilter.current) {
-        setSelectedIds(new Set(result.products.map((p: ProductExtended) => p.id)));
+        setSelectedIds(new Set(products.slice(0, pageSize).map((p: ProductExtended) => p.id)));
         isFirstLoadAfterFilter.current = false;
       }
-      setTotal(result.total);
-      setPage(result.page);
-      setTotalPages(result.totalPages);
     } catch (error) {
       console.error("Error fetching products:", error);
     } finally {
       setLoading(false);
     }
   }, [filters, page, pageSize]);
-
-  useEffect(() => {
-    loadFiltersData();
-  }, []);
-
-  // Auto-fetch products when page, pageSize, or filters change
-  useEffect(() => {
-    if (hasLoaded) {
-      fetchProducts();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, hasLoaded, filterVersion]);
 
   const loadFiltersData = async () => {
     try {
@@ -122,31 +108,36 @@ const BulkUpdatePage = () => {
     }
   };
 
-  const handleSelectAll = async () => {
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadFiltersData();
+  }, []);
+
+  // Auto-fetch products when page, pageSize, or filters change
+  useEffect(() => {
+    if (hasLoaded) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchProducts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, hasLoaded, filterVersion]);
+
+  // Paginate products client-side
+  const paginatedProducts = useMemo(() => {
+    return filteredProducts.slice((page - 1) * pageSize, page * pageSize);
+  }, [filteredProducts, page, pageSize]);
+
+  const handleSelectAll = () => {
     if (!hasLoaded || total === 0) return;
 
-    // If all matching products are already selected, deselect all
+    // If all visible products are already selected, deselect all
     if (selectedIds.size === total) {
       setSelectedIds(new Set());
       return;
     }
 
-    // Otherwise, fetch ALL product IDs matching current filters (across all pages)
-    setSelectAllLoading(true);
-    try {
-      const allIds = await getFilteredProductIds({
-        search: filters.search || undefined,
-        categoryId: filters.categoryId || undefined,
-        brandId: filters.brandId || undefined,
-        unit: filters.unit || undefined,
-        supplierId: filters.supplierId || undefined,
-      });
-      setSelectedIds(new Set(allIds));
-    } catch (error) {
-      console.error("Error selecting all products:", error);
-    } finally {
-      setSelectAllLoading(false);
-    }
+    // Select all products on current page
+    setSelectedIds(new Set(filteredProducts.map((p) => p.id)));
   };
 
   const handleToggleProduct = (id: string) => {
@@ -435,7 +426,7 @@ const BulkUpdatePage = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {filteredProducts.map((product) => (
+                      {paginatedProducts.map((product) => (
                         <tr
                           key={product.id}
                           className={`group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-colors ${selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""
@@ -468,7 +459,7 @@ const BulkUpdatePage = () => {
 
                 {/* Mobile Card View */}
                 <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
-                  {filteredProducts.map((product) => (
+                  {paginatedProducts.map((product) => (
                     <div
                       key={product.id}
                       className={`p-4 active:bg-blue-50 dark:active:bg-blue-900/10 flex items-start gap-3 ${selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""

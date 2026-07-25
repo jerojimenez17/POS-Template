@@ -1,33 +1,6 @@
-// import BillState from "../interfaces/BillState";
-import CAE from "@/models/CAE";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
-
-type BillAction =
-  | { type: "addItem"; payload: Product }
-  | { type: "addUnit"; payload: Product }
-  | { type: "removeUnit"; payload: { id: string } }
-  | { type: "removeAll"; payload: null }
-  | { type: "removeItem"; payload: { id: string } }
-  | { type: "updateunit"; payload: { id: string } }
-  | { type: "updateTotal"; payload: Product }
-  | { type: "changePrice"; payload: Product }
-  | { type: "changeUnit"; payload: Product }
-  | { type: "total"; payload: null }
-  | { type: "discount"; payload: number }
-  | { type: "typeDocument"; payload: string }
-  | { type: "documentNumber"; payload: number }
-  | { type: "entrega"; payload: number }
-  | { type: "nroAsociado"; payload: number }
-  | { type: "sellerName"; payload: string }
-  | { type: "IVACondition"; payload: string }
-  | { type: "date"; payload: Date }
-  | { type: "paidMethod"; payload: string }
-  | { type: "billType"; payload: string }
-  | { type: "CAE"; payload: CAE }
-  | { type: "clientId"; payload: string }
-  | { type: "client"; payload: string }
-  | { type: "setState"; payload: BillState };
+import type { BillAction } from "./billActions";
 
 export const BillReducer = (
   state: BillState,
@@ -39,13 +12,14 @@ export const BillReducer = (
         (product) => product.id === action.payload.id
       );
 
+      const itemTotal = action.payload.salePrice * action.payload.amount;
       if (isPresent) {
         return {
           ...state,
-          total: state.total + action.payload.salePrice * action.payload.amount,
+          total: state.total + itemTotal,
           totalWithDiscount:
             state.totalWithDiscount +
-            action.payload.salePrice * action.payload.amount * state.discount,
+            itemTotal * (1 - state.discount * 0.01),
           products: state.products.map((product) => {
             if (product.id === action.payload.id) {
               return {
@@ -62,8 +36,8 @@ export const BillReducer = (
           ...state,
           totalWithDiscount:
             state.totalWithDiscount +
-            action.payload.salePrice * action.payload.amount * state.discount,
-          total: state.total + action.payload.salePrice * action.payload.amount,
+            itemTotal * (1 - state.discount * 0.01),
+          total: state.total + itemTotal,
           products: state.products.concat({
             ...action.payload,
           }),
@@ -74,8 +48,8 @@ export const BillReducer = (
         ...state,
         totalWithDiscount:
           state.totalWithDiscount +
-          action.payload.salePrice * action.payload.amount * state.discount,
-        total: state.total + action.payload.salePrice * action.payload.amount,
+          action.payload.salePrice * (1 - state.discount * 0.01),
+        total: state.total + action.payload.salePrice,
         products: state.products.map(({ ...product }) => {
           if (product.id === action.payload.id) {
             product.amount++;
@@ -167,12 +141,14 @@ export const BillReducer = (
       };
     }
     case "total":
+      const recalculated = state.products.reduce(
+        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+        0
+      );
       return {
         ...state,
-        total: state.products.reduce(
-          (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
-          0
-        ),
+        total: recalculated,
+        totalWithDiscount: recalculated * (1 - (state.discount || 0) * 0.01),
       };
     case "discount":
       return {
@@ -257,6 +233,22 @@ export const BillReducer = (
       return {
         ...state,
         client: action.payload,
+      };
+    }
+    case "updateSalePrice": {
+      const { id, salePrice } = action.payload;
+      const updatedProducts = state.products.map((product) =>
+        product.id === id ? { ...product, salePrice } : product
+      );
+      const newTotal = updatedProducts.reduce(
+        (acc, cur) => acc + cur.salePrice * cur.amount,
+        0
+      );
+      return {
+        ...state,
+        products: updatedProducts,
+        total: newTotal,
+        totalWithDiscount: newTotal * (1 - (state.discount || 0) * 0.01),
       };
     }
     case "setState": {

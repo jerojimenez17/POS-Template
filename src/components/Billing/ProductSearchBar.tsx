@@ -5,6 +5,8 @@ import { ProductPrismaAdapter } from "@/models/ProductPrismaAdapter";
 import Product from "@/models/Product";
 import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
 import { cn } from "@/lib/utils";
+import { useCashbox } from "@/context/CashboxContext";
+import { toast } from "sonner";
 
 interface SupplierOption {
   id: string;
@@ -30,6 +32,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [duplicateProducts, setDuplicateProducts] = useState<Product[]>([]);
 
+  const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const supplierContainerRef = useRef<HTMLDivElement>(null);
   const lastKeystrokeTime = useRef<number>(0);
@@ -149,6 +152,11 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   };
 
   const addProductDirect = (product: Product) => {
+    if (!hasActiveSession) {
+      toast.error("Debe abrir una sesión de caja antes de agregar productos");
+      setIsOpeningModalOpen(true);
+      return;
+    }
     if (product.amount <= 0) {
       setErrorMessage("Producto sin Stock");
       return;
@@ -255,6 +263,11 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
                   const product = suggestions[selectedIndex];
+                  if (!hasActiveSession) {
+                    toast.error("Debe abrir una sesión de caja antes de agregar productos");
+                    setIsOpeningModalOpen(true);
+                    return;
+                  }
                   if (product.amount <= 0) {
                     setErrorMessage("Producto sin Stock");
                     return;
@@ -305,6 +318,11 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                       : "hover:bg-gray-50 dark:hover:bg-gray-700 border-l-4 border-l-transparent"
                   )}
                   onClick={() => {
+                    if (!hasActiveSession) {
+                      toast.error("Debe abrir una sesión de caja antes de agregar productos");
+                      setIsOpeningModalOpen(true);
+                      return;
+                    }
                     if (product.amount <= 0) {
                       setErrorMessage("Producto sin Stock");
                       return;

@@ -25,4 +25,6 @@ export type BillAction =
   | { type: "billType"; payload: string }
   | { type: "CAE"; payload: CAE }
   | { type: "setState"; payload: BillState }
-  | { type: "updateSalePrice"; payload: { id: string; salePrice: number } };
+  | { type: "updateSalePrice"; payload: { id: string; salePrice: number } }
+  | { type: "clientId"; payload: string }
+  | { type: "client"; payload: string };

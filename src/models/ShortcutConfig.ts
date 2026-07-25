@@ -15,4 +15,4 @@ export interface ShortcutConfigView {
 export type ShortcutKey = "F1" | "F2" | "F3";
 
 // Map used in the bill page
-export type ShortcutMap = Partial<Record<ShortcutKey, string>>; // key → productId
+export type ShortcutMap = Partial<Record<ShortcutKey, ShortcutConfigView>>;

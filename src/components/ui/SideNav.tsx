@@ -42,7 +42,7 @@ const SideNav = () => {
   const { data: session } = useSession();
   const role = session?.user?.role;
   const businessSlug = session?.user?.businessSlug;
-  const isAdmin = role === "ADMIN";
+  const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
   const { open: mobileOpen, setOpen: setMobileOpen } = useMobileNav();
 
   const isActive = (href: string) => {

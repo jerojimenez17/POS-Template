@@ -38,15 +38,13 @@ const ProductDashboard = () => {
     }, 300);
   }, []);
 
-  const fetchProducts = useCallback(async (pageNum: number, searchTerm: string, codeOnlySearch?: boolean, exactCodeSearch?: boolean) => {
+  const fetchProducts = useCallback(async (pageNum: number, searchTerm: string, _codeOnlySearch?: boolean, _exactCodeSearch?: boolean) => {
     setLoading(true);
     try {
       const result = await getProductsPaginated({
         page: pageNum,
         pageSize: PAGE_SIZE,
         search: searchTerm || undefined,
-        codeOnly: codeOnlySearch,
-        exactCode: exactCodeSearch,
       });
       setProducts(result.products as ProductExtended[]);
       setTotal(result.total);

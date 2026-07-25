@@ -43,19 +43,19 @@ const RootMenu = () => {
             </MenuCard>
           )}
           
-          {role === 'ADMIN' && (
+          {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
             <MenuCard url="/admin/users" title="Usuarios">
               <Users className="w-16 h-16" strokeWidth={1.5} />
             </MenuCard>
           )}
 
-          {role === 'ADMIN' && (
+          {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
             <MenuCard url="/admin/cashboxes" title="Cajas">
               <Box className="w-16 h-16" strokeWidth={1.5} />
             </MenuCard>
           )}
 
-          {role === 'ADMIN' && (
+          {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
             <MenuCard url="/admin/settings" title="Configuración">
               <Settings className="w-16 h-16" strokeWidth={1.5} />
             </MenuCard>

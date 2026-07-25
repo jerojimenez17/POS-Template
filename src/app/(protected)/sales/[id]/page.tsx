@@ -26,7 +26,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
     );
   }
 
-  const isAdmin = session?.user?.role === "ADMIN";
+  const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN";
 
   return (
     <div className="container mx-auto px-4 py-6 md:py-8 max-w-7xl h-full flex flex-col">

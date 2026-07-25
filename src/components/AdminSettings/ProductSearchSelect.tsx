@@ -81,7 +81,7 @@ const ProductSearchSelect: React.FC<ProductSearchSelectProps> = ({
     }
     setLoading(true);
     try {
-      const results = await getProductsBySearch(query, supplierId || undefined);
+      const results = await getProductsBySearch(query);
       setSuggestions(results.map(ProductPrismaAdapter.toDomain));
       setIsOpen(true);
     } catch {

@@ -30108,3 +30108,4 @@ pos-api/node_modules/rxjs/dist/types/internal/scheduler/QueueScheduler.d.ts
 pos-api/node_modules/rxjs/dist/types/internal/scheduler/QueueScheduler.d.ts.map
 pos-api/node_modules/rxjs/dist/types/internal/scheduler/VirtualTimeScheduler.d.ts
 pos-api/node_modules/rxjs/dist/types/internal/scheduler/VirtualTimeScheduler.d.ts.map
+scripts/check-user.mjs

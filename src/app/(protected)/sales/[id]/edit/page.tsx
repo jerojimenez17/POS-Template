@@ -10,7 +10,7 @@ import Spinner from "@/components/ui/Spinner";
 export default async function EditSalePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
-  const isAdmin = session?.user?.role === "ADMIN";
+  const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN";
 
   if (!isAdmin) {
     return (

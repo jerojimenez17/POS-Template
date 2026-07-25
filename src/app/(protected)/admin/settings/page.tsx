@@ -51,40 +51,44 @@ function FeatureBlockedScreen() {
 export default async function AdminSettingsPage() {
   const session = await auth();
 
-  if (!session || session.user.role !== UserRole.ADMIN) {
+  if (!session || (session.user.role !== UserRole.ADMIN && session.user.role !== UserRole.SUPER_ADMIN)) {
     redirect("/");
   }
 
   const businessId = session.user.businessId;
+  const isSuperAdmin = session.user.role === UserRole.SUPER_ADMIN;
 
   // FR-025: gate the entire page on the AFIP billing feature flag.
-  const feature = await requireFeature("hasAfipBilling");
-  if (!feature.success) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-gray-900">
-        <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild title="Volver">
-              <Link href="/">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <Settings className="h-5 w-5 text-blue-500" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight">Configuración</h1>
-                <p className="text-sm text-gray-500 hidden sm:block">ARCA / facturación electrónica</p>
+  // SUPER_ADMIN bypasses feature gates.
+  if (!isSuperAdmin) {
+    const feature = await requireFeature("hasAfipBilling");
+    if (!feature.success) {
+      return (
+        <div className="min-h-screen bg-slate-50 dark:bg-gray-900">
+          <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" asChild title="Volver">
+                <Link href="/">
+                  <ArrowLeft className="h-5 w-5" />
+                </Link>
+              </Button>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <Settings className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <h1 className="text-xl md:text-2xl font-bold tracking-tight">Configuración</h1>
+                  <p className="text-sm text-gray-500 hidden sm:block">ARCA / facturación electrónica</p>
+                </div>
               </div>
             </div>
+          </header>
+          <div className="max-w-5xl mx-auto px-4 py-6">
+            <FeatureBlockedScreen />
           </div>
-        </header>
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          <FeatureBlockedScreen />
         </div>
-      </div>
-    );
+      );
+    }
   }
 
   const data: { success?: ArcaData; error?: string } = await getBusinessArcaData(businessId!);

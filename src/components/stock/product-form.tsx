@@ -403,7 +403,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                       </div>
                     </label>
                     {existingImages.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 mt-2">
                         {existingImages.map((img) => {
                           const markedForDeletion = imagesToDelete.includes(img.id);
                           return (
@@ -529,7 +529,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                         setScannerTarget("codebar");
                         setScannerOpen(true);
                       }}
-                      className="h-10 w-10 text-gray-500 hover:text-black"
+                      className="h-9 w-10 text-gray-500 hover:text-black"
                       title="Escanear código de barras"
                     >
                       <ScanBarcode className="h-4 w-4" />

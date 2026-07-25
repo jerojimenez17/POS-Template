@@ -14,8 +14,8 @@ export const metadata = {
 export default async function AdminUsersPage() {
   const session = await auth();
 
-  // If not an admin, boot them
-  if (!session || !session.user || session.user.role !== "ADMIN") {
+  // If not an admin or super admin, boot them
+  if (!session || !session.user || (session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN")) {
     redirect("/");
   }
 

@@ -507,7 +507,7 @@ export const updateOrderAction = async (
       // Calcula la diferencia neta por producto y registra UN SOLO movimiento
       const oldQtyMap = new Map(existingOrder.items.map(i => [i.productId, i.quantity]));
       const newQtyMap = new Map(updatedData.products.map(p => [p.id, p.amount]));
-      const allProductIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()]);
+      const allProductIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()].filter(Boolean) as string[]);
 
       for (const productId of allProductIds) {
         const oldQty = oldQtyMap.get(productId) ?? 0;

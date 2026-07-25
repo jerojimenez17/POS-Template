@@ -214,7 +214,6 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
             categoryName: indices.category >= 0 ? String(row[indices.category] || "") : undefined,
             subCategoryName: indices.subCategory >= 0 ? String(row[indices.subCategory] || "") : undefined,
             codebar: indices.codebar >= 0 && row[indices.codebar] ? String(row[indices.codebar]) : undefined,
-            iva: indices.iva >= 0 && row[indices.iva] !== undefined && row[indices.iva] !== null && row[indices.iva] !== "" ? String(row[indices.iva]) : undefined,
           });
         }
       }
@@ -636,7 +635,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                       <TableCell>${item.price.toLocaleString("es-AR")}</TableCell>
                       <TableCell>
                         ${(() => {
-                          const parsed = parseExcelIva(item.iva);
+                          const parsed = parseExcelIva(adjustmentIva);
                           const rowIva = parsed.percent !== null ? parsed.percent : parseFloat(adjustmentIva);
                           const withDiscount = item.price * (1 - adjustmentDiscount / 100);
                           const withIva = withDiscount * (1 + rowIva / 100);
@@ -650,9 +649,9 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                 </TableBody>
               </Table>
             </div>
-            {previewData && previewData.totalItems > 100 && (
+            {previewData && (previewData.createdCount + previewData.updatedCount + previewData.ignoredCount) > 100 && (
               <p className="text-sm text-muted-foreground text-center">
-                Mostrando los primeros 100 productos de {previewData.totalItems}
+                Mostrando los primeros 100 productos de {previewData.createdCount + previewData.updatedCount + previewData.ignoredCount}
               </p>
             )}
           </div>

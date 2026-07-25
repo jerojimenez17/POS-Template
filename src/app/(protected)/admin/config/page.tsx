@@ -9,7 +9,7 @@ import { ArrowLeft, Settings } from "lucide-react";
 
 export default async function AdminConfigPage() {
   const session = await auth();
-  if (!session || session.user.role !== UserRole.ADMIN) redirect("/");
+  if (!session || (session.user.role !== UserRole.ADMIN && session.user.role !== UserRole.SUPER_ADMIN)) redirect("/");
 
   const result = await getBusinessConfig();
   if (result.error || !result.success) {

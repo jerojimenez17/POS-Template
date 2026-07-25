@@ -29,6 +29,12 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { useFeatures } from "@/hooks/useFeatures";
 import { createBudgetAction } from "@/actions/budget";
 import { parsePlanError } from "@/lib/plan-error";
+import {
+  getShortcutConfigsAction,
+  getProductByShortcutAction,
+} from "@/actions/shortcuts";
+import type { ShortcutMap, ShortcutKey } from "@/models/ShortcutConfig";
+import Product from "@/models/Product";
 
 interface props {
   session: Session | null;
@@ -52,7 +58,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [openEditModal, setOpenEditModal] = useState(false);
   const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
-  const { BillState, dispatch, onOrderResetRef, printMode } =
+  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
@@ -90,13 +96,47 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
 
   const [facturaKey, setFacturaKey] = useState(0);
   const [remitoKey, setRemitoKey] = useState(0);
-
-  // Global keydown listeners for F1, F2, F3 shortcuts
+  const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
+  const shortcutMapRef = useRef(shortcutMap);
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isEditing) return; // Disable shortcuts while editing sale (has different buttons)
-      
-      if (e.key === 'F1') {
+    shortcutMapRef.current = shortcutMap;
+  }, [shortcutMap]);
+
+  // Fetch shortcut config on mount
+  useEffect(() => {
+    const loadShortcuts = async () => {
+      const result = await getShortcutConfigsAction(session?.user?.businessId ?? "");
+      if ("success" in result && result.success && result.data) {
+        const map: ShortcutMap = {};
+        for (const cfg of result.data) {
+          map[cfg.key as ShortcutKey] = cfg;
+        }
+        setShortcutMap(map);
+      }
+    };
+    loadShortcuts();
+  }, []);
+
+  // Global keydown listeners for keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (isEditing) return;
+
+      const map = shortcutMapRef.current;
+      const shortcutCfg = map[e.key as ShortcutKey];
+
+      if (shortcutCfg && shortcutCfg.productId) {
+        e.preventDefault();
+        if (!checkSession()) return;
+        if (BillState.products?.length === 0) return;
+        const product = await getProductByShortcutAction(e.key as ShortcutKey);
+        if ("success" in product && product.success && product.data) {
+          addItem(product.data as Product);
+        }
+        return;
+      }
+
+      if (e.key === 'F4') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length === 0) return;
@@ -106,7 +146,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         setFacturaKey(k => k + 1);
         setOpenFacturaModal(true);
       }
-      if (e.key === 'F2') {
+      if (e.key === 'F9') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length === 0) return;
@@ -116,14 +156,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         setRemitoKey(k => k + 1);
         setOpenRemitoModal(true);
       }
-      if (e.key === 'F3') {
+      if (e.key === 'F10') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length > 0) {
           setOpenAcuentaModal(true);
         }
       }
-      if (e.key === 'F4') {
+      if (e.key === 'F5') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length > 0) {
@@ -134,7 +174,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, dispatch, BillState.products?.length, isEditing, hasActiveSession, setIsOpeningModalOpen]);
+  }, [session, dispatch, BillState.products?.length, isEditing, addItem, setFocusPriceProductId, checkSession]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {
@@ -360,7 +400,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <line x1="16" y1="17" x2="8" y2="17" />
             </svg>
             Facturar
-            <kbd className="ml-1 text-[10px] bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded border border-white/10">F1</kbd>
+            <kbd className="ml-1 text-[10px] bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded border border-white/10">F4</kbd>
           </Button>
 
           <Button
@@ -391,7 +431,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <path d="M12 18h.01" />
             </svg>
             Remito
-            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F2</kbd>
+            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F9</kbd>
           </Button>
 
           <Button
@@ -424,7 +464,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
             A cuenta
-            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F3</kbd>
+            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F10</kbd>
           </Button>
 
           {canUseBudget && (
@@ -445,6 +485,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
                   <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
                 </svg>
                 Presupuesto
+                <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F5</kbd>
               </Button>
               <ClientSelectionModal
                 mode="budget"
