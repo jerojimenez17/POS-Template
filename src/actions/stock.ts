@@ -877,19 +877,19 @@ const getProductsPaginatedWithRanking = async (
           AND (
             ${codeOnly
               ? Prisma.sql`
-                  similarity(COALESCE(p.code, ''), ${search}) > 0.15
-                  OR similarity(COALESCE(p.code, ''), ${normalizedSearch}) > 0.15
-                  OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
-                  OR similarity(COALESCE(p.codebar, ''), ${normalizedSearch}) > 0.15
+                  similarity(COALESCE(p.code, ''), ${search}) > 0
+                  OR similarity(COALESCE(p.code, ''), ${normalizedSearch}) > 0
+                  OR similarity(COALESCE(p.codebar, ''), ${search}) > 0
+                  OR similarity(COALESCE(p.codebar, ''), ${normalizedSearch}) > 0
                 `
               : Prisma.sql`
-                  similarity(COALESCE(p.description, ''), ${search}) > 0.15
-                  OR similarity(COALESCE(p.code, ''), ${search}) > 0.15
-                  OR similarity(COALESCE(p.code, ''), ${normalizedSearch}) > 0.15
-                  OR similarity(COALESCE(p.codebar, ''), ${search}) > 0.15
-                  OR similarity(COALESCE(p.codebar, ''), ${normalizedSearch}) > 0.15
-                  OR similarity(COALESCE(b.name, ''), ${search}) > 0.15
-                  OR similarity(COALESCE(s.name, ''), ${search}) > 0.15
+                  similarity(COALESCE(p.description, ''), ${search}) > 0
+                  OR similarity(COALESCE(p.code, ''), ${search}) > 0
+                  OR similarity(COALESCE(p.code, ''), ${normalizedSearch}) > 0
+                  OR similarity(COALESCE(p.codebar, ''), ${search}) > 0
+                  OR similarity(COALESCE(p.codebar, ''), ${normalizedSearch}) > 0
+                  OR similarity(COALESCE(b.name, ''), ${search}) > 0
+                  OR similarity(COALESCE(s.name, ''), ${search}) > 0
                 `
             }
           )
@@ -898,26 +898,34 @@ const getProductsPaginatedWithRanking = async (
           ${filters.unit ? Prisma.sql`AND p."unit" = ${filters.unit}` : Prisma.empty}
         ORDER BY
           (p.code = ${search} OR p.code = ${normalizedSearch} OR p.codebar = ${search} OR p.codebar = ${normalizedSearch}) DESC,
-          GREATEST(
+          (
             ${codeOnly
               ? Prisma.sql`
-                  similarity(COALESCE(p.code, ''), ${search}),
-                  similarity(COALESCE(p.code, ''), ${normalizedSearch}),
-                  similarity(COALESCE(p.codebar, ''), ${search}),
-                  similarity(COALESCE(p.codebar, ''), ${normalizedSearch})
+                  GREATEST(
+                    COALESCE(similarity(COALESCE(p.code, ''), ${search}), 0),
+                    COALESCE(similarity(COALESCE(p.code, ''), ${normalizedSearch}), 0)
+                  ) * 2.0
+                  + GREATEST(
+                    COALESCE(similarity(COALESCE(p.codebar, ''), ${search}), 0),
+                    COALESCE(similarity(COALESCE(p.codebar, ''), ${normalizedSearch}), 0)
+                  ) * 1.5
                 `
               : Prisma.sql`
-                  similarity(COALESCE(p.description, ''), ${search}),
-                  similarity(COALESCE(p.code, ''), ${search}),
-                  similarity(COALESCE(p.code, ''), ${normalizedSearch}),
-                  similarity(COALESCE(p.codebar, ''), ${search}),
-                  similarity(COALESCE(p.codebar, ''), ${normalizedSearch}),
-                  similarity(COALESCE(b.name, ''), ${search}),
-                  similarity(COALESCE(s.name, ''), ${search})
+                  COALESCE(similarity(COALESCE(p.description, ''), ${search}), 0) * 3.0
+                  + GREATEST(
+                    COALESCE(similarity(COALESCE(p.code, ''), ${search}), 0),
+                    COALESCE(similarity(COALESCE(p.code, ''), ${normalizedSearch}), 0)
+                  ) * 2.0
+                  + GREATEST(
+                    COALESCE(similarity(COALESCE(p.codebar, ''), ${search}), 0),
+                    COALESCE(similarity(COALESCE(p.codebar, ''), ${normalizedSearch}), 0)
+                  ) * 1.5
+                  + COALESCE(similarity(COALESCE(b.name, ''), ${search}), 0) * 1.0
+                  + COALESCE(similarity(COALESCE(s.name, ''), ${search}), 0) * 0.5
                 `
             }
           ) DESC
-        LIMIT 300
+        LIMIT 1000
       `
     );
 
@@ -1119,13 +1127,13 @@ export const getProductsBySearch = async (query: string, supplierId?: string) =>
         LEFT JOIN "Supplier" s ON s.id = p."supplierId"
         WHERE p."businessId" = ${businessId}
           AND (
-            similarity(COALESCE(p.description, ''), ${query}) > 0.15
-            OR similarity(COALESCE(p.code, ''), ${query}) > 0.15
-            OR similarity(COALESCE(p.code, ''), ${normalizedQuery}) > 0.15
-            OR similarity(COALESCE(p.codebar, ''), ${query}) > 0.15
-            OR similarity(COALESCE(p.codebar, ''), ${normalizedQuery}) > 0.15
-            OR similarity(COALESCE(b.name, ''), ${query}) > 0.15
-            OR similarity(COALESCE(s.name, ''), ${query}) > 0.15
+            similarity(COALESCE(p.description, ''), ${query}) > 0
+            OR similarity(COALESCE(p.code, ''), ${query}) > 0
+            OR similarity(COALESCE(p.code, ''), ${normalizedQuery}) > 0
+            OR similarity(COALESCE(p.codebar, ''), ${query}) > 0
+            OR similarity(COALESCE(p.codebar, ''), ${normalizedQuery}) > 0
+            OR similarity(COALESCE(b.name, ''), ${query}) > 0
+            OR similarity(COALESCE(s.name, ''), ${query}) > 0
           )
           ${supplierId ? Prisma.sql`AND p."supplierId" = ${supplierId}` : Prisma.empty}
         ORDER BY similarity DESC

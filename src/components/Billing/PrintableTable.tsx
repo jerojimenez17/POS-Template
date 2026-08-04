@@ -224,6 +224,7 @@ const PrintableTable = ({
   }, [state.products, state.discount, state.totalWithDiscount]);
 
   const hasSupplierFilter = session?.user?.business?.features?.hasSupplierFilter ?? false;
+  const allowNegativeStock = session?.user?.business?.features?.hasNegativeStock ?? false;
 
   return (
     <div ref={contentRef} className={`${className} print:block print:bg-white overflow-visible`}>
@@ -289,6 +290,7 @@ const PrintableTable = ({
       <ProductSearchBar
         onProductAdd={handleProductAdd}
         hasSupplierFilter={hasSupplierFilter}
+        allowNegativeStock={allowNegativeStock}
       />
 
       {/* Products Table */}

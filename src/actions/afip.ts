@@ -10,7 +10,7 @@ import { getArcaCredentialsForBilling } from "./arca";
  * This action validates the user session and uses a shared secret for authentication.
  */
 export const createAfipVoucherAction = async (billState: BillState) => {
-  const featureResult = await requireFeature("hasBilling");
+  const featureResult = await requireFeature("hasAfipBilling");
   if (!featureResult.success) {
     return { error: featureResult.error };
   }
@@ -31,7 +31,13 @@ export const createAfipVoucherAction = async (billState: BillState) => {
   }
 
   try {
-    console.log("AFIP SDK API KEY:", process.env.AFIPSDK_API_KEY);
+    const accessToken = process.env.AFIP_SDK_ACCESS_TOKEN;
+
+    if (!accessToken) {
+      console.error("AFIP_SDK_ACCESS_TOKEN no configurado");
+      return { error: "Error de configuración de acceso" };
+    }
+
     console.log("Function URL:", functionUrl);
     // 2. Call the Cloud Function from the server
     const { ptoVenta, ...billStateWithoutPtoVenta } = billState;
@@ -47,6 +53,15 @@ export const createAfipVoucherAction = async (billState: BillState) => {
         salePrice: p.salePrice,
         amount: p.amount,
       })),
+      // Ensure numeric fields are actually numbers for the cloud function
+      discount: Number(billStateWithoutPtoVenta.discount) || 0,
+      documentNumber: Number(billStateWithoutPtoVenta.documentNumber) || 0,
+      total: Number(billStateWithoutPtoVenta.total) || 0,
+      totalWithDiscount: Number(billStateWithoutPtoVenta.totalWithDiscount) || 0,
+      // Convert Date to ISO string for JSON serialization
+      date: billStateWithoutPtoVenta.date instanceof Date
+        ? billStateWithoutPtoVenta.date.toISOString()
+        : String(billStateWithoutPtoVenta.date),
     };
 
     const response = await axios.post(
@@ -56,9 +71,9 @@ export const createAfipVoucherAction = async (billState: BillState) => {
         encryptedCert: cert,
         encryptedKey: key,
         arca: {
-          accessToken: process.env.AFIPSDK_API_KEY,
+          accessToken,
           cuit,
-          puntoVenta: ptoVenta,
+          puntoVenta: Number(ptoVenta) || undefined,
         },
         billState: minimalBillState,
       },
