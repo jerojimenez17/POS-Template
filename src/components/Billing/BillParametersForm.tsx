@@ -28,7 +28,7 @@ interface BillParametersFormProps {
 const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
   const [editParamters, setEditParameters] = useState(false);
   const [lastVoucherNum, setLastVoucherNum] = useState<number | null>(null);
-  const [loadingVoucher, setLoadingVoucher] = useState(false);
+  const [loadingVoucher, setLoadingVoucher] = useState(true);
   const { dispatch, BillState, onOrderResetRef } = useContext(BillContext);
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
@@ -61,7 +61,14 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
         tipoFactura = 6;
       }
 
+      console.log("[getLastVoucher] ──────────────");
+      console.log("[getLastVoucher] billType (form):", watchBillType);
+      console.log("[getLastVoucher] tipoFactura (mapeado):", tipoFactura, "(1=A, 6=B, 11=C)");
+      console.log("[getLastVoucher] ptoVenta:", watchPtoVenta);
+      console.log("[getLastVoucher] ptoVentas disponibles:", ptoVentas);
+      console.log("[getLastVoucher] payload enviado a server action →", { ptoVenta: watchPtoVenta, tipoFactura, billType: watchBillType });
       const res = await getVoucherNumberAction(watchPtoVenta, tipoFactura);
+      console.log("[getLastVoucher] respuesta server action ←", JSON.stringify(res, null, 2));
       if (res.success !== undefined) {
         setLastVoucherNum(res.success);
       } else {
@@ -91,27 +98,24 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
 
   const currentDate = useMemo(() => new Date(), []);
 
-  const onSubmit = () => {
-    const clientCondition = form.getValues().clientCondition;
-    const documentNumber = form.getValues().documentNumber ?? 0;
+  const onSubmit = (data: z.infer<typeof BillParametersSchema>) => {
+    const documentNumber = data.documentNumber ?? 0;
     
     dispatch({
       type: "setState",
       payload: {
-        ...form.getValues(),
+        ...data,
         id: "",
         products: BillState.products,
         total: BillState.total,
         totalWithDiscount: BillState.totalWithDiscount,
         seller: BillState.seller,
-        billType: form.getValues().billType,
         date: currentDate,
-        typeDocument: clientCondition,
+        typeDocument: data.clientCondition,
         documentNumber,
-        IVACondition: clientCondition,
-        clientIvaCondition: clientCondition,
+        IVACondition: data.clientCondition,
+        clientIvaCondition: data.clientCondition,
         clientDocumentNumber: String(documentNumber),
-        ptoVenta: form.getValues().ptoVenta,
       },
     });
     
@@ -407,7 +411,13 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
           {form.getValues().ptoVenta && (
             <span className="ml-1 text-gray-600 dark:text-gray-400 font-mono text-xs">
               | {String(form.getValues().ptoVenta).padStart(3, '0')}-
-              {loadingVoucher ? "..." : String((lastVoucherNum || 0) + 1).padStart(4, '0')}
+              {loadingVoucher ? (
+                <span className="text-yellow-500">...</span>
+              ) : lastVoucherNum !== null ? (
+                String(lastVoucherNum + 1).padStart(4, '0')
+              ) : (
+                <span className="text-red-400">Error</span>
+              )}
             </span>
           )}
         </div>

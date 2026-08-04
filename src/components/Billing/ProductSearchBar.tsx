@@ -14,9 +14,10 @@ interface SupplierOption {
 interface ProductSearchBarProps {
   onProductAdd: (product: Product) => void;
   hasSupplierFilter: boolean;
+  allowNegativeStock?: boolean;
 }
 
-const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarProps) => {
+const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock }: ProductSearchBarProps) => {
   const [searchCode, setSearchCode] = useState("");
   const searchCodeRef = useRef("");
   const [suggestions, setSuggestions] = useState<Product[]>([]);
@@ -158,7 +159,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   };
 
   const addProductDirect = (product: Product) => {
-    if (product.amount <= 0) {
+    if (!allowNegativeStock && product.amount <= 0) {
       setErrorMessage("Producto sin Stock");
       return;
     }
@@ -264,7 +265,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
                   const product = suggestions[selectedIndex];
-                  if (product.amount <= 0) {
+                  if (!allowNegativeStock && product.amount <= 0) {
                     setErrorMessage("Producto sin Stock");
                     return;
                   }
@@ -314,7 +315,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                       : "hover:bg-gray-50 dark:hover:bg-gray-700 border-l-4 border-l-transparent"
                   )}
                   onClick={() => {
-                    if (product.amount <= 0) {
+                    if (!allowNegativeStock && product.amount <= 0) {
                       setErrorMessage("Producto sin Stock");
                       return;
                     }
