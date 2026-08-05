@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useOptimistic, startTransition } from "react";
+import { useState, useEffect, useRef, useOptimistic, startTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { Loader2, Plus, Search, Edit3 } from "lucide-react";
 import OrderItemsTable from "./OrderItemsTable";
 import { addItemsToOrder, updateOrderItem, removeOrderItem } from "@/actions/unpaid-orders";
-import { getProducts } from "@/actions/stock";
+import { getProductsBySearch } from "@/actions/stock";
 
 interface OrderItemFromDB {
   id: string;
@@ -91,10 +91,12 @@ export default function EditableOrderDetail({
   );
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [searchProduct, setSearchProduct] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
     setItems(
@@ -106,36 +108,50 @@ export default function EditableOrderDetail({
     );
   }, [order.items]);
 
-  useEffect(() => {
-    if (searchProduct) {
-      const filtered = products.filter(
-        (p) =>
-          p.description?.toLowerCase().includes(searchProduct.toLowerCase()) ||
-          p.code?.toLowerCase().includes(searchProduct.toLowerCase())
-      );
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts(products);
-    }
-  }, [searchProduct, products]);
-
-  const fetchProducts = async () => {
+  const loadProducts = async (query: string) => {
+    setIsLoadingProducts(true);
     try {
-      const data = await getProducts();
+      const data = await getProductsBySearch(query, undefined);
       setProducts(data || []);
-      setFilteredProducts(data || []);
     } catch (error) {
-      console.error("Error fetching products:", error);
+      console.error("Error loading products:", error);
       toast.error("Error al cargar productos");
+      setProducts([]);
+    } finally {
+      setIsLoadingProducts(false);
     }
   };
 
-  const handleOpenAddProduct = async () => {
-    await fetchProducts();
+  // Debounced server-side search triggered by typing. The very first run
+  // (mount, searchProduct === "") is a no-op because the initial load is kicked
+  // off directly from handleOpenAddProduct — avoiding a double load on open.
+  useEffect(() => {
+    if (!initialLoadDoneRef.current) {
+      initialLoadDoneRef.current = true;
+      return;
+    }
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      loadProducts(searchProduct);
+    }, 400);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
+      }
+    };
+  }, [searchProduct]);
+
+  const handleOpenAddProduct = () => {
     setSelectedProduct(null);
     setQuantity(1);
     setSearchProduct("");
     setIsAddProductOpen(true);
+    loadProducts("");
   };
 
   const handleUpdateQuantity = async (itemId: string, newQuantity: number) => {
@@ -311,7 +327,7 @@ export default function EditableOrderDetail({
       />
 
       <Dialog open={isAddProductOpen} onOpenChange={setIsAddProductOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Agregar Producto</DialogTitle>
             <DialogDescription>
@@ -331,12 +347,16 @@ export default function EditableOrderDetail({
             </div>
 
             <div className="max-h-[250px] overflow-y-auto border rounded-lg">
-              {filteredProducts.length === 0 ? (
+              {isLoadingProducts ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : products.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   No se encontraron productos
                 </div>
               ) : (
-                filteredProducts.map((product) => (
+                products.map((product) => (
                   <div
                     key={product.id}
                     onClick={() => setSelectedProduct(product)}
