@@ -105,6 +105,7 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
       type: "setState",
       payload: {
         ...data,
+        discount: BillState.discount,
         id: "",
         products: BillState.products,
         total: BillState.total,
@@ -125,7 +126,7 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {/* Grid de 3 columnas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* Comprobante */}
           <div className="space-y-4">
@@ -330,52 +331,7 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
             </div>
           </div>
 
-          {/* Descuento */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-              </svg>
-              Descuento
-            </div>
-            
-            <div className="space-y-3">
-              <FormField
-                control={form.control}
-                name="discount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Porcentaje (%)</FormLabel>
-                    <div className="relative">
-                      <Input
-                        className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 pr-10"
-                        {...field}
-                        value={field.value === 0 ? "" : field.value}
-                        placeholder="0"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
-                    </div>
-                  </FormItem>
-                )}
-              />
-
-              {/* Preview del descuento */}
-              {form.watch("discount") > 0 && (
-                <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500">
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="12" y1="8" x2="12" y2="12"/>
-                      <line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
-                    <span className="text-orange-700 dark:text-orange-400 font-medium">
-                      -{form.watch("discount")}% de descuento aplicado
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Descuento - ahora se edita desde el componente DiscountControl en el Totals section */}
         </div>
 
         {/* Botones de acción */}
@@ -462,12 +418,12 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
       )}
 
       {/* Descuento */}
-      {form.getValues().discount > 0 && (
+      {BillState.discount > 0 && (
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-50 dark:bg-orange-900/20">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500">
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
           </svg>
-          <span className="font-semibold text-orange-600 dark:text-orange-400">-{form.getValues().discount}%</span>
+          <span className="font-semibold text-orange-600 dark:text-orange-400">-{BillState.discount}%</span>
         </div>
       )}
 
