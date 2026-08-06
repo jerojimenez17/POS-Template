@@ -20,6 +20,8 @@ interface Order {
   paidStatus: string;
   clientId: string | null;
   items: OrderItemFromDB[];
+  discountPercentage: number;
+  discountAmount: number;
 }
 
 interface EditableOrderDetailWrapperProps {
@@ -42,6 +44,8 @@ export default function EditableOrderDetailWrapper({
       order={order}
       businessId={businessId}
       onOrderUpdated={handleOrderUpdated}
+      discountPercentage={order.discountPercentage}
+      discountAmount={order.discountAmount}
     />
   );
 }

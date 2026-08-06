@@ -557,6 +557,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               amount: p.amount,
             }))}
             total={BillState.total}
+            discount={BillState.discount}
+            totalWithDiscount={Math.round(
+              BillState.products.reduce(
+                (acc, act) => acc + act.salePrice * act.amount,
+                0,
+              ) * (1 - BillState.discount * 0.01)
+            )}
+            seller={session?.user?.email || ""}
             businessId={session?.user?.businessId || ""}
             onSuccess={() => {
               dispatch({ type: "removeAll", payload: null });

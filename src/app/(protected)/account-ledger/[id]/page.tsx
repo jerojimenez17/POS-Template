@@ -286,6 +286,19 @@ export default async function AccountLedgerDetailPage({
                 <span className="text-muted-foreground">Total Orden</span>
                 <span className="font-medium">${Math.round(order.total).toLocaleString("es-AR")}</span>
               </div>
+              {order.discountPercentage > 0 ? (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Descuento ({order.discountPercentage}%)</span>
+                  <span className="font-medium text-red-600">
+                    -${Math.round(order.discountAmount).toLocaleString("es-AR")}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Descuento: 0%</span>
+                  <span className="font-medium text-muted-foreground">$0</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Pagado</span>
                 <span className="font-medium text-green-600">

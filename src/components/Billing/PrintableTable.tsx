@@ -17,6 +17,7 @@ import { getBillTypeDisplay } from "@/lib/utils/bill-type";
 import QRCode from "qrcode";
 import CAE from "@/models/CAE";
 import PriceEditInput from "./PriceEditInput";
+import DiscountControl from "./DiscountControl";
 
 interface Props {
   printTrigger: number;
@@ -217,9 +218,11 @@ const PrintableTable = ({
   const totals = useMemo(() => {
     const subtotal = Math.round(state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
     const discountAmount = state.discount > 0 ? Math.round(subtotal * (state.discount / 100)) : 0;
-    const total = state.totalWithDiscount !== undefined
-      ? Math.round(Number(state.totalWithDiscount))
-      : Math.round(subtotal * (1 - state.discount / 100));
+    const total = state.discount > 0
+      ? Math.round(subtotal * (1 - state.discount / 100))
+      : state.totalWithDiscount !== undefined
+        ? Math.round(Number(state.totalWithDiscount))
+        : subtotal;
     return { subtotal, discountAmount, total };
   }, [state.products, state.discount, state.totalWithDiscount]);
 
@@ -406,10 +409,14 @@ const PrintableTable = ({
                 <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
                 <span className="font-medium tabular-nums">
                   ${totals.subtotal.toLocaleString("es-AR", {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0,
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
                   })}
                 </span>
+              </div>
+
+              <div className="print:hidden">
+                <DiscountControl editable={!externalState} />
               </div>
 
               {state.discount > 0 && (
@@ -417,8 +424,8 @@ const PrintableTable = ({
                   <span className="text-gray-500 dark:text-gray-400">Descuento ({state.discount}%)</span>
                   <span className="font-medium text-green-600 dark:text-green-400 tabular-nums">
                     -${totals.discountAmount.toLocaleString("es-AR", {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 0,
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
                     })}
                   </span>
                 </div>
@@ -428,8 +435,8 @@ const PrintableTable = ({
                 <span>Total</span>
                 <span className="tabular-nums">
                   ${totals.total.toLocaleString("es-AR", {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0,
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
                   })}
                 </span>
               </div>
