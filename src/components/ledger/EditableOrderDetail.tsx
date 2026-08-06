@@ -72,6 +72,7 @@ export default function EditableOrderDetail({
   discountAmount = 0,
 }: EditableOrderDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const [discountEditValue, setDiscountEditValue] = useState(String(discountPercentage));
   const [items, setItems] = useState<OrderItem[]>(
     order.items.map((item) => ({
@@ -181,6 +182,7 @@ export default function EditableOrderDetail({
           )
         );
         toast.success("Cantidad actualizada");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al actualizar cantidad");
@@ -211,6 +213,7 @@ export default function EditableOrderDetail({
           )
         );
         toast.success("Precio actualizado");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al actualizar precio");
@@ -238,6 +241,7 @@ export default function EditableOrderDetail({
       if (result.success) {
         setItems((prev) => prev.filter((item) => item.id !== itemId));
         toast.success("Item eliminado");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al eliminar item");
@@ -298,6 +302,7 @@ export default function EditableOrderDetail({
 
       if (result.success) {
         toast.success("Producto agregado");
+        setHasChanges(true);
         setItems((prev) => [...prev, newItem]);
         setIsAddProductOpen(false);
         onOrderUpdated?.();
@@ -330,6 +335,7 @@ export default function EditableOrderDetail({
 
       if (result.success) {
         toast.success("Descuento actualizado");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al actualizar descuento");
@@ -410,9 +416,18 @@ export default function EditableOrderDetail({
           )}
         </div>
 
-        <Button variant="outline" onClick={() => setIsEditing(!isEditing)}>
+        <Button variant="outline" onClick={() => {
+          if (isEditing) {
+            // Exiting edit mode
+            setIsEditing(false);
+          } else {
+            // Entering edit mode — reset changes tracking
+            setHasChanges(false);
+            setIsEditing(true);
+          }
+        }}>
           <Edit3 className="h-4 w-4 mr-2" />
-          {isEditing ? "Cancelar edición" : "Editar items"}
+          {isEditing ? (hasChanges ? "Terminar edición" : "Cancelar edición") : "Editar items"}
         </Button>
       </div>
 
