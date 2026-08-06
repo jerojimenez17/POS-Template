@@ -94,7 +94,7 @@ export default function EditableOrderDetail({
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [searchProduct, setSearchProduct] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState("1");
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDoneRef = useRef(false);
 
@@ -148,7 +148,7 @@ export default function EditableOrderDetail({
 
   const handleOpenAddProduct = () => {
     setSelectedProduct(null);
-    setQuantity(1);
+    setQuantity("1");
     setSearchProduct("");
     setIsAddProductOpen(true);
     loadProducts("");
@@ -249,7 +249,8 @@ export default function EditableOrderDetail({
       return;
     }
 
-    if (quantity <= 0) {
+    const quantityNum = parseFloat(quantity);
+    if (!quantityNum || quantityNum <= 0) {
       toast.error("La cantidad debe ser mayor a 0");
       return;
     }
@@ -260,8 +261,8 @@ export default function EditableOrderDetail({
       description: selectedProduct.description || "Producto",
       code: selectedProduct.code,
       price: selectedProduct.salePrice,
-      quantity: quantity,
-      subTotal: selectedProduct.salePrice * quantity,
+      quantity: quantityNum,
+      subTotal: selectedProduct.salePrice * quantityNum,
       addedAt: new Date(),
     };
 
@@ -280,8 +281,8 @@ export default function EditableOrderDetail({
             code: selectedProduct.code || undefined,
             description: selectedProduct.description || undefined,
             price: selectedProduct.salePrice,
-            quantity: quantity,
-            subTotal: selectedProduct.salePrice * quantity,
+            quantity: quantityNum,
+            subTotal: selectedProduct.salePrice * quantityNum,
           },
         ],
       });
@@ -397,10 +398,12 @@ export default function EditableOrderDetail({
                   <label className="text-sm font-medium">Cantidad</label>
                   <Input
                     type="number"
-                    min={1}
+                    min={0.01}
+                    step="0.01"
                     max={selectedProduct.amount}
                     value={quantity}
-                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    placeholder="0"
                   />
                 </div>
                 <div className="flex-1 text-right">
@@ -408,7 +411,7 @@ export default function EditableOrderDetail({
                   <p className="text-lg font-bold">
                     $
                     {(
-                      selectedProduct.salePrice * quantity
+                      selectedProduct.salePrice * (parseFloat(quantity) || 0)
                     ).toLocaleString("es-AR")}
                   </p>
                 </div>
