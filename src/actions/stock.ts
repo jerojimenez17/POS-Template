@@ -1009,6 +1009,38 @@ export const getProductByCode = async (code: string, supplierId?: string) => {
   }
 };
 
+export const getProductCurrentPrice = async (productId: string): Promise<{ salePrice: number } | null> => {
+  const session = await auth();
+  if (!session?.user?.businessId) return null;
+
+  try {
+    const product = await db.product.findFirst({
+      where: { id: productId, businessId: session.user.businessId },
+      select: { salePrice: true },
+    });
+    return product;
+  } catch (error) {
+    console.error("Error fetching product price:", error);
+    return null;
+  }
+};
+
+export const getProductsCurrentPrices = async (productIds: string[]): Promise<Record<string, number>> => {
+  const session = await auth();
+  if (!session?.user?.businessId || productIds.length === 0) return {};
+
+  try {
+    const products = await db.product.findMany({
+      where: { id: { in: productIds }, businessId: session.user.businessId },
+      select: { id: true, salePrice: true },
+    });
+    return Object.fromEntries(products.map((p) => [p.id, p.salePrice]));
+  } catch (error) {
+    console.error("Error fetching product prices:", error);
+    return {};
+  }
+};
+
 export const getProductsByCode = async (code: string) => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
