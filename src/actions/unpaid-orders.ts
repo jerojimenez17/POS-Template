@@ -32,6 +32,8 @@ interface CreateUnpaidOrderInput {
   businessId: string;
   items: UnpaidOrderItem[];
   total: number;
+  discount?: number;
+  seller?: string;
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
   notes?: string;
@@ -46,6 +48,12 @@ interface RegisterPaymentInput {
 
 interface CancelUnpaidOrderInput {
   orderId: string;
+  businessId: string;
+}
+
+interface UpdateOrderDiscountInput {
+  orderId: string;
+  discountPercentage: number;
   businessId: string;
 }
 
@@ -87,6 +95,12 @@ const removeOrderItemSchema = z.object({
 const getClientUnpaidOrderSchema = z.object({
   clientId: z.string(),
   businessId: z.string(),
+});
+
+const updateOrderDiscountSchema = z.object({
+  orderId: z.string().min(1),
+  discountPercentage: z.number().min(0).max(100),
+  businessId: z.string().min(1),
 });
 
 export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<ActionResult> => {
@@ -135,6 +149,9 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
           notes: input.notes || null,
           clientIvaCondition: input.clientIvaCondition,
           clientDocumentNumber: input.clientDocumentNumber,
+          discountPercentage: Number(input.discount) || 0,
+          discountAmount: Math.round(input.total * (Number(input.discount) || 0) * 0.01),
+          seller: input.seller || null,
           items: {
             create: input.items.map((item) => ({
               productId: item.productId,
@@ -391,6 +408,66 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
       success: false,
       error:
         error instanceof Error ? error.message : "Error al cancelar la orden",
+    };
+  }
+};
+
+export const updateOrderDiscount = async (input: UpdateOrderDiscountInput): Promise<ActionResult> => {
+  try {
+    const validatedInput = updateOrderDiscountSchema.parse(input);
+    const session = await auth();
+    const businessId = session?.user?.businessId || validatedInput.businessId;
+    if (!businessId) return { success: false, error: "No autorizado" };
+
+    const result = await db.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: validatedInput.orderId },
+        include: { items: true, client: true },
+      });
+
+      if (!order) throw new Error("Orden no encontrada");
+      if (order.paidStatus === "pago") throw new Error("No se puede modificar el descuento de una orden pagado");
+
+      // Calculate subtotal from items (sum of all item subTotals)
+      const subtotal = order.items.reduce((sum, item) => sum + item.subTotal, 0);
+
+      // Calculate new discount amount and total
+      const newDiscountAmount = Math.round(subtotal * validatedInput.discountPercentage * 0.01);
+      const newTotal = subtotal - newDiscountAmount;
+
+      // Calculate the difference to update client balance
+      const totalDiff = newTotal - order.total;
+
+      // Update order
+      await tx.order.update({
+        where: { id: validatedInput.orderId },
+        data: {
+          discountPercentage: validatedInput.discountPercentage,
+          discountAmount: newDiscountAmount,
+          total: newTotal,
+        },
+      });
+
+      // Update client balance by the difference
+      if (order.clientId && totalDiff !== 0) {
+        await tx.client.update({
+          where: { id: order.clientId },
+          data: { balance: { increment: totalDiff } },
+        });
+      }
+
+      return { success: true, data: { newTotal, newDiscountAmount } };
+    }, { maxWait: 10000, timeout: 60000 });
+
+    revalidateTag(CACHE_TAGS.ORDERS, "max");
+    revalidateTag(CACHE_TAGS.CLIENTS, "max");
+
+    return result;
+  } catch (error) {
+    console.error("Error updating order discount:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al actualizar el descuento",
     };
   }
 };

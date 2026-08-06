@@ -15,7 +15,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, Plus, Search, Edit3 } from "lucide-react";
 import OrderItemsTable from "./OrderItemsTable";
-import { addItemsToOrder, updateOrderItem, removeOrderItem } from "@/actions/unpaid-orders";
+import { addItemsToOrder, updateOrderItem, removeOrderItem, updateOrderDiscount } from "@/actions/unpaid-orders";
 import { getProductsBySearch } from "@/actions/stock";
 
 interface OrderItemFromDB {
@@ -60,14 +60,19 @@ interface EditableOrderDetailProps {
   order: Order;
   businessId: string;
   onOrderUpdated?: () => void;
+  discountPercentage?: number;
+  discountAmount?: number;
 }
 
 export default function EditableOrderDetail({
   order,
   businessId,
   onOrderUpdated,
+  discountPercentage = 0,
+  discountAmount = 0,
 }: EditableOrderDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [discountEditValue, setDiscountEditValue] = useState(String(discountPercentage));
   const [items, setItems] = useState<OrderItem[]>(
     order.items.map((item) => ({
       ...item,
@@ -107,6 +112,10 @@ export default function EditableOrderDetail({
       }))
     );
   }, [order.items]);
+
+  useEffect(() => {
+    setDiscountEditValue(String(discountPercentage));
+  }, [discountPercentage]);
 
   const loadProducts = async (query: string) => {
     setIsLoadingProducts(true);
@@ -305,13 +314,102 @@ export default function EditableOrderDetail({
     }
   };
 
+  const handleUpdateDiscount = async () => {
+    const parsed = Number(discountEditValue);
+    let clamped = isNaN(parsed) ? 0 : parsed;
+    if (clamped < 0) clamped = 0;
+    if (clamped > 100) clamped = 100;
+
+    setIsLoading(true);
+    try {
+      const result = await updateOrderDiscount({
+        orderId: order.id,
+        discountPercentage: clamped,
+        businessId,
+      });
+
+      if (result.success) {
+        toast.success("Descuento actualizado");
+        onOrderUpdated?.();
+      } else {
+        toast.error(result.error || "Error al actualizar descuento");
+        setDiscountEditValue(String(discountPercentage));
+      }
+    } catch (error) {
+      console.error("Error updating discount:", error);
+      toast.error("Error al actualizar descuento");
+      setDiscountEditValue(String(discountPercentage));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDiscountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleUpdateDiscount();
+    }
+    if (e.key === "Escape") {
+      setDiscountEditValue(String(discountPercentage));
+    }
+  };
+
   if (order.paidStatus === "pago") {
     return null;
   }
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-between items-center mb-4">
+        {/* Discount display/input */}
+        <div className="flex items-center gap-2">
+          {isEditing ? (
+            <>
+              <label
+                htmlFor="discount-input-edit"
+                className="text-sm text-muted-foreground"
+              >
+                Descuento
+              </label>
+              <div className="relative">
+                <input
+                  id="discount-input-edit"
+                  type="number"
+                  aria-label="Porcentaje de descuento"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className="h-8 w-20 rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 text-right text-sm tabular-nums focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  value={discountEditValue}
+                  onChange={(e) => setDiscountEditValue(e.target.value)}
+                  onKeyDown={handleDiscountKeyDown}
+                  onBlur={handleUpdateDiscount}
+                  disabled={isLoading}
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                  %
+                </span>
+              </div>
+              {Number(discountEditValue) > 0 && (
+                <span className="text-sm text-red-600">
+                  (-${Math.round(
+                    order.items.reduce((sum, item) => sum + item.subTotal, 0) *
+                    Number(discountEditValue) * 0.01
+                  ).toLocaleString("es-AR")})
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              Descuento: {discountPercentage > 0 ? `${discountPercentage}%` : "0%"}
+              {discountPercentage > 0 && (
+                <span className="text-red-600 ml-1">
+                  (-${Math.round(discountAmount).toLocaleString("es-AR")})
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+
         <Button variant="outline" onClick={() => setIsEditing(!isEditing)}>
           <Edit3 className="h-4 w-4 mr-2" />
           {isEditing ? "Cancelar edición" : "Editar items"}
