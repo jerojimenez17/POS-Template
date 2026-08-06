@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { Loader2, Plus, Search, Edit3 } from "lucide-react";
 import OrderItemsTable from "./OrderItemsTable";
 import { addItemsToOrder, updateOrderItem, removeOrderItem, updateOrderDiscount } from "@/actions/unpaid-orders";
-import { getProductsBySearch } from "@/actions/stock";
+import { getProductsBySearch, getProductCurrentPrice, getProductsCurrentPrices } from "@/actions/stock";
 
 interface OrderItemFromDB {
   id: string;
@@ -72,6 +72,7 @@ export default function EditableOrderDetail({
   discountAmount = 0,
 }: EditableOrderDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const [discountEditValue, setDiscountEditValue] = useState(String(discountPercentage));
   const [items, setItems] = useState<OrderItem[]>(
     order.items.map((item) => ({
@@ -181,6 +182,7 @@ export default function EditableOrderDetail({
           )
         );
         toast.success("Cantidad actualizada");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al actualizar cantidad");
@@ -211,6 +213,7 @@ export default function EditableOrderDetail({
           )
         );
         toast.success("Precio actualizado");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al actualizar precio");
@@ -238,6 +241,7 @@ export default function EditableOrderDetail({
       if (result.success) {
         setItems((prev) => prev.filter((item) => item.id !== itemId));
         toast.success("Item eliminado");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al eliminar item");
@@ -298,6 +302,7 @@ export default function EditableOrderDetail({
 
       if (result.success) {
         toast.success("Producto agregado");
+        setHasChanges(true);
         setItems((prev) => [...prev, newItem]);
         setIsAddProductOpen(false);
         onOrderUpdated?.();
@@ -330,6 +335,7 @@ export default function EditableOrderDetail({
 
       if (result.success) {
         toast.success("Descuento actualizado");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al actualizar descuento");
@@ -351,6 +357,76 @@ export default function EditableOrderDetail({
     }
     if (e.key === "Escape") {
       setDiscountEditValue(String(discountPercentage));
+    }
+  };
+
+  const handleRefreshPrice = async (itemId: string) => {
+    const item = items.find((i) => i.id === itemId);
+    if (!item?.productId) {
+      toast.error("Este item no tiene un producto asociado en el catálogo");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await getProductCurrentPrice(item.productId);
+      if (!result) {
+        toast.error("No se encontró el producto en el catálogo");
+        return;
+      }
+
+      await handleUpdatePrice(itemId, result.salePrice);
+    } catch (error) {
+      console.error("Error refreshing price:", error);
+      toast.error("Error al obtener el precio actual");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefreshAllPrices = async () => {
+    const itemsWithProduct = items.filter((item) => item.productId);
+    if (itemsWithProduct.length === 0) {
+      toast.error("No hay items con productos asociados en el catálogo");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const productIds = itemsWithProduct.map((item) => item.productId!);
+      const pricesMap = await getProductsCurrentPrices(productIds);
+
+      let updatedCount = 0;
+      for (const item of itemsWithProduct) {
+        const currentPrice = pricesMap[item.productId!];
+        if (currentPrice !== undefined && currentPrice !== item.price) {
+          await updateOrderItem({
+            itemId: item.id,
+            orderId: order.id,
+            price: currentPrice,
+          });
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === item.id
+                ? { ...i, price: currentPrice, subTotal: i.quantity * currentPrice }
+                : i
+            )
+          );
+          updatedCount++;
+        }
+      }
+
+      if (updatedCount > 0) {
+        toast.success(`Precios actualizados: ${updatedCount} productos`);
+        onOrderUpdated?.();
+      } else {
+        toast.info("Todos los precios ya están actualizados");
+      }
+    } catch (error) {
+      console.error("Error refreshing all prices:", error);
+      toast.error("Error al actualizar precios");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -410,9 +486,18 @@ export default function EditableOrderDetail({
           )}
         </div>
 
-        <Button variant="outline" onClick={() => setIsEditing(!isEditing)}>
+        <Button variant="outline" onClick={() => {
+          if (isEditing) {
+            // Exiting edit mode
+            setIsEditing(false);
+          } else {
+            // Entering edit mode — reset changes tracking
+            setHasChanges(false);
+            setIsEditing(true);
+          }
+        }}>
           <Edit3 className="h-4 w-4 mr-2" />
-          {isEditing ? "Cancelar edición" : "Editar items"}
+          {isEditing ? (hasChanges ? "Terminar edición" : "Cancelar edición") : "Editar items"}
         </Button>
       </div>
 
@@ -421,6 +506,8 @@ export default function EditableOrderDetail({
         isEditable={isEditing}
         onUpdateQuantity={isEditing ? handleUpdateQuantity : undefined}
         onUpdatePrice={isEditing ? handleUpdatePrice : undefined}
+        onRefreshPrice={isEditing ? handleRefreshPrice : undefined}
+        onRefreshAllPrices={isEditing ? handleRefreshAllPrices : undefined}
         onRemoveItem={isEditing ? handleRemoveItem : undefined}
         onAddItem={isEditing ? handleOpenAddProduct : undefined}
       />

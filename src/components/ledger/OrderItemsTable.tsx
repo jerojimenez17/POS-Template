@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, RefreshCw } from "lucide-react";
 import { formatLocalDate } from "@/utils/date";
 
 interface OrderItem {
@@ -21,6 +21,8 @@ interface OrderItemsTableProps {
   isEditable: boolean;
   onUpdateQuantity?: (itemId: string, quantity: number) => void;
   onUpdatePrice?: (itemId: string, price: number) => void;
+  onRefreshPrice?: (itemId: string) => void;
+  onRefreshAllPrices?: () => void;
   onRemoveItem?: (itemId: string) => void;
   onAddItem?: () => void;
 }
@@ -49,6 +51,8 @@ export default function OrderItemsTable({
   isEditable,
   onUpdateQuantity,
   onUpdatePrice,
+  onRefreshPrice,
+  onRefreshAllPrices,
   onRemoveItem,
   onAddItem,
 }: OrderItemsTableProps) {
@@ -114,16 +118,29 @@ export default function OrderItemsTable({
                       <td className="p-3">{item.description}</td>
                       <td className="p-3 text-right">
                         {isEditable ? (
-                          <Input
-                            type="number"
-                            value={item.price}
-                            onChange={(e) => {
-                              if (onUpdatePrice) {
-                                onUpdatePrice(item.id, parseFloat(e.target.value) || 0);
-                              }
-                            }}
-                            className="w-24 text-right"
-                          />
+                          <div className="flex items-center justify-end gap-1">
+                            <Input
+                              type="number"
+                              value={item.price}
+                              onChange={(e) => {
+                                if (onUpdatePrice) {
+                                  onUpdatePrice(item.id, parseFloat(e.target.value) || 0);
+                                }
+                              }}
+                              className="w-24 text-right"
+                            />
+                            {item.productId && onRefreshPrice && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
+                                title="Actualizar al precio actual del catálogo"
+                                onClick={() => onRefreshPrice(item.id)}
+                              >
+                                <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+                              </Button>
+                            )}
+                          </div>
                         ) : (
                           <span>${item.price.toLocaleString("es-AR")}</span>
                         )}
@@ -167,10 +184,18 @@ export default function OrderItemsTable({
       })}
 
       {isEditable && onAddItem && (
-        <Button variant="outline" onClick={onAddItem} className="w-full">
-          <Plus className="h-4 w-4 mr-2" />
-          Agregar producto
-        </Button>
+        <div className="flex gap-2">
+          {onRefreshAllPrices && items.some((item) => item.productId) && (
+            <Button variant="outline" onClick={onRefreshAllPrices} className="flex-1">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Actualizar precios
+            </Button>
+          )}
+          <Button variant="outline" onClick={onAddItem} className={onRefreshAllPrices && items.some((item) => item.productId) ? "flex-1" : "w-full"}>
+            <Plus className="h-4 w-4 mr-2" />
+            Agregar producto
+          </Button>
+        </div>
       )}
 
       <div className="flex justify-end p-4 bg-muted rounded-lg">
