@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { auth } from "../../../auth";
 import { BusinessUserSchema } from "@/schemas";
 import bcrypt from "bcryptjs";
+import { checkLimit } from "@/lib/plan-resolver";
 
 export const getBusinessUsers = async () => {
   const session = await auth();
@@ -45,13 +46,21 @@ export const createBusinessUser = async (values: z.infer<typeof BusinessUserSche
     return { error: "No autorizado" };
   }
 
+  const currentCount = await db.user.count({ where: { businessId: session.user.businessId } });
+  try {
+    await checkLimit(session.user.businessId, "users", currentCount);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Has alcanzado el límite de usuarios de tu plan." };
+  }
+
   const validateFields = BusinessUserSchema.safeParse(values);
 
   if (!validateFields.success) {
     return { error: "Datos inválidos" };
   }
 
-  const { name, email, password, role, cashboxId } = validateFields.data;
+  const { name, email, password, role, cashboxId: rawCashboxId } = validateFields.data;
+  const cashboxId = rawCashboxId || null;
 
   // Verify email is not in use
   const existingUser = await db.user.findUnique({ where: { email } });
@@ -94,7 +103,8 @@ export const updateBusinessUser = async (id: string, values: z.infer<typeof Busi
     return { error: "Datos inválidos" };
   }
 
-  const { name, email, password, role, cashboxId } = validateFields.data;
+  const { name, email, password, role, cashboxId: rawCashboxId } = validateFields.data;
+  const cashboxId = rawCashboxId || null;
 
   // Verify user belongs to same business
   const existingUser = await db.user.findUnique({ where: { id } });

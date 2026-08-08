@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Printer, FileText, Download } from "lucide-react";
+import { Printer, FileText } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +29,7 @@ export default function PrintOptionsPopover({
 
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (sale.CAE?.qrData) {
       QRCode.toString(sale.CAE.qrData, { type: "svg", margin: 0, width: 60 })
@@ -41,6 +42,7 @@ export default function PrintOptionsPopover({
       setQrSvgDataUrl(null);
     }
   }, [sale.CAE?.qrData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const hasCAE = Boolean(sale.CAE?.CAE);
   const isRemito = !sale.CAE || sale.CAE.CAE === "";
@@ -54,6 +56,7 @@ export default function PrintOptionsPopover({
             cuit: info.cuit,
             condicionIva: info.condicionIva,
             address: info.address,
+            inicioActividades: info.inicioActividades,
           }
       : undefined,
     date: sale.date || new Date(),
@@ -109,7 +112,10 @@ export default function PrintOptionsPopover({
       invoiceNumber: sale.CAE?.nroComprobante,
       qrSvgDataUrl: qrSvgDataUrl,
     });
-    
+
+    // Fixed width so html2canvas always captures at the same size
+    content.style.cssText = "width:750px;margin:0 auto;background:#fff;";
+
     const styleEl = document.createElement("style");
     styleEl.textContent = PDF_STYLES;
     content.insertBefore(styleEl, content.firstChild);
@@ -137,8 +143,8 @@ export default function PrintOptionsPopover({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Download className="h-4 w-4 text-gray-500" />
+        <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir">
+          <Printer className="h-4 w-4 text-blue-500 dark:text-blue-400" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">

@@ -90,9 +90,37 @@ export const deleteCashbox = async (id: string) => {
     
     if (!businessId || role !== "ADMIN") return fail("No autorizado");
 
-    await db.cashBox.delete({
-      where: { id, businessId },
+    const result = await db.$transaction(async (tx) => {
+      // 1. Check if cashbox has sessions — if so, block deletion
+      const sessionCount = await tx.cashboxSession.count({
+        where: { cashboxId: id, businessId },
+      });
+
+      if (sessionCount > 0) {
+        return {
+          blocked: true,
+          error: `No se puede eliminar esta caja porque tiene ${sessionCount} sesión(es) registradas. Las cajas con historial no pueden eliminarse.`,
+        } as const;
+      }
+
+      // 2. Unassign all users from this cashbox
+      await tx.user.updateMany({
+        where: { cashboxId: id, businessId },
+        data: { cashboxId: null },
+      });
+
+      // 3. Delete the cashbox
+      await tx.cashBox.delete({
+        where: { id, businessId },
+      });
+
+      return { blocked: false } as const;
     });
+
+    if (result.blocked) {
+      return fail(result.error);
+    }
+
     revalidateTag(CACHE_TAGS.CASHBOX, "max");
     return { success: true };
   } catch (error) {

@@ -3,6 +3,7 @@ import {
   processSaleAction,
   getSalesAction,
   getSaleByIdAction,
+  updateOrderAction,
 } from "@/actions/sales";
 
 vi.mock("@/lib/db", () => ({
@@ -11,6 +12,9 @@ vi.mock("@/lib/db", () => ({
     order: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+    },
+    orderUpdate: {
+      findFirst: vi.fn().mockResolvedValue(null),
     },
   },
 }));
@@ -21,6 +25,24 @@ vi.mock("../../../auth", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-gates", () => ({
+  requireFeature: vi.fn().mockResolvedValue({ success: true, data: { businessId: "business-123" } }),
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/lib/daily-limits", () => ({
+  getDailyUsage: vi.fn().mockResolvedValue({ salesCreated: 0, productsCreated: 0, clientsCreated: 0 }),
+  checkDailyLimit: vi.fn().mockResolvedValue({ allowed: true, limit: 999999 }),
+  incrementDailyUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/pusher-server", () => ({
+  pusherServer: {
+    trigger: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 const mockCAE = {
@@ -587,5 +609,284 @@ describe("Billing Fields - Integration Verification", () => {
     expect(minimalInput.total).toBe(100);
     expect(minimalInput.seller).toBe("Test Seller");
     expect(minimalInput.products.length).toBe(1);
+  });
+});
+
+describe("AFIP Feature Gate - processSaleAction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should return error when feature disabled and CAE present (gate blocks)", async () => {
+    const { requireFeature } = await import("@/lib/auth-gates");
+    vi.mocked(requireFeature).mockResolvedValue({
+      success: false,
+      error: "Función no habilitada",
+    });
+
+    const inputWithCAE = {
+      ...baseInput,
+      CAE: mockCAE,
+    } as Parameters<typeof processSaleAction>[0];
+
+    const result = await processSaleAction(inputWithCAE);
+
+    expect("error" in result && result.error).toBeTruthy();
+    // $transaction should NOT be called when gate blocks
+    const { db } = await import("@/lib/db");
+    expect((db.$transaction as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+  });
+
+  it("should succeed when feature enabled and CAE present (gate passes)", async () => {
+    const { db } = await import("@/lib/db");
+    const { requireFeature } = await import("@/lib/auth-gates");
+    vi.mocked(requireFeature).mockResolvedValue({
+      success: true,
+      data: { id: "user-1", businessId: "business-123", role: "ADMIN", business: null },
+    });
+
+    const createdOrder = {
+      id: "order-cae-gate-1",
+      total: 100,
+      seller: "Test Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      CAE: mockCAE,
+      items: [],
+    };
+
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          cashboxSession: {
+            findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
+          },
+          order: {
+            create: vi.fn().mockResolvedValue(createdOrder),
+          },
+          product: {
+            update: vi.fn().mockResolvedValue({ id: "product-1" }),
+          },
+          stockMovement: {
+            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
+          },
+          cashBox: {
+            update: vi.fn().mockResolvedValue({ id: "cashbox-1" }),
+          },
+          cashMovement: {
+            create: vi.fn().mockResolvedValue({ id: "cash-movement-1" }),
+          },
+        };
+        return callback(tx);
+      }
+    );
+
+    const inputWithCAE = {
+      ...baseInput,
+      CAE: mockCAE,
+    } as Parameters<typeof processSaleAction>[0];
+
+    const result = await processSaleAction(inputWithCAE);
+
+    expect(result.success).toBe(true);
+    expect((db.$transaction as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+  });
+
+  it("should succeed when feature disabled but NO CAE (gate skipped)", async () => {
+    const { db } = await import("@/lib/db");
+
+    // Mock requireFeature to fail — but gate should be skipped since no CAE
+    const { requireFeature } = await import("@/lib/auth-gates");
+    vi.mocked(requireFeature).mockResolvedValue({
+      success: false,
+      error: "Función no habilitada",
+    });
+
+    const createdOrder = {
+      id: "order-no-cae-gate-skip-1",
+      total: 100,
+      seller: "Test Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      items: [],
+    };
+
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          cashboxSession: {
+            findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
+          },
+          order: {
+            create: vi.fn().mockResolvedValue(createdOrder),
+          },
+          product: {
+            update: vi.fn().mockResolvedValue({ id: "product-1" }),
+          },
+          stockMovement: {
+            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
+          },
+          cashBox: {
+            update: vi.fn().mockResolvedValue({ id: "cashbox-1" }),
+          },
+          cashMovement: {
+            create: vi.fn().mockResolvedValue({ id: "cash-movement-1" }),
+          },
+        };
+        return callback(tx);
+      }
+    );
+
+    // No CAE in input
+    const result = await processSaleAction(baseInput);
+
+    expect(result.success).toBe(true);
+    expect((db.$transaction as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+  });
+});
+
+describe("updateOrderAction — CAE validation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should update non-invoiced sale (no CAE) successfully", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "ADMIN" },
+    });
+
+    const existingOrder = {
+      id: "order-no-cae-edit",
+      total: 100,
+      seller: "Test Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      clientId: null,
+      clientIvaCondition: null,
+      clientDocumentNumber: null,
+      CAE: null,
+      discountAmount: 0,
+      discountPercentage: 0,
+      date: new Date(),
+      items: [],
+    };
+
+    let mockTx: { order: { findFirst?: ReturnType<typeof vi.fn>; update?: ReturnType<typeof vi.fn> } };
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          order: {
+            findFirst: vi.fn().mockResolvedValue(existingOrder),
+            update: vi.fn().mockResolvedValue(existingOrder),
+          },
+          orderUpdate: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue({ id: "update-1" }),
+          },
+          product: {
+            update: vi.fn().mockResolvedValue({}),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({}),
+          },
+          stockMovement: {
+            create: vi.fn().mockResolvedValue({}),
+          },
+        };
+        mockTx = tx;
+        return callback(tx);
+      }
+    );
+
+    const result = await updateOrderAction("order-no-cae-edit", {
+      total: 100,
+      seller: "Test Seller",
+      paidMethod: "Efectivo",
+      products: [
+        { id: "product-1", code: "P001", description: "Test", salePrice: 100, amount: 1 },
+      ],
+      clientIvaCondition: "CUIT",
+      clientDocumentNumber: "20123456789",
+    });
+
+    expect(result.success).toBe(true);
+    // Verify IVA fields were included in the update
+    expect(mockTx.order.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          clientIvaCondition: "CUIT",
+          clientDocumentNumber: "20123456789",
+        }),
+      })
+    );
+  });
+
+  it("should block editing invoiced sale (CAE present)", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "ADMIN" },
+    });
+
+    const existingOrderWithCAE = {
+      id: "order-cae-blocked",
+      total: 100,
+      seller: "Test Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      clientId: null,
+      CAE: { CAE: "1234567890123", vencimiento: "2026-12-31", nroComprobante: 1, qrData: "https://example.com/qr" },
+      discountAmount: 0,
+      discountPercentage: 0,
+      items: [],
+    };
+
+    let mockTx: { order: { findFirst?: ReturnType<typeof vi.fn>; update?: ReturnType<typeof vi.fn> } };
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          order: {
+            findFirst: vi.fn().mockResolvedValue(existingOrderWithCAE),
+          },
+        };
+        mockTx = tx;
+        return callback(tx);
+      }
+    );
+
+    const result = await updateOrderAction("order-cae-blocked", {
+      total: 100,
+      seller: "Test Seller",
+      paidMethod: "Efectivo",
+      products: [
+        { id: "product-1", code: "P001", description: "Test", salePrice: 100, amount: 1 },
+      ],
+    });
+
+    // Should fail because CAE exists (throw inside transaction → outer catch returns error)
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+    // order.findFirst was called (CAE check happened)
+    expect(mockTx.order.findFirst).toHaveBeenCalled();
+    // order.update should NOT have been called because CAE check throws before it
+    expect(mockTx.order.update).toBeUndefined();
   });
 });

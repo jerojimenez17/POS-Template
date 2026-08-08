@@ -96,7 +96,7 @@ const ProductSelector = ({
   };
 
   return (
-    <div className="flex w-full h-full flex-col bg-slate-50/50 dark:bg-gray-950/50 min-h-screen relative">
+    <div className="flex w-full h-full flex-col bg-slate-50/50 dark:bg-gray-950/50 min-h-screen relative overflow-x-hidden">
       {/* Decorative background elements */}
       <div className="absolute top-0 left-0 w-full h-64 bg-linear-to-b from-primary/5 to-transparent pointer-events-none" />
 
@@ -166,8 +166,7 @@ const ProductSelector = ({
         </div>
       </div>
       <div
-        className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] my-4 max-h-full overflow-auto max-w-5xl mx-auto z-10 gap-4 px-4"
-        style={{ contentVisibility: "auto" }}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 my-4 max-h-full max-w-5xl mx-auto z-10 gap-4 px-4"
       >
         {isLoading ? (
           <div className="flex gap-4">

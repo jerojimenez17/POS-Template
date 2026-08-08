@@ -1,9 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { CheckSquare, Square, Printer, Percent, ArrowLeft, Filter, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import { CheckSquare, Square, Printer, Percent, ArrowLeft, Filter, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { getProductsFiltered, bulkUpdatePrices, getSuppliersForFilter } from "@/actions/stock";
 import { getCategories } from "@/actions/categories";
 import { getBrands } from "@/actions/brands";
@@ -38,29 +48,50 @@ const BulkUpdatePage = () => {
   const [percentage, setPercentage] = useState<string>("");
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [filterVersion, setFilterVersion] = useState(0);
+  const [selectAllLoading] = useState(false);
+  const isFirstLoadAfterFilter = useRef(true);
+  const [dialogState, setDialogState] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    variant: "info" | "confirm";
+    onConfirm?: () => void;
+  }>({ open: false, title: "", description: "", variant: "info" });
+
+  const showDialog = (title: string, description: string, variant: "info" | "confirm" = "info", onConfirm?: () => void) => {
+    setDialogState({ open: true, title, description, variant, onConfirm });
+  };
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getProductsFiltered({
+      const result = await getProductsFiltered({
         search: filters.search || undefined,
         categoryId: filters.categoryId || undefined,
         brandId: filters.brandId || undefined,
         unit: filters.unit || undefined,
         supplierId: filters.supplierId || undefined,
       });
-      setFilteredProducts(data as ProductExtended[]);
-      setSelectedIds(new Set(data.map((p: ProductExtended) => p.id)));
+      const products = result as ProductExtended[];
+      setFilteredProducts(products);
+      setTotal(products.length);
+      setTotalPages(Math.ceil(products.length / pageSize));
+      // On first load after applying filters, select all products on current page
+      if (isFirstLoadAfterFilter.current) {
+        setSelectedIds(new Set(products.slice(0, pageSize).map((p: ProductExtended) => p.id)));
+        isFirstLoadAfterFilter.current = false;
+      }
     } catch (error) {
       console.error("Error fetching products:", error);
     } finally {
       setLoading(false);
     }
-  }, [filters]);
-
-  useEffect(() => {
-    loadFiltersData();
-  }, []);
+  }, [filters, pageSize]);
 
   const loadFiltersData = async () => {
     try {
@@ -77,12 +108,36 @@ const BulkUpdatePage = () => {
     }
   };
 
-  const handleSelectAll = () => {
-    if (selectedIds.size === filteredProducts.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredProducts.map((p) => p.id)));
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadFiltersData();
+  }, []);
+
+  // Auto-fetch products when page, pageSize, or filters change
+  useEffect(() => {
+    if (hasLoaded) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchProducts();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, hasLoaded, filterVersion]);
+
+  // Paginate products client-side
+  const paginatedProducts = useMemo(() => {
+    return filteredProducts.slice((page - 1) * pageSize, page * pageSize);
+  }, [filteredProducts, page, pageSize]);
+
+  const handleSelectAll = () => {
+    if (!hasLoaded || total === 0) return;
+
+    // If all visible products are already selected, deselect all
+    if (selectedIds.size === total) {
+      setSelectedIds(new Set());
+      return;
+    }
+
+    // Select all products on current page
+    setSelectedIds(new Set(filteredProducts.map((p) => p.id)));
   };
 
   const handleToggleProduct = (id: string) => {
@@ -98,28 +153,31 @@ const BulkUpdatePage = () => {
   const handleBulkPriceUpdate = async () => {
     const percent = parseFloat(percentage);
     if (isNaN(percent) || percent < 0 || percent > 100) {
-      alert("Porcentaje inválido");
+      showDialog("Error", "Porcentaje inválido");
       return;
     }
 
     if (selectedIds.size === 0) {
-      alert("No hay productos seleccionados");
+      showDialog("Error", "No hay productos seleccionados");
       return;
     }
 
-    if (!confirm(`¿Aplicar ${percent}% de aumento a ${selectedIds.size} productos?`)) {
-      return;
-    }
-
-    const result = await bulkUpdatePrices(Array.from(selectedIds), percent);
-    
-    if (result.success) {
-      alert("Precios actualizados correctamente");
-      fetchProducts();
-      setIsFiltersOpen(false);
-    } else {
-      alert(result.error || "Error al actualizar precios");
-    }
+    showDialog(
+      "Confirmar aumento",
+      `¿Aplicar ${percent}% de aumento a ${selectedIds.size} productos?`,
+      "confirm",
+      async () => {
+        const result = await bulkUpdatePrices(Array.from(selectedIds), percent);
+        setDialogState(prev => ({ ...prev, open: false }));
+        if (result.success) {
+          showDialog("Éxito", "Precios actualizados correctamente");
+          fetchProducts();
+          setIsFiltersOpen(false);
+        } else {
+          showDialog("Error", result.error || "Error al actualizar precios");
+        }
+      }
+    );
   };
 
   const handlePrint = () => {
@@ -150,8 +208,8 @@ const BulkUpdatePage = () => {
           >
             <Filter className="h-4 w-4" />
           </Button>
-          <Button 
-            onClick={handlePrint} 
+          <Button
+            onClick={handlePrint}
             disabled={selectedProducts.length === 0}
             className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 px-3 md:px-4"
             aria-label={`Imprimir ${selectedProducts.length} productos seleccionados`}
@@ -238,7 +296,7 @@ const BulkUpdatePage = () => {
                   </select>
                 </div>
 
-                <Button onClick={() => { setHasLoaded(true); fetchProducts(); setIsFiltersOpen(false); }} variant="default" className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                <Button onClick={() => { setHasLoaded(true); setPage(1); setSelectedIds(new Set()); isFirstLoadAfterFilter.current = true; setFilterVersion(v => v + 1); setIsFiltersOpen(false); }} variant="default" className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
                   Aplicar Filtros
                 </Button>
               </div>
@@ -261,16 +319,16 @@ const BulkUpdatePage = () => {
                       placeholder="% aumento…"
                       value={percentage}
                       onChange={(e) => setPercentage(e.target.value)}
-                      className="flex-1 min-w-0 px-3 py-2 border rounded-md bg-white dark:bg-gray-800 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none transition-all"
+                      className="flex-1 min-w-0 px-3 py-2 border rounded-md bg-white dark:bg-gray-800 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none transition-all h-9"
                       min="0"
                       max="100"
                     />
-                    <Button 
-                      onClick={handleBulkPriceUpdate} 
+                    <Button
+                      onClick={handleBulkPriceUpdate}
                       variant="outline"
                       size="sm"
-                      className="shrink-0"
                       disabled={selectedIds.size === 0}
+                      className="shrink-0 h-9"
                     >
                       Aplicar
                     </Button>
@@ -299,25 +357,28 @@ const BulkUpdatePage = () => {
           {/* Toolbar */}
           <div className="p-4 border-b flex items-center justify-between gap-4 bg-gray-50/50 dark:bg-gray-800/50">
             <div className="flex items-center gap-4">
-              <Button 
-                onClick={handleSelectAll} 
-                variant="ghost" 
+              <Button
+                onClick={handleSelectAll}
+                variant="ghost"
                 size="sm"
+                disabled={selectAllLoading || !hasLoaded || total === 0}
                 className="hover:bg-white dark:hover:bg-gray-800 shadow-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-700 transition-all"
-                aria-label={selectedIds.size === filteredProducts.length ? "Deseleccionar todos los productos" : "Seleccionar todos los productos"}
+                aria-label={selectedIds.size === total && total > 0 ? "Deseleccionar todos los productos filtrados" : "Seleccionar todos los productos filtrados"}
               >
-                {selectedIds.size === filteredProducts.length ? (
+                {selectAllLoading ? (
+                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full" />
+                ) : selectedIds.size === total && total > 0 ? (
                   <CheckSquare className="h-4 w-4 text-blue-500" />
                 ) : (
                   <Square className="h-4 w-4 text-gray-400" />
                 )}
                 <span className="ml-2 font-medium">
-                  {selectedIds.size === filteredProducts.length ? "Deseleccionar todos" : "Seleccionar todos"}
+                  {selectedIds.size === total && total > 0 ? "Deseleccionar todos" : "Seleccionar todos"}
                 </span>
               </Button>
               <div className="h-4 w-px bg-gray-300 dark:bg-gray-700 hidden sm:block" />
               <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                {selectedIds.size.toLocaleString("es-AR")} de {filteredProducts.length.toLocaleString("es-AR")} seleccionados
+                {selectedIds.size.toLocaleString("es-AR")} de {total.toLocaleString("es-AR")} seleccionados
               </span>
             </div>
           </div>
@@ -365,12 +426,11 @@ const BulkUpdatePage = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {filteredProducts.map((product) => (
+                      {paginatedProducts.map((product) => (
                         <tr
                           key={product.id}
-                          className={`group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-colors ${
-                            selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""
-                          }`}
+                          className={`group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-colors ${selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""
+                            }`}
                           onClick={() => handleToggleProduct(product.id)}
                         >
                           <td className="p-4 text-center">
@@ -399,12 +459,11 @@ const BulkUpdatePage = () => {
 
                 {/* Mobile Card View */}
                 <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
-                  {filteredProducts.map((product) => (
+                  {paginatedProducts.map((product) => (
                     <div
                       key={product.id}
-                      className={`p-4 active:bg-blue-50 dark:active:bg-blue-900/10 flex items-start gap-3 ${
-                        selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""
-                      }`}
+                      className={`p-4 active:bg-blue-50 dark:active:bg-blue-900/10 flex items-start gap-3 ${selectedIds.has(product.id) ? "bg-blue-50/30 dark:bg-blue-900/5" : ""
+                        }`}
                       onClick={() => handleToggleProduct(product.id)}
                     >
                       <div className="shrink-0 pt-0.5">
@@ -438,6 +497,49 @@ const BulkUpdatePage = () => {
                 </div>
               </>
             )}
+
+            {/* Pagination */}
+            {total > 0 && (
+              <div className="flex items-center justify-between px-2 py-4 border-t">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {(page - 1) * pageSize + 1}&ndash;{Math.min(page * pageSize, total)} de {total.toLocaleString("es-AR")} productos
+                  </span>
+                  {/* Page size selector */}
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="text-sm border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                  >
+                    <option value={25}>25 por página</option>
+                    <option value={50}>50 por página</option>
+                    <option value={100}>100 por página</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" onClick={() => setPage(1)} disabled={page <= 1} className="h-8 w-8 p-0">
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page <= 1} className="h-8 px-3">
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-gray-500 dark:text-gray-400 px-3">
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages} className="h-8 px-3">
+                    Siguiente
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPage(totalPages)} disabled={page >= totalPages} className="h-8 w-8 p-0">
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -449,6 +551,27 @@ const BulkUpdatePage = () => {
           products={selectedProducts}
         />
       )}
+
+      <AlertDialog open={dialogState.open} onOpenChange={(open) => setDialogState(prev => ({ ...prev, open }))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{dialogState.title}</AlertDialogTitle>
+            <AlertDialogDescription>{dialogState.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {dialogState.variant === "confirm" ? (
+              <>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={dialogState.onConfirm}>Confirmar</AlertDialogAction>
+              </>
+            ) : (
+              <AlertDialogAction onClick={() => setDialogState(prev => ({ ...prev, open: false }))}>
+                Aceptar
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

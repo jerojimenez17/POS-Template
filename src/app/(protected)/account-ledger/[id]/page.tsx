@@ -1,7 +1,6 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,6 +19,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { 
   ArrowLeft,
+  BookOpen,
   User,
   Calendar,
   Package,
@@ -49,6 +49,7 @@ interface OrderWithRelations {
   client: { id: string; name: string | null; cellPhone: string | null; email: string | null; address: string | null } | null;
   items: Array<{ id: string; productId: string | null; description: string | null; code: string | null; price: number; quantity: number; subTotal: number; addedAt: Date }>;
   cashMovements: Array<{ id: string; date: Date; total: number; paidMethod: string | null }>;
+  notes?: string | null;
 }
 
 export default async function AccountLedgerDetailPage({
@@ -79,51 +80,98 @@ export default async function AccountLedgerDetailPage({
 
   if (!order) {
     return (
-      <div className="container mx-auto py-8 px-4 max-w-4xl">
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/account-ledger">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Volver
-            </Link>
-          </Button>
+      <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
+        <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild title="Volver">
+              <Link href="/account-ledger">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            </Button>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <BookOpen className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight">Detalle de Cuenta</h1>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <Card>
+            <CardContent className="py-8 text-center">
+              <p className="text-muted-foreground">Orden no encontrada</p>
+            </CardContent>
+          </Card>
         </div>
-        <Card>
-          <CardContent className="py-8 text-center">
-            <p className="text-muted-foreground">Orden no encontrada</p>
-          </CardContent>
-        </Card>
       </div>
     );
   }
 
   const totalPaid = order.cashMovements.reduce((sum, pm) => sum + pm.total, 0);
-  const remainingBalance = order.total - totalPaid;
+  const remainingBalance = Math.round(order.total) - Math.round(totalPaid);
 
 
 
-  const getStatusBadge = (paidStatus: string) => {
+  const getStatusPill = (status: string, paidStatus: string) => {
+    if (status === "pendiente") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+          Por Confirmar
+        </span>
+      );
+    }
     switch (paidStatus) {
       case "inpago":
-        return <Badge variant="destructive">Pendiente</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+            Pendiente
+          </span>
+        );
       case "pago":
-        return <Badge className="bg-green-500 hover:bg-green-600">Pagado</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border border-green-200 dark:border-green-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            Pagado
+          </span>
+        );
       default:
-        return <Badge variant="outline">{paidStatus}</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+            {paidStatus}
+          </span>
+        );
     }
   };
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-5xl">
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/account-ledger">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Volver
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-bold">Detalle de Cuenta</h1>
-      </div>
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
+      <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild title="Volver">
+            <Link href="/account-ledger">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <BookOpen className="h-5 w-5 text-blue-500" />
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">Detalle de Cuenta</h1>
+              <p className="text-sm text-gray-500 hidden sm:block">
+                Orden #{order.id.slice(-6).toUpperCase()}
+              </p>
+            </div>
+          </div>
+        </div>
+        {getStatusPill(order.status, order.paidStatus)}
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 py-6">
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Main Info Card */}
@@ -131,7 +179,7 @@ export default async function AccountLedgerDetailPage({
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>Orden #{order.id.slice(-6).toUpperCase()}</span>
-              {getStatusBadge(order.paidStatus)}
+              {getStatusPill(order.status, order.paidStatus)}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -142,6 +190,11 @@ export default async function AccountLedgerDetailPage({
                 <div>
                   <p className="text-xs text-muted-foreground uppercase font-medium">Cliente</p>
                   <p className="font-medium">{order.client?.name || "Sin cliente"}</p>
+                  {order.notes && (
+                    <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+                      {order.notes}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
@@ -255,7 +308,7 @@ export default async function AccountLedgerDetailPage({
                       </div>
                       <div className="text-right">
                         <span className="font-medium text-green-700 dark:text-green-400">
-                          +${payment.total.toLocaleString("es-AR")}
+                          +${Math.round(payment.total).toLocaleString("es-AR")}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2">
                           <LocalDate date={payment.date} />
@@ -278,12 +331,12 @@ export default async function AccountLedgerDetailPage({
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total Orden</span>
-                <span className="font-medium">${order.total.toLocaleString("es-AR")}</span>
+                <span className="font-medium">${Math.round(order.total).toLocaleString("es-AR")}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Pagado</span>
                 <span className="font-medium text-green-600">
-                  -${totalPaid.toLocaleString("es-AR")}
+                  -${Math.round(totalPaid).toLocaleString("es-AR")}
                 </span>
               </div>
               <Separator />
@@ -323,6 +376,7 @@ export default async function AccountLedgerDetailPage({
           </CardContent>
         </Card>
       </div>
+    </div>
     </div>
   );
 }

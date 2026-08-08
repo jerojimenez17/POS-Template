@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { updateBusinessFeaturesAction } from "@/actions/superadmin";
+import { updateBusinessPlanAction } from "@/actions/superadmin";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { Plan } from "@prisma/client";
 
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn(),
@@ -10,6 +9,9 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/db", () => ({
   db: {
+    planDefinition: {
+      findUnique: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -28,21 +30,34 @@ describe("Superadmin Actions Test Suite", () => {
 
     const payload = {
       businessId: "biz_1",
-      plan: Plan.PRO,
-      hasAfipBilling: false,
-      hasPublicCatalog: true,
-      hasClientLedger: true,
-      hasMultiCashbox: false,
-      hasSupplierFilter: false,
-      hasBudget: false,
-      maxUsers: 5,
-      maxProducts: 1000,
+      planDefinitionId: "plan_pro",
     };
 
-    const result = await updateBusinessFeaturesAction(payload);
+    const result = await updateBusinessPlanAction(payload);
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error).toContain("No autorizado");
+    }
+  });
+
+  it("should reject if PlanDefinition not found", async () => {
+    vi.mocked(auth).mockResolvedValue({
+      user: {
+        role: "SUPER_ADMIN",
+      },
+    } as any);
+
+    vi.mocked(db.planDefinition.findUnique).mockResolvedValue(null);
+
+    const payload = {
+      businessId: "biz_1",
+      planDefinitionId: "nonexistent",
+    };
+
+    const result = await updateBusinessPlanAction(payload);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain("Plan no encontrado");
     }
   });
 
@@ -53,12 +68,17 @@ describe("Superadmin Actions Test Suite", () => {
       },
     } as any);
 
+    vi.mocked(db.planDefinition.findUnique).mockResolvedValue({
+      id: "plan_pro",
+      name: "PRO",
+      features: { hasAfipBilling: true, hasPublicCatalog: true },
+      limits: { maxUsers: 5, maxProducts: 1000 },
+    } as any);
+
     const mockTx = {
       business: {
         findUnique: vi.fn().mockResolvedValue({ id: "biz_1" }),
-      },
-      businessFeatures: {
-        upsert: vi.fn().mockResolvedValue({}),
+        update: vi.fn().mockResolvedValue({ id: "biz_1" }),
       },
     };
 
@@ -68,19 +88,15 @@ describe("Superadmin Actions Test Suite", () => {
 
     const payload = {
       businessId: "biz_1",
-      plan: Plan.PRO,
-      hasAfipBilling: false,
-      hasPublicCatalog: true,
-      hasClientLedger: true,
-      hasMultiCashbox: false,
-      hasSupplierFilter: false,
-      hasBudget: false,
-      maxUsers: 5,
-      maxProducts: 1000,
+      planDefinitionId: "plan_pro",
     };
 
-    const result = await updateBusinessFeaturesAction(payload);
+    const result = await updateBusinessPlanAction(payload);
     expect(result.success).toBe(true);
-    expect(mockTx.businessFeatures.upsert).toHaveBeenCalledTimes(1);
+    expect(mockTx.business.update).toHaveBeenCalledTimes(1);
+    expect(mockTx.business.update).toHaveBeenCalledWith({
+      where: { id: "biz_1" },
+      data: { planDefinitionId: "plan_pro" },
+    });
   });
 });

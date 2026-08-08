@@ -1,31 +1,6 @@
-// import BillState from "../interfaces/BillState";
-import CAE from "@/models/CAE";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
-
-type BillAction =
-  | { type: "addItem"; payload: Product }
-  | { type: "addUnit"; payload: Product }
-  | { type: "removeUnit"; payload: { id: string } }
-  | { type: "removeAll"; payload: null }
-  | { type: "removeItem"; payload: { id: string } }
-  | { type: "updateunit"; payload: { id: string } }
-  | { type: "updateTotal"; payload: Product }
-  | { type: "changePrice"; payload: Product }
-  | { type: "changeUnit"; payload: Product }
-  | { type: "total"; payload: null }
-  | { type: "discount"; payload: number }
-  | { type: "typeDocument"; payload: string }
-  | { type: "documentNumber"; payload: number }
-  | { type: "entrega"; payload: number }
-  | { type: "nroAsociado"; payload: number }
-  | { type: "sellerName"; payload: string }
-  | { type: "IVACondition"; payload: string }
-  | { type: "date"; payload: Date }
-  | { type: "paidMethod"; payload: string }
-  | { type: "billType"; payload: string }
-  | { type: "CAE"; payload: CAE }
-  | { type: "setState"; payload: BillState };
+import type { BillAction } from "./billActions";
 
 export const BillReducer = (
   state: BillState,
@@ -37,13 +12,14 @@ export const BillReducer = (
         (product) => product.id === action.payload.id
       );
 
+      const itemTotal = action.payload.salePrice * action.payload.amount;
       if (isPresent) {
         return {
           ...state,
-          total: state.total + action.payload.salePrice * action.payload.amount,
+          total: state.total + itemTotal,
           totalWithDiscount:
             state.totalWithDiscount +
-            action.payload.salePrice * action.payload.amount * state.discount,
+            itemTotal * (1 - state.discount * 0.01),
           products: state.products.map((product) => {
             if (product.id === action.payload.id) {
               return {
@@ -60,8 +36,8 @@ export const BillReducer = (
           ...state,
           totalWithDiscount:
             state.totalWithDiscount +
-            action.payload.salePrice * action.payload.amount * state.discount,
-          total: state.total + action.payload.salePrice * action.payload.amount,
+            itemTotal * (1 - state.discount * 0.01),
+          total: state.total + itemTotal,
           products: state.products.concat({
             ...action.payload,
           }),
@@ -72,8 +48,8 @@ export const BillReducer = (
         ...state,
         totalWithDiscount:
           state.totalWithDiscount +
-          action.payload.salePrice * action.payload.amount * state.discount,
-        total: state.total + action.payload.salePrice * action.payload.amount,
+          action.payload.salePrice * (1 - state.discount * 0.01),
+        total: state.total + action.payload.salePrice,
         products: state.products.map(({ ...product }) => {
           if (product.id === action.payload.id) {
             product.amount++;
@@ -92,13 +68,21 @@ export const BillReducer = (
           return product;
         }),
       };
-    case "removeItem":
+    case "removeItem": {
+      const filtered = state.products.filter(
+        (product: Product) => product.id !== action.payload.id
+      );
+      const recalculatedTotal = filtered.reduce(
+        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+        0
+      );
       return {
         ...state,
-        products: state.products.filter(
-          (product: Product) => product.id !== action.payload.id
-        ),
+        products: filtered,
+        total: recalculatedTotal,
+        totalWithDiscount: recalculatedTotal * (1 - (state.discount || 0) * 0.01),
       };
+    }
     case "removeAll":
       return {
         ...state,
@@ -110,6 +94,9 @@ export const BillReducer = (
         total: 0,
         date: new Date(),
         paidMethod: "Efectivo",
+        twoMethods: false,
+        secondPaidMethod: undefined,
+        totalSecondMethod: null,
         totalWithDiscount: 0,
         pago: false,
         entrega: 0,
@@ -117,35 +104,51 @@ export const BillReducer = (
         typeDocument: "",
         CAE: { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" },
       };
-    case "changePrice":
+    case "changePrice": {
+      const priceChanged = state.products.map(({ ...product }) => {
+        if (product.id === action.payload.id) {
+          product.price = action.payload.price;
+        }
+        return product;
+      });
+      const priceTotal = priceChanged.reduce(
+        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+        0
+      );
       return {
         ...state,
-        products: state.products.map(({ ...product }) => {
-          if (product.id === action.payload.id) {
-            product.price = action.payload.price;
-          }
-
-          return product;
-        }),
+        products: priceChanged,
+        total: priceTotal,
+        totalWithDiscount: priceTotal * (1 - (state.discount || 0) * 0.01),
       };
-    case "changeUnit":
+    }
+    case "changeUnit": {
+      const unitChanged = state.products.map(({ ...product }) => {
+        if (product.id === action.payload.id) {
+          product.amount = action.payload.amount;
+        }
+        return product;
+      });
+      const unitTotal = unitChanged.reduce(
+        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+        0
+      );
       return {
         ...state,
-        products: state.products.map(({ ...product }) => {
-          if (product.id === action.payload.id) {
-            product.amount = action.payload.amount;
-          }
-
-          return product;
-        }),
+        products: unitChanged,
+        total: unitTotal,
+        totalWithDiscount: unitTotal * (1 - (state.discount || 0) * 0.01),
       };
+    }
     case "total":
+      const recalculated = state.products.reduce(
+        (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
+        0
+      );
       return {
         ...state,
-        total: state.products.reduce(
-          (acc: number, cur: Product) => acc + cur.salePrice * cur.amount,
-          0
-        ),
+        total: recalculated,
+        totalWithDiscount: recalculated * (1 - (state.discount || 0) * 0.01),
       };
     case "discount":
       return {
@@ -218,6 +221,34 @@ export const BillReducer = (
       return {
         ...state,
         date: action.payload,
+      };
+    }
+    case "clientId": {
+      return {
+        ...state,
+        clientId: action.payload,
+      };
+    }
+    case "client": {
+      return {
+        ...state,
+        client: action.payload,
+      };
+    }
+    case "updateSalePrice": {
+      const { id, salePrice } = action.payload;
+      const updatedProducts = state.products.map((product) =>
+        product.id === id ? { ...product, salePrice } : product
+      );
+      const newTotal = updatedProducts.reduce(
+        (acc, cur) => acc + cur.salePrice * cur.amount,
+        0
+      );
+      return {
+        ...state,
+        products: updatedProducts,
+        total: newTotal,
+        totalWithDiscount: newTotal * (1 - (state.discount || 0) * 0.01),
       };
     }
     case "setState": {

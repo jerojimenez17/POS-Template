@@ -20,6 +20,11 @@ vi.mock("@/auth", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-gates", () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 describe("R1: addItemsToOrder - adds items with addedAt timestamp", () => {
@@ -54,6 +59,9 @@ describe("R1: addItemsToOrder - adds items with addedAt timestamp", () => {
           },
           stockMovement: {
             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
           client: {
             update: vi.fn().mockResolvedValue({ id: "client-1" }),
@@ -149,6 +157,7 @@ describe("R2: updateOrderItem - edit quantity and price", () => {
       total: 100,
       paidStatus: "inpago",
       clientId: "client-1",
+      items: [orderItem],
     };
 
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
@@ -173,6 +182,9 @@ describe("R2: updateOrderItem - edit quantity and price", () => {
           },
           stockMovement: {
             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
           client: {
             update: vi.fn().mockResolvedValue({ id: "client-1" }),
@@ -211,6 +223,7 @@ describe("R2: updateOrderItem - edit quantity and price", () => {
       total: 100,
       paidStatus: "inpago",
       clientId: "client-1",
+      items: [orderItem],
     };
 
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
@@ -311,6 +324,7 @@ describe("R2: removeOrderItem - remove items from unpaid orders", () => {
       total: 200,
       paidStatus: "inpago",
       clientId: "client-1",
+      items: [orderItem],
     };
 
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
@@ -329,6 +343,9 @@ describe("R2: removeOrderItem - remove items from unpaid orders", () => {
           },
           stockMovement: {
             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
           client: {
             update: vi.fn().mockResolvedValue({ id: "client-1" }),
@@ -454,6 +471,7 @@ describe("Order total updates automatically", () => {
       paidStatus: "inpago",
       total: 100,
       clientId: "client-1",
+      items: [],
     };
 
     let updatedTotal = 0;
@@ -479,6 +497,9 @@ describe("Order total updates automatically", () => {
           },
           stockMovement: {
             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
           client: {
             update: vi.fn().mockResolvedValue({ id: "client-1" }),

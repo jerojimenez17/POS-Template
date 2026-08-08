@@ -10,7 +10,7 @@ import { getArcaCredentialsForBilling } from "./arca";
  * This action validates the user session and uses a shared secret for authentication.
  */
 export const createAfipVoucherAction = async (billState: BillState) => {
-  const featureResult = await requireFeature("hasBilling");
+  const featureResult = await requireFeature("hasAfipBilling");
   if (!featureResult.success) {
     return { error: featureResult.error };
   }
@@ -31,10 +31,22 @@ export const createAfipVoucherAction = async (billState: BillState) => {
   }
 
   try {
-    console.log("AFIP SDK API KEY:", process.env.AFIPSDK_API_KEY);
-    console.log("Function URL:", functionUrl);
     // 2. Call the Cloud Function from the server
     const { ptoVenta, ...billStateWithoutPtoVenta } = billState;
+
+    // Strip product data to only essential fields for the external API
+    const minimalBillState = {
+      ...billStateWithoutPtoVenta,
+      products: billStateWithoutPtoVenta.products.map((p) => ({
+        id: p.id,
+        code: p.code,
+        description: p.description,
+        price: p.price,
+        salePrice: p.salePrice,
+        amount: p.amount,
+      })),
+    };
+
     const response = await axios.post(
       functionUrl,
       {
@@ -46,7 +58,7 @@ export const createAfipVoucherAction = async (billState: BillState) => {
           cuit,
           puntoVenta: ptoVenta,
         },
-        billState: billStateWithoutPtoVenta,
+        billState: minimalBillState,
       },
       {
         headers: {

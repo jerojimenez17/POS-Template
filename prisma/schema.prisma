@@ -11,7 +11,7 @@ generator client {
 }
 
 model Account {
-  id                String  @id @default(cuid())
+  id          String   @id @default(uuid())
   userId            String
   type              String
   provider          String
@@ -60,6 +60,8 @@ model Business {
   cashMovements   CashMovement[]
   saleReturns     SaleReturn[]
   stockMovements  StockMovement[]
+  dailyUsage      DailyUsage[]
+  shortcutConfigs ShortcutConfig[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -76,6 +78,7 @@ model Business {
   // Arca Fileds Ends
   accountStatus     BusinessStatus    @default(ACTIVO)
   lastPaymentDate   DateTime?
+  trialEndsAt       DateTime?
 
   // Branding fields
   brandLogo             String?   // URL to uploaded logo
@@ -89,7 +92,8 @@ model Business {
   lowStockThreshold           Int?      @default(10)
   timezone                    String?   @default("America/Argentina/Buenos_Aires")
   orderUpdates      OrderUpdate[]
-  features          BusinessFeatures?
+  planDefinitionId String?
+  planDefinition   PlanDefinition? @relation(fields: [planDefinitionId], references: [id])
 }
 
 enum BusinessStatus {
@@ -234,6 +238,7 @@ model Product {
   rankings        ProductRanking[]
   stockMovements  StockMovement[]
   saleReturnItems SaleReturnItem[]
+  shortcutConfigs ShortcutConfig[]
 
   @@index([businessId])
   @@index([businessId, description])
@@ -340,6 +345,7 @@ model Order {
   total      Float       @default(0)
   status     OrderStatus @default(confirmado)
   paidStatus PaidStatus  @default(inpago)
+  notes      String?
   seller     String?
 
   // Payment methods
@@ -532,28 +538,48 @@ enum Plan {
   BASIC
   PRO
   ENTERPRISE
+  DEMO
 }
 
-model BusinessFeatures {
+model PlanDefinition {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  features    Json              // { hasAfipBilling, hasPublicCatalog, ... }
+  limits      Json              // { maxUsers, maxProducts, maxCashboxes, maxClients, dailySalesLimit }
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  displayOrder Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  businesses  Business[]
+}
+
+model ShortcutConfig {
   id         String   @id @default(cuid())
-  businessId String   @unique
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+  key        String
+  productId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  plan Plan @default(BASIC)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  // Feature Toggles
-  hasAfipBilling    Boolean @default(false)
-  hasPublicCatalog  Boolean @default(false)
-  hasClientLedger   Boolean @default(false)
-  hasMultiCashbox   Boolean @default(false)
-  hasSupplierFilter Boolean @default(false)
-  hasBudget Boolean @default(false)
-
-  // Operational Limits
-  maxUsers    Int @default(1)
-  maxProducts Int @default(100)
-
-  updatedAt DateTime @updatedAt
-
+  @@unique([businessId, key])
   @@index([businessId])
+}
+
+model DailyUsage {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  date        DateTime // normalized to UTC midnight
+  salesCount  Int      @default(0)
+  productsCreated Int  @default(0)
+  clientsCreated  Int  @default(0)
+
+  @@unique([businessId, date])
+  @@index([businessId, date])
 }

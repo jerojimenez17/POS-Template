@@ -6,12 +6,23 @@ import { BillContext } from "@/context/BillContext";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 
-const mockGetProductByCode = vi.fn().mockResolvedValue(null);
+vi.mock("@/hooks/useFeatures", () => ({
+  useFeatures: vi.fn(),
+}));
+
+import { useFeatures } from "@/hooks/useFeatures";
+
+// Production routes barcode lookups through getProductsByCode (returns array) when
+// no supplierId is active. getProductByCode is only called when supplierId is set.
+const mockGetProductsByCode = vi.fn().mockResolvedValue([]);
 const mockGetProductsBySearch = vi.fn().mockResolvedValue([]);
 
 vi.mock("@/actions/stock", () => ({
-  getProductByCode: (...args: unknown[]) => mockGetProductByCode(...args),
+  getProductByCode: vi.fn().mockResolvedValue(null),
+  getProductsByCode: (...args: unknown[]) => mockGetProductsByCode(...args),
   getProductsBySearch: (...args: unknown[]) => mockGetProductsBySearch(...args),
+  getProductsFiltered: vi.fn().mockResolvedValue({ products: [], total: 0, page: 1, pageSize: 25, totalPages: 0 }),
+  getSuppliersForFilter: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/actions/business", () => ({
@@ -30,6 +41,10 @@ vi.mock("@yudiel/react-qr-scanner", () => ({
 
 vi.mock("@/lib/print", () => ({
   printElement: vi.fn().mockResolvedValue(true),
+  printThermalReceipt: vi.fn().mockResolvedValue(undefined),
+  exportToPDF: vi.fn().mockResolvedValue(undefined),
+  buildPDFHTML: vi.fn().mockReturnValue("<div></div>"),
+  PDF_STYLES: "",
 }));
 
 vi.mock("next/font/google", () => ({
@@ -103,10 +118,20 @@ const renderWithMocks = (externalState?: BillState) => {
   );
 };
 
+// Production barcode timeout constant is 900ms (not 300ms).
+const BARCODE_TIMEOUT_MS = 900;
+
 describe("PrintableTable Barcode Scanning", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetProductByCode.mockResolvedValue(null);
+    vi.mocked(useFeatures).mockReturnValue({
+      plan: "PRO",
+      hasFeature: () => false,
+      isDelinquent: false,
+      isPlanAtLeast: () => true,
+      isOverLimit: () => false,
+    } as never);
+    mockGetProductsByCode.mockResolvedValue([]);
     mockGetProductsBySearch.mockResolvedValue([]);
   });
 
@@ -130,10 +155,11 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(10);
       fireEvent.change(input, { target: { value: "123" } });
 
-      vi.advanceTimersByTime(300);
+      // Advance past the 900ms barcode timeout
+      vi.advanceTimersByTime(BARCODE_TIMEOUT_MS);
 
       await vi.waitFor(() => {
-        expect(mockGetProductByCode).toHaveBeenCalledWith("123");
+        expect(mockGetProductsByCode).toHaveBeenCalledWith("123");
       });
     });
 
@@ -151,15 +177,16 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(100);
       fireEvent.change(input, { target: { value: "123" } });
 
+      // Advance past the 300ms manual search debounce
       vi.advanceTimersByTime(300);
 
       expect(mockGetProductsBySearch).toHaveBeenCalledWith("123");
-      expect(mockGetProductByCode).not.toHaveBeenCalled();
+      expect(mockGetProductsByCode).not.toHaveBeenCalled();
     });
   });
 
-  describe("Barcode Lookup with getProductByCode", () => {
-    it("should call getProductByCode when barcode is detected", async () => {
+  describe("Barcode Lookup with getProductsByCode", () => {
+    it("should call getProductsByCode when barcode is detected", async () => {
       vi.useFakeTimers();
       renderWithMocks();
       const input = screen.getByPlaceholderText(/Buscar producto/i);
@@ -173,10 +200,10 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(10);
       fireEvent.change(input, { target: { value: "123" } });
 
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(BARCODE_TIMEOUT_MS);
 
       await vi.waitFor(() => {
-        expect(mockGetProductByCode).toHaveBeenCalledWith("123");
+        expect(mockGetProductsByCode).toHaveBeenCalledWith("123");
       });
     });
   });
@@ -199,13 +226,15 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(100);
       fireEvent.change(input, { target: { value: "test" } });
 
+      vi.advanceTimersByTime(300);
+
       expect(mockGetProductsBySearch).toHaveBeenCalledWith("test");
-      expect(mockGetProductByCode).not.toHaveBeenCalled();
+      expect(mockGetProductsByCode).not.toHaveBeenCalled();
     });
   });
 
-  describe("Timeout Reset After 300ms", () => {
-    it("should reset barcode mode after 300ms of no keystrokes", async () => {
+  describe("Timeout Reset After 900ms", () => {
+    it("should process barcode after 900ms of no keystrokes", async () => {
       vi.useFakeTimers();
       renderWithMocks();
       const input = screen.getByPlaceholderText(/Buscar producto/i);
@@ -219,10 +248,10 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(10);
       fireEvent.change(input, { target: { value: "123" } });
 
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(BARCODE_TIMEOUT_MS);
 
       await vi.waitFor(() => {
-        expect(mockGetProductByCode).toHaveBeenCalledWith("123");
+        expect(mockGetProductsByCode).toHaveBeenCalledWith("123");
       });
     });
 
@@ -237,16 +266,17 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(10);
       fireEvent.change(input, { target: { value: "12" } });
 
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(BARCODE_TIMEOUT_MS);
 
-      expect(mockGetProductByCode).not.toHaveBeenCalled();
+      expect(mockGetProductsByCode).not.toHaveBeenCalled();
     });
   });
 
   describe("Successful Barcode Scan Adds Product", () => {
     it("should add product to bill when barcode scan succeeds", async () => {
       const mockProduct = createMockProduct({ code: "12345", description: "Scanned Product" });
-      mockGetProductByCode.mockResolvedValue(mockProduct);
+      // getProductsByCode returns an array with one product
+      mockGetProductsByCode.mockResolvedValue([mockProduct]);
 
       vi.useFakeTimers();
       renderWithMocks();
@@ -267,22 +297,21 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(10);
       fireEvent.change(input, { target: { value: "12345" } });
 
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(BARCODE_TIMEOUT_MS);
 
       await vi.waitFor(() => {
-        expect(mockContextValue.dispatch).toHaveBeenCalled();
+        expect(mockContextValue.addItem).toHaveBeenCalled();
       });
 
-      const call = mockContextValue.dispatch.mock.calls[0][0];
-      expect(call.type).toBe("addItem");
-      expect(call.payload.code).toBe("12345");
-      expect(call.payload.amount).toBe(1);
+      const call = mockContextValue.addItem.mock.calls[0][0];
+      expect(call.code).toBe("12345");
+      expect(call.amount).toBe(1);
     });
   });
 
   describe("Failed Barcode Scan Shows Error", () => {
     it("should show error message when product is not found", async () => {
-      mockGetProductByCode.mockResolvedValue(null);
+      mockGetProductsByCode.mockResolvedValue([]);
 
       vi.useFakeTimers();
       renderWithMocks();
@@ -300,7 +329,7 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(10);
       fireEvent.change(input, { target: { value: "99999" } });
 
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(BARCODE_TIMEOUT_MS);
 
       await vi.waitFor(() => {
         expect(screen.getByText("Producto no encontrado")).toBeTruthy();
@@ -309,7 +338,8 @@ describe("PrintableTable Barcode Scanning", () => {
 
     it("should show error message when product is out of stock", async () => {
       const mockProduct = createMockProduct({ code: "12345", amount: 0 });
-      mockGetProductByCode.mockResolvedValue(mockProduct);
+      // getProductsByCode returns array with one out-of-stock product
+      mockGetProductsByCode.mockResolvedValue([mockProduct]);
 
       vi.useFakeTimers();
       renderWithMocks();
@@ -327,7 +357,7 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(10);
       fireEvent.change(input, { target: { value: "12345" } });
 
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(BARCODE_TIMEOUT_MS);
 
       await vi.waitFor(() => {
         expect(screen.getByText("Producto sin Stock")).toBeTruthy();
@@ -356,7 +386,7 @@ describe("PrintableTable Barcode Scanning", () => {
 
     it("should remove blue border after barcode processing completes", async () => {
       const mockProduct = createMockProduct({ code: "12345" });
-      mockGetProductByCode.mockResolvedValue(mockProduct);
+      mockGetProductsByCode.mockResolvedValue([mockProduct]);
 
       vi.useFakeTimers();
       renderWithMocks();
@@ -374,7 +404,7 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(10);
       fireEvent.change(input, { target: { value: "12345" } });
 
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(BARCODE_TIMEOUT_MS);
 
       await vi.waitFor(() => {
         expect(input.className).not.toContain("ring-2");
@@ -403,12 +433,14 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(100);
       fireEvent.change(input, { target: { value: "test" } });
 
+      vi.advanceTimersByTime(300);
+
       expect(mockGetProductsBySearch).toHaveBeenCalledWith("test");
     });
 
     it("should clear search input after successful barcode scan", async () => {
       const mockProduct = createMockProduct({ code: "12345" });
-      mockGetProductByCode.mockResolvedValue(mockProduct);
+      mockGetProductsByCode.mockResolvedValue([mockProduct]);
 
       vi.useFakeTimers();
       renderWithMocks();
@@ -426,7 +458,7 @@ describe("PrintableTable Barcode Scanning", () => {
       vi.advanceTimersByTime(10);
       fireEvent.change(input, { target: { value: "12345" } });
 
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(BARCODE_TIMEOUT_MS);
 
       await vi.waitFor(() => {
         expect(input).toHaveValue("");

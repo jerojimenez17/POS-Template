@@ -1,4 +1,4 @@
-import { UserRole, Plan, BusinessStatus } from "@prisma/client";
+import { UserRole, BusinessStatus } from "@prisma/client";
 import { type DefaultSession } from "next-auth";
 
 export type ExtendedUser = DefaultSession["user"] & {
@@ -12,15 +12,21 @@ export type ExtendedUser = DefaultSession["user"] & {
     slug: string;
     accountStatus: BusinessStatus;
     features: {
-      plan: Plan;
+      plan: string;
       hasAfipBilling: boolean;
       hasPublicCatalog: boolean;
       hasClientLedger: boolean;
       hasMultiCashbox: boolean;
       hasSupplierFilter: boolean;
       hasBudget: boolean;
+      hasNegativeStock: boolean;
       maxUsers: number;
       maxProducts: number;
+      maxCashboxes: number;
+      maxClients: number;
+      dailySalesLimit: number;
+      dailyProductsLimit: number;
+      dailyClientsLimit: number;
     };
   } | null;
 };
@@ -32,6 +38,16 @@ declare module "next-auth" {
 }
 
 declare module "next-auth/jwt" {
+  interface JWT {
+    role?: UserRole;
+    businessId?: string | null;
+    businessName?: string | null;
+    businessSlug?: string | null;
+    business?: ExtendedUser["business"];
+  }
+}
+
+declare module "@auth/core/jwt" {
   interface JWT {
     role?: UserRole;
     businessId?: string | null;

@@ -37,6 +37,8 @@ import {
   getLedgerAccountsAction,
   addProductsToLedgerAction,
 } from "@/actions/ledger";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import BillState from "@/models/BillState";
 
 interface props {
@@ -59,6 +61,7 @@ const AccountLedgerModal = ({ billState }: props) => {
   const [search, setSearch] = useState("");
   const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
   const [isPending, startTransition] = useTransition();
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
 
   const addProductToAccount = async () => {
     if (!account.id) {
@@ -79,7 +82,12 @@ const AccountLedgerModal = ({ billState }: props) => {
       const result = await addProductsToLedgerAction(account.id, products);
 
       if (result.error) {
-        toast.error(result.error);
+        const parsed = parsePlanError(result.error);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+        } else {
+          toast.error(result.error);
+        }
         return;
       }
 
@@ -131,7 +139,12 @@ const AccountLedgerModal = ({ billState }: props) => {
       });
 
       if (result.error) {
-        toast.error(result.error);
+        const parsed = parsePlanError(result.error);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+        } else {
+          toast.error(result.error);
+        }
         return;
       }
 
@@ -215,12 +228,14 @@ const AccountLedgerModal = ({ billState }: props) => {
     });
   };
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const results = accounts.filter((account) =>
       account.clientName.toLowerCase().includes(search.toLowerCase())
     );
     setFilteredAccounts(results);
   }, [search, accounts]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div className="flex flex-col gap-4 w-full">
@@ -423,6 +438,18 @@ Creado: {format(account.date, "dd/MM/yyyy HH:mm")} – Última
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FeatureBlockedModal
+        open={!!planError}
+        onOpenChange={(open) => {
+          if (!open) setPlanError(null);
+        }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
+        showAcknowledge={false}
+      />
     </div>
   );
 };

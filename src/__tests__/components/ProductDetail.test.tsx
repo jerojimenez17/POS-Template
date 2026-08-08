@@ -6,12 +6,14 @@ import { ProductDetail } from "@/components/catalog/ProductDetail";
 import { CartContext } from "@/components/catalog/context/CartContext";
 import { PublicProduct } from "@/actions/catalog";
 
+/* eslint-disable @next/next/no-img-element */
 vi.mock("next/image", () => ({
   default: (props: Record<string, unknown>) => {
     const { priority, ...rest } = props;
-    return <img {...rest} />;
+    return <img alt="" {...rest} />;
   },
 }));
+/* eslint-enable @next/next/no-img-element */
 
 vi.mock("next/link", () => ({
   default: ({

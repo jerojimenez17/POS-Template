@@ -3,7 +3,6 @@
 import { db } from "@/lib/db";
 import { auth } from "@/auth";
 import type BillState from "@/models/BillState";
-import { pusherServer } from "@/lib/pusher-server";
 import { StockActivityItem } from "@/components/StockActivityModal";
 import { fail } from "@/lib/action-result";
 import { PAGINATION } from "@/lib/pagination";
@@ -197,17 +196,31 @@ export const getSaleByIdAction = async (id: string): Promise<BillState | null> =
   if (!businessId) return null;
 
   try {
-    const order = await db.order.findUnique({
-      where: { id, businessId },
-      include: {
-        items: true,
-        client: true,
-      },
-    });
+    const [order, lastUpdate] = await Promise.all([
+      db.order.findUnique({
+        where: { id, businessId },
+        include: {
+          items: true,
+          client: true,
+        },
+      }),
+      db.orderUpdate.findFirst({
+        where: { orderId: id },
+        orderBy: { version: "desc" },
+      }),
+    ]);
 
     if (!order) return null;
 
-    return mapOrderToBillState(order);
+    const result = mapOrderToBillState(order);
+
+    // Resolve billType from last history entry (Order model doesn't store it)
+    if (lastUpdate?.changes) {
+      const changes = lastUpdate.changes as Record<string, unknown>;
+      result.billType = (changes.billTypeTo as string) ?? result.billType;
+    }
+
+    return result;
   } catch (error) {
     console.error("Error fetching sale:", error);
     return null;

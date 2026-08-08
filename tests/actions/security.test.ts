@@ -5,8 +5,17 @@ import { createAfipVoucherAction } from "@/actions/afip";
 import { createOrder } from "@/actions/orders";
 import { createCashbox, openSession } from "@/actions/cashbox";
 import { getPublicProductsByBusinessId } from "@/actions/catalog";
+import { getCachedPlan, getEffectivePlan } from "@/lib/plan-resolver";
 import { db } from "@/lib/db";
 import type { ActionResult } from "@/lib/action-result";
+
+// Mock plan-resolver for catalog tests
+vi.mock("@/lib/plan-resolver", () => ({
+  getEffectivePlan: vi.fn(),
+  getCachedPlan: vi.fn(),
+  checkLimit: vi.fn(),
+  resolveFeatures: vi.fn(),
+}));
 
 const mockAuth = vi.hoisted(() => vi.fn());
 
@@ -22,9 +31,44 @@ vi.mock("@/auth", () => ({
   auth: mockAuth,
 }));
 
+const BASIC_PLAN = {
+  plan: "BASIC",
+  hasAfipBilling: false,
+  hasPublicCatalog: false,
+  hasClientLedger: false,
+  hasMultiCashbox: false,
+  hasSupplierFilter: false,
+  hasBudget: false,
+  maxUsers: 1,
+  maxProducts: 100,
+  maxCashboxes: 1,
+  maxClients: 50,
+  dailySalesLimit: 999999,
+  dailyProductsLimit: 999999,
+  dailyClientsLimit: 999999,
+};
+
+const PRO_PLAN = {
+  plan: "PRO",
+  hasAfipBilling: true,
+  hasPublicCatalog: true,
+  hasClientLedger: true,
+  hasMultiCashbox: true,
+  hasSupplierFilter: true,
+  hasBudget: true,
+  maxUsers: 5,
+  maxProducts: 1000,
+  maxCashboxes: 3,
+  maxClients: 500,
+  dailySalesLimit: 999999,
+  dailyProductsLimit: 999999,
+  dailyClientsLimit: 999999,
+};
+
 describe("Server-Side Action Security Gates Test Suite", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getCachedPlan).mockResolvedValue(PRO_PLAN as any);
     
     // Dynamically ensure methods exist on mockDb for spying
     (db as any).cashBox = (db as any).cashBox || {};
@@ -35,9 +79,6 @@ describe("Server-Side Action Security Gates Test Suite", () => {
     (db as any).cashboxSession.count = (db as any).cashboxSession.count || vi.fn();
     (db as any).cashboxSession.findFirst = (db as any).cashboxSession.findFirst || vi.fn();
     (db as any).cashboxSession.create = (db as any).cashboxSession.create || vi.fn();
-
-    (db as any).businessFeatures = (db as any).businessFeatures || {};
-    (db as any).businessFeatures.findUnique = (db as any).businessFeatures.findUnique || vi.fn();
 
     (db as any).product = (db as any).product || {};
     (db as any).product.findMany = (db as any).product.findMany || vi.fn().mockResolvedValue([]);
@@ -84,6 +125,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
         },
       },
     } as any);
+    vi.mocked(getCachedPlan).mockResolvedValue(BASIC_PLAN as any);
 
     const result = await requireFeature("hasAfipBilling");
     expect(result.success).toBe(false);
@@ -125,6 +167,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
         },
       },
     } as any);
+    vi.mocked(getCachedPlan).mockResolvedValue(BASIC_PLAN as any);
 
     const result = await assertLimit("maxProducts", 100);
     expect(result.success).toBe(false);
@@ -135,19 +178,20 @@ describe("Server-Side Action Security Gates Test Suite", () => {
   });
 
   describe("Phase 4: Server Action Gated Scenarios", () => {
-    describe("1. AFIP billing action (hasBilling)", () => {
-      it("should reject voucher generation if hasBilling is false", async () => {
+    describe("1. AFIP billing action (hasAfipBilling)", () => {
+      it("should reject voucher generation if hasAfipBilling is false", async () => {
         vi.mocked(auth).mockResolvedValue({
           user: {
             businessId: "business_123",
             business: {
               accountStatus: "ACTIVO",
               features: {
-                hasBilling: false,
+                hasAfipBilling: false,
               },
             },
           },
         } as any);
+        vi.mocked(getCachedPlan).mockResolvedValue(BASIC_PLAN as any);
 
         const result = await createAfipVoucherAction({} as any);
         expect((result as any).error).toContain("Esta función no está habilitada");
@@ -167,6 +211,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
             },
           },
         } as any);
+        vi.mocked(getCachedPlan).mockResolvedValue(BASIC_PLAN as any);
 
         const result = await createOrder({
           businessId: "business_123",
@@ -223,6 +268,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
             },
           },
         } as any);
+        vi.mocked(getCachedPlan).mockResolvedValue(BASIC_PLAN as any);
 
         vi.spyOn(db.cashBox, "count").mockResolvedValue(1);
 
@@ -244,6 +290,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
             },
           },
         } as any);
+        vi.mocked(getCachedPlan).mockResolvedValue(BASIC_PLAN as any);
 
         vi.spyOn(db.cashboxSession, "count").mockResolvedValue(1);
 
@@ -253,15 +300,29 @@ describe("Server-Side Action Security Gates Test Suite", () => {
     });
 
     describe("4. Catalog public product action (hasPublicCatalog)", () => {
-      it("should reject fetching products if hasPublicCatalog is false in the database", async () => {
-        const spy = vi.spyOn(db.businessFeatures, "findUnique").mockResolvedValue({
+      it("should reject fetching products if hasPublicCatalog is false", async () => {
+        vi.mocked(getEffectivePlan).mockResolvedValue({
+          plan: "BASIC",
+          hasAfipBilling: false,
           hasPublicCatalog: false,
-        } as any);
+          hasClientLedger: false,
+          hasMultiCashbox: false,
+          hasSupplierFilter: false,
+          hasBudget: false,
+          maxUsers: 1,
+          maxProducts: 100,
+          maxCashboxes: 1,
+          maxClients: 50,
+          dailySalesLimit: 999999,
+          hasNegativeStock: false,
+          dailyProductsLimit: 999999,
+          dailyClientsLimit: 999999,
+        });
 
         await expect(getPublicProductsByBusinessId("business_123")).rejects.toThrowError(
           "El catálogo público no está habilitado"
         );
-        expect(spy).toHaveBeenCalledWith({ where: { businessId: "business_123" } });
+        expect(getEffectivePlan).toHaveBeenCalledWith("business_123");
       });
     });
   });

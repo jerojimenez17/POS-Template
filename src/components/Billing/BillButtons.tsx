@@ -1,17 +1,17 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Session } from "next-auth";
 import { Button } from "../ui/button";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, useCallback } from "react";
 import { BillContext } from "@/context/BillContext";
-import Modal from "../Modal";
 import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
 import { createAfipVoucherAction } from "@/actions/afip";
 import { processSaleAction, updateOrderAction } from "@/actions/sales";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import Spinner from "../ui/Spinner";
 import ClientSelectionModal from "../ledger/ClientSelectionModal";
+import CheckoutModal from "./CheckoutModal";
 import { useRouter } from "next/navigation";
 import { useCashbox } from "@/context/CashboxContext";
 import {
@@ -21,22 +21,32 @@ import {
   DialogFooter,
   DialogTitle,
   DialogHeader,
-  DialogTrigger,
   DialogDescription,
 } from "../ui/dialog";
 import { Lock, FileText, Wallet, CheckCircle } from "lucide-react";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useFeatures } from "@/hooks/useFeatures";
 import { createBudgetAction } from "@/actions/budget";
+import { parsePlanError } from "@/lib/plan-error";
+import {
+  getShortcutConfigsAction,
+  getProductByShortcutAction,
+} from "@/actions/shortcuts";
+import type { ShortcutMap, ShortcutKey } from "@/models/ShortcutConfig";
+import Product from "@/models/Product";
 
 interface props {
   session: Session | null;
   handlePrint: (cae?: CAE, win?: Window | null) => void;
   isEditing?: boolean;
   orderId?: string;
+  ptoVentas?: number[];
 }
-const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props) => {
-  const canUseBudget = session?.user?.business?.features?.hasBudget ?? false;
+const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVentas }: props) => {
+  const { hasFeature } = useFeatures();
+  const canUseBudget = hasFeature("hasBudget");
+  const canUseLedger = hasFeature("hasClientLedger");
   const router = useRouter();
   const [createVoucherError, setCreateVoucherError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -48,27 +58,30 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [openEditModal, setOpenEditModal] = useState(false);
   const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
-  const { BillState, dispatch, onOrderResetRef, printMode } =
+  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
+  const [openFeatureBlockedModal, setOpenFeatureBlockedModal] = useState(false);
+  const [openLedgerBlockedModal, setOpenLedgerBlockedModal] = useState(false);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator !== "undefined" ? navigator.onLine : true
+  );
 
-  const checkSession = () => {
+  const checkSession = useCallback(() => {
     if (!hasActiveSession) {
       toast.error("Debe abrir una sesión de caja antes de realizar esta operación");
       setIsOpeningModalOpen(true);
       return false;
     }
     return true;
-  };
+  }, [hasActiveSession, setIsOpeningModalOpen]);
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
@@ -81,35 +94,76 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     };
   }, []);
 
-  // Global keydown listeners for F1, F2, F3 shortcuts
+  const [facturaKey, setFacturaKey] = useState(0);
+  const [remitoKey, setRemitoKey] = useState(0);
+  const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
+  const shortcutMapRef = useRef(shortcutMap);
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isEditing) return; // Disable shortcuts while editing sale (has different buttons)
-      
-      if (e.key === 'F1') {
+    shortcutMapRef.current = shortcutMap;
+  }, [shortcutMap]);
+
+  // Fetch shortcut config on mount
+  useEffect(() => {
+    const loadShortcuts = async () => {
+      const result = await getShortcutConfigsAction(session?.user?.businessId ?? "");
+      if ("success" in result && result.success && result.data) {
+        const map: ShortcutMap = {};
+        for (const cfg of result.data) {
+          map[cfg.key as ShortcutKey] = cfg;
+        }
+        setShortcutMap(map);
+      }
+    };
+    loadShortcuts();
+  }, [session?.user?.businessId]);
+
+  // Global keydown listeners for keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (isEditing) return;
+
+      const map = shortcutMapRef.current;
+      const shortcutCfg = map[e.key as ShortcutKey];
+
+      if (shortcutCfg && shortcutCfg.productId) {
         e.preventDefault();
         if (!checkSession()) return;
+        if (BillState.products?.length === 0) return;
+        const product = await getProductByShortcutAction(e.key as ShortcutKey);
+        if ("success" in product && product.success && product.data) {
+          addItem(product.data as Product);
+        }
+        return;
+      }
+
+      if (e.key === 'F4') {
+        e.preventDefault();
+        if (!checkSession()) return;
+        if (BillState.products?.length === 0) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
+        setFacturaKey(k => k + 1);
         setOpenFacturaModal(true);
       }
-      if (e.key === 'F2') {
+      if (e.key === 'F9') {
         e.preventDefault();
         if (!checkSession()) return;
+        if (BillState.products?.length === 0) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
+        setRemitoKey(k => k + 1);
         setOpenRemitoModal(true);
       }
-      if (e.key === 'F3') {
+      if (e.key === 'F10') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length > 0) {
           setOpenAcuentaModal(true);
         }
       }
-      if (e.key === 'F4') {
+      if (e.key === 'F5') {
         e.preventDefault();
         if (!checkSession()) return;
         if (BillState.products?.length > 0) {
@@ -120,7 +174,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, dispatch, BillState.products?.length, isEditing, setOpenBudgetModal]);
+  }, [session, dispatch, BillState.products?.length, isEditing, addItem, setFocusPriceProductId, checkSession]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {
@@ -132,13 +186,21 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   };
 
   const handleCreateVoucher = async (): Promise<CAE | null> => {
-    if (!checkConnection()) return null;
+    if (!checkConnection()) { setBlockButton(false); return null; }
     try {
       console.log("Calling createAfipVoucherAction");
       const resp = await createAfipVoucherAction(BillState);
 
       if (resp.error) {
-        toast.error(resp.error);
+        // Check if it's a plan error
+        const parsed = parsePlanError(resp.error);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+          setOpenFeatureBlockedModal(true);
+        } else {
+          // Not a plan error (e.g., missing credentials) - show as toast
+          toast.error(resp.error);
+        }
         setBlockButton(false);
         return null;
       }
@@ -176,7 +238,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   };
 
   const handleSaveSale = async (billState: typeBillState) => {
-    if (!checkConnection()) return;
+    if (!checkConnection()) { setBlockButton(false); return; }
     try {
       const result = await processSaleAction(billState);
       if ('error' in result && result.error) {
@@ -214,21 +276,45 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         return;
       }
 
-      if (
-        BillState.totalSecondMethod &&
-        totalAmount < BillState.totalSecondMethod
-      ) {
-        setErrorMessage(
-          "El monto del segundo medio de pago debe ser menor al total",
-        );
-        setOpenErrorModal(true);
-        setBlockButton(false);
-        return;
+      // Validación de pagos divididos: monto > 0 y suma igual al total
+      if (BillState.twoMethods) {
+        const secondAmount = BillState.totalSecondMethod || 0;
+        if (secondAmount < 1) {
+          setErrorMessage("El monto del segundo medio de pago debe ser mayor a $1");
+          setOpenErrorModal(true);
+          setBlockButton(false);
+          return;
+        }
+        if (secondAmount >= totalAmount) {
+          setErrorMessage("El monto del segundo medio de pago debe ser menor al total");
+          setOpenErrorModal(true);
+          setBlockButton(false);
+          return;
+        }
+      }
+
+      // Validación: Condición IVA requiere número de documento
+      const ivaCond = BillState.clientIvaCondition || BillState.IVACondition;
+      if (ivaCond && ivaCond !== "Consumidor Final") {
+        const docNum = BillState.clientDocumentNumber || BillState.documentNumber;
+        if (!docNum || String(docNum).trim() === "" || Number(docNum) === 0) {
+          const tipoDoc = ivaCond === "CUIT" ? "CUIT" : "DNI";
+          setErrorMessage(`Debe ingresar un ${tipoDoc} para la condición ${ivaCond}`);
+          setOpenErrorModal(true);
+          setBlockButton(false);
+          return;
+        }
       }
 
       let caeData: CAE | null = null;
       if (afip && !isUpdate) {
         caeData = await handleCreateVoucher();
+        // If AFIP billing was requested but failed (plan error, missing credentials, etc.),
+        // do NOT save the sale — abort immediately.
+        if (!caeData) {
+          setBlockButton(false);
+          return undefined;
+        }
       }
 
       if (isUpdate && orderId) {
@@ -249,12 +335,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           CAE: caeData || localCAE,
           totalWithDiscount: totalAmount,
         });
-        toast.success("Factura guardada correctamente");
+        toast.success(afip ? "Factura guardada correctamente" : "Remito guardado correctamente");
       }
       return caeData || localCAE;
     } catch (err) {
       if (!isOnline) {
         toast.error("Operación cancelada: Sin conexión a internet");
+      } else if (err instanceof Error && err.message.includes("ya fue facturada")) {
+        toast.error(err.message);
       } else {
         toast.error(
           "Error inesperado: " + (err instanceof Error ? err.message : ""),
@@ -267,8 +355,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [blockButton, setBlockButton] = useState(false);
   return (
     <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-3 py-4 px-4">
-      <Toaster position="top-right" richColors />
-
       {isEditing ? (
         <div className="flex w-full sm:w-auto">
           <Button
@@ -278,21 +364,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               }
               setOpenEditModal(true);
             }}
-            className="rounded-lg h-11 px-6 font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-sm w-full sm:w-auto"
+            className="rounded-lg h-11 px-6 font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 w-full sm:w-auto inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-            </svg>
             Actualizar Venta
           </Button>
         </div>
@@ -304,9 +377,11 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               if (session?.user.email) {
                 dispatch({ type: "sellerName", payload: session.user.email || "" });
               }
+              setFacturaKey(k => k + 1);
               setOpenFacturaModal(true);
             }}
-            className="rounded-lg h-11 px-6 font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 w-full sm:w-auto"
+            disabled={!hasActiveSession || BillState.products.length === 0}
+            className="rounded-lg h-11 px-6 font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 w-full sm:w-auto inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -325,18 +400,21 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               <line x1="16" y1="17" x2="8" y2="17" />
             </svg>
             Facturar
+            <kbd className="ml-1 text-[10px] bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded border border-white/10">F4</kbd>
           </Button>
 
           <Button
             variant="outline"
+            disabled={!hasActiveSession || BillState.products.length === 0}
             onClick={() => {
               if (!checkSession()) return;
               if (session?.user.email) {
                 dispatch({ type: "sellerName", payload: session.user.email || "" });
               }
+              setRemitoKey(k => k + 1);
               setOpenRemitoModal(true);
             }}
-            className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto"
+            className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -353,14 +431,19 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               <path d="M12 18h.01" />
             </svg>
             Remito
+            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F9</kbd>
           </Button>
 
           <Button
             variant="outline"
-            className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto"
-            disabled={BillState.products.length === 0}
+            className="rounded-lg h-11 px-6 font-medium border-slate-300 dark:border-slate-600 w-full sm:w-auto inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!hasActiveSession || BillState.products.length === 0}
             onClick={() => {
               if (!checkSession()) return;
+              if (!canUseLedger) {
+                setOpenLedgerBlockedModal(true);
+                return;
+              }
               setOpenAcuentaModal(true);
             }}
           >
@@ -381,6 +464,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
             A cuenta
+            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F10</kbd>
           </Button>
 
           {canUseBudget && (
@@ -401,6 +485,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                   <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
                 </svg>
                 Presupuesto
+                <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F5</kbd>
               </Button>
               <ClientSelectionModal
                 mode="budget"
@@ -462,63 +547,80 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
       )}
 
       {blockButton && <Spinner />}
-      <Dialog open={openFacturaModal} onOpenChange={setOpenFacturaModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmar creación de Factura</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            ¿Está seguro que desea crear una factura?
-          </DialogDescription>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline" className="rounded-lg">
-                Cancelar
-              </Button>
-            </DialogClose>
-            <DialogClose asChild>
-              <Button
-                autoFocus
-                onClick={async () => {
-                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
-                  if (targetWin) {
-                    targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
-                  }
+      
+      <CheckoutModal
+        key={`factura-${facturaKey}`}
+        open={openFacturaModal}
+        onOpenChange={setOpenFacturaModal}
+        type="factura"
+        ptoVentas={ptoVentas}
+        onConfirm={async () => {
+          setBlockButton(true);
+          setOpenFacturaModal(false);
+          const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+          if (targetWin) {
+            targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
+          }
 
-                  setBlockButton(true);
-                  try {
-                    const caeResult = await createSale(true, false);
-                    if (!caeResult) {
-                      if (targetWin) targetWin.close();
-                      setBlockButton(false);
-                      return;
-                    }
-                    if (!openErrorModal && BillState.total > 0) {
-                      handlePrint(caeResult, targetWin);
-                      setTimeout(() => {
-                        dispatch({ type: "removeAll", payload: null });
-                        if (onOrderResetRef.current) {
-                          onOrderResetRef.current();
-                        }
-                      }, 5000);
-                    } else if (targetWin) {
-                       targetWin.close();
-                    }
-                    setOpenFacturaModal(false);
-                    setBlockButton(false);
-                  } catch (err) {
-                    if (targetWin) targetWin.close();
-                    console.error(err);
-                  }
-                }}
-                className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900"
-              >
-                Confirmar
-              </Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          try {
+            const caeResult = await createSale(true, false);
+            if (!caeResult) {
+              if (targetWin) targetWin.close();
+              setBlockButton(false);
+              return;
+            }
+            // Disparar impresión y limpiar estado después
+            handlePrint(caeResult, targetWin);
+            setTimeout(() => {
+              dispatch({ type: "removeAll", payload: null });
+              if (onOrderResetRef.current) {
+                onOrderResetRef.current();
+              }
+            }, 1500);
+            setBlockButton(false);
+          } catch (err) {
+            if (targetWin) targetWin.close();
+            console.error(err);
+          }
+        }}
+      />
+
+      <CheckoutModal
+        key={`remito-${remitoKey}`}
+        open={openRemitoModal}
+        onOpenChange={setOpenRemitoModal}
+        type="remito"
+        ptoVentas={ptoVentas}
+        onConfirm={async () => {
+          setBlockButton(true);
+          setOpenRemitoModal(false);
+          const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+          if (targetWin) {
+            targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
+          }
+
+          try {
+            const caeResult = await createSale(false, false);
+            if (!caeResult) {
+              if (targetWin) targetWin.close();
+              setBlockButton(false);
+              return;
+            }
+            // Disparar impresión y limpiar estado después
+            handlePrint(caeResult, targetWin);
+            setTimeout(() => {
+              dispatch({ type: "removeAll", payload: null });
+              if (onOrderResetRef.current) {
+                onOrderResetRef.current();
+              }
+            }, 1500);
+            setBlockButton(false);
+          } catch (err) {
+            if (targetWin) targetWin.close();
+            console.error(err);
+          }
+        }}
+      />
 
       {/* UPDATE DIALOG */}
       <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
@@ -540,7 +642,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
               <Button
                 autoFocus
                 variant="default"
-                className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+                className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white"
                 onClick={async () => {
                   const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
                   if (targetWin) {
@@ -568,70 +670,36 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={openRemitoModal} onOpenChange={setOpenRemitoModal}>
+      <Dialog open={openErrorModal} onOpenChange={setOpenErrorModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar creación de Remito</DialogTitle>
+            <DialogTitle>Error</DialogTitle>
+            <DialogDescription>
+              {errorMessage}
+            </DialogDescription>
           </DialogHeader>
-          <DialogDescription>
-            ¿Está seguro que desea crear un remito?
-          </DialogDescription>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline" className="rounded-lg">
-                Cancelar
-              </Button>
-            </DialogClose>
-            <DialogClose asChild>
-              <Button
-                autoFocus
-                onClick={async () => {
-                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
-                  if (targetWin) {
-                    targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
-                  }
-
-                  setBlockButton(true);
-                  try {
-                    const caeResult = await createSale(false, false);
-                    if (!caeResult) {
-                      if (targetWin) targetWin.close();
-                      setBlockButton(false);
-                      return;
-                    }
-                    if (!openErrorModal && BillState.total > 0) {
-                      handlePrint(caeResult, targetWin);
-                      setTimeout(() => {
-                        dispatch({ type: "removeAll", payload: null });
-                        if (onOrderResetRef.current) {
-                          onOrderResetRef.current();
-                        }
-                      }, 5000);
-                    } else if (targetWin) {
-                       targetWin.close();
-                    }
-                    setOpenRemitoModal(false);
-                    setBlockButton(false);
-                  } catch (err) {
-                    if (targetWin) targetWin.close();
-                    console.error(err);
-                  }
-                }}
-                className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900"
-              >
-                Confirmar
-              </Button>
-            </DialogClose>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Modal
-        visible={openErrorModal}
-        onClose={() => setOpenErrorModal(false)}
-        blockButton={false}
-        message={errorMessage}
-      ></Modal>
+      <FeatureBlockedModal
+        open={openFeatureBlockedModal}
+        onOpenChange={(open) => {
+          setOpenFeatureBlockedModal(open);
+          if (!open) setPlanError(null);
+        }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature ?? "Facturación electrónica (ARCA)"}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
+      />
+
+      <FeatureBlockedModal
+        open={openLedgerBlockedModal}
+        onOpenChange={setOpenLedgerBlockedModal}
+        variant="feature"
+        feature="Cuenta Corriente"
+        showAcknowledge={false}
+      />
     </div>
   );
 };

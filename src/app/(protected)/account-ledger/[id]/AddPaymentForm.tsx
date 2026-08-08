@@ -30,7 +30,7 @@ export default function AddPaymentForm({
 }: AddPaymentFormProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(showForm);
-  const [amount, setAmount] = useState(remainingBalance.toString());
+  const [amount, setAmount] = useState(Math.round(remainingBalance).toString());
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
   const [isPending, setIsPending] = useState(false);
 
@@ -97,7 +97,7 @@ export default function AddPaymentForm({
             type="number"
             step="0.01"
             min="0"
-            max={remainingBalance}
+            max={Math.round(remainingBalance)}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="Monto del pago"

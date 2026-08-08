@@ -35,6 +35,11 @@ vi.mock('../auth', () => ({
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock('../src/lib/auth-gates', () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 vi.mock('../src/lib/pusher-server', () => ({

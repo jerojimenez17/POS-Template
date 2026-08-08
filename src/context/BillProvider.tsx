@@ -34,10 +34,14 @@ const BillProvider = ({ children }: props) => {
   const [BillState, dispatch] = useReducer(BillReducer, INITIAL_STATE);
   const [printMode, setPrintMode] = React.useState<PrintMode>("thermal");
   const [qzTrayActive, setQzTrayActive] = React.useState<boolean>(() => {
-    const saved = localStorage.getItem("qzTrayActive");
-    return saved !== null ? saved === "true" : true;
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("qzTrayActive");
+      return saved !== null ? saved === "true" : true;
+    }
+    return true;
   });
   const onOrderResetRef = useRef<(() => void) | null>(null);
+  const [focusPriceProductId, setFocusPriceProductId] = React.useState<string | null>(null);
 
   const handleSetQzTrayActive = (active: boolean) => {
     setQzTrayActive(active);
@@ -66,6 +70,8 @@ const BillProvider = ({ children }: props) => {
     setPrintMode: setPrintMode,
     qzTrayActive: qzTrayActive,
     setQzTrayActive: handleSetQzTrayActive,
+    focusPriceProductId,
+    setFocusPriceProductId,
   };
   return <BillContext.Provider value={values}>{children}</BillContext.Provider>;
 };

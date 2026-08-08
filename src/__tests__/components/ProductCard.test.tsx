@@ -5,12 +5,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import ProductCard from "@/components/catalog/ProductCard";
 import { PublicProduct } from "@/actions/catalog";
 
+/* eslint-disable @next/next/no-img-element */
 vi.mock("next/image", () => ({
   default: (props: Record<string, unknown>) => {
     const { ...imgProps } = props;
-    return <img {...imgProps} />;
+    return <img alt="" {...imgProps} />;
   },
 }));
+/* eslint-enable @next/next/no-img-element */
 
 vi.mock("../../../public/no-image.svg", () => ({
   default: "/no-image.svg",

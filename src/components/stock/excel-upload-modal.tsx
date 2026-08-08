@@ -6,12 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { BulkProductInput, previewProductsBulk, PreviewProductsBulkResult, processBulkProductBatch, finalizeBulkImport } from "@/actions/stock";
+import { parseExcelIva } from "@/utils/iva-parser";
 import { toast } from "sonner";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import * as XLSX from 'xlsx';
 import { UploadCloud, CheckCircle2, ArrowRight, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { getSuppliers, createSupplier as createSupplierAction } from "@/actions/stock";
+import { getSuppliers } from "@/actions/stock";
 import type { Supplier } from "@prisma/client";
 import CreateAttributeModal from "./create-attribute-modal";
 
@@ -30,6 +33,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [step, setStep] = useState<"config" | "preview">("config");
   const [previewData, setPreviewData] = useState<PreviewProductsBulkResult["preview"] | null>(null);
   const [parsedProductsState, setParsedProductsState] = useState<BulkProductInput[]>([]);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
@@ -37,7 +41,6 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [adjustmentIva, setAdjustmentIva] = useState("0");
   const [adjustmentGain, setAdjustmentGain] = useState(0);
   const [updateOnly, setUpdateOnly] = useState(false);
-  const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
   useEffect(() => {
@@ -78,6 +81,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [colCategory, setColCategory] = useState("");
   const [colSubCategory, setColSubCategory] = useState("");
   const [colCodebar, setColCodebar] = useState("");
+  const [colIva, setColIva] = useState("");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -107,14 +111,12 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
       return;
     }
 
-    setLoading(true);
-    console.log("Iniciando procesamiento de archivo:", file.name);
+    setLoading(true); 
 
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       
-      console.log("Hojas encontradas:", workbook.SheetNames.join(", "));
 
       // Auto-detect column index from header text
       const headerKeywords: Record<string, string[]> = {
@@ -126,12 +128,13 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         category: ["categoría", "categoria", "cat", "rubro"],
         subCategory: ["subcategoría", "subcategoria", "sub", "subrubro"],
         codebar: ["codebar", "ean", "barcode", "upc", "código de barras", "cod barras"],
+        iva: ["iva", "alícuota", "alicuota", "tasa"],
       };
 
       const detectColumns = (headerRow: unknown[]) => {
         const detected: Record<string, number> = {
           code: -1, description: -1, price: -1,
-          amount: -1, brand: -1, category: -1, subCategory: -1, codebar: -1,
+          amount: -1, brand: -1, category: -1, subCategory: -1, codebar: -1, iva: -1,
         };
         for (let col = 0; col < headerRow.length; col++) {
           const cell = String(headerRow[col] ?? "").trim().toLowerCase();
@@ -156,6 +159,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         category: getColIndex(colCategory),
         subCategory: getColIndex(colSubCategory),
         codebar: getColIndex(colCodebar),
+        iva: getColIndex(colIva),
       };
 
       const parsedProducts: BulkProductInput[] = [];
@@ -165,7 +169,6 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         const sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
 
         if (sheetRows.length === 0) {
-          console.log(`Hoja "${sheetName}" está vacía, saltando.`);
           continue;
         }
 
@@ -176,10 +179,6 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
 
         const indices = hasAutoDetect ? detected : fallbackIndices;
         const dataStartRow = hasAutoDetect ? 1 : Math.max(0, startRow - 1);
-
-        console.log(`Hoja "${sheetName}": ${sheetRows.length} filas, ` +
-          `columnas ${hasAutoDetect ? "auto-detectadas" : "manuales"}: ` +
-          `cod=${indices.code}, desc=${indices.description}, precio=${indices.price}`);
 
         const eRow = endRow !== "" && !hasAutoDetect
           ? Math.min(sheetRows.length, Number(endRow))
@@ -192,7 +191,6 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
           const codeVal = row[indices.code];
           const descVal = row[indices.description];
           const priceVal = row[indices.price];
-
           if (codeVal === undefined || descVal === undefined || priceVal === undefined ||
               codeVal === "" || descVal === "") {
             continue;
@@ -279,7 +277,12 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         );
 
         if ('error' in result) {
-          toast.error(result.error, { id: "bulk-confirm" });
+          const parsed = parsePlanError(result.error);
+          if (parsed.isPlanError) {
+            setPlanError(parsed);
+          } else {
+            toast.error(result.error, { id: "bulk-confirm" });
+          }
           setLoading(false);
           return;
         }
@@ -319,6 +322,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(val) => {
       if (!val) {
         setStep("config");
@@ -367,37 +371,77 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         ) : step === "config" ? (
         <div className="grid gap-6 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="file">Archivo Excel (.xlsx, .xls)</Label>
-            <Input
-              id="file"
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleFileChange}
-              className="cursor-pointer"
-            />
+            <Label htmlFor="file-upload" className="text-sm font-medium">
+              Archivo Excel (.xlsx, .xls) <span className="text-red-500">*</span>
+            </Label>
+            <label className="flex-1 cursor-pointer group">
+              <input
+                id="file-upload"
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <div className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg transition-colors bg-gray-50 dark:bg-gray-800 ${file ? 'border-green-400 bg-green-50/50 dark:bg-green-900/10' : 'border-gray-300 dark:border-gray-600 group-hover:border-gray-400 dark:group-hover:border-gray-500'}`}>
+                <div className="flex flex-col items-center justify-center text-center space-y-2">
+                  <div className={`p-2 rounded-full ${file ? 'bg-green-100 dark:bg-green-900/30' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
+                    {file ? (
+                      <CheckCircle2 className="h-6 w-6 text-green-500" />
+                    ) : (
+                      <UploadCloud className="h-6 w-6 text-green-500" />
+                    )}
+                  </div>
+                  {file ? (
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[250px]">
+                        {file.name}
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                        Archivo cargado correctamente
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Click para seleccionar archivo
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        Solo archivos .xlsx o .xls
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Fila de inicio <span className="text-red-500">*</span></Label>
-              <Input
-                type="number"
-                min={1}
-                value={startRow}
-                onChange={(e) => setStartRow(Number(e.target.value))}
-                placeholder="2"
-              />
-              <p className="text-xs text-muted-foreground">Fila donde empiezan los datos (1=Encabezados)</p>
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div className="p-4 border-b">
+              <h3 className="font-semibold text-sm">Configuración de Filas</h3>
             </div>
-            <div className="grid gap-2">
-              <Label>Fila de fin (Opcional)</Label>
-              <Input
-                type="number"
-                min={1}
-                value={endRow}
-                onChange={(e) => setEndRow(e.target.value === "" ? "" : Number(e.target.value))}
-                placeholder="Última fila"
-              />
+            <div className="p-4 grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Fila de inicio <span className="text-red-500">*</span></Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={startRow}
+                  onChange={(e) => setStartRow(Number(e.target.value))}
+                  placeholder="2"
+                />
+                <p className="text-xs text-muted-foreground">Inicio de datos (1=Encabezados)</p>
+              </div>
+              <div className="grid gap-2">
+                <Label>Fila de fin (Opcional)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={endRow}
+                  onChange={(e) => setEndRow(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="Última fila"
+                />
+                <p className="text-xs text-muted-foreground">Dejar en blanco para todas</p>
+              </div>
             </div>
           </div>
 
@@ -448,6 +492,10 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                   <Label>Código de Barras (EAN/UPC)</Label>
                   <Input value={colCodebar} onChange={e => setColCodebar(e.target.value)} placeholder="Ej: H" />
                 </div>
+                <div className="grid gap-2">
+                  <Label>IVA (Letra o Porcentaje)</Label>
+                  <Input value={colIva} onChange={e => setColIva(e.target.value)} placeholder="Ej: I" />
+                </div>
              </div>
            </div>
 
@@ -463,7 +511,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                      id="supplier"
                      value={selectedSupplierId}
                      onChange={(e) => handleSupplierSelect(e.target.value)}
-                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                    >
                      <option value="">Sin proveedor</option>
                      {suppliers.map((s) => (
@@ -501,7 +549,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                    id="iva"
                    value={adjustmentIva}
                    onChange={(e) => setAdjustmentIva(e.target.value)}
-                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                  >
                    <option value="0">0%</option>
                    <option value="10.5">10.5%</option>
@@ -587,10 +635,12 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                       <TableCell>${item.price.toLocaleString("es-AR")}</TableCell>
                       <TableCell>
                         ${(() => {
+                          const parsed = parseExcelIva(adjustmentIva);
+                          const rowIva = parsed.percent !== null ? parsed.percent : parseFloat(adjustmentIva);
                           const withDiscount = item.price * (1 - adjustmentDiscount / 100);
-                          const withIva = withDiscount * (1 + parseFloat(adjustmentIva) / 100);
+                          const withIva = withDiscount * (1 + rowIva / 100);
                           const withGain = withIva * (1 + adjustmentGain / 100);
-                          return withGain.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                          return (Math.round(withGain / 10) * 10).toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                         })()}
                       </TableCell>
                       <TableCell>{item.amount ?? "-"}</TableCell>
@@ -599,9 +649,9 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                 </TableBody>
               </Table>
             </div>
-            {previewData && previewData.items.length > 100 && (
+            {previewData && (previewData.createdCount + previewData.updatedCount + previewData.ignoredCount) > 100 && (
               <p className="text-sm text-muted-foreground text-center">
-                Mostrando los primeros 100 productos de {previewData.items.length}
+                Mostrando los primeros 100 productos de {previewData.createdCount + previewData.updatedCount + previewData.ignoredCount}
               </p>
             )}
           </div>
@@ -634,5 +684,15 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         )}
       </DialogContent>
     </Dialog>
+
+      <FeatureBlockedModal
+        open={!!planError}
+        onOpenChange={(open) => { if (!open) setPlanError(null); }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
+      />
+    </>
   );
 }

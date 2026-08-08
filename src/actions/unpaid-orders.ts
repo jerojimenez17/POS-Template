@@ -7,12 +7,13 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { PaidStatus } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
-import { requireFeature } from "@/lib/auth-gates";
+import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
 
 interface ActionResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  code?: string;
 }
 
 interface UnpaidOrderItem {
@@ -32,6 +33,7 @@ interface CreateUnpaidOrderInput {
   total: number;
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
+  notes?: string;
 }
 
 interface RegisterPaymentInput {
@@ -125,6 +127,7 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
           status: "confirmado",
           paidStatus: "inpago",
           date: new Date(),
+          notes: input.notes || null,
           clientIvaCondition: input.clientIvaCondition,
           clientDocumentNumber: input.clientDocumentNumber,
           items: {
@@ -215,6 +218,9 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
     const businessId = session?.user?.businessId || input.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
 
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
+
     const movement = await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: input.orderId },
@@ -279,6 +285,9 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
     const session = await auth();
     const businessId = session?.user?.businessId || input.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
     return await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
@@ -374,20 +383,22 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
         },
       } as never);
       orders = orders ? [orders] : [];
+    } else if (input.status === "all") {
+      orders = await db.order.findMany({
+        where: { businessId },
+        include: { client: true },
+        orderBy: { date: "desc" },
+      });
     } else {
       const isPending = input.status === "pendiente";
       const paidStatus = (input.status === "pagado" ? "pago" : input.status) as PaidStatus | undefined;
       orders = await db.order.findMany({
         where: {
           businessId,
-          // Si estamos buscando "pendientes", filtramos por status = pendiente
           ...(isPending ? { status: "pendiente" } : { status: { not: "pendiente" } }),
-          // Y solo aplicamos el filtro de paidStatus si no es "pending" ni "all"
-          ...(!isPending && paidStatus && paidStatus !== ("all" as never) ? { paidStatus } : {}),
+          ...(!isPending && paidStatus ? { paidStatus } : {}),
         },
-        include: {
-          client: true,
-        },
+        include: { client: true },
         orderBy: { date: "desc" },
       });
     }
@@ -442,6 +453,9 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
     const session = await auth();
     const businessId = session?.user?.businessId || validatedInput.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
     return await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
@@ -560,6 +574,9 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
     const session = await auth();
     const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
     return await db.$transaction(async (tx) => {
       const orderItem = await tx.orderItem.findUnique({
@@ -689,6 +706,9 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
     const session = await auth();
     const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
+
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
     return await db.$transaction(async (tx) => {
       const orderItem = await tx.orderItem.findUnique({

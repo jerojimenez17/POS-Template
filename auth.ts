@@ -1,10 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import NextAuth from "next-auth";
 import authConfig from "./auth.config";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
-import { getUserById, getUserByEmail } from "./data/user";
-import { UserRole, Plan, BusinessStatus } from "@prisma/client";
+import { resolvePlanFromBusiness } from "@/lib/plan-resolver";
+import { getUserById, getUserByEmail } from "@/data/user";
+import { type ExtendedUser } from "@/types/next-auth";
+import { UserRole, BusinessStatus } from "@prisma/client";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { LoginSchema } from "@/schemas";
 import bcrypt from "bcryptjs";
@@ -38,7 +39,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account, profile }) {
       if (account?.provider === "google" && user.email) {
         const existingUser = await getUserByEmail(user.email);
-        const imageUrl = user.image || (profile as any)?.picture;
+        const imageUrl = user.image || (profile as Record<string, unknown>)?.picture as string | undefined;
         if (existingUser && imageUrl && existingUser.image !== imageUrl) {
           await db.user.update({
             where: { id: existingUser.id },
@@ -66,7 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.businessName = token.businessName as string | null;
         session.user.businessSlug = token.businessSlug as string | null;
         session.user.image = token.image as string | null;
-        session.user.business = token.business as any;
+        session.user.business = token.business as ExtendedUser["business"];
       }
       return session;
     },
@@ -80,20 +81,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       token.businessSlug = existingUser.business?.slug || null;
       token.image = existingUser.image;
       if (existingUser.business) {
+        const resolved = resolvePlanFromBusiness(existingUser.business);
+
         token.business = {
           name: existingUser.business.name,
           slug: existingUser.business.slug,
           accountStatus: existingUser.business.accountStatus as BusinessStatus,
-          features: existingUser.business.features || {
-            plan: Plan.BASIC,
-      hasAfipBilling: false,
-      hasPublicCatalog: false,
-      hasClientLedger: false,
-      hasMultiCashbox: false,
-      hasSupplierFilter: false,
-      hasBudget: false,
+          features: resolved || {
+            plan: "BASIC",
+            hasAfipBilling: false,
+            hasPublicCatalog: false,
+            hasClientLedger: false,
+            hasMultiCashbox: false,
+            hasSupplierFilter: false,
+            hasBudget: false,
+            hasNegativeStock: false,
             maxUsers: 1,
             maxProducts: 100,
+            maxCashboxes: 1,
+            maxClients: 50,
+            dailySalesLimit: 999999,
+            dailyProductsLimit: 999999,
+            dailyClientsLimit: 999999,
           },
         };
       } else {

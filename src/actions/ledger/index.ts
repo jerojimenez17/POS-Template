@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { requireFeature } from "@/lib/auth-gates";
 
 interface LedgerProductInput {
   id: string;
@@ -45,6 +46,11 @@ export const createLedgerAccountAction = async (input: CreateLedgerInput) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
+
+  const featureCheck = await requireFeature("hasClientLedger");
+  if (!featureCheck.success) {
+    return { error: featureCheck.error || "Esta funcionalidad no está disponible en tu plan actual." };
+  }
 
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -100,50 +106,54 @@ export const createLedgerAccountAction = async (input: CreateLedgerInput) => {
         include: { items: true, client: true },
       });
 
-      // Discount stock and update rankings
-      for (const item of input.products) {
-        await tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.amount,
-            productId: item.id,
-            orderId: order.id,
-            businessId,
-            reason: `Venta a cuenta corriente: ${input.clientName}`,
-          },
-        });
-
-        await tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
+      // 🔥 OPTIMIZACIÓN: Ejecutar operaciones por lote en paralelo
+      await Promise.all([
+        ...input.products.map((item) =>
+          tx.product.update({
+            where: { id: item.id },
+            data: { amount: { decrement: item.amount } },
+          })
+        ),
+        ...input.products.map((item) =>
+          tx.stockMovement.create({
+            data: {
+              type: "SALE",
+              quantity: -item.amount,
+              productId: item.id,
+              orderId: order.id,
+              businessId,
+              reason: `Venta a cuenta corriente: ${input.clientName}`,
+            },
+          })
+        ),
+        ...input.products.map((item) =>
+          tx.productRanking.upsert({
+            where: {
+              productId_month_year_businessId: {
+                productId: item.id,
+                month,
+                year,
+                businessId,
+              },
+            },
+            update: {
+              totalSold: { increment: item.amount },
+              totalIncome: { increment: item.amount * item.salePrice },
+            },
+            create: {
               productId: item.id,
               month,
               year,
               businessId,
+              totalSold: item.amount,
+              totalIncome: item.amount * item.salePrice,
             },
-          },
-          update: {
-            totalSold: { increment: item.amount },
-            totalIncome: { increment: item.amount * item.salePrice },
-          },
-          create: {
-            productId: item.id,
-            month,
-            year,
-            businessId,
-            totalSold: item.amount,
-            totalIncome: item.amount * item.salePrice,
-          },
-        });
-      }
+          })
+        ),
+      ]);
 
       return order;
-    });
+    }, { maxWait: 10000, timeout: 60000 });
 
     revalidateTag(CACHE_TAGS.STOCK, "max");
     revalidateTag(CACHE_TAGS.ORDERS, "max");
@@ -206,6 +216,11 @@ export const addProductsToLedgerAction = async (
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
 
+  const featureCheck = await requireFeature("hasClientLedger");
+  if (!featureCheck.success) {
+    return { error: featureCheck.error || "Esta funcionalidad no está disponible en tu plan actual." };
+  }
+
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -230,59 +245,65 @@ export const addProductsToLedgerAction = async (
         },
       });
 
-      for (const item of products) {
-        await tx.orderItem.create({
-          data: {
-            orderId,
-            productId: item.id,
-            code: item.code,
-            description: item.description,
-            costPrice: item.price,
-            price: item.salePrice,
-            quantity: item.amount,
-            subTotal: item.salePrice * item.amount,
-          },
-        });
-
-        await tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.amount,
-            productId: item.id,
-            orderId,
-            businessId,
-          },
-        });
-
-        await tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
+      // 🔥 OPTIMIZACIÓN: Crear items + actualizar stock + movimientos + ranking en paralelo
+      await Promise.all([
+        ...products.map((item) =>
+          tx.orderItem.create({
+            data: {
+              orderId,
+              productId: item.id,
+              code: item.code,
+              description: item.description,
+              costPrice: item.price,
+              price: item.salePrice,
+              quantity: item.amount,
+              subTotal: item.salePrice * item.amount,
+            },
+          })
+        ),
+        ...products.map((item) =>
+          tx.product.update({
+            where: { id: item.id },
+            data: { amount: { decrement: item.amount } },
+          })
+        ),
+        ...products.map((item) =>
+          tx.stockMovement.create({
+            data: {
+              type: "SALE",
+              quantity: -item.amount,
+              productId: item.id,
+              orderId,
+              businessId,
+            },
+          })
+        ),
+        ...products.map((item) =>
+          tx.productRanking.upsert({
+            where: {
+              productId_month_year_businessId: {
+                productId: item.id,
+                month,
+                year,
+                businessId,
+              },
+            },
+            update: {
+              totalSold: { increment: item.amount },
+              totalIncome: { increment: item.amount * item.salePrice },
+            },
+            create: {
               productId: item.id,
               month,
               year,
               businessId,
+              totalSold: item.amount,
+              totalIncome: item.amount * item.salePrice,
             },
-          },
-          update: {
-            totalSold: { increment: item.amount },
-            totalIncome: { increment: item.amount * item.salePrice },
-          },
-          create: {
-            productId: item.id,
-            month,
-            year,
-            businessId,
-            totalSold: item.amount,
-            totalIncome: item.amount * item.salePrice,
-          },
-        });
-      }
-    });
+          })
+        ),
+      ]);
+    }, { maxWait: 10000, timeout: 60000 });
 
     revalidateTag(CACHE_TAGS.STOCK, "max");
     revalidateTag(CACHE_TAGS.ORDERS, "max");

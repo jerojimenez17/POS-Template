@@ -15,6 +15,17 @@ vi.mock("../auth", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-gates", () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/lib/pusher-server", () => ({
+  pusherServer: {
+    trigger: vi.fn().mockResolvedValue({}),
+  },
 }));
 
 describe("registerPayment", () => {
@@ -215,6 +226,148 @@ describe("registerPayment", () => {
     expect(orderUpdateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "order-1" },
+        data: { paidStatus: "pago" },
+      })
+    );
+  });
+
+  it("debe marcar como pago cuando el pago cubre el total redondeado aunque haya decimales residuales", async () => {
+    const { db } = await import("@/lib/db");
+
+    const orderUpdateSpy = vi.fn().mockResolvedValue({ id: "order-1" });
+
+    const orderWithDecimalTotal = {
+      id: "order-1",
+      total: 1342305.098,
+      clientId: "client-1",
+      paidStatus: "inpago" as PaidStatus,
+      cashMovements: [],
+    };
+
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback) => {
+        const tx = {
+          order: {
+            findUnique: vi.fn().mockResolvedValue(orderWithDecimalTotal),
+            update: orderUpdateSpy,
+          },
+          cashMovement: {
+            create: vi.fn().mockResolvedValue({ id: "cash-1" }),
+          },
+          client: {
+            update: vi.fn().mockResolvedValue({ id: "client-1" }),
+          },
+        };
+        return callback(tx);
+      }
+    );
+
+    const result = await registerPayment({
+      orderId: "order-1",
+      amount: 1342305,
+      paymentMethod: "efectivo",
+      businessId: "business-123",
+    });
+
+    expect(result.success).toBe(true);
+    expect(orderUpdateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { paidStatus: "pago" },
+      })
+    );
+  });
+
+  it("debe marcar como pago cuando los pagos acumulados con decimales cubren el total redondeado", async () => {
+    const { db } = await import("@/lib/db");
+
+    const orderUpdateSpy = vi.fn().mockResolvedValue({ id: "order-1" });
+
+    const existingCashMovements = [
+      { id: "cash-1", total: 50.2, orderId: "order-1" },
+    ];
+
+    const orderWithDecimalTotalAndPayments = {
+      id: "order-1",
+      total: 100.4,
+      clientId: "client-1",
+      paidStatus: "inpago" as PaidStatus,
+      cashMovements: existingCashMovements,
+    };
+
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback) => {
+        const tx = {
+          order: {
+            findUnique: vi.fn().mockResolvedValue(orderWithDecimalTotalAndPayments),
+            update: orderUpdateSpy,
+          },
+          cashMovement: {
+            create: vi.fn().mockResolvedValue({ id: "cash-2" }),
+          },
+          client: {
+            update: vi.fn().mockResolvedValue({ id: "client-1" }),
+          },
+        };
+        return callback(tx);
+      }
+    );
+
+    const result = await registerPayment({
+      orderId: "order-1",
+      amount: 50,
+      paymentMethod: "efectivo",
+      businessId: "business-123",
+    });
+
+    expect(result.success).toBe(true);
+    expect(orderUpdateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { paidStatus: "pago" },
+      })
+    );
+  });
+
+  it("debe permitir pago cuando el monto redondeado no excede el saldo pendiente redondeado", async () => {
+    const { db } = await import("@/lib/db");
+
+    const orderUpdateSpy = vi.fn().mockResolvedValue({ id: "order-1" });
+
+    const orderWithDecimalTotal = {
+      id: "order-1",
+      total: 1500.6,
+      clientId: "client-1",
+      paidStatus: "inpago" as PaidStatus,
+      cashMovements: [],
+    };
+
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback) => {
+        const tx = {
+          order: {
+            findUnique: vi.fn().mockResolvedValue(orderWithDecimalTotal),
+            update: orderUpdateSpy,
+          },
+          cashMovement: {
+            create: vi.fn().mockResolvedValue({ id: "cash-1" }),
+          },
+          client: {
+            update: vi.fn().mockResolvedValue({ id: "client-1" }),
+          },
+        };
+        return callback(tx);
+      }
+    );
+
+    const result = await registerPayment({
+      orderId: "order-1",
+      amount: 1501,
+      paymentMethod: "efectivo",
+      businessId: "business-123",
+    });
+
+    expect(result.success).toBe(true);
+    expect(orderUpdateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
         data: { paidStatus: "pago" },
       })
     );

@@ -9,7 +9,9 @@ import { toast } from "sonner";
 import { updateBusinessConfig } from "@/actions/business-config";
 
 interface BrandingTabProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onUpdate: (data: any) => void;
 }
 
@@ -34,8 +36,8 @@ export function BrandingTab({ data, onUpdate }: BrandingTabProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-0 shadow-md">
+      <CardHeader className="border-b bg-slate-50/50 dark:bg-slate-900/50 mb-4 rounded-t-xl">
         <CardTitle>Personalización</CardTitle>
         <CardDescription>Colores y logo del negocio</CardDescription>
       </CardHeader>
@@ -75,9 +77,11 @@ export function BrandingTab({ data, onUpdate }: BrandingTabProps) {
             <span className="text-sm text-muted-foreground">{form.brandSecondaryColor}</span>
           </div>
         </div>
-        <Button onClick={handleSave} disabled={loading}>
-          {loading ? "Guardando..." : "Guardar cambios"}
-        </Button>
+        <div className="pt-4 border-t mt-6 flex justify-end">
+          <Button className="w-full sm:w-auto" onClick={handleSave} disabled={loading}>
+            {loading ? "Guardando..." : "Guardar cambios"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

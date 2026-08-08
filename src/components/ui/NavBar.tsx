@@ -1,160 +1,62 @@
 "use client";
-// const NavBar = () => {
-//   return (
-//     <div className="flex mx-auto opacity-90 shadow-sm h-14 w-full justify-between px-4 py-5">
-//       <section className="flex justify-between">
-//         <span className="text-white font-bold text-2xl">Genesis</span>
-//       </section>
-//       <ul className="justify-center flex grow">
-//         <li className="justify-center items-center hover:shadow-inner hover:shadow-white py-2 align-baseline">
-//           <Link href="/stock">
-//             <p className="text-center text-white font-semibold ">Stock</p>
-//           </Link>
-//         </li>
-//       </ul>
-//     </div>
-//   );
-// };
 
-// export default NavBar;
-
-import { cn } from "@/lib/utils";
-import { NavigationMenuLink } from "@/components/ui/navigation-menu";
-import { Poppins } from "next/font/google";
 import React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import { UserButton } from "../auth/user-button";
 import { useSession } from "next-auth/react";
 import { Button } from "./button";
 import { LoginButton } from "../auth/login-button";
+import { useMobileNav } from "@/context/MobileNavContext";
+import { Menu, X } from "lucide-react";
 
-//   {
-//     title: "Pedidos",
-//     href: "/orders",
-//     description: "Chequea y administra tus pedidos",
-//   },
-// ];
-
-const font = Poppins({
-  subsets: ["latin"],
-  weight: ["600"],
-});
 export function NavigationMenuHeader() {
+  const pathname = usePathname();
   const { data: session } = useSession();
+  const { open: mobileOpen, setOpen: setMobileOpen } = useMobileNav();
   const businessName = session?.user?.businessName || "Stock.ia";
 
+  // Ocultar el header en el catálogo público
+  if (pathname?.includes("/catalogo")) return null;
+
   return (
-    <div
-      className={cn(
-        `w-full items-center h-12 shadow-md shadow-gray-400 relative flex justify-center align-middle`,
-        font.className
-      )}
-    >
-      <div className="flex grow w-full text-center">
-        <span
-          className={cn(
-            `text-center text-2xl font-semibold text-gray-800 mx-auto my-2`,
-            font.className
+    <header className="sticky top-0 z-50 w-full border-b border-gray-200/60 dark:border-gray-800/50 bg-white/75 dark:bg-gray-950/75 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-gray-950/60">
+      <div className="flex items-center justify-between h-14 px-4 mx-auto max-w-screen-2xl">
+        {/* Left: mobile menu trigger */}
+        <div className="flex items-center w-28">
+          {session && (
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="md:hidden inline-flex items-center justify-center rounded-lg p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800 transition-colors"
+              aria-label={mobileOpen ? "Cerrar menú" : "Abrir menú"}
+            >
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
           )}
-        >
-          <Link href="/">
-            <h1 className="mx-auto dark:text-gray-50">{businessName}</h1>
-          </Link>
-          {/* <Image
-            className={`w-32 h-12 antialiased`}
-            height={100}
-            style={{ objectFit: "none" }}
-            width={100}
-            src={
-              "https://firebasestorage.googleapis.com/v0/b/vcda-app.appspot.com/o/logoRoot2.png?alt=media&token=428dc1cd-26b0-4516-8f5b-f656b89d028b"
-            }
-            alt="VCD"
-          /> */}
-        </span>
-      </div>
-      {/* <NavigationMenu className="my-1 p-1 h-10 z-50 w-18">
-        <NavigationMenuList>
-          {true && (
-            <NavigationMenuItem className="">
-              <NavigationMenuTrigger className="backdrop-filter backdrop-blur-xl bg-gray font-bold text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-sm ">
-                Stock
-              </NavigationMenuTrigger>
-              <NavigationMenuContent>
-                <ul className="grid w-52 gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
-                  {components.map((component) => (
-                    <ListItem
-                      className="font-semibold"
-                      key={component.title}
-                      title={component.title}
-                      href={component.href}
-                    >
-                      {component.description}
-                    </ListItem>
-                  ))}
-                </ul>
-              </NavigationMenuContent>
-            </NavigationMenuItem>
+        </div>
+
+        {/* Center: business name */}
+        <Link href="/" className="flex-1 text-center min-w-0">
+          <h1 className="text-lg md:text-xl font-light italic tracking-wide text-gray-800 dark:text-gray-100 truncate max-w-[40vw] md:max-w-lg mx-auto">
+            {businessName}
+          </h1>
+        </Link>
+
+        {/* Right: controls */}
+        <div className="flex items-center justify-end gap-2 w-28">
+          <ThemeToggle />
+          {session ? (
+            <UserButton />
+          ) : (
+            <LoginButton>
+              <Button variant="default" size="sm" className="rounded-lg px-3 text-xs font-medium">
+                Iniciar Sesión
+              </Button>
+            </LoginButton>
           )}
-          <NavigationMenuItem>
-            <NavigationMenuTrigger className="bg-gray backdrop-filter backdrop-blur-xl font-bold text-black hover:bg-gray hover:backdrop-filter hover:backdrop-blur-lg">
-              Pedidos
-            </NavigationMenuTrigger>
-            <NavigationMenuContent>
-              <ul className="grid w-52 gap-3 p-4 md:w-[500px] z-50 md:grid-cols-2 lg:w-[600px] ">
-                {componentsPedidos.map((component) => (
-                  <ListItem
-                    className="font-bold text-lg"
-                    key={component.title}
-                    title={component.title}
-                    href={component.href}
-                  >
-                    {component.description}
-                  </ListItem>
-                ))}
-              </ul>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
-        </NavigationMenuList>
-      </NavigationMenu> */}
-      <div className="mr-4 my-auto flex items-center gap-x-4">
-        <ThemeToggle />
-        {session ? (
-          <UserButton />
-        ) : (
-          <LoginButton>
-            <Button variant="default" size="sm">
-              Iniciar Sesión
-            </Button>
-          </LoginButton>
-        )}
+        </div>
       </div>
-    </div>
+    </header>
   );
 }
-
-const ListItem = React.forwardRef<
-  React.ElementRef<"a">,
-  React.ComponentPropsWithoutRef<"a">
->(({ className, title, children, ...props }, ref) => {
-  return (
-    <li>
-      <NavigationMenuLink asChild>
-        <a
-          ref={ref}
-          className={cn(
-            "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-            className
-          )}
-          {...props}
-        >
-          <div className="text-sm font-medium leading-none">{title}</div>
-          <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-            {children}
-          </p>
-        </a>
-      </NavigationMenuLink>
-    </li>
-  );
-});
-ListItem.displayName = "ListItem";

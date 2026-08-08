@@ -6,6 +6,8 @@ import { useForm } from "react-hook-form";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { z } from "zod";
 import { newProduct } from "../actions/newProduct";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import {
   Form,
   FormControl,
@@ -77,6 +79,7 @@ const ProductForm = ({ product, onClose }: Props) => {
   const [isPending, startTransition] = useTransition();
   const [uploadMessages, setUploadMessages] = useState<string[]>([]);
   const [errorMessages, setErrorMessages] = useState<string[]>([]);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
     [],
   );
@@ -292,11 +295,22 @@ const ProductForm = ({ product, onClose }: Props) => {
       try {
         if (product) {
           const updateData = {
-            ...values,
-            brandId: values.brand,
-            categoryId: values.category,
-            subCategoryId: values.subCategory,
-            supplierId: values.supplier,
+            code: values.code,
+            codebar: values.codebar,
+            description: values.description,
+            price: Number(values.price),
+            gain: Number(values.gain),
+            amount: values.amount,
+            unit: values.unit,
+            brandId: values.brand || null,
+            categoryId: values.category || null,
+            subCategoryId: values.subCategory || null,
+            supplierId: values.supplier || null,
+            client_bonus: values.client_bonus,
+            catalog: values.catalog,
+            details: values.details || null,
+            image: typeof values.image === "string" ? values.image : null,
+            imageName: typeof values.imageName === "string" ? values.imageName : null,
             imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
             imagesToDelete: imagesToDelete.length > 0 ? imagesToDelete : undefined,
           };
@@ -319,8 +333,13 @@ const ProductForm = ({ product, onClose }: Props) => {
           };
           const result = await newProduct(submissionValues);
           if (result.error) {
-            toast.error(result.error);
-            setErrorMessages([result.error]);
+            const parsed = parsePlanError(result.error);
+            if (parsed.isPlanError) {
+              setPlanError(parsed);
+            } else {
+              toast.error(result.error);
+              setErrorMessages([result.error]);
+            }
           } else {
             setUploadMessages(["Producto cargado con éxito"]);
             toast.success("Producto cargado con éxito");
@@ -338,10 +357,11 @@ const ProductForm = ({ product, onClose }: Props) => {
   };
 
   return (
+    <>
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
+        className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4"
       >
         <div className="col-span-1 md:col-span-2 space-y-2">
           <FormField
@@ -383,7 +403,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                       </div>
                     </label>
                     {existingImages.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 mt-2">
                         {existingImages.map((img) => {
                           const markedForDeletion = imagesToDelete.includes(img.id);
                           return (
@@ -433,6 +453,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                               key={`new-${i}`}
                               className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-green-300"
                             >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={URL.createObjectURL(file)}
                                 alt=""
@@ -472,6 +493,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                 <FormControl>
                   <Input
                     {...field}
+                    onChange={(e) => field.onChange(e.target.value.replace(/"/g, "-"))}
                     placeholder=""
                     type="text"
                     className="border-black"
@@ -495,6 +517,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                   <div className="flex gap-2">
                     <Input
                       {...field}
+                      onChange={(e) => field.onChange(e.target.value.replace(/"/g, "-"))}
                       placeholder="Ej: 7790001234567"
                       type="text"
                       disabled={isPending}
@@ -507,10 +530,10 @@ const ProductForm = ({ product, onClose }: Props) => {
                         setScannerTarget("codebar");
                         setScannerOpen(true);
                       }}
-                      className="h-10 w-10 text-gray-500 hover:text-black"
+                      className="h-9 w-10 text-gray-500 hover:text-black"
                       title="Escanear código de barras"
                     >
-                      <ScanBarcode className="h-5 w-5" />
+                      <ScanBarcode className="h-4 w-4" />
                     </Button>
                   </div>
                 </FormControl>
@@ -577,7 +600,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-sm font-medium">
-                  Margen de ganancia % <span className="text-red-500">*</span>
+                  Margen de ganancia %
                 </FormLabel>
                 <FormControl>
                   <div className="relative">
@@ -597,140 +620,132 @@ const ProductForm = ({ product, onClose }: Props) => {
             )}
           />
         </div>
-        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="category"
             render={({ field }) => (
-              <FormItem className="flex-1">
+              <FormItem>
                 <FormLabel>
-                  Categoria <span className="text-red-500">*</span>
+                  Categoria
                 </FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona Categoria" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent className="text-black bg-white">
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona Categoria" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent className="text-black bg-white">
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <CreateAttributeModal
+                    type="category"
+                    onSuccess={handleCategorySuccess}
+                  />
+                </div>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <div className="pt-1.5">
-            <CreateAttributeModal
-              type="category"
-              onSuccess={handleCategorySuccess}
-            />
-          </div>
-        </div>
-        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="subCategory"
             render={({ field }) => (
-              <FormItem className="flex-1">
+              <FormItem>
                 <FormLabel>Subcategoría</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                  disabled={!selectedCategoryId}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {subcategories.map((sub) => (
-                      <SelectItem key={sub.id} value={sub.id}>
-                        {sub.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    disabled={!selectedCategoryId}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {subcategories.map((sub) => (
+                        <SelectItem key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <CreateAttributeModal
+                    type="subcategory"
+                    parentId={selectedCategoryId}
+                    onSuccess={handleSubcategorySuccess}
+                  />
+                </div>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <div className="pt-1.5">
-            <CreateAttributeModal
-              type="subcategory"
-              parentId={selectedCategoryId}
-              onSuccess={handleSubcategorySuccess}
-            />
-          </div>
-        </div>
-        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="brand"
             render={({ field }) => (
-              <FormItem className="flex-1">
+              <FormItem>
                 <FormLabel>
-                  Marca <span className="text-red-500">*</span>
+                  Marca
                 </FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {brands.map((brand) => (
-                      <SelectItem key={brand.id} value={brand.id}>
-                        {brand.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {brands.map((brand) => (
+                        <SelectItem key={brand.id} value={brand.id}>
+                          {brand.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <CreateAttributeModal type="brand" onSuccess={handleBrandSuccess} />
+                </div>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <div className="pt-1.5">
-            <CreateAttributeModal type="brand" onSuccess={handleBrandSuccess} />
-          </div>
-        </div>
-        <div className="flex flex-row items-end gap-2">
           <FormField
             control={form.control}
             name="supplier"
             render={({ field }) => (
-              <FormItem className="flex-1">
+              <FormItem>
                 <FormLabel>Proveedor</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {suppliers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <CreateAttributeModal
+                    type="supplier"
+                    onSuccess={handleSupplierSuccess}
+                  />
+                </div>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <div className="pt-1.5">
-            <CreateAttributeModal
-              type="supplier"
-              onSuccess={handleSupplierSuccess}
-            />
-          </div>
-        </div>
 
         <div className="space-y-2">
           <FormField
@@ -766,7 +781,7 @@ const ProductForm = ({ product, onClose }: Props) => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-sm font-medium">
-                  Unidad <span className="text-red-500">*</span>
+                  Unidad
                 </FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
@@ -937,6 +952,16 @@ const ProductForm = ({ product, onClose }: Props) => {
         <FormError key={message} message={message} />
       ))}
     </Form>
+
+    <FeatureBlockedModal
+      open={!!planError}
+      onOpenChange={(open) => { if (!open) setPlanError(null); }}
+      variant={planError?.variant ?? "feature"}
+      feature={planError?.feature}
+      resource={planError?.resource}
+      limitValue={planError?.limitValue}
+    />
+    </>
   );
 };
 

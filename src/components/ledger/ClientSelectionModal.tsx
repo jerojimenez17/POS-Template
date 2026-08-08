@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
@@ -15,6 +15,8 @@ import {
 } from "../ui/dialog";
 import { toast } from "sonner";
 import { Loader2, User, Search, Plus } from "lucide-react";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import { createClient } from "@/actions/clients";
 import { getClientUnpaidOrder, addItemsToOrder } from "@/actions/unpaid-orders";
 
@@ -35,20 +37,6 @@ interface UnpaidOrderItem {
   price: number;
   quantity: number;
   subTotal: number;
-}
-
-interface OrderItem {
-  id: string;
-  quantity: number;
-  price: number;
-  subTotal: number;
-  addedAt: Date;
-}
-
-interface ExistingOrder {
-  id: string;
-  total: number;
-  items: OrderItem[];
 }
 
 interface ClientSelectionModalProps {
@@ -83,7 +71,6 @@ export default function ClientSelectionModal({
   totalWithDiscount,
 }: ClientSelectionModalProps) {
   const [clients, setClients] = useState<Client[]>([]);
-  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -95,35 +82,26 @@ export default function ClientSelectionModal({
   const [newClientCellPhone, setNewClientCellPhone] = useState("");
   const [newClientAddress, setNewClientAddress] = useState("");
   const [isCreatingClient, setIsCreatingClient] = useState(false);
+
+  // Siempre recalcular total desde items para evitar inconsistencias
+  const calculatedTotal = useMemo(
+    () => items.reduce((sum, item) => sum + item.salePrice * item.amount, 0),
+    [items]
+  );
   const [newClientCuit, setNewClientCuit] = useState("");
   const [newClientIvaCondition, setNewClientIvaCondition] = useState("");
 
   // Order-level CUIT/IVA overrides
   const [orderClientCuit, setOrderClientCuit] = useState("");
   const [orderClientIva, setOrderClientIva] = useState("");
+  const [orderNotes, setOrderNotes] = useState("");
 
   // Smart client selection state (R3)
-  const [existingOrder, setExistingOrder] = useState<ExistingOrder | null>(null);
+  const [existingOrders, setExistingOrders] = useState<{ id: string; total: number; date: Date; itemsCount: number; status: string; paidStatus: string }[]>([]);
+  const [selectedExistingOrderId, setSelectedExistingOrderId] = useState<string | null>(null);
   const [showExistingOrderDialog, setShowExistingOrderDialog] = useState(false);
   const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
-
-  useEffect(() => {
-    if (open) {
-      fetchClients();
-      setSelectedClientId("");
-      setOrderClientCuit("");
-      setOrderClientIva("");
-      setExistingOrder(null);
-      setShowExistingOrderDialog(false);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    const results = clients.filter((client) =>
-      client.name.toLowerCase().includes(search.toLowerCase())
-    );
-    setFilteredClients(results);
-  }, [search, clients]);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
 
   const fetchClients = async () => {
     setIsFetchingClients(true);
@@ -131,13 +109,33 @@ export default function ClientSelectionModal({
       const response = await fetch("/api/clients");
       const data = await response.json();
       setClients(data.clients || data);
-      setFilteredClients(data.clients || data);
     } catch (error) {
       console.error("Error fetching clients:", error);
     } finally {
       setIsFetchingClients(false);
     }
   };
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (open) {
+      fetchClients();
+      setSelectedClientId("");
+      setOrderClientCuit("");
+      setOrderClientIva("");
+      setOrderNotes("");
+      setExistingOrders([]);
+      setSelectedExistingOrderId(null);
+      setShowExistingOrderDialog(false);
+    }
+  }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const filteredClients = useMemo(() =>
+    clients.filter((client) =>
+      client.name.toLowerCase().includes(search.toLowerCase())
+    ),
+  [clients, search]);
 
   const handleCreateClient = async () => {
     if (!newClientName.trim()) {
@@ -156,7 +154,12 @@ export default function ClientSelectionModal({
       });
 
       if (result.error) {
-        toast.error(result.error);
+        const parsed = parsePlanError(result.error);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+        } else {
+          toast.error(result.error);
+        }
       } else {
         toast.success(result.success || "Cliente creado correctamente");
         setIsCreateModalOpen(false);
@@ -184,12 +187,26 @@ export default function ClientSelectionModal({
       return;
     }
 
+    if (calculatedTotal <= 0) {
+      toast.error("El total debe ser mayor a 0");
+      return;
+    }
+
     setIsCheckingExistingOrder(true);
     try {
       const result = await getClientUnpaidOrder(selectedClientId, businessId);
       
       if (result.success && result.data) {
-        setExistingOrder(result.data as ExistingOrder);
+        const order = result.data as { id: string; total: number; date: Date; items: unknown[]; status: string; paidStatus: string };
+        setExistingOrders([{
+          id: order.id,
+          total: order.total,
+          date: order.date,
+          itemsCount: order.items?.length ?? 0,
+          status: order.status,
+          paidStatus: order.paidStatus,
+        }]);
+        setSelectedExistingOrderId(order.id);
         setShowExistingOrderDialog(true);
         setIsCheckingExistingOrder(false);
         return;
@@ -197,7 +214,7 @@ export default function ClientSelectionModal({
 
       await createNewOrder(selectedClientId);
     } catch (error) {
-      console.error("Error checking existing order:", error);
+      console.error("Error checking existing orders:", error);
       await createNewOrder(selectedClientId);
     } finally {
       setIsCheckingExistingOrder(false);
@@ -237,7 +254,12 @@ export default function ClientSelectionModal({
             paidMethod: "Efectivo",
           });
           if ('error' in result && result.error) {
-            toast.error(result.error as string);
+            const parsed = parsePlanError(result.error as string);
+            if (parsed.isPlanError) {
+              setPlanError(parsed);
+            } else {
+              toast.error(result.error as string);
+            }
           } else {
             toast.success("Presupuesto creado correctamente");
             onOpenChange(false);
@@ -255,9 +277,10 @@ export default function ClientSelectionModal({
             clientId,
             businessId,
             items: orderItems,
-            total,
+          total: calculatedTotal,
             clientIvaCondition: orderClientIva || undefined,
             clientDocumentNumber: orderClientCuit || undefined,
+            notes: orderNotes.trim() || undefined,
           }),
         });
         const result = await response.json();
@@ -266,7 +289,12 @@ export default function ClientSelectionModal({
           onOpenChange(false);
           onSuccess?.();
         } else {
-          toast.error(result.error || "Error al crear la orden");
+          const parsed = parsePlanError(result.error || "");
+          if (parsed.isPlanError) {
+            setPlanError(parsed);
+          } else {
+            toast.error(result.error || "Error al crear la orden");
+          }
         }
       }
     } catch (error) {
@@ -278,7 +306,7 @@ export default function ClientSelectionModal({
   };
 
   const addToExistingOrder = async () => {
-    if (!existingOrder) return;
+    if (!selectedExistingOrderId) return;
 
     setIsLoading(true);
     try {
@@ -292,7 +320,7 @@ export default function ClientSelectionModal({
       }));
 
       const result = await addItemsToOrder({
-        orderId: existingOrder.id,
+        orderId: selectedExistingOrderId,
         businessId,
         items: orderItems,
       });
@@ -303,7 +331,12 @@ export default function ClientSelectionModal({
         onOpenChange(false);
         onSuccess?.();
       } else {
-        toast.error(result.error || "Error al agregar items a la orden");
+        const parsed = parsePlanError(result.error || "");
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+        } else {
+          toast.error(result.error || "Error al agregar items a la orden");
+        }
       }
     } catch (error) {
       console.error("Error adding to existing order:", error);
@@ -420,13 +453,24 @@ export default function ClientSelectionModal({
                   <option value="Exento">Exento</option>
                 </select>
               </div>
+              <div className="grid gap-2">
+                <label htmlFor="orderNotes" className="text-xs font-medium">Notas / Observaciones (opcional)</label>
+                <textarea
+                  id="orderNotes"
+                  placeholder="Ej: Retiró Juan Pérez, DNI 12345678"
+                  value={orderNotes}
+                  onChange={(e) => setOrderNotes(e.target.value)}
+                  rows={2}
+                  className="flex h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                />
+              </div>
             </div>
           )}
 
           <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
             <span className="text-sm text-muted-foreground">Total:</span>
             <span className="text-lg font-bold">
-              ${total.toLocaleString("es-AR")}
+              ${calculatedTotal.toLocaleString("es-AR")}
             </span>
           </div>
         </div>
@@ -537,36 +581,86 @@ export default function ClientSelectionModal({
     <Dialog open={showExistingOrderDialog} onOpenChange={setShowExistingOrderDialog}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Orden Pendiente Existente</DialogTitle>
+          <DialogTitle>
+            {existingOrders.length > 1
+              ? `${existingOrders.length} Órdenes Pendientes`
+              : "Orden Pendiente Existente"}
+          </DialogTitle>
           <DialogDescription>
-            Este cliente ya tiene una orden pendiente
+            {existingOrders.length > 1
+              ? "El cliente tiene varias órdenes pendientes. Seleccione a cuál desea agregar los productos."
+              : "Este cliente ya tiene una orden pendiente"}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4 space-y-4">
-          <div className="p-4 bg-muted rounded-lg">
-            <p className="text-sm text-muted-foreground">Orden actual:</p>
-            <p className="text-lg font-bold">
-              ${existingOrder?.total.toLocaleString("es-AR") || "0"}
-            </p>
-          </div>
-          
-          <div className="p-4 bg-muted rounded-lg">
-            <p className="text-sm text-muted-foreground">Total a agregar:</p>
-            <p className="text-lg font-bold">
-              ${total.toLocaleString("es-AR")}
-            </p>
-          </div>
+        <div className="py-2 space-y-3 max-h-[260px] overflow-y-auto">
+          {existingOrders.map((order) => {
+            const isSelected = selectedExistingOrderId === order.id;
 
-          <p className="text-sm text-muted-foreground">
-            ¿Qué desea hacer con los productos seleccionados?
+            const statusLabel = order.status === "pendiente"
+              ? "Presupuesto / Por confirmar"
+              : order.status === "consignacion"
+              ? "En consignación"
+              : "Confirmada / A cuenta";
+
+            const statusColor = order.status === "pendiente"
+              ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+              : order.status === "consignacion"
+              ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+              : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+
+            return (
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => setSelectedExistingOrderId(order.id)}
+                className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${
+                  isSelected
+                    ? "border-primary bg-primary/5"
+                    : "border-muted bg-muted/30 hover:border-muted-foreground/30"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      isSelected ? "border-primary" : "border-muted-foreground"
+                    }`}>
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium">
+                          Orden #{order.id.slice(-6).toUpperCase()}
+                        </p>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusColor}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {new Date(order.date).toLocaleDateString("es-AR")} · {order.itemsCount} {order.itemsCount === 1 ? "item" : "items"}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-sm font-bold shrink-0 ml-2">
+                    ${order.total.toLocaleString("es-AR")}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="p-3 bg-muted rounded-lg">
+          <p className="text-sm text-muted-foreground">Total a agregar:</p>
+          <p className="text-lg font-bold">
+            ${total.toLocaleString("es-AR")}
           </p>
         </div>
 
         <DialogFooter className="flex-col gap-2">
           <Button 
             onClick={addToExistingOrder} 
-            disabled={isLoading}
+            disabled={isLoading || !selectedExistingOrderId}
             className="w-full"
           >
             {isLoading ? (
@@ -593,6 +687,18 @@ export default function ClientSelectionModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <FeatureBlockedModal
+      open={!!planError}
+      onOpenChange={(open) => {
+        if (!open) setPlanError(null);
+      }}
+      variant={planError?.variant ?? "feature"}
+      feature={planError?.feature}
+      resource={planError?.resource}
+      limitValue={planError?.limitValue}
+      showAcknowledge={false}
+    />
     </>
   );
 }

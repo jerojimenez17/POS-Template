@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { UserRole, Plan } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { auth } from "@/lib/auth";
@@ -99,17 +99,9 @@ export const deleteBusiness = async (businessId: string) => {
     }
 };
 
-export const updateBusinessFeaturesAction = async (payload: {
+export const updateBusinessPlanAction = async (payload: {
   businessId: string;
-  plan: Plan;
-  hasAfipBilling: boolean;
-  hasPublicCatalog: boolean;
-  hasClientLedger: boolean;
-  hasMultiCashbox: boolean;
-  hasSupplierFilter: boolean;
-  hasBudget: boolean;
-  maxUsers: number;
-  maxProducts: number;
+  planDefinitionId: string;
 }) => {
   const session = await auth();
 
@@ -118,6 +110,14 @@ export const updateBusinessFeaturesAction = async (payload: {
   }
 
   try {
+    // Validate PlanDefinition exists
+    const planDef = await db.planDefinition.findUnique({
+      where: { id: payload.planDefinitionId },
+    });
+    if (!planDef) {
+      return { success: false, error: "Plan no encontrado" };
+    }
+
     await db.$transaction(async (tx) => {
       const business = await tx.business.findUnique({
         where: { id: payload.businessId },
@@ -127,31 +127,9 @@ export const updateBusinessFeaturesAction = async (payload: {
         throw new Error("Negocio no encontrado");
       }
 
-      await tx.businessFeatures.upsert({
-        where: { businessId: payload.businessId },
-        update: {
-          plan: payload.plan,
-          hasAfipBilling: payload.hasAfipBilling,
-          hasPublicCatalog: payload.hasPublicCatalog,
-          hasClientLedger: payload.hasClientLedger,
-          hasMultiCashbox: payload.hasMultiCashbox,
-          hasSupplierFilter: payload.hasSupplierFilter,
-          hasBudget: payload.hasBudget,
-          maxUsers: payload.maxUsers,
-          maxProducts: payload.maxProducts,
-        },
-        create: {
-          businessId: payload.businessId,
-          plan: payload.plan,
-          hasAfipBilling: payload.hasAfipBilling,
-          hasPublicCatalog: payload.hasPublicCatalog,
-          hasClientLedger: payload.hasClientLedger,
-          hasMultiCashbox: payload.hasMultiCashbox,
-          hasSupplierFilter: payload.hasSupplierFilter,
-          hasBudget: payload.hasBudget,
-          maxUsers: payload.maxUsers,
-          maxProducts: payload.maxProducts,
-        },
+      await tx.business.update({
+        where: { id: payload.businessId },
+        data: { planDefinitionId: payload.planDefinitionId },
       });
     });
 
@@ -163,8 +141,8 @@ export const updateBusinessFeaturesAction = async (payload: {
     return { success: true };
   } catch (error) {
     const err = error as Error;
-    console.error("Error updating business features:", error);
-    return fail(err.message || "Error al actualizar características del negocio");
+    console.error("Error updating business plan:", error);
+    return fail(err.message || "Error al actualizar el plan del negocio");
   }
 };
 

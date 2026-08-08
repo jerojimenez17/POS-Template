@@ -1,10 +1,12 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { getProductByCode, getProductsByCode, getProductsBySearch, getSuppliersForFilter } from "@/actions/stock";
+import { getProductByCode, getProductsByCode, getProductsFiltered, getSuppliersForFilter } from "@/actions/stock";
 import { ProductPrismaAdapter } from "@/models/ProductPrismaAdapter";
 import Product from "@/models/Product";
 import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
 import { cn } from "@/lib/utils";
+import { useCashbox } from "@/context/CashboxContext";
+import { toast } from "sonner";
 
 interface SupplierOption {
   id: string;
@@ -30,6 +32,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [duplicateProducts, setDuplicateProducts] = useState<Product[]>([]);
 
+  const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const supplierContainerRef = useRef<HTMLDivElement>(null);
   const lastKeystrokeTime = useRef<number>(0);
@@ -87,7 +90,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   }, []);
 
   const performSearch = async (value: string, supId: string) => {
-    const results = await getProductsBySearch(value, supId || undefined);
+    const results = await getProductsFiltered({ search: value, supplierId: supId || undefined });
     setSuggestions(results.map(ProductPrismaAdapter.toDomain));
   };
 
@@ -149,6 +152,11 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   };
 
   const addProductDirect = (product: Product) => {
+    if (!hasActiveSession) {
+      toast.error("Debe abrir una sesión de caja antes de agregar productos");
+      setIsOpeningModalOpen(true);
+      return;
+    }
     if (product.amount <= 0) {
       setErrorMessage("Producto sin Stock");
       return;
@@ -162,7 +170,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
   const processBarcode = async (code: string) => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (supplierId) {
-      const product = await getProductByCode(code, supplierId);
+      const product = await getProductByCode(code);
       if (!product) {
         setErrorMessage("Producto no encontrado");
       } else {
@@ -191,7 +199,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (barcodeTimeout.current) clearTimeout(barcodeTimeout.current);
     if (supplierId) {
-      const product = await getProductByCode(code, supplierId);
+      const product = await getProductByCode(code);
       if (!product) {
         setErrorMessage("Producto no encontrado");
         return;
@@ -255,6 +263,11 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
                   const product = suggestions[selectedIndex];
+                  if (!hasActiveSession) {
+                    toast.error("Debe abrir una sesión de caja antes de agregar productos");
+                    setIsOpeningModalOpen(true);
+                    return;
+                  }
                   if (product.amount <= 0) {
                     setErrorMessage("Producto sin Stock");
                     return;
@@ -269,7 +282,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
               } else if (e.key === "ArrowDown") {
                 e.preventDefault();
                 if (suggestions.length === 0) {
-                  getProductsBySearch("", supplierId || undefined).then(results => {
+                  getProductsFiltered({ search: "", supplierId: supplierId || undefined }).then(results => {
                     setSuggestions(results.map(ProductPrismaAdapter.toDomain));
                     setSelectedIndex(0);
                   });
@@ -287,8 +300,13 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
             autoComplete="off"
             spellCheck={false}
           />
+          {/* Overlay to dim table when suggestions are open */}
           {suggestions.length > 0 && (
-            <div className="absolute z-20 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl max-h-72 overflow-y-auto">
+            <div className="fixed inset-0 bg-black/10 dark:bg-black/30 z-10" onClick={() => { setSuggestions([]); setSelectedIndex(-1); }} />
+          )}
+
+          {suggestions.length > 0 && (
+            <div className="absolute z-20 w-full mt-2 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm border-2 border-gray-200 dark:border-gray-600 rounded-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 max-h-72 overflow-y-auto">
               {suggestions.map((product, index) => (
                 <div
                   key={product.id}
@@ -300,6 +318,11 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                       : "hover:bg-gray-50 dark:hover:bg-gray-700 border-l-4 border-l-transparent"
                   )}
                   onClick={() => {
+                    if (!hasActiveSession) {
+                      toast.error("Debe abrir una sesión de caja antes de agregar productos");
+                      setIsOpeningModalOpen(true);
+                      return;
+                    }
                     if (product.amount <= 0) {
                       setErrorMessage("Producto sin Stock");
                       return;
@@ -340,6 +363,21 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
             </div>
           )}
         </div>
+
+        {/* Scanner button */}
+        <button
+          className="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus-visible:ring-1 focus-visible:ring-ring"
+          onClick={() => setScannerOpen(true)}
+          aria-label="Escanear codigo"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+            <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+            <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+            <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+            <line x1="7" y1="12" x2="17" y2="12" />
+          </svg>
+        </button>
 
         {/* Supplier combobox */}
         {hasSupplierFilter && (
@@ -409,21 +447,6 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
             )}
           </div>
         )}
-
-        {/* Scanner button */}
-        <button
-          className="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus-visible:ring-1 focus-visible:ring-ring"
-          onClick={() => setScannerOpen(true)}
-          aria-label="Escanear codigo"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-            <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-            <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-            <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-            <line x1="7" y1="12" x2="17" y2="12" />
-          </svg>
-        </button>
       </div>
 
       {errorMessage && (
