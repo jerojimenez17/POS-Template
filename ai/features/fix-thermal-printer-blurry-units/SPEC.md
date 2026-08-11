@@ -1,0 +1,129 @@
+# SPEC — Fix blurry units on thermal printer fallback ticket
+
+**Feature:** Improve legibility of unit/quantity text on the thermal printer HTML fallback ticket.
+**Scope:** CSS-only change in one function. No data-model changes. No new dependencies.
+
+---
+
+## 1. Problem
+
+The POS has two thermal printing paths:
+
+| Path | Mechanism | Triggered when |
+|------|-----------|----------------|
+| **QZ Tray (raw ESC/POS)** | `generateThermalReceipt()` → sends raw ESC/POS commands to the printer via qz-tray | `qzTrayEnabled = true` (default) |
+| **HTML fallback** | `buildThermalPrintHTML()` → opens a popup window with styled HTML, then calls `window.print()` | `qzTrayEnabled = false` (e.g. qz-tray unavailable or user toggled it off) |
+
+The **HTML fallback** ticket renders product quantities with this CSS (lines 240-246 and 268 of `BrowserPrint.ts`):
+
+```html
+<div class="product-price">x${p.amount} $${p.unitPrice.toFixed(2)}</div>
+```
+
+```css
+.product-price { font-size: 11px; color: #555; }
+```
+
+**Root cause:** On thermal printers (typically 203 DPI), small text (11px) combined with gray color (#555) produces blurry, hard-to-read output. The browser's font rendering antialiases the gray text against the white background, and the low DPI of the thermal head amplifies the blur.
+
+In contrast, the **QZ Tray (ESC/POS) path** uses raw printer commands with `BOLD_ON` (`\x1B\x45\x01`) for the quantity line, which renders natively on the printer with full contrast and no antialiasing — hence it looks sharp.
+
+---
+
+## 2. Goals
+
+- Make the `product-price` line (units × unit price) in the HTML fallback thermal ticket **bolder and slightly larger**.
+- Keep the change minimal and scoped to the CSS only — no structural HTML changes.
+- Ensure the total ticket width (80mm paper) is not broken by the size increase.
+
+## 3. Non-Goals (explicitly out of scope)
+
+- No changes to the QZ Tray / ESC/POS path (`generateThermalReceipt()`).
+- No changes to non-thermal print paths (PDF export, A4 browser print).
+- No changes to the `PrintableTable` React component or its data flow.
+- No new dependencies or configuration.
+
+---
+
+## 4. Design Overview
+
+### 4.1 Target file
+
+`src/lib/print/BrowserPrint.ts` — the `buildThermalPrintHTML()` function (lines 232-357).
+
+### 4.2 Change: CSS only
+
+Modify the `.product-price` CSS rule inside the `<style>` block of `buildThermalPrintHTML()`:
+
+**Before:**
+```css
+.product-price { font-size: 11px; color: #555; }
+```
+
+**After:**
+```css
+.product-price { font-size: 12px; font-weight: 700; color: #000; }
+```
+
+### 4.3 Rationale
+
+| Property | Before | After | Why |
+|----------|--------|-------|-----|
+| `font-size` | `11px` | `12px` | Slightly larger text renders clearer on 203 DPI thermal heads. 12px fits well within the 80mm (≈304px at 96 DPI) ticket width. |
+| `font-weight` | (not set / normal) | `700` (bold) | Bold text has thicker strokes, reducing the antialiasing blur effect on low-DPI printers. Matches the ESC/POS path which uses `BOLD_ON`. |
+| `color` | `#555` (gray) | `#000` (black) | Full-contrast black eliminates gray antialiasing artifacts. Thermal printers print in binary (black/white) anyway, so gray is always simulated via dithering which looks blurry. |
+
+### 4.4 Impact on layout
+
+The `product-price` div occupies the middle section of a flex row:
+```css
+.product-row { display: flex; flex-wrap: wrap; ... }
+.product-desc { width: 100%; ... }         /* Full width, above */
+.product-price { font-size: 12px; ... }    /* Left side of row below desc */
+.product-sum { font-weight: 700; font-size: 13px; }  /* Right side */
+```
+
+With `flex-wrap: wrap`, the `product-price` and `product-sum` share the row. A 1px increase (11→12px) is negligible and will not cause wrapping issues given the typical content length (`x2 $150.00` is ~14 chars at 12px ≈ 100px, well within the 80mm ticket).
+
+---
+
+## 5. Files & Changes
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `src/lib/print/BrowserPrint.ts` | In `buildThermalPrintHTML()`, update the `.product-price` CSS rule (line 268): `font-size: 11px; color: #555;` → `font-size: 12px; font-weight: 700; color: #000;` |
+
+### Unchanged files
+
+- `src/lib/print/BrowserPrint.ts` — `generateThermalReceipt()` (ESC/POS path) is untouched.
+- `src/components/Billing/PrintableTable.tsx` — no changes.
+- `src/components/Billing/BillButtons.tsx` — no changes.
+- `src/context/BillProvider.tsx`, `BillContext.tsx` — no changes.
+- `src/lib/print/PDFExport.ts` — no changes.
+
+---
+
+## 6. Acceptance Criteria (measurable)
+
+1. **CSS change only:** The only code modification is the `.product-price` CSS rule in `buildThermalPrintHTML()` — `font-size: 12px`, `font-weight: 700`, `color: #000`.
+2. **HTML fallback renders bold units:** When printing via HTML fallback (QZ Tray disabled), the quantity line (`x2 $150.00`) renders in **bold black text at 12px**.
+3. **QZ Tray path unaffected:** The ESC/POS receipt generated by `generateThermalReceipt()` is byte-for-byte identical before and after the change.
+4. **Layout preserved:** The product row (`product-desc` + `product-price` + `product-sum`) does not break or wrap unexpectedly for typical product descriptions (≤30 chars) and prices (≤10 chars).
+5. **No regressions:** `npm run lint` passes; `npm run build` succeeds.
+
+---
+
+## 7. Out of scope / open questions
+
+- Whether other text elements in the HTML fallback (e.g. `.info-row`, `.product-desc`) should also be adjusted for thermal legibility — can be a follow-up if needed.
+- Whether the `product-sum` (subtotal) should also receive `color: #000` for consistency — currently it already has `font-weight: 700` so it renders acceptably.
+
+---
+
+## 8. Definition of Done
+
+- The `.product-price` CSS rule in `buildThermalPrintHTML()` is updated to `font-size: 12px; font-weight: 700; color: #000;`.
+- Manual verification: print a test ticket via HTML fallback (QZ Tray off) and confirm units are bold, black, and legible on the thermal printer.
+- Lint and build pass with no errors.

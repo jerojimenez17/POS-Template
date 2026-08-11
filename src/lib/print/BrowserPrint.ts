@@ -265,7 +265,7 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
       .products { width: 100%; margin-bottom: 3mm; }
       .product-row { display: flex; flex-wrap: wrap; margin-bottom: 2mm; justify-content: space-between; align-items: flex-end; }
       .product-desc { width: 100%; font-weight: 600; font-size: 12.5px; }
-      .product-price { font-size: 11px; color: #555; }
+      .product-price { font-size: 12px; font-weight: 700; color: #000; }
       .product-sum { font-weight: 700; font-size: 13px; }
       .totals { border-top: 2px dashed #ccc; padding-top: 3mm; margin-top: 3mm; }
       .total-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 1mm; }
