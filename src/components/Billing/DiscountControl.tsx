@@ -12,19 +12,22 @@ const DiscountControl = ({
   editable = true,
   className,
 }: DiscountControlProps) => {
-  const { BillState, dispatch } = useContext(BillContext);
-  const [editValue, setEditValue] = useState<string>(
-    String(BillState.discount)
-  );
+  const context = useContext(BillContext);
+  const BillState = context?.BillState;
+  const dispatch = context?.dispatch;
+
+  const discount = BillState?.discount ?? 0;
+
+  const [editValue, setEditValue] = useState<string>(String(discount));
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEditValue(String(BillState.discount));
-  }, [BillState.discount]);
+    setEditValue(String(discount));
+  }, [discount]);
 
   const commitValue = useCallback(
     (raw: string) => {
-      if (!editable) return;
+      if (!editable || !dispatch) return;
       const parsed = Number(raw);
       let clamped = isNaN(parsed) ? 0 : parsed;
       if (clamped < 0) clamped = 0;
@@ -44,13 +47,15 @@ const DiscountControl = ({
       commitValue(editValue);
     }
     if (e.key === "Escape") {
-      setEditValue(String(BillState.discount));
+      setEditValue(String(discount));
     }
   };
 
   const handleBlur = () => {
     commitValue(editValue);
   };
+
+  if (!BillState || !dispatch) return null;
 
   return (
     <div className={`flex items-center gap-2 ${className ?? ""}`}>
