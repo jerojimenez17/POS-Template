@@ -20,16 +20,36 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { BillContext } from "@/context/BillContext";
 import BillTypes from "@/models/billType";
 import { getVoucherNumberAction } from "@/actions/voucher";
+import { getDefaultBillType } from "@/utils/billing";
+import { getBusinessBillingInfoAction } from "@/actions/business";
 
 interface BillParametersFormProps {
   ptoVentas?: number[];
+  initialBillType?: string;
 }
 
-const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
+const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersFormProps) => {
   const [editParamters, setEditParameters] = useState(false);
   const [lastVoucherNum, setLastVoucherNum] = useState<number | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(true);
-  const { dispatch, BillState, onOrderResetRef } = useContext(BillContext);
+  const context = useContext(BillContext);
+  const dispatch = context?.dispatch;
+  const BillState = context?.BillState;
+  const onOrderResetRef = context?.onOrderResetRef;
+  const [businessCondicionIva, setBusinessCondicionIva] = useState<string | null | undefined>(undefined);
+
+  // Fetch business IVA condition on mount to determine default bill type
+  useEffect(() => {
+    getBusinessBillingInfoAction()
+      .then((info) => {
+        setBusinessCondicionIva(info?.condicionIva ?? null);
+      })
+      .catch(() => {
+        setBusinessCondicionIva(null);
+      });
+  }, []);
+
+  const defaultBillType = initialBillType || getDefaultBillType(businessCondicionIva);
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
     resolver: zodResolver(BillParametersSchema),
@@ -38,15 +58,37 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
       clientCondition: ClientConditions.CONSUMIDOR_FINAL,
       discount: 0,
       twoMethods: false,
-      billType: BillTypes.C,
+      billType: initialBillType || BillState?.billType || defaultBillType,
       totalSecondMethod: 0,
       secondPaidMethod: PaidMethods.DEBITO,
       ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
     },
   });
 
+  // Update form billType and BillState when business IVA condition is fetched
+  useEffect(() => {
+    if (businessCondicionIva !== undefined && dispatch) {
+      form.setValue("billType", defaultBillType);
+      // Also update BillState so AFIP receives the correct bill type
+      dispatch({
+        type: "billType",
+        payload: defaultBillType,
+      });
+    }
+  }, [businessCondicionIva, defaultBillType, form, dispatch]);
+
   const watchBillType = form.watch("billType");
   const watchPtoVenta = form.watch("ptoVenta");
+
+  // Keep BillState in BillContext strictly synchronized with form's billType
+  useEffect(() => {
+    if (watchBillType && dispatch) {
+      dispatch({
+        type: "billType",
+        payload: watchBillType,
+      });
+    }
+  }, [watchBillType, dispatch]);
 
   useEffect(() => {
     const fetchVoucher = async () => {
@@ -81,20 +123,22 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
   }, [watchBillType, watchPtoVenta]);
 
   useEffect(() => {
-    onOrderResetRef.current = () => {
-      form.reset({
-        paidMethod: PaidMethods.EFECTIVO,
-        clientCondition: ClientConditions.CONSUMIDOR_FINAL,
-        discount: 0,
-        twoMethods: false,
-        billType: BillTypes.C,
-        totalSecondMethod: 0,
-        secondPaidMethod: PaidMethods.DEBITO,
-        ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
-      });
-      setEditParameters(false);
-    };
-  }, [form, onOrderResetRef]);
+    if (onOrderResetRef) {
+      onOrderResetRef.current = () => {
+        form.reset({
+          paidMethod: PaidMethods.EFECTIVO,
+          clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+          discount: 0,
+          twoMethods: false,
+          billType: defaultBillType,
+          totalSecondMethod: 0,
+          secondPaidMethod: PaidMethods.DEBITO,
+          ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
+        });
+        setEditParameters(false);
+      };
+    }
+  }, [form, onOrderResetRef, defaultBillType]);
 
   const currentDate = useMemo(() => new Date(), []);
 
@@ -418,7 +462,7 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
       )}
 
       {/* Descuento */}
-      {BillState.discount > 0 && (
+      {BillState && BillState.discount > 0 && (
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-50 dark:bg-orange-900/20">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500">
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>

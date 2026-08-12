@@ -34,6 +34,8 @@ import {
 } from "@/actions/shortcuts";
 import type { ShortcutMap, ShortcutKey } from "@/models/ShortcutConfig";
 import Product from "@/models/Product";
+import { getDefaultBillType } from "@/utils/billing";
+import { getBusinessBillingInfoAction } from "@/actions/business";
 
 interface props {
   session: Session | null;
@@ -62,12 +64,20 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(true);
   const businessId = (session?.user as { businessId?: string })?.businessId;
+  const [defaultBillType, setDefaultBillType] = useState<string>("Factura C");
   const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
   const shortcutMapRef = useRef(shortcutMap);
   // Sync ref with state after render
   useEffect(() => {
     shortcutMapRef.current = shortcutMap;
   }, [shortcutMap]);
+
+  // Fetch business IVA condition to determine default bill type
+  useEffect(() => {
+    getBusinessBillingInfoAction().then((info) => {
+      setDefaultBillType(getDefaultBillType(info?.condicionIva ?? null));
+    });
+  }, []);
 
   const checkSession = () => {
     if (!hasActiveSession) {
@@ -536,7 +546,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                   dispatch({ type: "billType", payload: "Presupuesto" });
                   handlePrint(undefined, targetWin);
                   setTimeout(() => {
-                    dispatch({ type: "removeAll", payload: null });
+                    dispatch({ type: "removeAll", payload: null, defaultBillType });
                     if (onOrderResetRef.current) {
                       onOrderResetRef.current();
                     }
@@ -567,7 +577,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
             seller={session?.user?.email || ""}
             businessId={session?.user?.businessId || ""}
             onSuccess={() => {
-              dispatch({ type: "removeAll", payload: null });
+              dispatch({ type: "removeAll", payload: null, defaultBillType });
               if (onOrderResetRef.current) {
                 onOrderResetRef.current();
               }
@@ -611,7 +621,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                     if (!openErrorModal && BillState.total > 0) {
                       handlePrint(caeResult, targetWin);
                       setTimeout(() => {
-                        dispatch({ type: "removeAll", payload: null });
+                        dispatch({ type: "removeAll", payload: null, defaultBillType });
                         if (onOrderResetRef.current) {
                           onOrderResetRef.current();
                         }
@@ -717,7 +727,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                     if (!openErrorModal && BillState.total > 0) {
                       handlePrint(caeResult, targetWin);
                       setTimeout(() => {
-                        dispatch({ type: "removeAll", payload: null });
+                        dispatch({ type: "removeAll", payload: null, defaultBillType });
                         if (onOrderResetRef.current) {
                           onOrderResetRef.current();
                         }

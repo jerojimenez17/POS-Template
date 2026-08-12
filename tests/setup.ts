@@ -69,6 +69,9 @@ export const mockDb = {
     findUnique: vi.fn().mockResolvedValue(null),
     upsert: vi.fn().mockResolvedValue({ id: 'cashbox-1', businessId: 'business-123', total: 0 }),
   },
+  business: {
+    findUnique: vi.fn().mockResolvedValue(null),
+  },
 };
 
 vi.mock('../src/lib/db', () => ({

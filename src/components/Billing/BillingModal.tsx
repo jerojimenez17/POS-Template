@@ -17,6 +17,8 @@ import { updateOrderCaeAction } from "@/actions/sales/update";
 import { Input } from "../ui/input";
 import { paidMethods } from "@/utils/PaidMethods";
 import { Button } from "../ui/button";
+import { getDefaultBillType } from "@/utils/billing";
+import { getBusinessBillingInfoAction } from "@/actions/business";
 
 interface BillingModalProps {
   open: boolean;
@@ -36,6 +38,19 @@ const BillingModal = ({
   const [documentNumber, setDocumentNumber] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
   const [discount, setDiscount] = useState<number>(0);
+  const [businessCondicionIva, setBusinessCondicionIva] = useState<string | null>(null);
+
+  useEffect(() => {
+    getBusinessBillingInfoAction()
+      .then((info) => {
+        setBusinessCondicionIva(info?.condicionIva ?? null);
+      })
+      .catch(() => {
+        setBusinessCondicionIva(null);
+      });
+  }, []);
+
+  const defaultBillType = getDefaultBillType(businessCondicionIva);
 
   useEffect(() => {
     if (sale) {
@@ -53,16 +68,11 @@ const BillingModal = ({
       // Note: We are transforming the current sale data combined with modal inputs
       const billToProcess: BillState = {
         ...sale,
+        billType: sale?.billType || defaultBillType,
         IVACondition: ivaCondition,
         documentNumber: Number(documentNumber),
         paidMethod: paymentMethod,
         discount: discount,
-        // Ensure totals are recalculated if needed or trust the backend/service handles it based on products?
-        // postBill sends the whole object. If we change discount, we might need to recalculate totalWithDiscount.
-        // For simplicity, we assume generic values for now or recalculate if needed.
-        // But changing discount here might be tricky if "Totales" are displayed from `sale` prop.
-        // The prompt says "Totales" (display?).
-        // If we change params, we should update the object.
       };
 
       // Recalculate total if discount changed (optional, if allowed)
@@ -128,7 +138,7 @@ const BillingModal = ({
         <DialogHeader>
           <DialogTitle className="text-pink-400">Facturar Venta</DialogTitle>
           <DialogDescription>
-            Genere una Factura C para esta venta existente.
+            Genere una {defaultBillType} para esta venta existente.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -137,7 +147,7 @@ const BillingModal = ({
             <label className="text-right text-sm text-gray-500">Tipo</label>
             <Input
               disabled
-              value="Factura C"
+              value={defaultBillType}
               className="col-span-3 border-gray-300"
             />
           </div>
