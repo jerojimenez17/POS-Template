@@ -28,10 +28,15 @@ const INITIAL_STATE: BillState = {
 
 interface props {
   children: ReactElement | ReactElement[];
+  initialBillType?: string;
 }
 
-const BillProvider = ({ children }: props) => {
-  const [BillState, dispatch] = useReducer(BillReducer, INITIAL_STATE);
+const BillProvider = ({ children, initialBillType }: props) => {
+  const getInitialState = (): BillState => ({
+    ...INITIAL_STATE,
+    billType: initialBillType ?? INITIAL_STATE.billType,
+  });
+  const [BillState, dispatch] = useReducer(BillReducer, undefined, getInitialState);
   const [printMode, setPrintMode] = React.useState<PrintMode>("thermal");
   const [qzTrayActive, setQzTrayActive] = React.useState<boolean>(() => {
     if (typeof window !== "undefined") {

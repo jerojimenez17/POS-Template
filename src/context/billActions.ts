@@ -6,7 +6,7 @@ export type BillAction =
   | { type: "addItem"; payload: Product }
   | { type: "addUnit"; payload: Product }
   | { type: "removeUnit"; payload: { id: string } }
-  | { type: "removeAll"; payload: null }
+  | { type: "removeAll"; payload: null; defaultBillType?: string }
   | { type: "removeItem"; payload: { id: string } }
   | { type: "updateunit"; payload: { id: string } }
   | { type: "updateTotal"; payload: Product }
