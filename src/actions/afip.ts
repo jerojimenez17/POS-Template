@@ -6,6 +6,19 @@ import BillState from "@/models/BillState";
 import { getArcaCredentialsForBilling } from "./arca";
 
 /**
+ * Returns the effective unit price for a bill line.
+ * Uses salePrice as the primary source of truth (handles shortcut products where
+ * the cashier typed a price after the product was added with salePrice=0),
+ * and falls back to the catalog price when salePrice is 0.
+ * Returns 0 only when both are 0 (which is an invalid bill state).
+ */
+const getEffectiveUnitPrice = (p: { price: number; salePrice: number }): number => {
+  if (p.salePrice > 0) return p.salePrice;
+  if (p.price > 0) return p.price;
+  return 0;
+};
+
+/**
  * Server Action to create an AFIP voucher by calling the Firebase Cloud Function.
  * This action validates the user session and uses a shared secret for authentication.
  */
@@ -49,8 +62,8 @@ export const createAfipVoucherAction = async (billState: BillState) => {
         id: p.id,
         code: p.code,
         description: p.description,
-        price: p.price,
-        salePrice: p.salePrice,
+        price: getEffectiveUnitPrice(p),
+        salePrice: p.salePrice ?? 0,
         amount: p.amount,
       })),
       // Ensure numeric fields are actually numbers for the cloud function
@@ -63,6 +76,20 @@ export const createAfipVoucherAction = async (billState: BillState) => {
         ? billStateWithoutPtoVenta.date.toISOString()
         : String(billStateWithoutPtoVenta.date),
     };
+
+    // Validate effective total before calling AFIP — AFIP rejects 0-amount invoices
+    // with "alicuota de iva debe ser distinto de cero". This catches the common
+    // case where shortcut products (salePrice=0, price=0) were never priced, and
+    // also handles a discount that wipes the total to zero.
+    const effectiveTotal = Number(
+      billStateWithoutPtoVenta.totalWithDiscount ?? billStateWithoutPtoVenta.total
+    ) || 0;
+
+    if (effectiveTotal <= 0) {
+      return {
+        error: "No se puede generar la factura: el monto total debe ser mayor a 0",
+      };
+    }
 
     const response = await axios.post(
       functionUrl,
