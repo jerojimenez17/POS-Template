@@ -1,10 +1,12 @@
 "use client";
 
-import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
+import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 export interface PDFTemplateOptions {
   qrSvgDataUrl?: string | null;
-  invoiceNumber?: number;
+  invoiceNumber?: number | string;
+  pointOfSale?: number | string;
 }
 
 export const PDF_STYLES = `
@@ -57,11 +59,13 @@ export const PDF_STYLES = `
 export function buildPDFHTML(
   receiptData: {
     businessName: string;
+    documentKind?: DocumentPrintKind;
     businessInfo?: {
       razonSocial?: string | null;
       cuit?: string | null;
       condicionIva?: string | null;
       address?: string | null;
+      inicioActividades?: Date | string | null;
     };
     date: Date;
     documentType?: string;
@@ -81,26 +85,36 @@ export function buildPDFHTML(
     discount?: number;
     discountAmount?: number;
     total: number;
+    pointOfSale?: number | string;
+    invoiceNumber?: number | string;
     cae?: {
       cae: string;
       vencimiento: string;
       qrData?: string;
+      ptoVenta?: number | string;
     };
   },
   options?: PDFTemplateOptions
 ): string {
-  const { qrSvgDataUrl, invoiceNumber } = options || {};
-  const billType = receiptData.billType || "Comprobante";
+  const { qrSvgDataUrl, invoiceNumber, pointOfSale } = options || {};
   const seller = receiptData.seller || "";
   const paidMethod = receiptData.paidMethod || "Efectivo";
   const subtotal = receiptData.subtotal ?? 0;
+  const isOfficialInvoice = getDocumentPrintKind(receiptData.cae?.cae) === "official-invoice";
+  const billType = getBillTypeDisplay(receiptData.billType, receiptData.cae?.cae, !isOfficialInvoice);
+  const officialCae = receiptData.cae;
 
   const dateFormatted = new Intl.DateTimeFormat("es-AR", {
     dateStyle: "short",
     timeStyle: "short",
   }).format(receiptData.date);
 
-  const invoiceNumberFormatted = formatInvoiceNumberFull(invoiceNumber);
+  const invoiceNumberFormatted = isOfficialInvoice
+    ? formatInvoiceNumberFull(
+        invoiceNumber ?? receiptData.invoiceNumber,
+        pointOfSale ?? receiptData.pointOfSale ?? receiptData.cae?.ptoVenta,
+      )
+    : "";
 
   const clientInfo = receiptData.client
     ? `<div class="info-section">
@@ -113,16 +127,17 @@ export function buildPDFHTML(
       </div>`
     : "";
 
-  const businessInfo = `
+  const businessInfo = isOfficialInvoice ? `
     <div class="info-section">
       <div class="info-section-title">Datos del Establecimiento</div>
       ${receiptData.businessInfo?.cuit ? `<div class="info-row"><span class="info-label">CUIT:</span><span class="info-value">${receiptData.businessInfo.cuit}</span></div>` : ""}
       ${receiptData.businessInfo?.condicionIva ? `<div class="info-row"><span class="info-label">Cond. IVA:</span><span class="info-value">${receiptData.businessInfo.condicionIva.replace(/_/g, " ")}</span></div>` : ""}
       ${receiptData.businessInfo?.address ? `<div class="info-row"><span class="info-label">Dirección:</span><span class="info-value">${receiptData.businessInfo.address}</span></div>` : ""}
+      ${receiptData.businessInfo?.inicioActividades ? `<div class="info-row"><span class="info-label">Inicio Actividades:</span><span class="info-value">${new Date(receiptData.businessInfo.inicioActividades).toLocaleDateString("es-AR")}</span></div>` : ""}
       <div class="info-row"><span class="info-label">Vendedor:</span><span class="info-value">${seller}</span></div>
       <div class="info-row"><span class="info-label">Medio de Pago:</span><span class="info-value">${paidMethod}</span></div>
     </div>
-  `;
+  ` : `<div class="info-section"><div class="info-section-title">Comprobante</div><div class="info-row"><span class="info-label">Vendedor:</span><span class="info-value">${seller}</span></div><div class="info-row"><span class="info-label">Medio de Pago:</span><span class="info-value">${paidMethod}</span></div></div>`;
 
   const itemsRows = receiptData.products.map(p => `
     <tr>
@@ -137,15 +152,15 @@ export function buildPDFHTML(
     ? `<div class="total-row discount"><span>Descuento (${receiptData.discount}%)</span><span>-$${receiptData.discountAmount.toFixed(2)}</span></div>`
     : "";
 
-  const caeSection = receiptData.cae
+  const caeSection = isOfficialInvoice
     ? `<div class="cae-banner">
         <div class="cae-qr">
           ${qrSvgDataUrl ? `<img src="${qrSvgDataUrl}" alt="QR" style="width: 100%; height: auto; display: block;" />` : ""}
         </div>
         <div class="cae-info">
           <div class="cae-info-title">Comprobante Autorizado</div>
-          <div class="cae-info-text"><span class="label">CAE:</span> ${receiptData.cae.cae}</div>
-          <div class="cae-info-text"><span class="label">Vencimiento:</span> ${receiptData.cae.vencimiento}</div>
+            <div class="cae-info-text"><span class="label">CAE:</span> ${officialCae?.cae ?? ""}</div>
+            <div class="cae-info-text"><span class="label">Vencimiento:</span> ${officialCae?.vencimiento ?? ""}</div>
           <div class="legal-text">
             El crédito fiscal discriminado en el presente comprobante, sólo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes de la Ley N°27.618
           </div>
@@ -160,7 +175,7 @@ export function buildPDFHTML(
     <div class="invoice-container">
       <div class="header">
         <div class="company-name">${receiptData.businessName}</div>
-        ${receiptData.businessInfo?.razonSocial ? `<div class="company-details">${receiptData.businessInfo.razonSocial}</div>` : ""}
+        ${isOfficialInvoice && receiptData.businessInfo?.razonSocial ? `<div class="company-details">${receiptData.businessInfo.razonSocial}</div>` : ""}
       </div>
 
       <div class="invoice-box">

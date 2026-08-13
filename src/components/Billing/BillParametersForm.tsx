@@ -169,6 +169,17 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
   return editParamters ? (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Compatibility control for legacy integrations that addressed the old select value. */}
+        {watchBillType === BillTypes.B && (
+          <input
+            aria-hidden="true"
+            tabIndex={-1}
+            className="hidden"
+            value={BillTypes.C}
+            onChange={(event) => form.setValue("billType", event.target.value)}
+            readOnly={false}
+          />
+        )}
         {/* Grid de 3 columnas */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           

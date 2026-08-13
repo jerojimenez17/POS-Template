@@ -69,6 +69,7 @@ model Business {
   inicioActividades DateTime?
   condicionIva      IvaCondition      @default(MONOTRIBUTO)
   address           String?
+  qzTray            Boolean           @default(false)
   cert              String?           @db.Text
   key               String?           @db.Text
   ptoVenta          Int[]             @default([])

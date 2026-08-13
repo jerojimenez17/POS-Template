@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { BillContext } from "@/context/BillContext";
 
 interface Props {
@@ -12,29 +12,43 @@ const PriceEditInput = ({ productId, salePrice }: Props) => {
   const { dispatch, focusPriceProductId, setFocusPriceProductId } =
     useContext(BillContext);
   const [isEditing, setIsEditing] = useState(false);
-  const [value, setValue] = useState(salePrice.toString());
   const inputRef = useRef<HTMLInputElement>(null);
+  const consumedFocusRequestRef = useRef<string | null>(null);
+  const setInputRef = useCallback(
+    (input: HTMLInputElement | null) => {
+      inputRef.current = input;
+      if (input && focusPriceProductId === productId && !isEditing) {
+        setIsEditing(true);
+      }
+    },
+    [focusPriceProductId, isEditing, productId],
+  );
 
-  // Auto-focus when this product's price should be focused
+  // Enter edit mode first so the input can mount, then focus and consume the
+  // request on the following effect pass. This also handles requests that
+  // arrive before this product is rendered.
   useEffect(() => {
-    if (focusPriceProductId === productId && inputRef.current) {
+    if (focusPriceProductId !== productId) {
+      if (focusPriceProductId === null) {
+        consumedFocusRequestRef.current = null;
+      }
+      return;
+    }
+
+    if (consumedFocusRequestRef.current === focusPriceProductId) {
+      return;
+    }
+
+    if (inputRef.current) {
       inputRef.current.focus();
-      setIsEditing(true);
-      setValue(salePrice.toString());
-      setFocusPriceProductId(null);
+      consumedFocusRequestRef.current = focusPriceProductId;
+      setFocusPriceProductId?.(null);
     }
-  }, [focusPriceProductId, productId, salePrice, setFocusPriceProductId]);
-
-  // Sync value when salePrice changes externally
-  useEffect(() => {
-    if (!isEditing) {
-      setValue(salePrice.toString());
-    }
-  }, [salePrice, isEditing]);
+  }, [focusPriceProductId, productId, setFocusPriceProductId]);
 
   const handleBlur = () => {
     setIsEditing(false);
-    const parsed = parseFloat(value.replace(",", "."));
+    const parsed = parseFloat((inputRef.current?.value ?? "").replace(",", "."));
     if (!isNaN(parsed) && parsed >= 0) {
       dispatch({
         type: "updateSalePrice",
@@ -49,14 +63,13 @@ const PriceEditInput = ({ productId, salePrice }: Props) => {
     }
   };
 
-  if (isEditing) {
+  if (isEditing || focusPriceProductId === productId) {
     return (
       <input
-        ref={inputRef}
+        ref={setInputRef}
         type="text"
         inputMode="decimal"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
+        defaultValue={salePrice.toString()}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         className="w-24 text-right font-medium tabular-nums border border-blue-400 rounded px-1 py-0.5 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none transition-shadow"
@@ -70,7 +83,6 @@ const PriceEditInput = ({ productId, salePrice }: Props) => {
   return (
     <button
       onClick={() => {
-        setValue(salePrice.toString());
         setIsEditing(true);
       }}
       className="w-24 text-right font-medium tabular-nums hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1 py-0.5 transition-colors cursor-text"

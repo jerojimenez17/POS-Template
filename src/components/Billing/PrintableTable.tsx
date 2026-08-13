@@ -13,9 +13,10 @@ import { getBusinessBillingInfoAction } from "@/actions/business";
 import moment from "moment";
 import { QRCodeSVG } from "qrcode.react";
 import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES, type PrintOptions } from "@/lib/print";
-import { getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
 import QRCode from "qrcode";
 import CAE from "@/models/CAE";
+import { buildReceiptBusinessInfo } from "@/lib/print/receipt-data";
 import PriceEditInput from "./PriceEditInput";
 import DiscountControl from "./DiscountControl";
 
@@ -63,7 +64,7 @@ const PrintableTable = ({
   forceCae,
   targetWindowRef,
 }: Props) => {
-  const { BillState, addItem, removeItem, printMode, qzTrayActive, focusPriceProductId, setFocusPriceProductId } = React.useContext(BillContext);
+  const { BillState, addItem, removeItem, printMode, qzTrayEnabled } = React.useContext(BillContext);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
   const [isClient, setIsClient] = useState(false);
   const [billingInfo, setBillingInfo] = useState<{
@@ -79,6 +80,8 @@ const PrintableTable = ({
 
   // Fix hydration: Only run on client
   useEffect(() => {
+    // This state gates client-only print markup after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsClient(true);
 
     const fetchBillingInfo = async () => {
@@ -98,24 +101,28 @@ const PrintableTable = ({
         })
         .catch(console.error);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQrSvgDataUrl(null);
     }
   }, [state.CAE, state.CAE?.qrData, forceCae]);
 
-  const isRemito = !(forceCae || state.CAE)?.CAE || (forceCae || state.CAE)?.CAE === "";
-  const billTypeDisplay = getBillTypeDisplay(state.billType, (forceCae || state.CAE)?.CAE, isRemito);
+  const activeCae = forceCae || state.CAE;
+  const receiptBusinessInfo = useMemo(
+    () => buildReceiptBusinessInfo(
+      session?.user?.businessName || "Mi Comercio",
+      activeCae?.CAE,
+      billingInfo ?? undefined,
+    ),
+    [session?.user?.businessName, activeCae?.CAE, billingInfo],
+  );
+  const isRemito = receiptBusinessInfo.documentKind === "remito";
+  const billTypeDisplay = getBillTypeDisplay(state.billType, activeCae?.CAE, isRemito);
 
   const handlePrint = useCallback(async () => {
     const activeCae = forceCae || state.CAE;
     const subtotal = Math.round(state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
     const receiptData: ThermalReceiptData = {
-      businessName: session?.user?.businessName || "Mi Comercio",
-      businessInfo: billingInfo ? {
-        razonSocial: billingInfo.razonSocial,
-        cuit: billingInfo.cuit,
-        condicionIva: billingInfo.condicionIva,
-        address: billingInfo.address,
-      } : undefined,
+      ...receiptBusinessInfo,
       date: state.date || new Date(),
       documentType: state.typeDocument || "DNI",
       billType: billTypeDisplay,
@@ -138,15 +145,19 @@ const PrintableTable = ({
         cae: activeCae.CAE,
         vencimiento: activeCae.vencimiento,
         qrData: activeCae.qrData,
+        ptoVenta: activeCae.ptoVenta ?? state.ptoVenta,
       } : undefined,
+      pointOfSale: state.ptoVenta ?? activeCae?.ptoVenta,
+      invoiceNumber: activeCae?.nroComprobante,
     };
 
     if (printMode === "thermal") {
-      await printThermalReceipt(receiptData, qzTrayActive);
+         await printThermalReceipt(receiptData, qzTrayEnabled ?? false);
     } else {
       const content = document.createElement("div");
       content.innerHTML = buildPDFHTML(receiptData, {
         invoiceNumber: activeCae?.nroComprobante,
+        pointOfSale: state.ptoVenta ?? activeCae?.ptoVenta,
         qrSvgDataUrl: qrSvgDataUrl,
       });
 
@@ -170,9 +181,11 @@ const PrintableTable = ({
         document.body.removeChild(content);
       }
     }
-  }, [state, session, billingInfo, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef]);
+  }, [state, session, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef, qzTrayEnabled, receiptBusinessInfo]);
 
   useEffect(() => {
+    // Keep the externally supplied bill synchronized with the printable view.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState(externalState || BillState || defaultBillState);
   }, [externalState, BillState]);
 
@@ -243,9 +256,9 @@ const PrintableTable = ({
             >
              {session?.user?.businessName || "Nombre de App"}
             </h2>
-            {billingInfo?.razonSocial && (
+            {receiptBusinessInfo.documentKind === "official-invoice" && receiptBusinessInfo.businessInfo?.razonSocial && (
               <p className="text-sm text-gray-600 font-medium">
-                {billingInfo.razonSocial}
+                {receiptBusinessInfo.businessInfo.razonSocial}
               </p>
             )}
           </div>
@@ -253,12 +266,16 @@ const PrintableTable = ({
           <div className="mt-2 text-sm grid grid-cols-2 gap-4 text-left">
             <div>
               <p><span className="font-semibold">Fecha:</span> {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}</p>
-              <p>
+               <p>
                 <span className="font-semibold">
-                  {state.CAE?.CAE ? "Factura:" : "Comprobante:"}
+                  {receiptBusinessInfo.documentKind === "official-invoice" ? "Factura:" : "Comprobante:"}
                 </span>{" "}
-                {billTypeDisplay}
-              </p>
+                 {billTypeDisplay}
+               </p>
+               {receiptBusinessInfo.documentKind === "official-invoice" &&
+                 formatInvoiceNumberFull(activeCae?.nroComprobante, state.ptoVenta ?? activeCae?.ptoVenta) && (
+                 <p><span className="font-semibold">N°:</span> {formatInvoiceNumberFull(activeCae?.nroComprobante, state.ptoVenta ?? activeCae?.ptoVenta)}</p>
+               )}
               <p><span className="font-semibold">Vendedor:</span> {state.seller || session?.user?.email}</p>
               <p><span className="font-semibold">Medio de Pago:</span> {state.paidMethod}</p>
 
@@ -278,12 +295,12 @@ const PrintableTable = ({
 
             </div>
 
-            {billingInfo && (
-              <div>
-                {billingInfo.cuit && <p><span className="font-semibold">CUIT:</span> {billingInfo.cuit}</p>}
-                {billingInfo.condicionIva && <p><span className="font-semibold">Condición IVA:</span> {billingInfo.condicionIva.replace("_", " ")}</p>}
-                {billingInfo.inicioActividades && <p><span className="font-semibold">Inicio Actividades:</span> {moment(billingInfo.inicioActividades).format("DD/MM/YYYY")}</p>}
-                {billingInfo.address && <p><span className="font-semibold">Dirección:</span> {billingInfo.address}</p>}
+             {receiptBusinessInfo.documentKind === "official-invoice" && receiptBusinessInfo.businessInfo && (
+               <div>
+                 {receiptBusinessInfo.businessInfo.cuit && <p><span className="font-semibold">CUIT:</span> {receiptBusinessInfo.businessInfo.cuit}</p>}
+                 {receiptBusinessInfo.businessInfo.condicionIva && <p><span className="font-semibold">Condición IVA:</span> {receiptBusinessInfo.businessInfo.condicionIva.replace("_", " ")}</p>}
+                 {receiptBusinessInfo.businessInfo.inicioActividades && <p><span className="font-semibold">Inicio Actividades:</span> {moment(receiptBusinessInfo.businessInfo.inicioActividades).format("DD/MM/YYYY")}</p>}
+                 {receiptBusinessInfo.businessInfo.address && <p><span className="font-semibold">Dirección:</span> {receiptBusinessInfo.businessInfo.address}</p>}
               </div>
             )}
           </div>
@@ -446,12 +463,12 @@ const PrintableTable = ({
       </div>
 
       {/* CAE Section - Print only */}
-      {isClient && state.CAE?.CAE && (
+      {isClient && receiptBusinessInfo.documentKind === "official-invoice" && activeCae?.CAE && (
         <div className="print-visible mt-8 text-xs border-t border-gray-300 pt-4 pb-8">
           <div className="flex items-center justify-between gap-4">
-            {state.CAE.qrData ? (
+            {activeCae.qrData ? (
               <div className="shrink-0 bg-white p-1 rounded-sm">
-                <QRCodeSVG value={state.CAE.qrData} size={110} level="M" includeMargin={false} />
+                <QRCodeSVG value={activeCae.qrData} size={110} level="M" includeMargin={false} />
               </div>
             ) : (
               <div className="w-[110px] shrink-0"></div>
@@ -460,10 +477,10 @@ const PrintableTable = ({
             <div className="flex-1 text-center">
               <p className="font-bold text-[14px] mb-2 uppercase tracking-wide">Comprobante Autorizado</p>
               <p className="mb-1">
-                <span className="font-bold text-gray-700">CAE:</span> <span className="text-[13px]">{state.CAE.CAE}</span>
+                  <span className="font-bold text-gray-700">CAE:</span> <span className="text-[13px]">{activeCae.CAE}</span>
               </p>
               <p className="mb-3">
-                <span className="font-bold text-gray-700">Vencimiento:</span> <span className="text-[13px]">{state.CAE.vencimiento}</span>
+                <span className="font-bold text-gray-700">Vencimiento:</span> <span className="text-[13px]">{activeCae.vencimiento}</span>
               </p>
               <div className="w-full h-px bg-gray-200 my-2 mx-auto max-w-[200px]"></div>
               <p className="text-[9px] leading-tight italic text-gray-500 max-w-[300px] mx-auto">

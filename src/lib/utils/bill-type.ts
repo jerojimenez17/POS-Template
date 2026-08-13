@@ -21,7 +21,7 @@ export function getBillTypeDisplay(
   isRemito?: boolean
 ): string {
   if (billType === "Presupuesto") return "Presupuesto";
-  if (cae) {
+  if (cae?.trim()) {
     if (billType && AFIP_INVOICE_TYPES[billType]) {
       return AFIP_INVOICE_TYPES[billType];
     }
@@ -32,7 +32,7 @@ export function getBillTypeDisplay(
 }
 
 export function isAFIPAuthorized(billType?: string | null, cae?: string | null): boolean {
-  return Boolean(cae);
+  return Boolean(cae?.trim());
 }
 
 export function getShortBillType(billType?: string | null): string {
@@ -41,13 +41,37 @@ export function getShortBillType(billType?: string | null): string {
   return match ? match[0] : billType.slice(0, 1).toUpperCase();
 }
 
-export function formatInvoiceNumberFull(nroComprobante?: number): string {
-  if (!nroComprobante) return "";
-  const nroStr = String(nroComprobante);
-  if (nroStr.length === 12) {
-    const ptoVta = nroStr.slice(0, 4);
-    const nroCmp = nroStr.slice(4);
-    return `${ptoVta}-${nroCmp}`;
+export interface InvoiceNumberParts {
+  ptoVenta?: unknown;
+  nroComprobante?: unknown;
+}
+
+function decimalInteger(value: unknown): string | null {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) return null;
+    return String(value);
   }
-  return nroStr;
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim())) return null;
+  const text = value.trim();
+  return /^0+$/.test(text) ? null : text;
+}
+
+export function formatInvoiceNumberFull(nroComprobante?: unknown, ptoVenta?: unknown): string {
+  if (typeof nroComprobante === "object" && nroComprobante !== null) {
+    const parts = nroComprobante as InvoiceNumberParts;
+    return formatInvoiceNumberFull(parts.nroComprobante, parts.ptoVenta);
+  }
+  const numberText = decimalInteger(nroComprobante);
+  if (!numberText) return "";
+  const pointText = decimalInteger(ptoVenta);
+  if (pointText) {
+    return `${pointText.padStart(3, "0")}-${numberText.padStart(4, "0")}`;
+  }
+
+  if (typeof nroComprobante === "string" && /^\d{7}$/.test(nroComprobante.trim())) {
+    const historicalNumber = nroComprobante.trim();
+    return `${historicalNumber.slice(0, 3)}-${historicalNumber.slice(3)}`;
+  }
+
+  return "";
 }

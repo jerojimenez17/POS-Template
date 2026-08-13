@@ -90,6 +90,7 @@ const BillingModal = ({
             vencimiento: resp.data.afip.CAEFchVto,
             nroComprobante: resp.data.nroCbte || resp.data.afip.nroCbte,
             qrData: resp.data.qrData || resp.data.afip.qrData,
+            ptoVenta: sale.ptoVenta,
           },
           IVACondition: ivaCondition,
           documentNumber: Number(documentNumber),

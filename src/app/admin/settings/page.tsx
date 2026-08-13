@@ -10,6 +10,8 @@ import * as z from "zod";
 import { ArcaFieldsSchema } from "@/schemas";
 import { ArcaData } from "@/models/Arca";
 import ShortcutConfigSection from "@/components/AdminSettings/ShortcutConfigSection";
+import BusinessPrintSettingsSection from "@/components/AdminSettings/BusinessPrintSettingsSection";
+import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 
 export default async function AdminSettingsPage() {
   const session = await auth();
@@ -20,6 +22,7 @@ export default async function AdminSettingsPage() {
 
   const businessId = session.user.businessId;
   const data: { success?: ArcaData; error?: string } = await getBusinessArcaData(businessId!);
+  const printSettings = await getBusinessPrintSettingsAction();
 
   if (data.error || !data.success) {
     return (
@@ -60,6 +63,7 @@ export default async function AdminSettingsPage() {
       </div>
 
       <ArcaForm businessId={businessId || ""} initialData={initialData} />
+      {"qzTray" in printSettings && <BusinessPrintSettingsSection businessId={printSettings.businessId} qzTray={printSettings.qzTray} address={printSettings.address} />}
       <ShortcutConfigSection businessId={businessId || ""} />
     </div>
   );

@@ -29,9 +29,10 @@ const INITIAL_STATE: BillState = {
 interface props {
   children: ReactElement | ReactElement[];
   initialBillType?: string;
+  qzTrayEnabled?: boolean;
 }
 
-const BillProvider = ({ children, initialBillType }: props) => {
+const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: props) => {
   const getInitialState = (): BillState => ({
     ...INITIAL_STATE,
     billType: initialBillType ?? INITIAL_STATE.billType,
@@ -41,9 +42,9 @@ const BillProvider = ({ children, initialBillType }: props) => {
   const [qzTrayActive, setQzTrayActive] = React.useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("qzTrayActive");
-      return saved !== null ? saved === "true" : true;
+      return saved !== null ? saved === "true" : qzTrayEnabled;
     }
-    return true;
+    return qzTrayEnabled;
   });
   const onOrderResetRef = useRef<(() => void) | null>(null);
   const [focusPriceProductId, setFocusPriceProductId] = React.useState<string | null>(null);

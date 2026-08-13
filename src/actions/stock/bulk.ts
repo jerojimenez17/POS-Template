@@ -439,6 +439,7 @@ export const bulkUpdatePrices = async (
           data: {
             salePrice: { multiply: factor },
             gain: gain,
+            last_update: new Date(),
           },
         })
       );
