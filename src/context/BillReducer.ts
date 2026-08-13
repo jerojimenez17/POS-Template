@@ -102,7 +102,7 @@ export const BillReducer = (
         ...state,
         products: [],
         documentNumber: 0,
-        billType: BillTypes.B,
+        billType: action.defaultBillType ?? BillTypes.B,
         IVACondition: "Consumidor Final",
         nroAsociado: 0,
         total: 0,

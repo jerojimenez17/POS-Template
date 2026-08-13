@@ -56,6 +56,20 @@ export const createAfipVoucherAction = async (billState: BillState) => {
     const { ptoVenta, ...billStateWithoutPtoVenta } = billState;
 
     // Strip product data to only essential fields for the external API
+    const discount = Number(billStateWithoutPtoVenta.discount) || 0;
+    const rawTotal = Number(billStateWithoutPtoVenta.total) || 0;
+    const totalWithDiscountProp = Number(billStateWithoutPtoVenta.totalWithDiscount) || 0;
+
+    // Calculate effective total with discount if discount > 0 and totalWithDiscountProp is not set
+    const effectiveTotalWithDiscount = totalWithDiscountProp > 0
+      ? totalWithDiscountProp
+      : (discount > 0 ? Math.round(rawTotal * (1 - discount / 100)) : rawTotal);
+
+    // If there is a discount applied or totalWithDiscount is present, use effectiveTotalWithDiscount as the total sent to AFIP
+    const finalTotal = (discount > 0 || totalWithDiscountProp > 0)
+      ? effectiveTotalWithDiscount
+      : rawTotal;
+
     const minimalBillState = {
       ...billStateWithoutPtoVenta,
       products: billStateWithoutPtoVenta.products.map((p) => ({
@@ -67,10 +81,10 @@ export const createAfipVoucherAction = async (billState: BillState) => {
         amount: p.amount,
       })),
       // Ensure numeric fields are actually numbers for the cloud function
-      discount: Number(billStateWithoutPtoVenta.discount) || 0,
+      discount: discount,
       documentNumber: Number(billStateWithoutPtoVenta.documentNumber) || 0,
-      total: Number(billStateWithoutPtoVenta.total) || 0,
-      totalWithDiscount: Number(billStateWithoutPtoVenta.totalWithDiscount) || 0,
+      total: finalTotal,
+      totalWithDiscount: effectiveTotalWithDiscount,
       // Convert Date to ISO string for JSON serialization
       date: billStateWithoutPtoVenta.date instanceof Date
         ? billStateWithoutPtoVenta.date.toISOString()

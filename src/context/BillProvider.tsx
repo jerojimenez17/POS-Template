@@ -5,7 +5,6 @@ import { BillReducer } from "./BillReducer";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import { PrintMode } from "./BillContext";
-import BillTypes from "@/models/billType";
 
 const INITIAL_STATE: BillState = {
   twoMethods: false,
@@ -20,7 +19,7 @@ const INITIAL_STATE: BillState = {
   IVACondition: "Consumidor Final",
   paidMethod: "Efectivo",
   nroAsociado: 0,
-  billType: BillTypes.B,
+  billType: "Remito",
   pago: false,
   entrega: 0,
   CAE: { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" },
@@ -29,14 +28,31 @@ const INITIAL_STATE: BillState = {
 
 interface props {
   children: ReactElement | ReactElement[];
+  initialBillType?: string;
   qzTrayEnabled?: boolean;
 }
 
-const BillProvider = ({ children, qzTrayEnabled = false }: props) => {
-  const [BillState, dispatch] = useReducer(BillReducer, INITIAL_STATE);
+const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: props) => {
+  const getInitialState = (): BillState => ({
+    ...INITIAL_STATE,
+    billType: initialBillType ?? INITIAL_STATE.billType,
+  });
+  const [BillState, dispatch] = useReducer(BillReducer, undefined, getInitialState);
   const [printMode, setPrintMode] = React.useState<PrintMode>("thermal");
+  const [qzTrayActive, setQzTrayActive] = React.useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("qzTrayActive");
+      return saved !== null ? saved === "true" : qzTrayEnabled;
+    }
+    return qzTrayEnabled;
+  });
   const onOrderResetRef = useRef<(() => void) | null>(null);
   const [focusPriceProductId, setFocusPriceProductId] = React.useState<string | null>(null);
+
+  const handleSetQzTrayActive = (active: boolean) => {
+    setQzTrayActive(active);
+    localStorage.setItem("qzTrayActive", String(active));
+  };
 
   useEffect(() => {
     dispatch({ type: "date", payload: new Date() });
@@ -58,7 +74,8 @@ const BillProvider = ({ children, qzTrayEnabled = false }: props) => {
     onOrderResetRef: onOrderResetRef,
     printMode: printMode,
     setPrintMode: setPrintMode,
-    qzTrayEnabled,
+    qzTrayActive: qzTrayActive,
+    setQzTrayActive: handleSetQzTrayActive,
     focusPriceProductId,
     setFocusPriceProductId,
   };
