@@ -1,6 +1,7 @@
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import type { BillAction } from "./billActions";
+import BillTypes from "@/models/billType";
 
 export const BillReducer = (
   state: BillState,
@@ -101,7 +102,7 @@ export const BillReducer = (
         ...state,
         products: [],
         documentNumber: 0,
-        billType: "Factura C",
+        billType: BillTypes.B,
         IVACondition: "Consumidor Final",
         nroAsociado: 0,
         total: 0,
@@ -238,16 +239,35 @@ export const BillReducer = (
         typeDocument: action.payload.typeDocument,
       };
     }
-    case "updateSalePrice":
+    case "updateSalePrice": {
+      const productExists = state.products.some(
+        (product) => product.id === action.payload.id
+      );
+      if (!productExists) {
+        return state;
+      }
+
+      const updatedProducts = state.products.map((product) => {
+        if (product.id === action.payload.id) {
+          return { ...product, salePrice: action.payload.salePrice };
+        }
+        return product;
+      });
+      const rawTotal = updatedProducts.reduce(
+        (acc, cur) => acc + cur.salePrice * cur.amount, 0
+      );
+      const newTotal = Math.round(rawTotal);
+      const newTotalWithDiscount = state.discount > 0
+        ? Math.round(rawTotal * (1 - state.discount / 100))
+        : newTotal;
+
       return {
         ...state,
-        products: state.products.map((product) => {
-          if (product.id === action.payload.id) {
-            return { ...product, salePrice: action.payload.salePrice };
-          }
-          return product;
-        }),
+        products: updatedProducts,
+        total: newTotal,
+        totalWithDiscount: newTotalWithDiscount,
       };
+    }
     default:
       return state;
   }

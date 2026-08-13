@@ -341,7 +341,7 @@ export const toggleProductCatalogAction = async (productId: string, catalog: boo
   try {
     await db.product.update({
       where: { id: productId },
-      data: { catalog },
+      data: { catalog, last_update: new Date() },
     });
     revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: true };

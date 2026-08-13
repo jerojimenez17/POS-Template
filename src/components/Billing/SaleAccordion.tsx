@@ -10,12 +10,14 @@ import Modal from "../Modal";
 import { Session } from "next-auth";
 import { formatLocalDate } from "@/utils/date";
 import { toast } from "sonner";
+import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
 
 interface props {
   sale: BillState;
   session: Session | null;
+  qzTrayEnabled?: boolean;
 }
-const SaleAccordion = ({ sale, session }: props) => {
+const SaleAccordion = ({ sale, session, qzTrayEnabled }: props) => {
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteSale, setDeleteSale] = useState<BillState>();
   const [openBilling, setOpenBilling] = useState(false);
@@ -44,9 +46,9 @@ const SaleAccordion = ({ sale, session }: props) => {
 
         {/* Invoice / CAE */}
         <div>
-          {sale.CAE?.CAE && sale.CAE.CAE !== "" ? (
+          {sale.CAE?.CAE?.trim() ? (
             <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">
-              {sale.CAE.CAE}
+              {formatInvoiceNumberFull(sale.CAE.nroComprobante, sale.ptoVenta ?? sale.CAE.ptoVenta)}
             </span>
           ) : (
             <button
@@ -90,7 +92,7 @@ const SaleAccordion = ({ sale, session }: props) => {
 
         {/* Action: Print */}
         <div className="flex justify-center items-center">
-          <PrintOptionsPopover sale={sale} session={session} />
+           <PrintOptionsPopover sale={sale} session={session} qzTrayEnabled={qzTrayEnabled} />
         </div>
 
         {/* Action: Delete */}

@@ -5,6 +5,7 @@ import { BillReducer } from "./BillReducer";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import { PrintMode } from "./BillContext";
+import BillTypes from "@/models/billType";
 
 const INITIAL_STATE: BillState = {
   twoMethods: false,
@@ -19,7 +20,7 @@ const INITIAL_STATE: BillState = {
   IVACondition: "Consumidor Final",
   paidMethod: "Efectivo",
   nroAsociado: 0,
-  billType: "Remito",
+  billType: BillTypes.B,
   pago: false,
   entrega: 0,
   CAE: { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" },
@@ -28,25 +29,14 @@ const INITIAL_STATE: BillState = {
 
 interface props {
   children: ReactElement | ReactElement[];
+  qzTrayEnabled?: boolean;
 }
 
-const BillProvider = ({ children }: props) => {
+const BillProvider = ({ children, qzTrayEnabled = false }: props) => {
   const [BillState, dispatch] = useReducer(BillReducer, INITIAL_STATE);
   const [printMode, setPrintMode] = React.useState<PrintMode>("thermal");
-  const [qzTrayActive, setQzTrayActive] = React.useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("qzTrayActive");
-      return saved !== null ? saved === "true" : true;
-    }
-    return true;
-  });
   const onOrderResetRef = useRef<(() => void) | null>(null);
   const [focusPriceProductId, setFocusPriceProductId] = React.useState<string | null>(null);
-
-  const handleSetQzTrayActive = (active: boolean) => {
-    setQzTrayActive(active);
-    localStorage.setItem("qzTrayActive", String(active));
-  };
 
   useEffect(() => {
     dispatch({ type: "date", payload: new Date() });
@@ -68,8 +58,7 @@ const BillProvider = ({ children }: props) => {
     onOrderResetRef: onOrderResetRef,
     printMode: printMode,
     setPrintMode: setPrintMode,
-    qzTrayActive: qzTrayActive,
-    setQzTrayActive: handleSetQzTrayActive,
+    qzTrayEnabled,
     focusPriceProductId,
     setFocusPriceProductId,
   };

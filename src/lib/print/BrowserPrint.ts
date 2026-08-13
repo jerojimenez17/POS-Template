@@ -1,4 +1,5 @@
-import { getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 
 export const ESCPOS = {
@@ -55,11 +56,13 @@ function divider(char: string = "-", width: number = THERMAL_WIDTH): string {
 
 export interface ThermalReceiptData {
   businessName: string;
+  documentKind?: DocumentPrintKind;
   businessInfo?: {
     razonSocial?: string | null;
     cuit?: string | null;
     condicionIva?: string | null;
     address?: string | null;
+    inicioActividades?: Date | string | null;
   };
   date: Date;
   documentType: string;
@@ -83,16 +86,10 @@ export interface ThermalReceiptData {
     cae: string;
     vencimiento: string;
     qrData?: string;
+    ptoVenta?: number | string;
   };
-  pointOfSale?: number;
-  invoiceNumber?: number;
-}
-
-function formatInvoiceNumber(pointOfSale?: number, invoiceNumber?: number): string {
-  if (!pointOfSale || !invoiceNumber) return "";
-  const ptoVta = String(pointOfSale).padStart(4, "0");
-  const nroCmp = String(invoiceNumber).padStart(8, "0");
-  return `${ptoVta}-${nroCmp}`;
+  pointOfSale?: number | string;
+  invoiceNumber?: number | string;
 }
 
 function sanitize(text: string): string {
@@ -108,7 +105,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   const lines: string[] = [];
   
   const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
-  const isAFIPInvoice = Boolean(data.cae?.cae);
+  const isAFIPInvoice = getDocumentPrintKind(data.cae?.cae) === "official-invoice";
   
   lines.push(ESCPOS.INIT);
   lines.push(ESCPOS.ALIGN_CENTER);
@@ -119,20 +116,24 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   lines.push(ESCPOS.BOLD_OFF);
   lines.push(ESCPOS.LINE_FEED);
   
-  if (data.businessInfo?.razonSocial) {
+  const isOfficialInvoice = getDocumentPrintKind(data.cae?.cae) === "official-invoice";
+  if (isOfficialInvoice && data.businessInfo?.razonSocial) {
     lines.push(sanitize(data.businessInfo.razonSocial));
   }
   
-  if (data.businessInfo?.cuit) {
+  if (isOfficialInvoice && data.businessInfo?.cuit) {
     lines.push("CUIT: " + data.businessInfo.cuit);
   }
   
-  if (data.businessInfo?.condicionIva) {
+  if (isOfficialInvoice && data.businessInfo?.condicionIva) {
     lines.push(data.businessInfo.condicionIva.replace(/_/g, " "));
   }
   
-  if (data.businessInfo?.address) {
+  if (isOfficialInvoice && data.businessInfo?.address) {
     lines.push(sanitize(data.businessInfo.address));
+  }
+  if (isOfficialInvoice && data.businessInfo?.inicioActividades) {
+    lines.push("Inicio actividades: " + new Date(data.businessInfo.inicioActividades).toLocaleDateString("es-AR"));
   }
   
   lines.push(ESCPOS.LINE_FEED);
@@ -150,7 +151,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   lines.push(formatLine("Fecha:", dateStr));
   
   if (isAFIPInvoice) {
-    const invoiceNum = formatInvoiceNumber(data.pointOfSale, data.invoiceNumber);
+    const invoiceNum = formatInvoiceNumberFull(data.invoiceNumber, data.pointOfSale ?? data.cae?.ptoVenta);
     if (invoiceNum) {
       lines.push(formatLine("Nro:", invoiceNum));
     }
@@ -205,13 +206,13 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   lines.push(divider("="));
   lines.push(ESCPOS.LINE_FEED);
   
-  if (data.cae?.cae) {
+  if (isOfficialInvoice) {
     lines.push(ESCPOS.BOLD_ON);
     lines.push("** COMPROBANTE AUTORIZADO **");
     lines.push(ESCPOS.BOLD_OFF);
     lines.push(ESCPOS.LINE_FEED);
-    lines.push(formatLine("CAE:", data.cae.cae));
-    lines.push(formatLine("Vto:", data.cae.vencimiento));
+    lines.push(formatLine("CAE:", data.cae?.cae ?? ""));
+    lines.push(formatLine("Vto:", data.cae?.vencimiento ?? ""));
     lines.push(ESCPOS.LINE_FEED);
     lines.push("Verifique en: www.afip.gob.ar");
     lines.push(ESCPOS.LINE_FEED);
@@ -233,8 +234,8 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
   const qrHtml = qrDataUrl ? `<div class="qr-container"><img src="${qrDataUrl}" alt="QR" /></div>` : "";
   const dateStr = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(data.date);
   const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
-  const isAFIPInvoice = Boolean(data.cae?.cae);
-  const invoiceNum = isAFIPInvoice ? formatInvoiceNumber(data.pointOfSale, data.invoiceNumber) : "";
+  const isAFIPInvoice = getDocumentPrintKind(data.cae?.cae) === "official-invoice";
+  const invoiceNum = isAFIPInvoice ? formatInvoiceNumberFull(data.invoiceNumber, data.pointOfSale ?? data.cae?.ptoVenta) : "";
   const docType = data.documentType || "DNI";
 
   const productsHtml = data.products.map(p => `
@@ -282,10 +283,11 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
       <div class="ticket">
         <div class="header">
           <div class="business-name">${sanitize(data.businessName)}</div>
-          ${data.businessInfo?.razonSocial ? `<div class="business-info">${sanitize(data.businessInfo.razonSocial)}</div>` : ''}
-          ${data.businessInfo?.cuit ? `<div class="business-info">CUIT: ${data.businessInfo.cuit}</div>` : ''}
-          ${data.businessInfo?.condicionIva ? `<div class="business-info">${data.businessInfo.condicionIva.replace(/_/g, " ")}</div>` : ''}
-          ${data.businessInfo?.address ? `<div class="business-info">${sanitize(data.businessInfo.address)}</div>` : ''}
+           ${isAFIPInvoice && data.businessInfo?.razonSocial ? `<div class="business-info">${sanitize(data.businessInfo.razonSocial)}</div>` : ''}
+           ${isAFIPInvoice && data.businessInfo?.cuit ? `<div class="business-info">CUIT: ${data.businessInfo.cuit}</div>` : ''}
+           ${isAFIPInvoice && data.businessInfo?.condicionIva ? `<div class="business-info">${data.businessInfo.condicionIva.replace(/_/g, " ")}</div>` : ''}
+           ${isAFIPInvoice && data.businessInfo?.address ? `<div class="business-info">${sanitize(data.businessInfo.address)}</div>` : ''}
+           ${isAFIPInvoice && data.businessInfo?.inicioActividades ? `<div class="business-info">Inicio actividades: ${new Date(data.businessInfo.inicioActividades).toLocaleDateString("es-AR")}</div>` : ''}
         </div>
 
         <div class="info-row"><span class="info-label">Fecha:</span><span>${dateStr}</span></div>
@@ -322,11 +324,11 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
           <div class="total-row grand"><span>TOTAL:</span><span>$${data.total.toFixed(2)}</span></div>
         </div>
 
-        ${data.cae?.cae ? `
+        ${isAFIPInvoice ? `
           <div class="cae-section">
             <div class="cae-title">COMPROBANTE AUTORIZADO</div>
-            <div class="cae-text"><b>CAE:</b> ${data.cae.cae}</div>
-            <div class="cae-text"><b>Vto:</b> ${data.cae.vencimiento}</div>
+            <div class="cae-text"><b>CAE:</b> ${data.cae?.cae ?? ""}</div>
+            <div class="cae-text"><b>Vto:</b> ${data.cae?.vencimiento ?? ""}</div>
             <div style="font-size: 10px; margin-top: 2px;">Verifique en: www.afip.gob.ar</div>
           </div>
         ` : ''}
@@ -374,10 +376,10 @@ async function tryFallbackHTMLPrint(data: ThermalReceiptData, qrDataUrl: string 
   }
 }
 
-export async function printThermalReceipt(data: ThermalReceiptData, qzTrayEnabled: boolean = true): Promise<boolean> {
+export async function printThermalReceipt(data: ThermalReceiptData, qzTrayEnabled: boolean = false): Promise<boolean> {
   const receipt = generateThermalReceipt(data);
-  const hasQRCode = Boolean(data.cae?.qrData);
-  const qrData = data.cae?.qrData || null;
+  const hasQRCode = Boolean(data.cae?.cae?.trim() && data.cae.qrData?.trim());
+  const qrData = hasQRCode ? data.cae?.qrData?.trim() ?? null : null;
   
   let qrDataUrl: string | null = null;
   if (hasQRCode && qrData) {

@@ -15,6 +15,7 @@ import { Button } from "./../ui/button";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { pusherClient } from "@/lib/pusher-client";
 import { getSalesAction } from "@/actions/sales";
+import { isAFIPAuthorized } from "@/lib/utils/bill-type";
 
 import { Session } from "next-auth";
 
@@ -22,9 +23,10 @@ interface props {
   sales: BillState[];
   nextCursor: string | null;
   session: Session | null;
+  qzTrayEnabled?: boolean;
 }
 
-const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) => {
+const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnabled = false }: props) => {
   const user = session?.user;
   const [printTrigger, setPrintTrigger] = useState(0);
   const [externalState] = useState<BillState>();
@@ -92,8 +94,8 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
     return liveSales
       .filter((sale) => {
         const { Remito, FacturaC } = filtersState;
-        const isFacturaC = sale.CAE && sale.CAE.CAE !== "";
-        const isRemito = !sale.CAE || sale.CAE.CAE === "";
+        const isFacturaC = isAFIPAuthorized(undefined, sale.CAE?.CAE);
+        const isRemito = !isFacturaC;
 
         if (FacturaC.active && Remito.active) return true;
         if (FacturaC.active) return isFacturaC;
@@ -194,7 +196,8 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
                 <SaleAccordion
                   session={session}
                   key={sale.id}
-                  sale={sale}
+                   sale={sale}
+                   qzTrayEnabled={qzTrayEnabled}
                 />
               ))}
               {currentSales.length === 0 && (

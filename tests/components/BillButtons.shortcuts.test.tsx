@@ -4,6 +4,13 @@ import BillButtonsDefault from "@/components/Billing/BillButtons";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useFeatures } from "@/hooks/useFeatures";
 import * as shortcutsActions from "@/actions/shortcuts";
+import * as salesActions from "@/actions/sales";
+import * as afipActions from "@/actions/afip";
+import { useCashbox } from "@/context/CashboxContext";
+import type { Session } from "next-auth";
+import { BusinessStatus, Plan } from "@prisma/client";
+import Product from "@/models/Product";
+import { Suplier } from "@/models/Suplier";
 
 // Mock shortcuts actions
 vi.mock("@/actions/shortcuts", () => ({
@@ -11,6 +18,15 @@ vi.mock("@/actions/shortcuts", () => ({
   getProductByShortcutAction: vi.fn(),
   saveShortcutConfigAction: vi.fn(),
   deleteShortcutConfigAction: vi.fn(),
+}));
+
+vi.mock("@/actions/sales", () => ({
+  processSaleAction: vi.fn(),
+  updateOrderAction: vi.fn(),
+}));
+
+vi.mock("@/actions/afip", () => ({
+  createAfipVoucherAction: vi.fn(),
 }));
 
 // Mock sonner toast
@@ -69,28 +85,29 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const mockProduct = {
+const mockProduct: Product = Object.assign(new Product(), {
   id: "shortcut-prod-1",
   code: "VAR001",
-  codebar: "",
   description: "Producto Precio Variable",
-  brand: "",
-  subCategory: "",
-  price: 0,
-  salePrice: 0,
-  gain: 0,
-  suplier: { id: "s1", name: "Test", discount: 0, iva: 0, gain: 0 },
-  client_bonus: 0,
-  unit: "unidades",
-  image: "",
-  imageName: "",
-  images: [],
+  suplier: Object.assign(new Suplier(), { id: "s1", name: "Test" }),
   amount: 1,
-  last_update: new Date(),
-  creation_date: new Date(),
-  category: "",
-  catalog: true,
-  details: "",
+});
+
+const activeCashboxMock: ReturnType<typeof useCashbox> = {
+  hasActiveSession: true,
+  setHasActiveSession: vi.fn(),
+  isClosing: false,
+  setIsClosing: vi.fn(),
+  isOpeningModalOpen: false,
+  setIsOpeningModalOpen: vi.fn(),
+};
+
+const featureMock: ReturnType<typeof useFeatures> = {
+  plan: Plan.ENTERPRISE,
+  hasFeature: () => true,
+  isDelinquent: false,
+  isPlanAtLeast: () => true,
+  isOverLimit: () => false,
 };
 
 const defaultBillContextMock = {
@@ -147,21 +164,35 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       id: "user-1",
       email: "test@example.com",
       businessId: "business-123",
-      business: {
-        features: { hasBudget: true, hasAfipBilling: true, hasClientLedger: true, plan: "ENTERPRISE" },
+    role: "ADMIN",
+    businessName: "Test Business",
+    businessSlug: "test-business",
+    business: {
+      name: "Test Business",
+      slug: "test-business",
+      accountStatus: BusinessStatus.ACTIVO,
+      features: {
+        plan: Plan.ENTERPRISE,
+        hasBudget: true,
+        hasAfipBilling: true,
+        hasClientLedger: true,
+        hasPublicCatalog: true,
+        hasMultiCashbox: true,
+        hasSupplierFilter: true,
+        hasNegativeStock: true,
+        maxUsers: 10,
+        maxProducts: 1000,
       },
     },
+    },
     expires: "1",
-  };
+  } satisfies Session;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useCashbox).mockReturnValue(activeCashboxMock);
     // Default feature mock: all features enabled
-    vi.mocked(useFeatures).mockReturnValue({
-      plan: "ENTERPRISE",
-      hasFeature: () => true,
-      isDelinquent: false,
-    } as any);
+    vi.mocked(useFeatures).mockReturnValue(featureMock);
   });
 
   describe("Shortcut config fetching on mount", () => {
@@ -495,8 +526,8 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
     });
   });
 
-  describe("Remapped keys (AC20-AC23)", () => {
-    it("should open Factura modal when F4 is pressed (AC20)", async () => {
+  describe("Remapped keys (AC1-AC9)", () => {
+     it("should open Remito modal when F7 is pressed and prevent the browser default (AC1)", async () => {
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
         data: [],
@@ -517,17 +548,22 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-      fireEvent.keyDown(window, { key: "F4" });
+       const event = new KeyboardEvent("keydown", { key: "F7", cancelable: true });
+       window.dispatchEvent(event);
 
-      // After pressing F4, the factura confirmation dialog should appear
-      await waitFor(() => {
-        expect(
-          screen.getByText("Confirmar creación de Factura")
-        ).toBeInTheDocument();
-      });
-    });
+       await waitFor(() => {
+         expect(
+           screen.getByText("Confirmar creación de Remito")
+         ).toBeInTheDocument();
+       });
+       expect(event.defaultPrevented).toBe(true);
+       expect(defaultBillContextMock.dispatch).toHaveBeenCalledWith({
+         type: "sellerName",
+         payload: "test@example.com",
+       });
+     });
 
-    it("should open Remito modal when F9 is pressed (AC21)", async () => {
+     it("should open Factura modal when F9 is pressed and prevent the browser default (AC2)", async () => {
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
         data: [],
@@ -546,14 +582,141 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-      fireEvent.keyDown(window, { key: "F9" });
+       const event = new KeyboardEvent("keydown", { key: "F9", cancelable: true });
+       window.dispatchEvent(event);
 
-      await waitFor(() => {
-        expect(
-          screen.getByText("Confirmar creación de Remito")
-        ).toBeInTheDocument();
+       await waitFor(() => {
+         expect(
+           screen.getByText("Confirmar creación de Factura")
+         ).toBeInTheDocument();
+       });
+       expect(event.defaultPrevented).toBe(true);
+       expect(defaultBillContextMock.dispatch).toHaveBeenCalledWith({
+         type: "sellerName",
+         payload: "test@example.com",
+       });
+     });
+
+     it("should leave F4 without opening either creation dialog (AC3/AC4)", async () => {
+       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({ success: true, data: [] });
+       render(<BillButtonsDefault session={sessionMock} handlePrint={vi.fn()} isEditing={false} />, {
+         billContextMock: defaultBillContextMock,
+         sessionMock,
+       });
+       await waitFor(() => expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled());
+
+       fireEvent.keyDown(window, { key: "F4" });
+
+       expect(screen.queryByText("Confirmar creación de Factura")).not.toBeInTheDocument();
+       expect(screen.queryByText("Confirmar creación de Remito")).not.toBeInTheDocument();
+     });
+
+     it.each(["F7", "F9"])("should block %s when the cashbox session is inactive (AC5)", async (key) => {
+       const setIsOpeningModalOpen = vi.fn();
+        vi.mocked(useCashbox).mockReturnValue({
+          ...activeCashboxMock,
+          hasActiveSession: false,
+          setIsOpeningModalOpen,
+        });
+       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({ success: true, data: [] });
+       const { toast } = await import("sonner");
+       render(<BillButtonsDefault session={sessionMock} handlePrint={vi.fn()} isEditing={false} />, {
+         billContextMock: defaultBillContextMock,
+         sessionMock,
+       });
+       await waitFor(() => expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled());
+
+       fireEvent.keyDown(window, { key });
+
+       expect(screen.queryByText(/Confirmar creación/)).not.toBeInTheDocument();
+       expect(toast.error).toHaveBeenCalledWith("Debe abrir una sesión de caja antes de realizar esta operación");
+       expect(setIsOpeningModalOpen).toHaveBeenCalledWith(true);
+     });
+
+     it("should ignore F7 and F9 while editing (AC6)", async () => {
+       render(<BillButtonsDefault session={sessionMock} handlePrint={vi.fn()} isEditing={true} />, {
+         billContextMock: defaultBillContextMock,
+         sessionMock,
+       });
+
+       fireEvent.keyDown(window, { key: "F7" });
+       fireEvent.keyDown(window, { key: "F9" });
+
+       expect(screen.queryByText(/Confirmar creación/)).not.toBeInTheDocument();
+       expect(defaultBillContextMock.dispatch).not.toHaveBeenCalled();
+       expect(salesActions.processSaleAction).not.toHaveBeenCalled();
+     });
+
+      it("should preserve the non-AFIP route when confirming F7 (AC7)", async () => {
+        const billContext = { ...defaultBillContextMock, BillState: { ...defaultBillContextMock.BillState, total: 10, products: [{ ...mockProduct, salePrice: 10 }] } };
+        const handlePrint = vi.fn();
+        vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({ success: true, data: [] });
+        vi.mocked(salesActions.processSaleAction).mockResolvedValue({
+          success: true,
+          orderId: "order-1",
+        });
+        render(<BillButtonsDefault session={sessionMock} handlePrint={handlePrint} isEditing={false} />, { billContextMock: billContext, sessionMock });
+       await waitFor(() => expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled());
+       fireEvent.keyDown(window, { key: "F7" });
+       await screen.findByText("Confirmar creación de Remito");
+       fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+        await waitFor(() => expect(salesActions.processSaleAction).toHaveBeenCalled());
+        expect(afipActions.createAfipVoucherAction).not.toHaveBeenCalled();
+        expect(salesActions.processSaleAction).toHaveBeenCalledWith(expect.objectContaining({
+          seller: "",
+          total: 10,
+          products: [{ id: "shortcut-prod-1", code: "VAR001", description: "Producto Precio Variable", price: 0, salePrice: 10, amount: 1 }],
+        }));
+        expect(handlePrint).toHaveBeenCalled();
       });
-    });
+
+     it("should preserve the AFIP route when confirming F9 (AC8)", async () => {
+       const billContext = { ...defaultBillContextMock, BillState: { ...defaultBillContextMock.BillState, total: 10, products: [{ ...mockProduct, salePrice: 10 }] } };
+       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({ success: true, data: [] });
+        vi.mocked(afipActions.createAfipVoucherAction).mockResolvedValue({
+          success: true,
+          data: {
+            afip: { CAE: "123", CAEFchVto: "20300101" },
+            nroCbte: 1,
+            qrData: "",
+          },
+        });
+        vi.mocked(salesActions.processSaleAction).mockResolvedValue({
+          success: true,
+          orderId: "order-1",
+        });
+       render(<BillButtonsDefault session={sessionMock} handlePrint={vi.fn()} isEditing={false} />, { billContextMock: billContext, sessionMock });
+       await waitFor(() => expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled());
+       fireEvent.keyDown(window, { key: "F9" });
+       await screen.findByText("Confirmar creación de Factura");
+       fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+        await waitFor(() => expect(afipActions.createAfipVoucherAction).toHaveBeenCalled());
+        expect(salesActions.processSaleAction).toHaveBeenCalled();
+        expect(afipActions.createAfipVoucherAction).toHaveBeenCalledWith(billContext.BillState);
+      });
+
+      it.each(["F7", "F9"])("should cancel %s without saving, printing, or resetting", async (key) => {
+        const handlePrint = vi.fn();
+        vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({ success: true, data: [] });
+        render(<BillButtonsDefault session={sessionMock} handlePrint={handlePrint} isEditing={false} />, {
+          billContextMock: defaultBillContextMock,
+          sessionMock,
+        });
+        await waitFor(() => expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled());
+
+        fireEvent.keyDown(window, { key });
+        await screen.findByText(key === "F7" ? "Confirmar creación de Remito" : "Confirmar creación de Factura");
+        fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+        expect(salesActions.processSaleAction).not.toHaveBeenCalled();
+        expect(afipActions.createAfipVoucherAction).not.toHaveBeenCalled();
+        expect(handlePrint).not.toHaveBeenCalled();
+        expect(defaultBillContextMock.dispatch).toHaveBeenCalledTimes(1);
+        expect(defaultBillContextMock.dispatch).toHaveBeenCalledWith({
+          type: "sellerName",
+          payload: "test@example.com",
+        });
+      });
 
     it("should open A cuenta modal when F10 is pressed (AC22)", async () => {
       // For A cuenta modal we need products in the bill
@@ -637,10 +800,15 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       const sessionNoBudget = {
         ...sessionMock,
         user: {
-          ...sessionMock.user,
-          business: {
-            features: { hasBudget: false, plan: "BASIC" },
-          },
+            ...sessionMock.user,
+            business: {
+              ...sessionMock.user.business,
+              features: {
+                ...sessionMock.user.business.features,
+                hasBudget: false,
+                plan: Plan.BASIC,
+              },
+            },
         },
       };
 
@@ -857,14 +1025,14 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       ).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
 
-      // Remapped keys should still work normally (F4 → factura)
-      fireEvent.keyDown(window, { key: "F4" });
+       // Remapped keys should still work normally (F7 → remito)
+       fireEvent.keyDown(window, { key: "F7" });
 
-      await waitFor(() => {
-        expect(
-          screen.getByText("Confirmar creación de Factura")
-        ).toBeInTheDocument();
-      });
+       await waitFor(() => {
+         expect(
+           screen.getByText("Confirmar creación de Remito")
+         ).toBeInTheDocument();
+       });
     });
   });
 });

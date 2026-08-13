@@ -154,24 +154,24 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         return;
       }
 
-      // F4 — Factura modal (was F1)
-      if (e.key === 'F4') {
-        e.preventDefault();
-        if (!checkSession()) return;
-        if (session?.user.email) {
-          dispatch({ type: "sellerName", payload: session.user.email || "" });
-        }
-        setOpenFacturaModal(true);
-        return;
-      }
-      // F9 — Remito modal (was F2)
-      if (e.key === 'F9') {
+      // F7 — Remito modal
+      if (e.key === 'F7') {
         e.preventDefault();
         if (!checkSession()) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
         setOpenRemitoModal(true);
+        return;
+      }
+      // F9 — Factura modal
+      if (e.key === 'F9') {
+        e.preventDefault();
+        if (!checkSession()) return;
+        if (session?.user.email) {
+          dispatch({ type: "sellerName", payload: session.user.email || "" });
+        }
+        setOpenFacturaModal(true);
         return;
       }
       // F10 — A cuenta modal (was F3)
@@ -227,6 +227,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           vencimiento: afipData.CAEFchVto,
           nroComprobante: resp.data.nroCbte || afipData.nroCbte || 0,
           qrData: resp.data.qrData || afipData.qrData || "",
+          ptoVenta: BillState.ptoVenta,
         };
         dispatch({ type: "CAE", payload: newCAE });
         setLocalCAE(newCAE);

@@ -7,10 +7,12 @@ import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
 import { getActiveSession } from "@/actions/cashbox";
 import { SessionManager } from "@/components/cashbox/SessionManager";
+import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 const NewBillPage = async () => {
-  const [session, activeSessionResult] = await Promise.all([
+  const [session, activeSessionResult, printSettings] = await Promise.all([
     auth(),
     getActiveSession(),
+    getBusinessPrintSettingsAction(),
   ]);
   const hasActiveSession = activeSessionResult.success && activeSessionResult.data !== null;
 
@@ -24,10 +26,11 @@ const NewBillPage = async () => {
     ptoVentas = business?.ptoVenta || [];
   }
 
+  const qzTrayEnabled = "qzTray" in printSettings ? printSettings.qzTray : false;
   return (
     <Suspense fallback={<Spinner />}>
       <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
-        <BillProvider>
+          <BillProvider qzTrayEnabled={qzTrayEnabled}>
           {/* Header Section */}
           <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
             <div className="max-w-7xl mx-auto flex items-center justify-between">

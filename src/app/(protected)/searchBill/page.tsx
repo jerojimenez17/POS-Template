@@ -4,18 +4,20 @@ import { auth } from "../../../../auth";
 import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
 import { getSalesAction } from "@/actions/sales";
+import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 
 export const dynamic = 'force-dynamic';
 
 const SearchBillContent = async () => {
   const session = await auth();
-  const { sales, nextCursor } = await getSalesAction();
+  const [{ sales, nextCursor }, printSettings] = await Promise.all([getSalesAction(), getBusinessPrintSettingsAction()]);
+  const qzTrayEnabled = "qzTray" in printSettings ? printSettings.qzTray : false;
 
   return (
     <div className="flex flex-col items-center w-full max-w-7xl mx-auto px-4 py-8 space-y-6 overflow-auto mb-10">
       <FilterBillPanel />
       <div className="w-full">
-        <SalesTable sales={sales} nextCursor={nextCursor} session={session} />
+        <SalesTable sales={sales} nextCursor={nextCursor} session={session} qzTrayEnabled={qzTrayEnabled} />
       </div>
     </div>
   );

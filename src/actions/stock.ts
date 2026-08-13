@@ -1217,6 +1217,7 @@ export const getProductsFiltered = async (filters: {
   brandId?: string;
   unit?: string;
   supplierId?: string;
+  recentlyModified?: boolean;
   page?: number;
   pageSize?: number;
 }) => {
@@ -1252,13 +1253,16 @@ export const getProductsFiltered = async (filters: {
       ...(filters.brandId ? { brandId: filters.brandId } : {}),
       ...(filters.unit ? { unit: filters.unit } : {}),
       ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+      ...(filters.recentlyModified
+        ? { last_update: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }
+        : {}),
     };
 
     const [products, total] = await db.$transaction([
       db.product.findMany({
         where,
         include: { supplier: true, brand: true, category: true, subCategory: true },
-        orderBy: { description: "asc" },
+        orderBy: { last_update: "desc" },
         skip,
         take: currentPageSize,
       }),
@@ -1284,6 +1288,7 @@ export const getFilteredProductIds = async (filters: {
   brandId?: string;
   unit?: string;
   supplierId?: string;
+  recentlyModified?: boolean;
 }): Promise<string[]> => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
@@ -1310,6 +1315,9 @@ export const getFilteredProductIds = async (filters: {
     ...(filters.brandId ? { brandId: filters.brandId } : {}),
     ...(filters.unit ? { unit: filters.unit } : {}),
     ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+    ...(filters.recentlyModified
+      ? { last_update: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }
+      : {}),
   };
 
   try {
@@ -1353,7 +1361,7 @@ export const bulkUpdatePrices = async (
       const gain = product.price === 0 ? 0 : ((newSalePrice - product.price) / product.price) * 100;
       return db.product.update({
         where: { id: product.id },
-        data: { salePrice: newSalePrice, gain },
+        data: { salePrice: newSalePrice, gain, last_update: new Date() },
       });
     });
 
@@ -1374,7 +1382,7 @@ export const toggleProductCatalogAction = async (productId: string, catalog: boo
   try {
     await db.product.update({
       where: { id: productId },
-      data: { catalog },
+      data: { catalog, last_update: new Date() },
     });
     revalidatePath("/stock");
     return { success: true };

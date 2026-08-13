@@ -6,7 +6,7 @@ import { Printer, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function PrintModeSelector() {
-  const { printMode, setPrintMode, qzTrayActive, setQzTrayActive } = useContext(BillContext);
+  const { printMode, setPrintMode } = useContext(BillContext);
 
   const toggle = (mode: PrintMode) => {
     setPrintMode(mode);
@@ -43,23 +43,6 @@ export default function PrintModeSelector() {
         </button>
       </div>
 
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
-        <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">QZ Tray</span>
-        <button
-          onClick={() => setQzTrayActive(!qzTrayActive)}
-          className={cn(
-            "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-            qzTrayActive ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600"
-          )}
-        >
-          <span
-            className={cn(
-              "pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform",
-              qzTrayActive ? "translate-x-4" : "translate-x-1"
-            )}
-          />
-        </button>
-      </div>
     </div>
   );
 }

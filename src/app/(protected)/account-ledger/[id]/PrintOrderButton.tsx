@@ -9,9 +9,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { printThermalReceipt, exportToPDF, buildPDFHTML, PDF_STYLES, type ThermalReceiptData } from "@/lib/print";
-import { getBusinessBillingInfoAction } from "@/actions/business";
+import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 import { useState, useEffect } from "react";
 import type { Session } from "next-auth";
+import { buildReceiptBusinessInfo } from "@/lib/print/receipt-data";
 
 interface OrderItem {
   id: string;
@@ -40,23 +41,19 @@ interface Props {
 }
 
 export default function PrintOrderButton({ order, session }: Props) {
-  const [billingInfo, setBillingInfo] = useState<Record<string, unknown> | null>(null);
+  const [qzTrayEnabled, setQzTrayEnabled] = useState(false);
 
   useEffect(() => {
-    getBusinessBillingInfoAction().then(setBillingInfo);
+    getBusinessPrintSettingsAction().then((settings) => {
+      if ("qzTray" in settings) setQzTrayEnabled(settings.qzTray);
+    });
   }, []);
 
   const getPrintData = (): ThermalReceiptData => {
     const subtotal = order.items.reduce((sum, i) => sum + i.subTotal, 0);
     const billType = order.status === "pendiente" ? "Presupuesto" : "Comprobante";
     return {
-      businessName: session?.user?.businessName || "Mi Comercio",
-      businessInfo: billingInfo ? {
-        razonSocial: billingInfo.razonSocial as string,
-        cuit: billingInfo.cuit as string,
-        condicionIva: billingInfo.condicionIva as string,
-        address: billingInfo.address as string,
-      } : undefined,
+      ...buildReceiptBusinessInfo(session?.user?.businessName || "Mi Comercio", undefined),
       date: new Date(order.date),
       documentType: "DNI",
       billType,
@@ -77,7 +74,7 @@ export default function PrintOrderButton({ order, session }: Props) {
   };
 
   const handlePrintThermal = async () => {
-    await printThermalReceipt(getPrintData());
+    await printThermalReceipt(getPrintData(), qzTrayEnabled);
   };
 
   const handlePrintPDF = async () => {

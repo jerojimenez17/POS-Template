@@ -9,8 +9,9 @@ interface UpdateCaeInput {
   CAE: {
     CAE: string;
     vencimiento: string;
-    nroComprobante: number;
+    nroComprobante: number | string;
     qrData: string;
+    ptoVenta?: number | string;
   };
   IVACondition: string;
   documentNumber: number;
@@ -70,7 +71,7 @@ export const deleteOrderAction = async (orderId: string) => {
         if (item.productId) {
           await tx.product.update({
             where: { id: item.productId },
-            data: { amount: { increment: item.quantity } },
+            data: { amount: { increment: item.quantity }, last_update: new Date() },
           });
         }
       }
