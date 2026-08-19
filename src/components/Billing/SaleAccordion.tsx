@@ -37,7 +37,7 @@ const SaleAccordion = ({ sale, session, qzTrayEnabled }: props) => {
   };
 
   return (
-    <div className="rounded p-4 bg-white shadow-sm hover:shadow-md transition-shadow m-1 border border-gray-100 dark:border-gray-800 text-xs sm:text-sm md:text-base w-175 sm:w-full min-w-max">
+    <div className="rounded p-4 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm hover:shadow-md transition-shadow m-1 border border-gray-100 dark:border-gray-700 text-xs sm:text-sm md:text-base w-175 sm:w-full min-w-max">
       <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px_40px] items-center gap-4 text-gray-700 dark:text-gray-300">
         {/* Date */}
         <div className="font-medium text-gray-900 dark:text-gray-100">
@@ -53,7 +53,7 @@ const SaleAccordion = ({ sale, session, qzTrayEnabled }: props) => {
           ) : (
             <button
               onClick={() => setOpenBilling(true)}
-              className="px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors text-xs font-semibold whitespace-nowrap"
+              className="px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-800 dark:hover:text-blue-100 transition-colors text-xs font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               Facturar
             </button>
@@ -87,7 +87,7 @@ const SaleAccordion = ({ sale, session, qzTrayEnabled }: props) => {
           className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
           title="Ver Detalle"
         >
-          <Eye className="h-4 w-4 text-gray-500" />
+          <Eye className="h-4 w-4 text-gray-500 dark:text-gray-400" />
         </Link>
 
         {/* Action: Print */}

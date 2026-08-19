@@ -8,7 +8,7 @@ interface props {
 const DeleteButton = ({ onClick, id, disable }: props) => {
   return (
     <button
-      className="cursor-pointer my-auto"
+      className="cursor-pointer my-auto rounded-md p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50"
       id={id}
       onClick={onClick}
       disabled={disable}
