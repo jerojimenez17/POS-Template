@@ -46,6 +46,8 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
   }, [user, seller]);
 
   useEffect(() => {
+    // The live list is local state because it is also updated by the Pusher subscription.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLiveSales(sales);
     setCursor(initialCursor);
     setHasMore(initialCursor !== null);
@@ -150,6 +152,11 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
       .sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [liveSales, filtersState]);
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentPage(1);
+  }, [filtersState, itemsPerPage]);
+
   const total = React.useMemo(() => {
     return filteredSales.reduce((acc, sale) => acc + (sale.totalWithDiscount || 0), 0);
   }, [filteredSales]);
@@ -160,15 +167,11 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
     return filteredSales.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredSales, currentPage, itemsPerPage]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filteredSales.length, itemsPerPage]);
-
   return (
-    <div className="text-center text-black flex flex-col w-full mb-20 px-4">
+    <div className="text-center text-gray-900 dark:text-gray-100 flex flex-col w-full mb-20 px-4">
       {" "}
       <div className="h-20 my-8 sm:my-2 md:my-6 lg:my-4">
-        <p className="p-3 text-2xl text-gray-800 font-bold">
+        <p className="p-3 text-2xl text-gray-900 dark:text-gray-100 font-bold">
           Total: $
           {total.toLocaleString("es-AR", {
             minimumFractionDigits: 2,
@@ -215,7 +218,7 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
               variant="outline"
               onClick={handleLoadMore}
               disabled={loadingMore}
-              className="gap-2"
+              className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <ChevronDown className={`h-4 w-4 ${loadingMore ? "animate-bounce" : ""}`} />
               {loadingMore ? "Cargando..." : "Cargar más"}
@@ -224,17 +227,17 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-4 bg-white bg-opacity-50 gap-4 mt-auto rounded-lg shadow-sm">
+      <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 gap-4 mt-auto rounded-lg shadow-sm">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700 font-medium">Filas por página:</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Filas por página:</span>
           <Select
             value={itemsPerPage.toString()}
             onValueChange={(value) => setItemsPerPage(Number(value))}
           >
-            <SelectTrigger className="w-[70px] h-8">
+            <SelectTrigger className="w-[70px] h-8 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="text-gray-800">
+            <SelectContent className="border-gray-200 bg-white text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
               <SelectItem value="10">10</SelectItem>
               <SelectItem value="20">20</SelectItem>
               <SelectItem value="50">50</SelectItem>
@@ -244,25 +247,25 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
         </div>
 
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-700 font-medium">
-            Página {currentPage} de {totalPages || 1}
+          <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+             Página {currentPage} de {totalPages || 1}
           </span>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
+              className="h-8 w-8 border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-blue-500"
+               onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+               disabled={currentPage === 1}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-8 w-8 border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-blue-500"
               onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage >= totalPages}
+                disabled={currentPage >= totalPages}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

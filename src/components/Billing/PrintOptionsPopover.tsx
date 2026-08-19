@@ -135,16 +135,16 @@ export default function PrintOptionsPopover({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Download className="h-4 w-4 text-gray-500" />
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500">
+          <Download className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={handlePrintThermal}>
+      <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-gray-800">
+        <DropdownMenuItem onClick={handlePrintThermal} className="focus:bg-gray-100 dark:focus:bg-gray-700">
           <Printer className="mr-2 h-4 w-4" />
           Impresión Térmica
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handlePrintPDF}>
+        <DropdownMenuItem onClick={handlePrintPDF} className="focus:bg-gray-100 dark:focus:bg-gray-700">
           <FileText className="mr-2 h-4 w-4" />
           Generar PDF
         </DropdownMenuItem>
