@@ -9,6 +9,8 @@ import { getActiveSession } from "@/actions/cashbox";
 import { SessionManager } from "@/components/cashbox/SessionManager";
 import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 import { getDefaultBillType } from "@/utils/billing";
+import BillTypes from "@/models/billType";
+import type { BillType } from "@/models/billType";
 
 const NewBillPage = async () => {
   const [session, activeSessionResult, printSettings] = await Promise.all([
@@ -19,15 +21,21 @@ const NewBillPage = async () => {
   const hasActiveSession = activeSessionResult.success && activeSessionResult.data !== null;
 
   let ptoVentas: number[] = [];
-  let initialBillType = "Factura C";
+  // Keep the real business default explicit on the page. Unknown billing data
+  // falls back to Factura C, while Responsable Inscripto is resolved to B.
+  let initialBillType: BillType = BillTypes.C;
   if (session?.user?.businessId) {
-    const { db } = await import("@/lib/db");
-    const business = await db.business.findUnique({
-      where: { id: session.user.businessId },
-      select: { ptoVenta: true, condicionIva: true }
-    });
-    ptoVentas = business?.ptoVenta || [];
-    initialBillType = getDefaultBillType(business?.condicionIva);
+    try {
+      const { db } = await import("@/lib/db");
+      const business = await db.business.findUnique({
+        where: { id: session.user.businessId },
+        select: { ptoVenta: true, condicionIva: true }
+      });
+      ptoVentas = business?.ptoVenta || [];
+      initialBillType = getDefaultBillType(business?.condicionIva);
+    } catch (error) {
+      console.error("Unable to load business billing defaults:", error);
+    }
   }
 
   const qzTrayEnabled = "qzTray" in printSettings ? printSettings.qzTray : false;

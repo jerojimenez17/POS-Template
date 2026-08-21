@@ -95,7 +95,15 @@ export const getBusinessArcaData = async (
             return { error: "Negocio no encontrado" };
         }
 
-        return { success: business };
+        // This result is passed to a Client Component. Return presence only;
+        // billing reads the encrypted material in a server-only flow.
+        return {
+          success: {
+            ...business,
+            cert: business.cert ? "CONFIGURADO" : null,
+            key: business.key ? "CONFIGURADO" : null,
+          },
+        };
     } catch (error) {
         console.error("Get ARCA Data Error:", error);
         return { error: "Error al obtener datos de ARCA" };
@@ -117,6 +125,7 @@ export const getArcaCredentialsForBilling = async () => {
                 cuit: true,
                 cert: true,
                 key: true,
+                ptoVenta: true,
             },
         });
 
@@ -133,6 +142,7 @@ export const getArcaCredentialsForBilling = async () => {
                 cuit: business.cuit,
                 cert: business.cert,
                 key: business.key,
+                ptoVentas: business.ptoVenta,
             },
         };
     } catch (error) {

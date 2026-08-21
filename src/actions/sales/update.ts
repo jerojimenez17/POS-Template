@@ -16,6 +16,7 @@ interface UpdateCaeInput {
   IVACondition: string;
   documentNumber: number;
   paidMethod: string;
+  billType?: string;
 }
 
 export const updateOrderCaeAction = async (

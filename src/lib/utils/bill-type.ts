@@ -15,20 +15,30 @@ export const AFIP_INVOICE_TYPES: Record<string, string> = {
   "9": "Nota de Credito C",
 };
 
+/**
+ * Resolves ARCA numeric codes and known labels while preserving non-empty
+ * historical values. Empty values remain empty so legacy fallback is explicit.
+ */
+export function normalizeBillType(billType?: string | null): string | undefined {
+  const value = billType?.trim();
+  if (!value) return undefined;
+  return AFIP_INVOICE_TYPES[value] || value;
+}
+
 export function getBillTypeDisplay(
   billType?: string | null,
   cae?: string | null,
   isRemito?: boolean
 ): string {
-  if (billType === "Presupuesto") return "Presupuesto";
-  if (cae?.trim()) {
-    if (billType && AFIP_INVOICE_TYPES[billType]) {
-      return AFIP_INVOICE_TYPES[billType];
-    }
-    return billType || "Factura C";
-  }
-  
-  return isRemito ? "Remito" : "Comprobante";
+  // CAE is the only proof that this is an official invoice. Without it, do
+  // not display a fiscal invoice type even when a legacy numeric type exists.
+  if (!cae?.trim()) return isRemito ? "Remito" : "Comprobante";
+
+  const normalizedType = normalizeBillType(billType);
+  if (normalizedType) return normalizedType;
+
+  console.warn("Legacy sale without persisted billType; using Factura C fallback");
+  return "Factura C";
 }
 
 export function isAFIPAuthorized(billType?: string | null, cae?: string | null): boolean {

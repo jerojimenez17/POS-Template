@@ -119,7 +119,8 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
         genCuit,
         genUsername,
         genPassword,
-        genAlias
+        genAlias,
+        businessId
       );
 
       if (result.error) {
@@ -128,16 +129,10 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
       }
 
       if (result.success) {
-        form.setValue("cert", result.success.cert);
-        form.setValue("key", result.success.key);
         setShowGenDialog(false);
-        setSuccess(
-          `Certificados ${
-            genMode === "dev" ? "de prueba (DEV)" : "de producción (PROD)"
-          } generados correctamente. Revise los campos y guarde la configuración para persistirlos.`
-        );
+        setSuccess(result.success);
       }
-    } catch (err) {
+    } catch {
       setGenError("Error inesperado al generar certificados");
     } finally {
       setIsGenerating(false);

@@ -71,8 +71,10 @@ export async function exportToPDF(
     margin,
   } = mergedOptions;
   const { jsPDF } = await import("jspdf");
-
-  const canvas = await captureElement(element, mergedOptions);
+  const pages = Array.from(element.querySelectorAll<HTMLElement>(".pdf-page"));
+  const canvases = pages.length > 0
+    ? await Promise.all(pages.map((page) => captureElement(page, mergedOptions)))
+    : [await captureElement(element, mergedOptions)];
   
   const formatDims = getFormatDimensions(format);
   const isLandscape = orientation === "landscape";
@@ -87,12 +89,6 @@ export async function exportToPDF(
   });
 
   const imgWidth = pageWidth - margin * 2;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  const imgData = canvas.toDataURL("image/png");
-  
-  let heightLeft = imgHeight;
-  let position = margin;
 
   pdf.setDocumentProperties({
     title: documentTitle,
@@ -100,15 +96,12 @@ export async function exportToPDF(
     creator: "POS Template",
   });
 
-  pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
-  heightLeft -= pageHeight - margin * 2;
-
-  while (heightLeft > 0) {
-    position = heightLeft - imgHeight + margin;
-    pdf.addPage();
-    pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight - margin * 2;
-  }
+  const pageContentHeight = pageHeight - margin * 2;
+  canvases.forEach((canvas, index) => {
+    if (index > 0) pdf.addPage();
+    const imgHeight = Math.min(pageContentHeight, (canvas.height * imgWidth) / canvas.width);
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, imgHeight);
+  });
 
   // To avoid automatic download and prioritize "Showing for printing":
   // We use a Blob and open it in a new window.
@@ -155,7 +148,10 @@ export async function downloadElementAsPDF(
   const mergedOptions = { ...DEFAULT_OPTIONS, ...options, filename };
   const { jsPDF } = await import("jspdf");
   
-  const canvas = await captureElement(element, mergedOptions);
+  const pages = Array.from(element.querySelectorAll<HTMLElement>(".pdf-page"));
+  const canvases = pages.length > 0
+    ? await Promise.all(pages.map((page) => captureElement(page, mergedOptions)))
+    : [await captureElement(element, mergedOptions)];
   
   const formatDims = getFormatDimensions(mergedOptions.format);
   const pageWidth = formatDims.width;
@@ -169,10 +165,11 @@ export async function downloadElementAsPDF(
 
   const margin = mergedOptions.margin;
   const imgWidth = pageWidth - margin * 2;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  const imgData = canvas.toDataURL("image/png");
-  pdf.addImage(imgData, "PNG", margin, margin, imgWidth, imgHeight);
+  canvases.forEach((canvas, index) => {
+    if (index > 0) pdf.addPage();
+    const imgHeight = Math.min(pageHeight - margin * 2, (canvas.height * imgWidth) / canvas.width);
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, imgHeight);
+  });
   
   pdf.save(`${filename}.pdf`);
 }

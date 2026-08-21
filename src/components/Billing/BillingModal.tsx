@@ -19,6 +19,8 @@ import { paidMethods } from "@/utils/PaidMethods";
 import { Button } from "../ui/button";
 import { getDefaultBillType } from "@/utils/billing";
 import { getBusinessBillingInfoAction } from "@/actions/business";
+import { formatAfipPointSaleErrorForUser, sanitizeAfipText } from "@/services/afip/point-sale-validation";
+import { isValidCae } from "@/services/afip/voucher-response";
 
 interface BillingModalProps {
   open: boolean;
@@ -51,13 +53,19 @@ const BillingModal = ({
   }, []);
 
   const defaultBillType = getDefaultBillType(businessCondicionIva);
+  // Billing an existing sale uses the business billing default. The sale's
+  // historical C value must not override a Responsable Inscripto default.
+  const effectiveBillType = defaultBillType;
 
   useEffect(() => {
     if (sale) {
-      setIvaCondition(sale.IVACondition || "Consumidor Final");
-      setDocumentNumber(sale.documentNumber?.toString() || "");
-      setPaymentMethod(sale.paidMethod || "Efectivo");
-      setDiscount(sale.discount || 0);
+      const timeoutId = window.setTimeout(() => {
+        setIvaCondition(sale.IVACondition || "Consumidor Final");
+        setDocumentNumber(sale.documentNumber?.toString() || "");
+        setPaymentMethod(sale.paidMethod || "Efectivo");
+        setDiscount(sale.discount || 0);
+      }, 0);
+      return () => window.clearTimeout(timeoutId);
     }
   }, [sale, open]);
 
@@ -68,7 +76,7 @@ const BillingModal = ({
       // Note: We are transforming the current sale data combined with modal inputs
       const billToProcess: BillState = {
         ...sale,
-        billType: sale?.billType || defaultBillType,
+        billType: effectiveBillType,
         IVACondition: ivaCondition,
         documentNumber: Number(documentNumber),
         paidMethod: paymentMethod,
@@ -82,19 +90,24 @@ const BillingModal = ({
 
       const resp = await createAfipVoucherAction(billToProcess);
 
-      if (resp.success && resp.data.afip) {
+      if ("error" in resp) {
+        toast.error(typeof resp.error === "string" ? resp.error : formatAfipPointSaleErrorForUser(resp.error));
+        return;
+      }
+      if (resp.success && isValidCae(resp.data.cae)) {
         // Success
         const caeResult = await updateOrderCaeAction(sale.id, {
           CAE: {
-            CAE: resp.data.afip.CAE,
-            vencimiento: resp.data.afip.CAEFchVto,
-            nroComprobante: resp.data.nroCbte || resp.data.afip.nroCbte,
-            qrData: resp.data.qrData || resp.data.afip.qrData,
-            ptoVenta: sale.ptoVenta,
+             CAE: resp.data.cae,
+             vencimiento: resp.data.vencimiento,
+             nroComprobante: resp.data.nroComprobante,
+             qrData: resp.data.qrData,
+             ptoVenta: resp.data.ptoVenta ?? sale.ptoVenta,
           },
           IVACondition: ivaCondition,
           documentNumber: Number(documentNumber),
           paidMethod: paymentMethod,
+          billType: billToProcess.billType,
         });
 
         if (caeResult.error) {
@@ -106,14 +119,13 @@ const BillingModal = ({
         onSuccess();
         onOpenChange(false);
       } else {
-        toast.error(
-          "Error al crear factura: " + (resp.error || "Respuesta inválida"),
-        );
+        toast.error("Error al crear factura: La respuesta no contiene un CAE válido");
       }
     } catch (error) {
-      console.error(error);
+      const safeMessage = error instanceof Error ? sanitizeAfipText(error.message) : "unknown";
+      console.error("[createVoucher] client failure", { errorType: typeof error, message: safeMessage });
       if (error instanceof Error) {
-        toast.error("Error al facturar: " + error.message);
+        toast.error("Error al facturar: " + safeMessage);
       } else {
         toast.error("Error al facturar: Error desconocido");
       }
@@ -139,7 +151,7 @@ const BillingModal = ({
         <DialogHeader>
           <DialogTitle className="text-pink-400">Facturar Venta</DialogTitle>
           <DialogDescription>
-            Genere una {defaultBillType} para esta venta existente.
+             Genere una {effectiveBillType} para esta venta existente.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -148,7 +160,7 @@ const BillingModal = ({
             <label className="text-right text-sm text-gray-500">Tipo</label>
             <Input
               disabled
-              value={defaultBillType}
+               value={effectiveBillType}
               className="col-span-3 border-gray-300"
             />
           </div>
