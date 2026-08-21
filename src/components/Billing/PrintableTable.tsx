@@ -75,6 +75,7 @@ const PrintableTable = ({
     address?: string | null;
   } | null>(null);
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
+  const [qrGenerationFailed, setQrGenerationFailed] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const lastPrintTrigger = useRef(0);
 
@@ -92,18 +93,29 @@ const PrintableTable = ({
   }, []);
 
   useEffect(() => {
+    let active = true;
     const activeCae = forceCae || state.CAE;
     if (activeCae?.qrData) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQrGenerationFailed(false);
+      setQrSvgDataUrl(null);
       QRCode.toString(activeCae.qrData, { type: "svg", margin: 0, width: 60 })
         .then((svgString) => {
           const dataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
-          setQrSvgDataUrl(dataUrl);
+          if (active) setQrSvgDataUrl(dataUrl);
         })
-        .catch(console.error);
+        .catch((error: unknown) => {
+          if (active) {
+            setQrSvgDataUrl(null);
+            setQrGenerationFailed(true);
+          }
+          console.error("Error generating receipt QR:", error);
+        });
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQrSvgDataUrl(null);
+      setQrGenerationFailed(false);
     }
+    return () => { active = false; };
   }, [state.CAE, state.CAE?.qrData, forceCae]);
 
   const activeCae = forceCae || state.CAE;
@@ -192,12 +204,12 @@ const PrintableTable = ({
   useEffect(() => {
     if (printTrigger > lastPrintTrigger.current && isClient) {
       const activeCae = forceCae || state.CAE;
-      if (activeCae?.qrData && !qrSvgDataUrl) return;
+      if (activeCae?.qrData && !qrSvgDataUrl && !qrGenerationFailed) return;
 
       lastPrintTrigger.current = printTrigger;
       handlePrint();
     }
-  }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, forceCae, state.CAE, state.CAE?.qrData]);
+  }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, qrGenerationFailed, forceCae, state.CAE, state.CAE?.qrData]);
 
   // Prevent browser defaults for F1/F2/F3 (Chrome opens help on F1)
   useEffect(() => {

@@ -2,14 +2,23 @@
 
 import { auth } from "../../auth";
 import { UserRole } from "@prisma/client";
+import { db } from "@/lib/db";
+import { encrypt } from "@/lib/encryption";
+
+const MAX_ERROR_BODY_LENGTH = 240;
+const safeErrorBody = (body: string): string => body
+  .replace(/(["']?)(?:cert(?:ificate)?|key|token|password|secret|authorization|api[_ -]?key|accessToken|encryptedCert|encryptedKey)\1\s*[:=]\s*(["']?)[^\s,;}"']+\2/gi, "$1[redacted]$2")
+  .replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/gi, "[certificate redacted]")
+  .replace(/\s+/g, " ").trim().slice(0, MAX_ERROR_BODY_LENGTH);
 
 export const generateCertsAction = async (
   type: "dev" | "prod",
   cuit: string,
   username: string,
   password: string,
-  alias: string
-): Promise<{ success?: { cert: string; key: string }; error?: string }> => {
+  alias: string,
+  businessId?: string
+): Promise<{ success?: string; error?: string }> => {
   const session = await auth();
 
   if (
@@ -18,6 +27,15 @@ export const generateCertsAction = async (
       session.user.role !== UserRole.ADMIN)
   ) {
     return { error: "No autorizado" };
+  }
+
+  if (session.user.role === UserRole.ADMIN && businessId && session.user.businessId !== businessId) {
+    return { error: "No autorizado para modificar otro negocio" };
+  }
+
+  const targetBusinessId = businessId ?? session.user.businessId;
+  if (!targetBusinessId) {
+    return { error: "Negocio no especificado" };
   }
 
   try {
@@ -52,10 +70,10 @@ export const generateCertsAction = async (
 
     if (!response.ok) {
       const errorBody = await response.text();
-      console.error("Cloud function error:", response.status, errorBody);
+      console.error("Cloud function error:", response.status, safeErrorBody(errorBody));
       return {
         error: `Error del servidor (${response.status}): ${
-          errorBody || "Error desconocido"
+          safeErrorBody(errorBody) || "Error desconocido"
         }`,
       };
     }
@@ -63,22 +81,28 @@ export const generateCertsAction = async (
     const result = await response.json();
 
     // Handle both wrapped ApiResult format and direct response
-    if (result.data?.cert && result.data?.key) {
-      return { success: { cert: result.data.cert, key: result.data.key } };
-    }
+    const generated = result.data?.cert && result.data?.key
+      ? { cert: result.data.cert, key: result.data.key }
+      : result.cert && result.key ? { cert: result.cert, key: result.key } : undefined;
 
-    if (result.cert && result.key) {
-      return { success: { cert: result.cert, key: result.key } };
+    if (generated) {
+      // Persist in the authenticated server action; never return PEM material
+      // to the Client Component that initiated generation.
+      await db.business.update({
+        where: { id: targetBusinessId },
+        data: { cert: encrypt(generated.cert), key: encrypt(generated.key) },
+      });
+      return { success: "Certificados generados y guardados correctamente" };
     }
 
     return {
       error:
-        result.error ||
-        result.details?.message ||
+        safeErrorBody(typeof result.error === "string" ? result.error : "") ||
+        safeErrorBody(typeof result.details?.message === "string" ? result.details.message : "") ||
         "Error desconocido al generar certificados",
     };
   } catch (error) {
-    console.error("Generate Certs Error:", error);
+    console.error("Generate Certs Error:", error instanceof Error ? error.name : "unknown");
     return { error: "Error al comunicarse con el servidor de certificados" };
   }
 };

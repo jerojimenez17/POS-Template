@@ -16,12 +16,19 @@ import {
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { BillContext } from "@/context/BillContext";
 import BillTypes from "@/models/billType";
 import { getVoucherNumberAction } from "@/actions/voucher";
 import { getDefaultBillType } from "@/utils/billing";
 import { getBusinessBillingInfoAction } from "@/actions/business";
+import { formatAfipPointSaleErrorForUser, type AfipPointSaleError } from "@/services/afip/point-sale-validation";
+
+const getVoucherTypeCode = (billType: string): 1 | 6 | 11 => {
+  if (billType === BillTypes.A) return 1;
+  if (billType === BillTypes.B) return 6;
+  return 11;
+};
 
 interface BillParametersFormProps {
   ptoVentas?: number[];
@@ -32,24 +39,14 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
   const [editParamters, setEditParameters] = useState(false);
   const [lastVoucherNum, setLastVoucherNum] = useState<number | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(true);
+  const [voucherError, setVoucherError] = useState<AfipPointSaleError | string | null>(null);
+  const requestSequence = useRef(0);
   const context = useContext(BillContext);
   const dispatch = context?.dispatch;
   const BillState = context?.BillState;
   const onOrderResetRef = context?.onOrderResetRef;
-  const [businessCondicionIva, setBusinessCondicionIva] = useState<string | null | undefined>(undefined);
-
-  // Fetch business IVA condition on mount to determine default bill type
-  useEffect(() => {
-    getBusinessBillingInfoAction()
-      .then((info) => {
-        setBusinessCondicionIva(info?.condicionIva ?? null);
-      })
-      .catch(() => {
-        setBusinessCondicionIva(null);
-      });
-  }, []);
-
-  const defaultBillType = initialBillType || getDefaultBillType(businessCondicionIva);
+  const billTypeRef = context?.billTypeRef;
+  const defaultBillType = initialBillType ?? context?.initialBillType ?? getDefaultBillType();
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
     resolver: zodResolver(BillParametersSchema),
@@ -58,69 +55,84 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
       clientCondition: ClientConditions.CONSUMIDOR_FINAL,
       discount: 0,
       twoMethods: false,
-      billType: initialBillType || BillState?.billType || defaultBillType,
+      billType: defaultBillType,
       totalSecondMethod: 0,
       secondPaidMethod: PaidMethods.DEBITO,
       ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
     },
   });
 
-  // Update form billType and BillState when business IVA condition is fetched
-  useEffect(() => {
-    if (businessCondicionIva !== undefined && dispatch) {
-      form.setValue("billType", defaultBillType);
-      // Also update BillState so AFIP receives the correct bill type
-      dispatch({
-        type: "billType",
-        payload: defaultBillType,
-      });
-    }
-  }, [businessCondicionIva, defaultBillType, form, dispatch]);
-
   const watchBillType = form.watch("billType");
   const watchPtoVenta = form.watch("ptoVenta");
+  const watchClientCondition = form.watch("clientCondition");
 
-  // Keep BillState in BillContext strictly synchronized with form's billType
+  // The new-sale page supplies the business default server-side. Only the
+  // standalone form path needs this fallback lookup, so the normal page does
+  // not fetch the business billing data a second time in the browser.
   useEffect(() => {
-    if (watchBillType && dispatch) {
-      dispatch({
-        type: "billType",
-        payload: watchBillType,
+    if (initialBillType !== undefined || context?.initialBillType !== undefined) return;
+
+    let cancelled = false;
+    void Promise.resolve(getBusinessBillingInfoAction())
+      .then((info) => {
+        if (cancelled) return;
+        const nextBillType = getDefaultBillType(info?.condicionIva);
+        form.setValue("billType", nextBillType);
+        if (dispatch) dispatch({ type: "billType", payload: nextBillType });
+        if (billTypeRef) billTypeRef.current = nextBillType;
+      })
+      .catch(() => {
+        // getDefaultBillType() already provides the required Factura C fallback.
       });
-    }
-  }, [watchBillType, dispatch]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialBillType, context?.initialBillType, form, dispatch, billTypeRef]);
+
+  // Keep the point of sale used for the displayed number attached to the
+  // checkout state as well. This is intentionally a single synchronization,
+  // not another voucher lookup.
+  useEffect(() => {
+    const initialPtoVenta = ptoVentas[0];
+    if (!dispatch || !BillState || initialPtoVenta === undefined) return;
+    if (BillState.ptoVenta === initialPtoVenta && BillState.billType === defaultBillType) return;
+    dispatch({
+      type: "setState",
+      payload: { ...BillState, ptoVenta: initialPtoVenta, billType: defaultBillType },
+    });
+  }, [dispatch, BillState, defaultBillType, ptoVentas]);
 
   useEffect(() => {
+    const requestId = ++requestSequence.current;
     const fetchVoucher = async () => {
       if (!watchPtoVenta) return;
       setLoadingVoucher(true);
       
-      let tipoFactura = 11;
-      const billTypeStr = String(watchBillType).toLowerCase();
-      if (billTypeStr.includes("factura a")) {
-        tipoFactura = 1; // Simplificado para comprobante normal
-      } else if (billTypeStr.includes("factura b")) {
-        tipoFactura = 6;
-      }
+       const tipoFactura = getVoucherTypeCode(watchBillType);
 
-      console.log("[getLastVoucher] ──────────────");
-      console.log("[getLastVoucher] billType (form):", watchBillType);
-      console.log("[getLastVoucher] tipoFactura (mapeado):", tipoFactura, "(1=A, 6=B, 11=C)");
-      console.log("[getLastVoucher] ptoVenta:", watchPtoVenta);
-      console.log("[getLastVoucher] ptoVentas disponibles:", ptoVentas);
-      console.log("[getLastVoucher] payload enviado a server action →", { ptoVenta: watchPtoVenta, tipoFactura, billType: watchBillType });
-      const res = await getVoucherNumberAction(watchPtoVenta, tipoFactura);
-      console.log("[getLastVoucher] respuesta server action ←", JSON.stringify(res, null, 2));
-      if (res.success !== undefined) {
-        setLastVoucherNum(res.success);
-      } else {
-        setLastVoucherNum(null);
-      }
+       const res = await getVoucherNumberAction(watchPtoVenta, tipoFactura);
+       console.log("[getLastVoucher] result", {
+         success: typeof res.success === "number",
+         errorType: typeof res.error,
+         errorCode: res.errorDetails?.code,
+         operation: res.errorDetails?.operation,
+         ptoVenta: watchPtoVenta,
+         tipoFactura,
+       });
+      if (requestId !== requestSequence.current) return;
+       if (res.success !== undefined) {
+         setLastVoucherNum(res.success);
+         setVoucherError(null);
+       } else {
+         setLastVoucherNum(null);
+         setVoucherError(res.errorDetails ?? res.error ?? "No se pudo obtener la numeración");
+       }
       setLoadingVoucher(false);
     };
 
     fetchVoucher();
-  }, [watchBillType, watchPtoVenta]);
+  }, [ptoVentas, watchBillType, watchPtoVenta]);
 
   useEffect(() => {
     if (onOrderResetRef) {
@@ -130,17 +142,27 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
           clientCondition: ClientConditions.CONSUMIDOR_FINAL,
           discount: 0,
           twoMethods: false,
-          billType: defaultBillType,
+           billType: defaultBillType,
           totalSecondMethod: 0,
           secondPaidMethod: PaidMethods.DEBITO,
           ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
-        });
+         });
+          if (dispatch) dispatch({ type: "billType", payload: defaultBillType });
+          if (dispatch && ptoVentas.length > 0) dispatch({ type: "setState", payload: { ...BillState, ptoVenta: ptoVentas[0], billType: defaultBillType } });
+         if (billTypeRef) billTypeRef.current = defaultBillType;
         setEditParameters(false);
       };
     }
-  }, [form, onOrderResetRef, defaultBillType]);
+  }, [form, onOrderResetRef, defaultBillType, dispatch, billTypeRef, ptoVentas, BillState]);
 
   const currentDate = useMemo(() => new Date(), []);
+
+  const voucherErrorMessage = typeof voucherError === "string"
+    ? voucherError
+    : voucherError
+      ? formatAfipPointSaleErrorForUser(voucherError)
+      : null;
+  const structuredVoucherError = voucherError && typeof voucherError !== "string" ? voucherError : null;
 
   const onSubmit = (data: z.infer<typeof BillParametersSchema>) => {
     const documentNumber = data.documentNumber ?? 0;
@@ -167,19 +189,8 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
     setEditParameters(false);
   };
   return editParamters ? (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Compatibility control for legacy integrations that addressed the old select value. */}
-        {watchBillType === BillTypes.B && (
-          <input
-            aria-hidden="true"
-            tabIndex={-1}
-            className="hidden"
-            value={BillTypes.C}
-            onChange={(event) => form.setValue("billType", event.target.value)}
-            readOnly={false}
-          />
-        )}
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {/* Grid de 3 columnas */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
@@ -202,7 +213,11 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Tipo</FormLabel>
-                    <Select {...field} onValueChange={field.onChange}>
+                    <Select {...field} onValueChange={(value) => {
+                       field.onChange(value);
+                       dispatch?.({ type: "billType", payload: value });
+                       if (billTypeRef) billTypeRef.current = value;
+                    }}>
                       <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
                         <SelectValue placeholder={field.value} />
                       </SelectTrigger>
@@ -227,7 +242,11 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
                       <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Pto. Venta</FormLabel>
                       <Select 
                         value={field.value ? String(field.value) : undefined} 
-                        onValueChange={(val) => field.onChange(Number(val))}
+                         onValueChange={(val) => {
+                           const point = Number(val);
+                           field.onChange(point);
+                           if (dispatch && BillState) dispatch({ type: "setState", payload: { ...BillState, ptoVenta: point, billType: watchBillType } });
+                         }}
                       >
                         <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
                           <SelectValue placeholder="Seleccione" />
@@ -267,14 +286,14 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
                 )}
               />
 
-              {form.watch("clientCondition") !== ClientConditions.CONSUMIDOR_FINAL && (
+               {watchClientCondition !== ClientConditions.CONSUMIDOR_FINAL && (
                 <FormField
                   control={form.control}
                   name="documentNumber"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm text-gray-600 dark:text-gray-300">
-                        {form.watch("clientCondition") === ClientConditions.CUIT
+                        {watchClientCondition === ClientConditions.CUIT
                           ? "CUIT"
                           : "DNI"}
                       </FormLabel>
@@ -425,14 +444,31 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
               {loadingVoucher ? (
                 <span className="text-yellow-500">...</span>
               ) : lastVoucherNum !== null ? (
-                String(lastVoucherNum + 1).padStart(4, '0')
-              ) : (
-                <span className="text-red-400">Error</span>
-              )}
+                <span>{String(lastVoucherNum + 1).padStart(4, '0')}</span>
+               ) : (
+                 <span className="text-red-400" title={voucherErrorMessage ?? undefined}>Error</span>
+               )}
             </span>
           )}
         </div>
       </div>
+
+      {voucherErrorMessage && (
+        <div role="alert" className="w-full rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+          <p className="font-semibold">No se generó CAE: rechazo de AFIP/ARCA</p>
+          <p className="mt-1">{voucherErrorMessage}</p>
+          {structuredVoucherError?.code === "11002" && (
+            <ol className="mt-2 list-decimal space-y-1 pl-4">
+              <li>Verifique que el punto esté habilitado para WSFE/WSFEv1 en ARCA.</li>
+              <li>Confirme el CUIT y el ambiente del certificado.</li>
+              <li>Seleccione un punto habilitado o revise la configuración y vuelva a editar los parámetros.</li>
+            </ol>
+          )}
+          <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setEditParameters(true)}>
+            Editar parámetros
+          </Button>
+        </div>
+      )}
 
       {/* Condición IVA */}
       <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
@@ -441,14 +477,14 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
       </div>
 
       {/* CUIT/DNI */}
-      {form.watch("clientCondition") === ClientConditions.CUIT && form.getValues().documentNumber > 0 && (
+       {watchClientCondition === ClientConditions.CUIT && form.getValues().documentNumber > 0 && (
         <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
           <span>CUIT:</span>
           <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>
         </div>
       )}
 
-      {form.watch("clientCondition") === ClientConditions.DNI && form.getValues().documentNumber > 0 && (
+       {watchClientCondition === ClientConditions.DNI && form.getValues().documentNumber > 0 && (
         <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
           <span>DNI:</span>
           <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>

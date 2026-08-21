@@ -32,16 +32,22 @@ export default function PrintOptionsPopover({
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
     if (sale.CAE?.qrData) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQrSvgDataUrl(null);
       QRCode.toString(sale.CAE.qrData, { type: "svg", margin: 0, width: 60 })
         .then((svgString) => {
-          const dataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
-          setQrSvgDataUrl(dataUrl);
+          if (active) setQrSvgDataUrl(`data:image/svg+xml;base64,${btoa(svgString)}`);
         })
-        .catch(console.error);
+        .catch((error: unknown) => {
+          if (active) setQrSvgDataUrl(null);
+          console.error("Error generating receipt QR:", error);
+        });
     } else {
-      setTimeout(() => setQrSvgDataUrl(null), 0);
+      setQrSvgDataUrl(null);
     }
+    return () => { active = false; };
   }, [sale.CAE?.qrData]);
 
   const hasCAE = Boolean(sale.CAE?.CAE?.trim());

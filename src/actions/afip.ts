@@ -4,6 +4,23 @@ import axios from "axios";
 import { requireFeature } from "@/lib/auth-gates";
 import BillState from "@/models/BillState";
 import { getArcaCredentialsForBilling } from "./arca";
+import { getVoucherNumberAction } from "./voucher";
+import {
+  formatAfipPointSaleErrorForUser,
+  getAfipVoucherTypeCode,
+  parseAfipPointSaleError,
+  validatePointSaleRequest,
+  type AfipPointSaleError,
+} from "@/services/afip/point-sale-validation";
+import {
+  parseAfipVoucherResponse,
+  type AfipResponseDiagnostic,
+  type AfipVoucherSuccessData,
+} from "@/services/afip/voucher-response";
+
+export type CreateAfipVoucherResult =
+  | { success: true; data: AfipVoucherSuccessData }
+  | { error: string | AfipPointSaleError; diagnostic?: AfipResponseDiagnostic };
 
 /**
  * Returns the effective unit price for a bill line.
@@ -22,7 +39,7 @@ const getEffectiveUnitPrice = (p: { price: number; salePrice: number }): number 
  * Server Action to create an AFIP voucher by calling the Firebase Cloud Function.
  * This action validates the user session and uses a shared secret for authentication.
  */
-export const createAfipVoucherAction = async (billState: BillState) => {
+export const createAfipVoucherAction = async (billState: BillState): Promise<CreateAfipVoucherResult> => {
   const featureResult = await requireFeature("hasAfipBilling");
   if (!featureResult.success) {
     return { error: featureResult.error };
@@ -35,6 +52,27 @@ export const createAfipVoucherAction = async (billState: BillState) => {
   }
 
   const { cuit, cert, key } = credentials.success;
+  const ptoVenta = Number(billState.ptoVenta);
+  let tipoFactura: 1 | 6 | 11;
+  try {
+    tipoFactura = getAfipVoucherTypeCode(billState.billType ?? "");
+    validatePointSaleRequest({ ptoVenta, tipoFactura }, credentials.success.ptoVentas ?? [ptoVenta]);
+  } catch (error: unknown) {
+    return { error: error instanceof Error ? error.message : "Punto de venta inválido" };
+  }
+
+  const preflight = await getVoucherNumberAction(ptoVenta, tipoFactura);
+  // getVoucherNumberAction's success is only the last-number lookup. Do not
+  // confuse that numeric result with createVoucher's CAE response.
+  const preflightFailed = "error" in preflight && Boolean(preflight.error);
+  const hasPreflightNumber = typeof preflight.success === "number";
+  if (preflightFailed || !hasPreflightNumber) {
+    const pointError = preflight.errorDetails ?? parseAfipPointSaleError(preflight.error ?? "No se obtuvo numeración", {
+      operation: "getLastVoucher", ptoVenta, tipoFactura,
+      environment: process.env.AFIP_ENVIRONMENT === "produccion" ? "produccion" : process.env.AFIP_ENVIRONMENT === "homologacion" ? "homologacion" : "desconocido",
+    });
+    return { error: pointError.code === "11002" ? pointError : formatAfipPointSaleErrorForUser(pointError) };
+  }
   const functionUrl = process.env.NEXT_PUBLIC_AFIP_FUNCTION_URL || "http://localhost:5001/stockia-e90c6/us-central1/createAFIPVoucher";
   const internalKey = process.env.INTERNAL_AFIP_API_KEY;
 
@@ -51,9 +89,9 @@ export const createAfipVoucherAction = async (billState: BillState) => {
       return { error: "Error de configuración de acceso" };
     }
 
-    console.log("Function URL:", functionUrl);
     // 2. Call the Cloud Function from the server
-    const { ptoVenta, ...billStateWithoutPtoVenta } = billState;
+     const billStateWithoutPtoVenta = { ...billState };
+     delete billStateWithoutPtoVenta.ptoVenta;
 
     // Strip product data to only essential fields for the external API
     const discount = Number(billStateWithoutPtoVenta.discount) || 0;
@@ -70,8 +108,25 @@ export const createAfipVoucherAction = async (billState: BillState) => {
       ? effectiveTotalWithDiscount
       : rawTotal;
 
+    // Explicit allow-list: never forward the complete client BillState (in
+    // particular CAE/client metadata) to the external function.
     const minimalBillState = {
-      ...billStateWithoutPtoVenta,
+      id: billStateWithoutPtoVenta.id,
+      seller: billStateWithoutPtoVenta.seller,
+      typeDocument: billStateWithoutPtoVenta.typeDocument,
+      IVACondition: billStateWithoutPtoVenta.IVACondition,
+      twoMethods: billStateWithoutPtoVenta.twoMethods,
+      secondPaidMethod: billStateWithoutPtoVenta.secondPaidMethod,
+      totalSecondMethod: billStateWithoutPtoVenta.totalSecondMethod,
+      entrega: billStateWithoutPtoVenta.entrega,
+      pago: billStateWithoutPtoVenta.pago,
+      billType: billStateWithoutPtoVenta.billType,
+      nroAsociado: billStateWithoutPtoVenta.nroAsociado,
+      paidMethod: billStateWithoutPtoVenta.paidMethod,
+      clientId: billStateWithoutPtoVenta.clientId,
+      client: billStateWithoutPtoVenta.client,
+      clientIvaCondition: billStateWithoutPtoVenta.clientIvaCondition,
+      clientDocumentNumber: billStateWithoutPtoVenta.clientDocumentNumber,
       products: billStateWithoutPtoVenta.products.map((p) => ({
         id: p.id,
         code: p.code,
@@ -107,6 +162,9 @@ export const createAfipVoucherAction = async (billState: BillState) => {
 
     const response = await axios.post(
       functionUrl,
+      // Server-to-server exception required by the canonical Cloud Function
+      // contract: credentials are sent only in this request, never returned,
+      // logged, or included in diagnostics/client results.
       {
         action: "createVoucher",
         encryptedCert: cert,
@@ -114,7 +172,8 @@ export const createAfipVoucherAction = async (billState: BillState) => {
         arca: {
           accessToken,
           cuit,
-          puntoVenta: Number(ptoVenta) || undefined,
+           puntoVenta: ptoVenta,
+           tipoFactura,
         },
         billState: minimalBillState,
       },
@@ -126,18 +185,44 @@ export const createAfipVoucherAction = async (billState: BillState) => {
       }
     );
 
-    return { success: true, data: response.data };
-  } catch (error: unknown) {
-    let errorMsg = "Error al comunicarse con el servicio de AFIP";
+      const parsed = parseAfipVoucherResponse(response.data, {
+        status: response.status,
+        ptoVenta,
+        tipoFactura,
+        environment: process.env.AFIP_ENVIRONMENT === "produccion" ? "produccion" : process.env.AFIP_ENVIRONMENT === "homologacion" ? "homologacion" : "desconocido",
+      });
+      if (parsed.kind === "success") return { success: true, data: parsed.data };
+      console.warn("[createVoucher] AFIP response shape", parsed.responseShape);
+      if (parsed.kind === "afip-error") return { error: parsed.error, diagnostic: { ...parsed.responseShape, reason: "afip-error" } };
+      return { error: parsed.message, diagnostic: { ...parsed.responseShape, reason: "missing-cae" } };
+   } catch (error: unknown) {
+     let errorMsg: string | AfipPointSaleError = "Error al comunicarse con el servicio de AFIP";
     
-    if (axios.isAxiosError(error)) {
-      console.error("Cloud Function Error:", error.response?.data || error.message);
-      errorMsg = error.response?.data?.error || error.message || errorMsg;
-    } else if (error instanceof Error) {
-      console.error("Error:", error.message);
-      errorMsg = error.message;
+     if (axios.isAxiosError(error)) {
+        const parsedResponse = parseAfipVoucherResponse(error.response?.data ?? error.message, {
+          status: error.response?.status,
+          ptoVenta,
+          tipoFactura,
+          environment: "desconocido",
+        });
+        if (parsedResponse.kind === "afip-error") {
+          console.warn("[createVoucher] AFIP error shape", parsedResponse.responseShape);
+          return { error: parsedResponse.error, diagnostic: { ...parsedResponse.responseShape, reason: "afip-error" } };
+        }
+        const parsed = parseAfipPointSaleError(error.response?.data ?? error.message, {
+         operation: "createVoucher", ptoVenta, tipoFactura, environment: "desconocido",
+       });
+       errorMsg = parsed.code === "11002" ? parsed : parsed.message;
+      } else if (error instanceof Error) {
+        const parsed = parseAfipPointSaleError(error, {
+          operation: "createVoucher", ptoVenta, tipoFactura, environment: "desconocido",
+        });
+        console.error("[createVoucher] AFIP client failure", {
+          code: parsed.code, operation: parsed.operation, ptoVenta: parsed.ptoVenta, tipoFactura: parsed.tipoFactura,
+        });
+        errorMsg = parsed.code === "11002" ? parsed : parsed.message;
     }
     
-    return { error: errorMsg };
+     return { error: errorMsg };
   }
 };

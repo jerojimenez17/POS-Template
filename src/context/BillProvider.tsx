@@ -5,6 +5,9 @@ import { BillReducer } from "./BillReducer";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import { PrintMode } from "./BillContext";
+import type { BillAction } from "./billActions";
+import { normalizeBillType } from "@/utils/billing";
+import BillTypes from "@/models/billType";
 
 const INITIAL_STATE: BillState = {
   twoMethods: false,
@@ -19,7 +22,7 @@ const INITIAL_STATE: BillState = {
   IVACondition: "Consumidor Final",
   paidMethod: "Efectivo",
   nroAsociado: 0,
-  billType: "Remito",
+  billType: BillTypes.B,
   pago: false,
   entrega: 0,
   CAE: { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" },
@@ -33,11 +36,21 @@ interface props {
 }
 
 const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: props) => {
+  // /newBill supplies the business-derived type explicitly. Standalone and
+  // unknown paths use the new-sale Factura B fallback.
+  const effectiveInitialBillType = normalizeBillType(initialBillType, BillTypes.B);
   const getInitialState = (): BillState => ({
     ...INITIAL_STATE,
-    billType: initialBillType ?? INITIAL_STATE.billType,
+    billType: effectiveInitialBillType,
   });
-  const [BillState, dispatch] = useReducer(BillReducer, undefined, getInitialState);
+  const [BillState, reducerDispatch] = useReducer(BillReducer, undefined, getInitialState);
+  const dispatch = (action: BillAction) => {
+    if (action.type === "removeAll" && action.defaultBillType === undefined) {
+      reducerDispatch({ ...action, defaultBillType: effectiveInitialBillType });
+      return;
+    }
+    reducerDispatch(action);
+  };
   const [printMode, setPrintMode] = React.useState<PrintMode>("thermal");
   const [qzTrayActive, setQzTrayActive] = React.useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -47,6 +60,7 @@ const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: prop
     return qzTrayEnabled;
   });
   const onOrderResetRef = useRef<(() => void) | null>(null);
+  const billTypeRef = useRef(effectiveInitialBillType);
   const [focusPriceProductId, setFocusPriceProductId] = React.useState<string | null>(null);
 
   const handleSetQzTrayActive = (active: boolean) => {
@@ -72,6 +86,8 @@ const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: prop
     addItem: addItem,
     removeItem: removeItem,
     onOrderResetRef: onOrderResetRef,
+    initialBillType: effectiveInitialBillType,
+    billTypeRef,
     printMode: printMode,
     setPrintMode: setPrintMode,
     qzTrayActive: qzTrayActive,

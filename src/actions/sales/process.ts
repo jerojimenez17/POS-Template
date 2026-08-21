@@ -42,6 +42,7 @@ interface ProcessSaleInput {
     qrData: string;
     ptoVenta?: number | string;
   };
+  billType?: string;
 }
 
 export const processSaleAction = async (billState: ProcessSaleInput) => {

@@ -4,6 +4,7 @@ import { Session } from "next-auth";
 import { Button } from "../ui/button";
 import { useContext, useEffect, useRef, useState } from "react";
 import { BillContext } from "@/context/BillContext";
+import BillTypes from "@/models/billType";
 import Modal from "../Modal";
 import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
@@ -34,8 +35,9 @@ import {
 } from "@/actions/shortcuts";
 import type { ShortcutMap, ShortcutKey } from "@/models/ShortcutConfig";
 import Product from "@/models/Product";
-import { getDefaultBillType } from "@/utils/billing";
-import { getBusinessBillingInfoAction } from "@/actions/business";
+import { createBillCheckoutSnapshot } from "@/utils/billing";
+import { formatAfipPointSaleErrorForUser, sanitizeAfipText } from "@/services/afip/point-sale-validation";
+import { isValidCae } from "@/services/afip/voucher-response";
 
 interface props {
   session: Session | null;
@@ -56,28 +58,23 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [openEditModal, setOpenEditModal] = useState(false);
   const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
-  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem } =
+  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem, initialBillType, billTypeRef } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
   const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
   const businessId = (session?.user as { businessId?: string })?.businessId;
-  const [defaultBillType, setDefaultBillType] = useState<string>("Factura C");
+  const defaultBillType = initialBillType ?? BillTypes.B;
   const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
   const shortcutMapRef = useRef(shortcutMap);
   // Sync ref with state after render
   useEffect(() => {
     shortcutMapRef.current = shortcutMap;
   }, [shortcutMap]);
-
-  // Fetch business IVA condition to determine default bill type
-  useEffect(() => {
-    getBusinessBillingInfoAction().then((info) => {
-      setDefaultBillType(getDefaultBillType(info?.condicionIva ?? null));
-    });
-  }, []);
 
   const checkSession = () => {
     if (!hasActiveSession) {
@@ -109,8 +106,6 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
 
   // Verificar estado de conexión al montar el componente
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
@@ -217,47 +212,46 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     return true;
   };
 
-  const handleCreateVoucher = async (): Promise<CAE | null> => {
+  const handleCreateVoucher = async (checkout: typeBillState): Promise<CAE | null> => {
     if (!checkConnection()) return null;
     try {
       console.log("Calling createAfipVoucherAction");
-      const resp = await createAfipVoucherAction(BillState);
+       const resp = await createAfipVoucherAction(checkout);
 
-      if (resp.error) {
-        toast.error(resp.error);
+       if ("error" in resp) {
+         toast.error(typeof resp.error === "string" ? resp.error : formatAfipPointSaleErrorForUser(resp.error));
         setBlockButton(false);
         return null;
       }
 
-      const afipData = resp.data.afip || resp.data;
-      if (afipData?.CAE) {
-        setCreateVoucherError(false);
-        const newCAE: CAE = {
-          CAE: afipData.CAE,
-          vencimiento: afipData.CAEFchVto,
-          nroComprobante: resp.data.nroCbte || afipData.nroCbte || 0,
-          qrData: resp.data.qrData || afipData.qrData || "",
-          ptoVenta: BillState.ptoVenta,
-        };
+       if (resp.success && isValidCae(resp.data.cae)) {
+         setCreateVoucherError(false);
+         const newCAE: CAE = {
+           CAE: resp.data.cae,
+           vencimiento: resp.data.vencimiento,
+           nroComprobante: resp.data.nroComprobante,
+           qrData: resp.data.qrData,
+           ptoVenta: resp.data.ptoVenta ?? checkout.ptoVenta,
+         };
         dispatch({ type: "CAE", payload: newCAE });
         setLocalCAE(newCAE);
         toast.success("Factura generada correctamente");
         setBlockButton(false);
         return newCAE;
-      } else {
-        const errorMsg = typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data);
-        toast.error(errorMsg);
-        setResponse(errorMsg);
+       } else {
+         const errorMsg = "La Cloud Function respondió sin un CAE válido";
+         toast.error(errorMsg);
+         setResponse(errorMsg);
         setBlockButton(false);
         return null;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      setResponse(err.message);
-      toast.error(err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? sanitizeAfipText(err.message) : "Error inesperado al generar la factura";
+       setResponse(message);
+       toast.error(message);
       setCreateVoucherError(true);
       setBlockButton(false);
-      console.error(err);
+       console.error("[createVoucher] client failure", { errorType: typeof err, message });
       return null;
     }
   };
@@ -334,15 +328,20 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         return;
       }
 
+      const checkout = createBillCheckoutSnapshot(BillState, billTypeRef?.current);
       let caeData: CAE | null = null;
       if (afip && !isUpdate) {
-        caeData = await handleCreateVoucher();
+        caeData = await handleCreateVoucher(checkout);
+        if (!caeData?.CAE?.trim()) {
+          setBlockButton(false);
+          return undefined;
+        }
       }
 
       if (isUpdate && orderId) {
         const updateResult = await updateOrderAction(orderId, {
-          ...BillState,
-          products: toMinimalProducts(BillState.products),
+          ...checkout,
+          products: toMinimalProducts(checkout.products),
           totalWithDiscount: totalAmount,
         });
 
@@ -354,7 +353,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         router.push(`/sales/${orderId}`);
       } else {
         const saveSuccess = await handleSaveSale({
-          ...BillState,
+          ...checkout,
           CAE: caeData || localCAE,
           totalWithDiscount: totalAmount,
         });
