@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { printThermalReceipt, exportToPDF, buildPDFHTML, PDF_STYLES, type ThermalReceiptData } from "@/lib/print";
 import { getBusinessBillingInfoAction } from "@/actions/business";
+import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 import { useState, useEffect } from "react";
 import type { Session } from "next-auth";
 
@@ -40,9 +41,13 @@ interface Props {
 }
 
 export default function PrintOrderButton({ order, session }: Props) {
+  const [qzTrayEnabled, setQzTrayEnabled] = useState(false);
   const [billingInfo, setBillingInfo] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
+    getBusinessPrintSettingsAction().then((settings) => {
+      if ("qzTray" in settings) setQzTrayEnabled(settings.qzTray);
+    });
     getBusinessBillingInfoAction().then(setBillingInfo);
   }, []);
 
@@ -78,7 +83,7 @@ export default function PrintOrderButton({ order, session }: Props) {
   };
 
   const handlePrintThermal = async () => {
-    await printThermalReceipt(getPrintData());
+    await printThermalReceipt(getPrintData(), qzTrayEnabled);
   };
 
   const handlePrintPDF = async () => {

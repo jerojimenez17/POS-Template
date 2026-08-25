@@ -26,6 +26,7 @@ import { createAfipVoucherAction } from "@/actions/afip";
 import { updateOrderCaeAction } from "@/actions/sales/update";
 import { toast } from "sonner";
 import { parsePlanError } from "@/lib/plan-error";
+import { formatAfipPointSaleErrorForUser } from "@/services/afip/point-sale-validation";
 import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
 import { cn } from "@/lib/utils";
 
@@ -94,21 +95,29 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
 
       const result = await createAfipVoucherAction(payload);
       if ("error" in result && result.error) {
-        const parsed = parsePlanError(result.error);
+        const errorText =
+          typeof result.error === "string"
+            ? result.error
+            : formatAfipPointSaleErrorForUser(result.error);
+        const parsed = parsePlanError(errorText);
         if (parsed.isPlanError) {
           setPlanError(parsed);
         } else {
-          toast.error(result.error);
+          toast.error(errorText);
         }
-      } else if ("success" in result && result.success && result.data?.afip) {
-        // Persist CAE + form changes to the order
-        const afipData = result.data.afip;
+      } else if ("success" in result && result.success && result.data) {
+        // Persist CAE + form changes to the order.
+        // createAfipVoucherAction returns the FLAT AfipVoucherSuccessData shape
+        // ({ cae, vencimiento, nroComprobante, qrData }) — map it onto the
+        // nested UpdateCaeInput.CAE contract expected by updateOrderCaeAction.
+        // (Mirrors the sibling mapping in BillingModal.tsx.)
+        const d = result.data;
         const caeResult = await updateOrderCaeAction(sale.id, {
           CAE: {
-            CAE: afipData.CAE,
-            vencimiento: afipData.CAEFchVto,
-            nroComprobante: result.data.nroCbte || afipData.nroCbte,
-            qrData: result.data.qrData || afipData.qrData,
+            CAE: d.cae,
+            vencimiento: d.vencimiento,
+            nroComprobante: d.nroComprobante,
+            qrData: d.qrData,
           },
           IVACondition: ivaCondition,
           documentNumber,

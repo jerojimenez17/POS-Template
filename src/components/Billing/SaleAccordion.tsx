@@ -20,13 +20,15 @@ import { formatLocalDate } from "@/utils/date";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
 
 interface props {
   sale: BillState;
   session: Session | null;
+  qzTrayEnabled?: boolean;
 }
 
-const SaleAccordion = ({ sale, session }: props) => {
+const SaleAccordion = ({ sale, session, qzTrayEnabled }: props) => {
   const router = useRouter();
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteSale, setDeleteSale] = useState<BillState>();
@@ -67,9 +69,9 @@ const SaleAccordion = ({ sale, session }: props) => {
 
         {/* Invoice / CAE */}
         <div onClick={(e) => e.stopPropagation()}>
-          {sale.CAE?.CAE && sale.CAE.CAE !== "" ? (
+          {sale.CAE?.CAE?.trim() ? (
             <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">
-              {sale.CAE.CAE}
+              {formatInvoiceNumberFull(sale.CAE.nroComprobante, sale.ptoVenta ?? sale.CAE.ptoVenta)}
             </span>
           ) : (
             <button
@@ -77,7 +79,7 @@ const SaleAccordion = ({ sale, session }: props) => {
                 e.stopPropagation();
                 setOpenBilling(true);
               }}
-              className="px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors text-xs font-semibold whitespace-nowrap"
+              className="px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-800 dark:hover:text-blue-100 transition-colors text-xs font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               Facturar
             </button>
@@ -110,7 +112,7 @@ const SaleAccordion = ({ sale, session }: props) => {
           className="flex items-center justify-center gap-0.5"
           onClick={(e) => e.stopPropagation()}
         >
-          <PrintOptionsPopover sale={sale} session={session} />
+          <PrintOptionsPopover sale={sale} session={session} qzTrayEnabled={qzTrayEnabled} />
 
           <button
             disabled={!isAdmin}

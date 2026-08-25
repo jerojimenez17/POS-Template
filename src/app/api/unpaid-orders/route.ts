@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { clientId, items, total, clientIvaCondition, clientDocumentNumber, notes } = body;
+    const { clientId, items, total, discount, seller, clientIvaCondition, clientDocumentNumber, notes } = body;
 
     if (!clientId || !items || !total) {
       return NextResponse.json(
@@ -24,6 +24,8 @@ export async function POST(request: Request) {
       businessId: session.user.businessId,
       items,
       total,
+      discount,
+      seller,
       clientIvaCondition,
       clientDocumentNumber,
       notes,

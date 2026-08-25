@@ -16,9 +16,10 @@ interface SupplierOption {
 interface ProductSearchBarProps {
   onProductAdd: (product: Product) => void;
   hasSupplierFilter: boolean;
+  allowNegativeStock?: boolean;
 }
 
-const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarProps) => {
+const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock }: ProductSearchBarProps) => {
   const [searchCode, setSearchCode] = useState("");
   const searchCodeRef = useRef("");
   const [suggestions, setSuggestions] = useState<Product[]>([]);
@@ -157,7 +158,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
       setIsOpeningModalOpen(true);
       return;
     }
-    if (product.amount <= 0) {
+    if (!allowNegativeStock && product.amount <= 0) {
       setErrorMessage("Producto sin Stock");
       return;
     }
@@ -268,7 +269,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                     setIsOpeningModalOpen(true);
                     return;
                   }
-                  if (product.amount <= 0) {
+                  if (!allowNegativeStock && product.amount <= 0) {
                     setErrorMessage("Producto sin Stock");
                     return;
                   }
@@ -323,7 +324,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter }: ProductSearchBarP
                       setIsOpeningModalOpen(true);
                       return;
                     }
-                    if (product.amount <= 0) {
+                    if (!allowNegativeStock && product.amount <= 0) {
                       setErrorMessage("Producto sin Stock");
                       return;
                     }

@@ -150,8 +150,10 @@ describe("BillButtonsDefault - AFIP abort on feature disabled", () => {
 
   it("should NOT call processSaleAction when createAfipVoucherAction fails (gate blocked modal)", async () => {
     const { createAfipVoucherAction } = await import("@/actions/afip");
+    // Merged handler classifies the string via parsePlanError (plan-error.ts);
+    // only "no está habilitada/disponible…" phrasing opens the blocked modal.
     vi.mocked(createAfipVoucherAction).mockResolvedValue({
-      error: "Función no habilitada",
+      error: "La facturación electrónica no está habilitada para tu plan",
     });
 
     const { processSaleAction } = await import("@/actions/sales");
@@ -186,13 +188,17 @@ describe("BillButtonsDefault - AFIP abort on feature disabled", () => {
 
   it("should call processSaleAction when createAfipVoucherAction succeeds (gate passes)", async () => {
     const { createAfipVoucherAction } = await import("@/actions/afip");
+    // Merged FLAT AfipVoucherSuccessData (report-E §1.1): cae/vencimiento/
+    // nroComprobante/qrData at data root; CAE must be the 14-digit numeric code.
     vi.mocked(createAfipVoucherAction).mockResolvedValue({
       success: true,
       data: {
-        CAE: "1234567890123",
-        CAEFchVto: "2026-12-31",
-        nroCbte: 1,
+        cae: "12345678901234",
+        vencimiento: "2026-12-31",
+        nroComprobante: 1,
         qrData: "https://example.com/qr",
+        ptoVenta: 2,
+        sourcePath: "data",
       },
     });
 

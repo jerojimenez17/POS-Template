@@ -27,6 +27,7 @@ interface FilterState {
   brandId: string;
   unit: string;
   supplierId: string;
+  recentlyModified: boolean;
 }
 
 const BulkUpdatePage = () => {
@@ -43,6 +44,7 @@ const BulkUpdatePage = () => {
     brandId: "",
     unit: "",
     supplierId: "",
+    recentlyModified: false,
   });
   const [loading, setLoading] = useState(false);
   const [percentage, setPercentage] = useState<string>("");
@@ -77,7 +79,23 @@ const BulkUpdatePage = () => {
         unit: filters.unit || undefined,
         supplierId: filters.supplierId || undefined,
       });
-      const products = result as ProductExtended[];
+      // "Últimos modificados" (upstream feature adapted to our architecture):
+      // our refactored getProductsFiltered returns the full matching set and
+      // does not accept recentlyModified/page/pageSize, so Jero's fixed 30-day
+      // window (see ai/features/bulk-update-recently-modified-filter) is
+      // applied client-side, along with his v2 most-recent-first ordering.
+      const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const products = (result as ProductExtended[])
+        .filter(
+          (p) =>
+            !filters.recentlyModified ||
+            new Date(p.last_update).getTime() >= recentCutoff
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.last_update).getTime() -
+            new Date(a.last_update).getTime()
+        );
       setFilteredProducts(products);
       setTotal(products.length);
       setTotalPages(Math.ceil(products.length / pageSize));
@@ -294,6 +312,19 @@ const BulkUpdatePage = () => {
                       <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
                     ))}
                   </select>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    id="recently-modified-filter"
+                    type="checkbox"
+                    checked={filters.recentlyModified}
+                    onChange={(e) => setFilters({ ...filters, recentlyModified: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="recently-modified-filter" className="text-sm font-medium cursor-pointer select-none">
+                    Últimos modificados (último mes)
+                  </label>
                 </div>
 
                 <Button onClick={() => { setHasLoaded(true); setPage(1); setSelectedIds(new Set()); isFirstLoadAfterFilter.current = true; setFilterVersion(v => v + 1); setIsFiltersOpen(false); }} variant="default" className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm">

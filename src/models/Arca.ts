@@ -5,8 +5,10 @@ export interface ArcaData {
   razonSocial: string | null;
   inicioActividades: Date | null;
   condicionIva: IvaCondition;
-  cert: string | null;
-  key: string | null;
+  /** Presence only; certificate material never crosses the server boundary. */
+  cert: "CONFIGURADO" | null;
+  /** Presence only; private key material never crosses the server boundary. */
+  key: "CONFIGURADO" | null;
   ptoVenta: number[];
 }
 

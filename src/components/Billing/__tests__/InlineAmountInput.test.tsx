@@ -190,7 +190,9 @@ describe("InlineAmountInput Component", () => {
       expect(spanAfter.textContent).toBe("5");
     });
 
-    it('entering "0" and pressing Enter reverts to original, no update called', () => {
+    it('entering "0" and pressing Enter clamps to the minimum (1) and commits', () => {
+      // Merged behavior (upstream ccd9e4f, kept per merge policy): parseValue clamps
+      // with Math.max(1, parsed) instead of our old revert-on-invalid contract.
       const updateAmount = vi.fn();
       const { container } = render(
         <InlineAmountInput amount={5} productId="prod-1" updateAmount={updateAmount} />,
@@ -203,12 +205,12 @@ describe("InlineAmountInput Component", () => {
       fireEvent.change(input, { target: { value: "0" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
-      expect(updateAmount).not.toHaveBeenCalled();
+      expect(updateAmount).toHaveBeenCalledWith("prod-1", 1);
       const spanAfter = container.querySelector("span")!;
-      expect(spanAfter.textContent).toBe("5");
+      expect(spanAfter.textContent).toBe("5"); // parent keeps its own prop in isolation
     });
 
-    it('entering "-1" and blurring reverts to original, no update called', () => {
+    it('entering "-1" and blurring clamps to the minimum (1) and commits', () => {
       const updateAmount = vi.fn();
       const { container } = render(
         <div>
@@ -223,7 +225,7 @@ describe("InlineAmountInput Component", () => {
       fireEvent.change(input, { target: { value: "-1" } });
       fireEvent.blur(input);
 
-      expect(updateAmount).not.toHaveBeenCalled();
+      expect(updateAmount).toHaveBeenCalledWith("prod-1", 1);
       const spanAfter = container.querySelector("span")!;
       expect(spanAfter.textContent).toBe("5");
     });

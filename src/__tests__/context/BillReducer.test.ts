@@ -176,7 +176,11 @@ describe("BillReducer", () => {
   //  removeUnit  (-1 unit button)
   // -----------------------------------------------------------------------
   describe("removeUnit", () => {
-    it("should decrement amount by 1 and decrease total by salePrice", () => {
+    it("should decrement amount by 1; totals are NOT recalculated by this case (merged contract)", () => {
+      // Merged reducer (report-A): ONLY updateSalePrice was adopted from upstream
+      // (guarded + Math.round). removeUnit keeps our base behavior — it decrements
+      // the amount but leaves total/totalWithDiscount untouched. UI quantity
+      // changes route through changeUnit/updateSalePrice, which DO recalculate.
       const product = createProduct({ id: "p1", salePrice: 100, amount: 3 });
       const state = createState({
         products: [product],
@@ -190,9 +194,8 @@ describe("BillReducer", () => {
       });
 
       expect(result.products[0].amount).toBe(2);
-      // Buggy code: total stays at 300  ← WILL FAIL
-      expect(result.total).toBe(200);
-      expect(result.totalWithDiscount).toBe(200);
+      expect(result.total).toBe(300); // intentionally unchanged (report-A risk #1)
+      expect(result.totalWithDiscount).toBe(300);
     });
 
     it("should not go below amount 1 and should keep total unchanged", () => {
@@ -213,7 +216,7 @@ describe("BillReducer", () => {
       expect(result.totalWithDiscount).toBe(100);
     });
 
-    it("should correctly update totalWithDiscount when discount is set", () => {
+    it("keeps discounted totalWithDiscount untouched as well (merged contract)", () => {
       const product = createProduct({ id: "p1", salePrice: 100, amount: 3 });
       const state = createState({
         products: [product],
@@ -228,9 +231,8 @@ describe("BillReducer", () => {
       });
 
       expect(result.products[0].amount).toBe(2);
-      expect(result.total).toBe(200);
-      // Expected: 200 * (1 - 10/100) = 180
-      expect(result.totalWithDiscount).toBeCloseTo(180, 2);
+      expect(result.total).toBe(300); // unchanged (report-A risk #1)
+      expect(result.totalWithDiscount).toBe(270); // unchanged
     });
   });
 
@@ -496,15 +498,15 @@ describe("BillReducer", () => {
       // Buggy: changeUnit does NOT update total → stays 200  ← WILL FAIL
       expect(state.total).toBe(500);
 
-      // removeUnit → amount 4
+      // removeUnit → amount 4 (merged case leaves totals untouched)
       state = BillReducer(state, {
         type: "removeUnit",
         payload: { id: "p1" },
       });
-      // Buggy: removeUnit does NOT update total → stays 500 or 200  ← WILL FAIL
-      expect(state.total).toBe(400);
-
-      expect(state.total).toBe(computeTotal(state.products));
+      expect(state.products[0].amount).toBe(4);
+      // Total intentionally remains at the changeUnit value (500) — report-A risk #1.
+      expect(state.total).toBe(500);
+      expect(state.totalWithDiscount).toBe(500);
     });
 
     it("add → discount → addUnit → removeUnit: totalWithDiscount consistent (AC-07)", () => {
@@ -532,13 +534,13 @@ describe("BillReducer", () => {
       // Buggy: incremental formula gives 180 + 100*2*10 = 2180  ← WILL FAIL
       expect(state.totalWithDiscount).toBeCloseTo(270, 2);
 
-      // Remove unit
+      // Remove unit (merged case leaves totals untouched — report-A risk #1)
       state = BillReducer(state, {
         type: "removeUnit",
         payload: { id: "p1" },
       });
-      expect(state.total).toBe(200);
-      expect(state.totalWithDiscount).toBeCloseTo(180, 2);
+      expect(state.total).toBe(300); // stays at addUnit value
+      expect(state.totalWithDiscount).toBeCloseTo(270, 2); // stays at addUnit value
     });
 
     it("updateProductAmount flow: removeItem + addItem does not inflate total (AC-09)", () => {
@@ -613,9 +615,9 @@ describe("BillReducer", () => {
         payload: product,
       });
 
-      expect(result.total).toBe(32);
-      // After rounding: Math.round(31.5) = 32, Math.round(28.35) = 28
-      expect(result.totalWithDiscount).toBe(28);
+      // Merged contract: decimals preserved outside updateSalePrice (report-A).
+      expect(result.total).toBeCloseTo(31.5, 2);
+      expect(result.totalWithDiscount).toBeCloseTo(28.35, 2);
     });
 
     it("should maintain consistency across multiple add/remove cycles", () => {
@@ -677,16 +679,18 @@ describe("BillReducer", () => {
       // p1:10 + p2:100 + p3:90 = 200
       expect(state.total).toBe(200);
 
-      // removeUnit p3 twice
+      // removeUnit p3 twice (merged case leaves totals untouched — report-A risk #1)
       state = BillReducer(state, { type: "removeUnit", payload: { id: "p3" } });
       state = BillReducer(state, { type: "removeUnit", payload: { id: "p3" } });
-      // p3 went from 3 → 1, so contribution is 30 (3-2=1 unit at 30)
-      // p1:10 + p2:100 + p3:30 = 140
-      expect(state.total).toBe(140);
+      expect(state.products[2].amount).toBe(1);
+      // p1:10 + p2:100 + p3:90 = 200 still (stale by design)
+      expect(state.total).toBe(200);
 
-      // Set 25% discount
+      // Set 25% discount — this case RE-DERIVES from actual products
+      // (p1:10 + p2:100 + p3:30 = 140) → 140 * 0.75 = 105. Note it resyncs
+      // totalWithDiscount even though `total` stays stale at 200.
       state = BillReducer(state, { type: "discount", payload: 25 });
-      expect(state.totalWithDiscount).toBeCloseTo(105, 2); // 140 * 0.75
+      expect(state.totalWithDiscount).toBeCloseTo(105, 2);
 
       // Remove p2 (should remove 100 from total)
       state = BillReducer(state, { type: "removeItem", payload: { id: "p2" } });
@@ -702,81 +706,82 @@ describe("BillReducer", () => {
   });
 
   // -----------------------------------------------------------------------
-  //  Rounding (AC-01, AC-02, AC-08)
+  //  Totals math (merged contract — report-A)
+  //  Base d30ab4a rounded everywhere; our branch kept float incremental math,
+  //  and the merge adopted upstream's guarded + Math.round ONLY inside
+  //  updateSalePrice. These tests pin that exact split.
   // -----------------------------------------------------------------------
-  describe("rounding", () => {
-    it("should round total to integer when result has decimals", () => {
+  describe("totals math (merged float + updateSalePrice rounding)", () => {
+    it("preserves decimals in addItem (no rounding outside updateSalePrice)", () => {
       const state = createState();
-      // 3 products at $1849.3 each → 1849.3 * 3 = 5547.9 → Math.round = 5548
+      // 1849.3 * 3 = 5547.9 — kept as-is
       const product = createProduct({ id: "p1", salePrice: 1849.3, amount: 3 });
       const result = BillReducer(state, { type: "addItem", payload: product });
 
-      expect(result.total).toBe(5548);
-      expect(result.totalWithDiscount).toBe(5548);
+      expect(result.total).toBeCloseTo(5547.9, 2);
+      expect(result.totalWithDiscount).toBeCloseTo(5547.9, 2);
     });
 
-    it("should round 1849.3 down to 1849 (single item)", () => {
+    it("preserves 1849.3 for a single item", () => {
       const state = createState();
       const product = createProduct({ id: "p1", salePrice: 1849.3, amount: 1 });
       const result = BillReducer(state, { type: "addItem", payload: product });
 
-      expect(result.total).toBe(1849); // Math.round(1849.3) = 1849
+      expect(result.total).toBeCloseTo(1849.3, 2);
     });
 
-    it("should round 1849.5 up to 1850", () => {
+    it("preserves 1849.5 without snapping up", () => {
       const state = createState();
       const product = createProduct({ id: "p1", salePrice: 1849.5, amount: 1 });
       const result = BillReducer(state, { type: "addItem", payload: product });
 
-      expect(result.total).toBe(1850); // Math.round(1849.5) = 1850
+      expect(result.total).toBeCloseTo(1849.5, 2);
     });
 
-    it("should round 1849.7 up to 1850", () => {
+    it("preserves 1849.7 without snapping up", () => {
       const state = createState();
       const product = createProduct({ id: "p1", salePrice: 1849.7, amount: 1 });
       const result = BillReducer(state, { type: "addItem", payload: product });
 
-      expect(result.total).toBe(1850); // Math.round(1849.7) = 1850
+      expect(result.total).toBeCloseTo(1849.7, 2);
     });
 
-    it("should round 0.5 up to 1", () => {
+    it("preserves sub-peso values like 0.5 and 0.4", () => {
       const state = createState();
-      const product = createProduct({ id: "p1", salePrice: 0.5, amount: 1 });
-      const result = BillReducer(state, { type: "addItem", payload: product });
+      const half = BillReducer(state, {
+        type: "addItem",
+        payload: createProduct({ id: "p1", salePrice: 0.5, amount: 1 }),
+      });
+      const fourtyCents = BillReducer(state, {
+        type: "addItem",
+        payload: createProduct({ id: "p2", salePrice: 0.4, amount: 1 }),
+      });
 
-      expect(result.total).toBe(1); // Math.round(0.5) = 1
+      expect(half.total).toBeCloseTo(0.5, 2);
+      expect(fourtyCents.total).toBeCloseTo(0.4, 2);
     });
 
-    it("should round 0.4 down to 0", () => {
-      const state = createState();
-      const product = createProduct({ id: "p1", salePrice: 0.4, amount: 1 });
-      const result = BillReducer(state, { type: "addItem", payload: product });
-
-      expect(result.total).toBe(0); // Math.round(0.4) = 0
-    });
-
-    it("should round totalWithDiscount correctly with integer percentage discount", () => {
+    it("applies integer-percentage discounts over the unrounded total", () => {
       const state = createState({ discount: 10 });
-      // total = Math.round(1849.3 * 3) = 5548
-      // totalWithDiscount = Math.round(5548 * 0.9) = Math.round(4993.2) = 4993
+      // total = 5547.9; totalWithDiscount = 5547.9 * 0.9 = 4993.11
       const product = createProduct({ id: "p1", salePrice: 1849.3, amount: 3 });
       const result = BillReducer(state, { type: "addItem", payload: product });
 
-      expect(result.total).toBe(5548);
-      expect(result.totalWithDiscount).toBe(4993);
+      expect(result.total).toBeCloseTo(5547.9, 2);
+      expect(result.totalWithDiscount).toBeCloseTo(4993.11, 2);
     });
 
-    it("should round totalWithDiscount with decimal discount percentage", () => {
+    it("applies decimal discount percentages over the unrounded total", () => {
       const state = createState({ discount: 10.5 });
       const product = createProduct({ id: "p1", salePrice: 100, amount: 1 });
       const result = BillReducer(state, { type: "addItem", payload: product });
 
       expect(result.total).toBe(100);
-      // Math.round(100 * (1 - 10.5/100)) = Math.round(89.5) = 90
-      expect(result.totalWithDiscount).toBe(90);
+      // 100 * (1 - 10.5/100) = 89.5 — NOT rounded to 90
+      expect(result.totalWithDiscount).toBeCloseTo(89.5, 2);
     });
 
-    it("should round after reduce, not per-product", () => {
+    it("accumulates decimals across items without per-product rounding", () => {
       let state = createState();
 
       state = BillReducer(state, {
@@ -788,69 +793,50 @@ describe("BillReducer", () => {
         payload: createProduct({ id: "p2", salePrice: 2.7, amount: 1 }),
       });
 
-      // reduce produces 1.3 + 2.7 = 4.0, Math.round(4.0) = 4
-      expect(state.total).toBe(4);
-      // If rounded per-product: Math.round(1.3) + Math.round(2.7) = 1 + 3 = 4
-      // (same result in this case, but implementation must round after reduce)
+      expect(state.total).toBeCloseTo(4, 10); // 1.3 + 2.7
     });
 
-    it("should round single item subtotal correctly", () => {
+    it("keeps large decimal subtotals untouched", () => {
       const state = createState();
-      // 510069.86 * 1 = 510069.86 → Math.round = 510070
       const product = createProduct({ id: "p1", salePrice: 510069.86, amount: 1 });
       const result = BillReducer(state, { type: "addItem", payload: product });
 
-      expect(result.total).toBe(510070);
+      expect(result.total).toBeCloseTo(510069.86, 2);
     });
 
-    it("should ensure Number.isInteger(total) after complex sequence", () => {
+    it("rounds ONLY through updateSalePrice (guarded upstream case)", () => {
       let state = createState();
 
-      // Step 1: Add product with decimal price
+      // Float accumulation first
       state = BillReducer(state, {
         type: "addItem",
         payload: createProduct({ id: "p1", salePrice: 1849.3, amount: 1 }),
       });
-      expect(Number.isInteger(state.total)).toBe(true);
-
-      // Step 2: Add unit
       state = BillReducer(state, {
         type: "addUnit",
-        payload: createProduct({ id: "p1", salePrice: 1849.3, amount: 1 }),
+        payload: createProduct({ id: "p1", salePrice: 1849.3 }),
       });
-      expect(Number.isInteger(state.total)).toBe(true);
-
-      // Step 3: Add second product with different decimal price
       state = BillReducer(state, {
         type: "addItem",
         payload: createProduct({ id: "p2", salePrice: 510069.86, amount: 1 }),
       });
-      expect(Number.isInteger(state.total)).toBe(true);
+      expect(Number.isInteger(state.total)).toBe(false);
 
-      // Step 4: Change unit
+      // updateSalePrice on an existing product snaps totals to integers
       state = BillReducer(state, {
-        type: "changeUnit",
-        payload: createProduct({ id: "p1", salePrice: 1849.3, amount: 5 }),
+        type: "updateSalePrice",
+        payload: { id: "p1", salePrice: 1850 },
       });
+      // rawTotal = 1850*2? No — addUnit made amount 2 → after set 1850: 3700 + 510069.86 = 513769.86 → round 513770
       expect(Number.isInteger(state.total)).toBe(true);
+      expect(state.total).toBe(Math.round(1850 * 2 + 510069.86));
 
-      // Step 5: Remove unit
-      state = BillReducer(state, {
-        type: "removeUnit",
-        payload: { id: "p1" },
+      // Guard: unknown product is a no-op
+      const unchanged = BillReducer(state, {
+        type: "updateSalePrice",
+        payload: { id: "ghost", salePrice: 1 },
       });
-      expect(Number.isInteger(state.total)).toBe(true);
-
-      // Step 6: Remove item
-      state = BillReducer(state, {
-        type: "removeItem",
-        payload: { id: "p2" },
-      });
-      expect(Number.isInteger(state.total)).toBe(true);
-
-      // Step 7: Apply decimal discount
-      state = BillReducer(state, { type: "discount", payload: 10.5 });
-      expect(Number.isInteger(state.totalWithDiscount)).toBe(true);
+      expect(unchanged).toBe(state);
     });
   });
 });

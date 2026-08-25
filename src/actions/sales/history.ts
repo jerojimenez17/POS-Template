@@ -14,6 +14,8 @@ type OrderWithItems = Prisma.OrderGetPayload<{
 }>;
 
 function mapOrderToBillState(order: OrderWithItems): BillState {
+  const cae = parseCAE(order.CAE);
+
   return {
     id: order.id,
     products: order.items.map((item) => ({
@@ -54,7 +56,8 @@ function mapOrderToBillState(order: OrderWithItems): BillState {
     IVACondition: order.clientIvaCondition || "Consumidor Final",
     clientIvaCondition: order.clientIvaCondition || undefined,
     clientDocumentNumber: order.clientDocumentNumber || undefined,
-    CAE: parseCAE(order.CAE),
+    CAE: cae,
+    ptoVenta: typeof cae?.ptoVenta === "number" ? cae.ptoVenta : undefined,
     twoMethods: !!order.paymentMethod2 && order.totalMethod2 !== null && order.totalMethod2 > 0,
     paidMethod: order.paymentMethod || "Efectivo",
   };

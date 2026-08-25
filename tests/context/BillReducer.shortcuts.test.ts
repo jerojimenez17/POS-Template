@@ -94,9 +94,9 @@ describe("BillReducer - updateSalePrice action", () => {
     // Product 2 should remain identical
     expect(newState.products[1]).toEqual(baseState.products[1]);
 
-    // Total should remain unchanged (reducer only updates the product, not recalculates total)
-    expect(newState.total).toBe(400);
-    expect(newState.totalWithDiscount).toBe(400);
+    // The edited sale price is part of the bill total, including quantity.
+    expect(newState.total).toBe(350);
+    expect(newState.totalWithDiscount).toBe(350);
   });
 
   it("should return state unchanged when product id does not exist", () => {

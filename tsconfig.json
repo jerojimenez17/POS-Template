@@ -47,6 +47,11 @@
   ],
   "exclude": [
     "node_modules",
-    "scripts"
+    "scripts",
+    "tests",
+    "ai",
+    "e2e",
+    "src/__tests__",
+    "**/__tests__"
   ]
 }

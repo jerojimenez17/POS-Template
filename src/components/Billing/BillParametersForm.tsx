@@ -15,12 +15,22 @@ import {
 } from "../ui/select";
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
-import React, { useCallback, useContext, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { BillContext } from "@/context/BillContext";
 import BillTypes from "@/models/billType";
 import { getVoucherNumberAction } from "@/actions/voucher";
 import { cn } from "@/lib/utils";
 import { Settings2, X, FileText, Receipt } from "lucide-react";
+import { getDefaultBillType } from "@/utils/billing";
+import { getBusinessBillingInfoAction } from "@/actions/business";
+import { formatAfipPointSaleErrorForUser, type AfipPointSaleError } from "@/services/afip/point-sale-validation";
+
+/** AFIP comprobante codes: A=1, B=6, C=11 (Jero f485810/5cefac7). */
+const getVoucherTypeCode = (billType: string): 1 | 6 | 11 => {
+  if (billType === BillTypes.A) return 1;
+  if (billType === BillTypes.B) return 6;
+  return 11;
+};
 
 interface BillParametersFormProps {
   ptoVentas?: number[];
@@ -28,10 +38,17 @@ interface BillParametersFormProps {
 }
 
 const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParametersFormProps) => {
-  const [mobileOpen, setMobileOpen] = React.useState(false);
-  const [lastVoucherNum, setLastVoucherNum] = React.useState<number | null>(null);
-  const [loadingVoucher, setLoadingVoucher] = React.useState(false);
-  const { dispatch, BillState, onOrderResetRef } = useContext(BillContext);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [lastVoucherNum, setLastVoucherNum] = useState<number | null>(null);
+  const [loadingVoucher, setLoadingVoucher] = useState(false);
+  const [voucherError, setVoucherError] = useState<AfipPointSaleError | string | null>(null);
+  const requestSequence = useRef(0);
+  const { dispatch, BillState, onOrderResetRef, billTypeRef, initialBillType } = useContext(BillContext);
+
+  // Jero (5cefac7): default comprobante type derives from the business IVA
+  // condition (Factura B for Responsable Inscripto) provided via context;
+  // getDefaultBillType() falls back to Factura C.
+  const defaultBillType = initialBillType ?? getDefaultBillType();
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
     resolver: zodResolver(BillParametersSchema),
@@ -40,7 +57,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
       clientCondition: ClientConditions.CONSUMIDOR_FINAL,
       discount: 0,
       twoMethods: false,
-      billType: BillTypes.C,
+      billType: defaultBillType,
       totalSecondMethod: 0,
       secondPaidMethod: PaidMethods.DEBITO,
       ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
@@ -50,21 +67,55 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
   const watchBillType = form.watch("billType");
   const watchPtoVenta = form.watch("ptoVenta");
   const watchClientCondition = form.watch("clientCondition");
-  const watchDiscount = form.watch("discount");
   const watchTwoMethods = form.watch("twoMethods");
   const watchPaidMethod = form.watch("paidMethod");
 
+  // Jero (5cefac7): standalone path fallback — when no default was supplied
+  // server-side/context, resolve the business IVA condition in the browser and
+  // correct the comprobante type once.
   useEffect(() => {
+    if (initialBillType !== undefined) return;
+
+    let cancelled = false;
+    void Promise.resolve(getBusinessBillingInfoAction())
+      .then((info) => {
+        if (cancelled) return;
+        const nextBillType = getDefaultBillType(info?.condicionIva);
+        form.setValue("billType", nextBillType);
+        dispatch({ type: "billType", payload: nextBillType });
+        if (billTypeRef) billTypeRef.current = nextBillType;
+      })
+      .catch(() => {
+        // getDefaultBillType() already provides the required Factura C fallback.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialBillType, form, dispatch, billTypeRef]);
+
+  // Keep billTypeRef (consumed by the checkout snapshot sent to AFIP) always
+  // mirroring the authoritative form value.
+  useEffect(() => {
+    if (billTypeRef) billTypeRef.current = watchBillType;
+  }, [billTypeRef, watchBillType]);
+
+  useEffect(() => {
+    const requestId = ++requestSequence.current;
     const fetchVoucher = async () => {
       if (!watchPtoVenta) return;
       setLoadingVoucher(true);
-      let tipoFactura = 11;
-      const billTypeStr = String(watchBillType).toLowerCase();
-      if (billTypeStr.includes("factura a")) tipoFactura = 1;
-      else if (billTypeStr.includes("factura b")) tipoFactura = 6;
+      const tipoFactura = getVoucherTypeCode(watchBillType);
       const res = await getVoucherNumberAction(watchPtoVenta, tipoFactura);
-      if (res.success !== undefined) setLastVoucherNum(res.success);
-      else setLastVoucherNum(null);
+      // Ignore stale responses after rapid ptoVenta/billType changes (Jero).
+      if (requestId !== requestSequence.current) return;
+      if (res.success !== undefined) {
+        setLastVoucherNum(res.success);
+        setVoucherError(null);
+      } else {
+        setLastVoucherNum(null);
+        setVoucherError(res.errorDetails ?? res.error ?? "No se pudo obtener la numeración");
+      }
       setLoadingVoucher(false);
     };
     fetchVoucher();
@@ -77,13 +128,17 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
         clientCondition: ClientConditions.CONSUMIDOR_FINAL,
         discount: 0,
         twoMethods: false,
-        billType: BillTypes.C,
+        // Jero fix: reset to the business default comprobante type, not a
+        // hardcoded Factura C.
+        billType: defaultBillType,
         totalSecondMethod: 0,
         secondPaidMethod: PaidMethods.DEBITO,
         ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
       });
+      dispatch({ type: "billType", payload: defaultBillType });
+      if (billTypeRef) billTypeRef.current = defaultBillType;
     };
-  }, [form, onOrderResetRef, ptoVentas]);
+  }, [form, onOrderResetRef, defaultBillType, dispatch, billTypeRef, ptoVentas]);
 
   // Sync form from BillContext when in cards layout (edit mode)
   const syncKey = `${BillState.IVACondition}-${BillState.documentNumber}-${BillState.paidMethod}`;
@@ -108,6 +163,14 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
   const billStateRef = useRef(BillState);
   billStateRef.current = BillState;
 
+  // Jero (f485810): surface AFIP/ARCA voucher-number failures to the user.
+  const voucherErrorMessage = typeof voucherError === "string"
+    ? voucherError
+    : voucherError
+      ? formatAfipPointSaleErrorForUser(voucherError)
+      : null;
+  const structuredVoucherError = voucherError && typeof voucherError !== "string" ? voucherError : null;
+
   const pushToContext = useCallback(() => {
     const values = form.getValues();
     const clientCondition = values.clientCondition;
@@ -117,6 +180,9 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
       type: "setState",
       payload: {
         ...values,
+        // Discount is owned by DiscountControl in the totals section — this
+        // form must never clobber it (Jero bca1230/0c30043).
+        discount: bs.discount ?? 0,
         id: bs.id || "",
         products: bs.products,
         total: bs.total,
@@ -142,7 +208,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
   useEffect(() => {
     const timer = setTimeout(pushToContext, 150);
     return () => clearTimeout(timer);
-  }, [watchPaidMethod, watchClientCondition, watchDiscount, watchTwoMethods,
+  }, [watchPaidMethod, watchClientCondition, watchTwoMethods,
       watchBillTypeField, watchTotalSecondMethod, watchSecondPaidMethod,
       watchPtoVentaField, watchDocumentNumber, pushToContext]);
 
@@ -152,10 +218,24 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
   // Shared: split payment fields
   const showSplit = watchTwoMethods;
 
+  const voucherErrorAlert = voucherErrorMessage ? (
+    <div role="alert" className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+      <p className="font-semibold">No se pudo obtener la numeración de AFIP/ARCA</p>
+      <p className="mt-1">{voucherErrorMessage}</p>
+      {structuredVoucherError?.code === "11002" && (
+        <ol className="mt-2 list-decimal space-y-1 pl-4">
+          <li>Verifique que el punto esté habilitado para WSFE/WSFEv1 en ARCA.</li>
+          <li>Confirme el CUIT y el ambiente del certificado.</li>
+          <li>Seleccione un punto habilitado o revise la configuración e intente nuevamente.</li>
+        </ol>
+      )}
+    </div>
+  ) : null;
+
   const formContent = (
     <Form {...form}>
       <div className="space-y-3">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* COL 1: Comprobante */}
           <div className="space-y-2">
             <div className="flex items-center gap-3 flex-wrap">
@@ -165,7 +245,11 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
                 render={({ field }) => (
                   <FormItem className="min-w-[140px]">
                     <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo</FormLabel>
-                    <Select {...field} onValueChange={field.onChange}>
+                    <Select {...field} onValueChange={(value) => {
+                      field.onChange(value);
+                      // Immediate context sync so AFIP calls use the chosen type
+                      dispatch({ type: "billType", payload: value });
+                    }}>
                       <SelectTrigger className="h-8 text-sm rounded-md">
                         <SelectValue />
                       </SelectTrigger>
@@ -185,7 +269,12 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
                   render={({ field }) => (
                     <FormItem className="min-w-[90px]">
                       <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pto.</FormLabel>
-                      <Select value={field.value ? String(field.value) : undefined} onValueChange={(v) => field.onChange(Number(v))}>
+                      <Select value={field.value ? String(field.value) : undefined} onValueChange={(val) => {
+                        const point = Number(val);
+                        field.onChange(point);
+                        // Immediate context sync (Jero): checkout uses this point of sale
+                        dispatch({ type: "setState", payload: { ...billStateRef.current, ptoVenta: point, billType: watchBillTypeField } });
+                      }}>
                         <SelectTrigger className="h-8 text-sm rounded-md">
                           <SelectValue placeholder="-" />
                         </SelectTrigger>
@@ -201,8 +290,18 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
               )}
               {watchPtoVenta && (
                 <div className="self-end pb-1.5">
-                  <span className="text-[11px] font-mono text-gray-400">
-                    {loadingVoucher ? "..." : `${String(watchPtoVenta).padStart(3, '0')}-${String((lastVoucherNum || 0) + 1).padStart(4, '0')}`}
+                  <span
+                    className={cn(
+                      "text-[11px] font-mono text-gray-400",
+                      !loadingVoucher && lastVoucherNum === null && "text-red-400"
+                    )}
+                    title={voucherErrorMessage ?? undefined}
+                  >
+                    {loadingVoucher
+                      ? "..."
+                      : lastVoucherNum !== null
+                        ? `${String(watchPtoVenta).padStart(3, '0')}-${String(lastVoucherNum + 1).padStart(4, '0')}`
+                        : "Error"}
                   </span>
                 </div>
               )}
@@ -333,35 +432,6 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
               </div>
             )}
           </div>
-
-          {/* COL 3: Descuento (compact) */}
-          <div className="space-y-2 self-start">
-            <FormField
-              control={form.control}
-              name="discount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Desc.</FormLabel>
-                  <div className="relative min-w-[90px]">
-                    <Input
-                      className="h-8 text-sm rounded-md pr-7"
-                      {...field}
-                      value={field.value === 0 ? "" : field.value}
-                      placeholder="0"
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">%</span>
-                  </div>
-                </FormItem>
-              )}
-            />
-            {watchDiscount > 0 && (
-              <div className="rounded-md bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 px-2.5 py-1.5">
-                <span className="text-[11px] font-medium text-orange-700 dark:text-orange-400">
-                  -{watchDiscount}%
-                </span>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </Form>
@@ -385,7 +455,10 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Tipo</FormLabel>
-                    <Select {...field} onValueChange={field.onChange}>
+                    <Select {...field} onValueChange={(value) => {
+                      field.onChange(value);
+                      dispatch({ type: "billType", payload: value });
+                    }}>
                       <SelectTrigger className="h-9 text-sm rounded-md">
                         <SelectValue />
                       </SelectTrigger>
@@ -405,7 +478,11 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Pto. Venta</FormLabel>
-                      <Select value={field.value ? String(field.value) : undefined} onValueChange={(v) => field.onChange(Number(v))}>
+                      <Select value={field.value ? String(field.value) : undefined} onValueChange={(v) => {
+                        const point = Number(v);
+                        field.onChange(point);
+                        dispatch({ type: "setState", payload: { ...billStateRef.current, ptoVenta: point, billType: watchBillTypeField } });
+                      }}>
                         <SelectTrigger className="h-9 text-sm rounded-md">
                           <SelectValue placeholder="-" />
                         </SelectTrigger>
@@ -469,7 +546,12 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
             </div>
             {watchPtoVenta && (
               <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground font-mono">
-                Próximo: {String(watchPtoVenta).padStart(3, '0')}-{String((lastVoucherNum || 0) + 1).padStart(4, '0')}
+                Próximo:{" "}
+                {loadingVoucher
+                  ? "..."
+                  : lastVoucherNum !== null
+                    ? `${String(watchPtoVenta).padStart(3, '0')}-${String(lastVoucherNum + 1).padStart(4, '0')}`
+                    : "—"}
               </div>
             )}
           </section>
@@ -562,37 +644,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
                 </div>
               )}
 
-              {/* Descuento inline */}
-              <div className="pt-3 border-t border-border">
-                <FormField
-                  control={form.control}
-                  name="discount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Descuento</FormLabel>
-                      <div className="flex items-center gap-3">
-                        <div className="relative w-28">
-                          <Input
-                            className="h-9 text-sm rounded-md pr-7 text-right"
-                            {...field}
-                            value={field.value === 0 ? "" : field.value}
-                            placeholder="0"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
-                        </div>
-                        {watchDiscount > 0 && (
-                          <span className="text-sm text-orange-600 dark:text-orange-400 font-medium">
-                            -{watchDiscount}%
-                          </span>
-                        )}
-                        {!watchDiscount && (
-                          <span className="text-xs text-muted-foreground/60 italic">Sin descuento</span>
-                        )}
-                      </div>
-                    </FormItem>
-                  )}
-                />
-              </div>
+              {/* Descuento: se edita desde DiscountControl en la sección de Totales (Jero bca1230/0c30043) */}
             </div>
           </section>
         </div>
@@ -607,6 +659,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
       <div className="hidden md:block bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 md:px-6 py-3">
         <div className="max-w-7xl mx-auto">
           {formContent}
+          {voucherErrorAlert}
         </div>
       </div>
 
@@ -627,10 +680,10 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
             <span>{watchBillTypeField}</span>
             <span>·</span>
             <span>{watchPaidMethod}</span>
-            {watchDiscount > 0 && (
+            {BillState.discount > 0 && (
               <>
                 <span>·</span>
-                <span>-{watchDiscount}%</span>
+                <span>-{BillState.discount}%</span>
               </>
             )}
           </div>
@@ -638,6 +691,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
         {mobileOpen && (
           <div className="pt-3 pb-1">
             {formContent}
+            {voucherErrorAlert}
           </div>
         )}
       </div>

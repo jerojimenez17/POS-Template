@@ -439,7 +439,48 @@ export const getProductByCode = async (code: string) => {
   }
 };
 
-export const getProductsBySearch = async (query: string) => {
+/**
+ * Returns the current sale price of a single product (scoped to the caller's
+ * business). Ported from upstream stock.ts: powers price refresh on editable
+ * orders so stale cart prices are detected before saving.
+ */
+export const getProductCurrentPrice = async (productId: string): Promise<{ salePrice: number } | null> => {
+  const session = await auth();
+  if (!session?.user?.businessId) return null;
+
+  try {
+    const product = await db.product.findFirst({
+      where: { id: productId, businessId: session.user.businessId },
+      select: { salePrice: true },
+    });
+    return product;
+  } catch (error) {
+    console.error("Error fetching product price:", error);
+    return null;
+  }
+};
+
+/**
+ * Batch variant of `getProductCurrentPrice`: maps productId -> salePrice for
+ * the given ids (missing ids are simply absent from the result).
+ */
+export const getProductsCurrentPrices = async (productIds: string[]): Promise<Record<string, number>> => {
+  const session = await auth();
+  if (!session?.user?.businessId || productIds.length === 0) return {};
+
+  try {
+    const products = await db.product.findMany({
+      where: { id: { in: productIds }, businessId: session.user.businessId },
+      select: { id: true, salePrice: true },
+    });
+    return Object.fromEntries(products.map((p) => [p.id, p.salePrice]));
+  } catch (error) {
+    console.error("Error fetching product prices:", error);
+    return {};
+  }
+};
+
+export const getProductsBySearch = async (query: string, supplierId?: string) => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
 
@@ -452,6 +493,7 @@ export const getProductsBySearch = async (query: string) => {
           { codebar: { contains: query, mode: "insensitive" } },
           { description: { contains: query, mode: "insensitive" } },
         ],
+        ...(supplierId ? { supplierId } : {}),
       },
       include: { supplier: true, brand: true, category: true, subCategory: true, images: { orderBy: { createdAt: 'asc' } } },
       take: PAGINATION.PRODUCTS_SEARCH_MAX,
@@ -470,6 +512,7 @@ export const getProductsFiltered = async (filters: {
   brandId?: string;
   unit?: string;
   supplierId?: string;
+  recentlyModified?: boolean;
 }) => {
   const session = await auth();
   if (!session?.user?.businessId) return [];
@@ -491,14 +534,65 @@ export const getProductsFiltered = async (filters: {
         ...(filters.brandId ? { brandId: filters.brandId } : {}),
         ...(filters.unit ? { unit: filters.unit } : {}),
         ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+        ...(filters.recentlyModified
+          ? { last_update: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }
+          : {}),
       },
       include: { supplier: true, brand: true, category: true, subCategory: true, images: { orderBy: { createdAt: 'asc' } } },
-      orderBy: { description: "asc" },
+      // Ported from upstream: when the "recently modified" filter is active,
+      // most-recently-touched products come first (bulk update workflow).
+      orderBy: filters.recentlyModified ? { last_update: "desc" } : { description: "asc" },
     });
 
     return products;
   } catch (error) {
     console.error("Error fetching filtered products:", error);
+    return [];
+  }
+};
+
+/**
+ * Returns only the ids matching `getProductsFiltered` criteria. Ported from
+ * upstream stock.ts: powers "select all across pages" in the bulk update page.
+ */
+export const getFilteredProductIds = async (filters: {
+  search?: string;
+  categoryId?: string;
+  brandId?: string;
+  unit?: string;
+  supplierId?: string;
+  recentlyModified?: boolean;
+}): Promise<string[]> => {
+  const session = await auth();
+  if (!session?.user?.businessId) return [];
+
+  try {
+    const products = await db.product.findMany({
+      where: {
+        businessId: session.user.businessId,
+        ...(filters.search
+          ? {
+              OR: [
+                { code: { contains: filters.search, mode: "insensitive" } },
+                { codebar: { contains: filters.search, mode: "insensitive" } },
+                { description: { contains: filters.search, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+        ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+        ...(filters.brandId ? { brandId: filters.brandId } : {}),
+        ...(filters.unit ? { unit: filters.unit } : {}),
+        ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+        ...(filters.recentlyModified
+          ? { last_update: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }
+          : {}),
+      },
+      select: { id: true },
+    });
+
+    return products.map((p) => p.id);
+  } catch (error) {
+    console.error("Error fetching filtered product ids:", error);
     return [];
   }
 };
@@ -513,7 +607,7 @@ export const toggleProductCatalogAction = async (productId: string, catalog: boo
   try {
     await db.product.update({
       where: { id: productId },
-      data: { catalog },
+      data: { catalog, last_update: new Date() },
     });
     revalidateTag(CACHE_TAGS.STOCK, "max");
     return { success: true };

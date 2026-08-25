@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState, useTransition } from "react";
 import { ArcaFieldsSchema } from "@/schemas";
-import { CheckCircle2, XCircle, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, XCircle, Plus, Trash2, Shield, ShieldCheck, Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,9 +37,19 @@ import {
 import { FormError } from "@/components/ui/form-error";
 import { FormSuccess } from "@/components/ui/form-success";
 import { updateBusinessArcaData } from "@/actions/arca";
+import { generateCertsAction } from "@/actions/generate-certs";
 import { Card, CardContent } from "@/components/ui/card";
 import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
 import { parsePlanError } from "@/lib/plan-error";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
 
 interface ArcaFormProps {
   businessId: string;
@@ -51,6 +61,16 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
   const [success, setSuccess] = useState<string | undefined>("");
   const [isPending, startTransition] = useTransition();
   const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
+
+  // Cert generation dialog state
+  const [showGenDialog, setShowGenDialog] = useState(false);
+  const [genMode, setGenMode] = useState<"dev" | "prod">("dev");
+  const [genCuit, setGenCuit] = useState("");
+  const [genUsername, setGenUsername] = useState("");
+  const [genPassword, setGenPassword] = useState("");
+  const [genAlias, setGenAlias] = useState("afipsdk");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | undefined>("");
 
   const form = useForm<z.infer<typeof ArcaFieldsSchema>>({
     resolver: zodResolver(ArcaFieldsSchema),
@@ -103,6 +123,49 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
   const hasCert = initialData?.cert === "CONFIGURADO" || initialData?.cert && initialData.cert.length > 0;
   const hasKey = initialData?.key === "CONFIGURADO" || initialData?.key && initialData.key.length > 0;
 
+  const openGenerateDialog = (mode: "dev" | "prod") => {
+    const currentCuit = form.getValues().cuit || initialData?.cuit || "";
+    setGenMode(mode);
+    setGenCuit(currentCuit);
+    setGenUsername(currentCuit);
+    setGenPassword("");
+    setGenAlias("afipsdk");
+    setGenError("");
+    setShowGenDialog(true);
+  };
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    setGenError("");
+    setError("");
+    setSuccess("");
+
+    try {
+      const result = await generateCertsAction(
+        genMode,
+        genCuit,
+        genUsername,
+        genPassword,
+        genAlias,
+        businessId
+      );
+
+      if (result.error) {
+        setGenError(result.error);
+        return;
+      }
+
+      if (result.success) {
+        setShowGenDialog(false);
+        setSuccess(result.success);
+      }
+    } catch {
+      setGenError("Error inesperado al generar certificados");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const onSubmit = (values: z.infer<typeof ArcaFieldsSchema>) => {
     setError("");
     setSuccess("");
@@ -128,6 +191,7 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
   };
 
   return (
+    <>
     <Card className="rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
       <CardContent className="p-6">
         <Form {...form}>
@@ -318,6 +382,41 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
                 </FormItem>
               )}
             />
+            {/* Cert Generator Section */}
+            <div className="border p-4 rounded-md space-y-3">
+              <div className="flex items-center justify-between">
+                <FormLabel className="text-base font-semibold">
+                  Generar Certificados ARCA
+                </FormLabel>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Genere automáticamente certificados desde AFIP/ARCA usando sus
+                credenciales de acceso web.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openGenerateDialog("dev")}
+                  disabled={isPending}
+                  className="flex-1"
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  Generar DEV
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openGenerateDialog("prod")}
+                  disabled={isPending}
+                  className="flex-1"
+                >
+                  <ShieldCheck className="w-4 h-4 mr-2" />
+                  Generar PROD
+                </Button>
+              </div>
+            </div>
+
             {error && <FormError message={error} />}
             {success && <FormSuccess message={success} />}
 
@@ -359,5 +458,97 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
         </AlertDialog>
       </CardContent>
     </Card>
+
+    {/* Generate Certificates Dialog */}
+      <Dialog open={showGenDialog} onOpenChange={setShowGenDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Generar Certificados{" "}
+              {genMode === "dev" ? "de Prueba (DEV)" : "de Producción (PROD)"}
+            </DialogTitle>
+            <DialogDescription>
+              Ingrese las credenciales de acceso web de AFIP/ARCA para generar
+              los certificados. Sus datos no se almacenan, solo se envían a la
+              Cloud Function para la generación.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">CUIT</label>
+              <Input
+                value={genCuit}
+                onChange={(e) => setGenCuit(e.target.value)}
+                placeholder="20111111112"
+                disabled={isGenerating}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Usuario</label>
+              <Input
+                value={genUsername}
+                onChange={(e) => setGenUsername(e.target.value)}
+                placeholder="20111111112"
+                disabled={isGenerating}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Contraseña</label>
+              <Input
+                type="password"
+                value={genPassword}
+                onChange={(e) => setGenPassword(e.target.value)}
+                placeholder="contraseña"
+                disabled={isGenerating}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Alias</label>
+              <Input
+                value={genAlias}
+                onChange={(e) => setGenAlias(e.target.value)}
+                placeholder="afipsdk"
+                disabled={isGenerating}
+              />
+              <p className="text-xs text-muted-foreground">
+                El alias del servicio (por defecto: afipsdk)
+              </p>
+            </div>
+            {genError && (
+              <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md border border-destructive/20">
+                {genError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isGenerating}
+              >
+                Cancelar
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              onClick={handleGenerate}
+              disabled={isGenerating || !genCuit || !genUsername || !genPassword}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generando...
+                </>
+              ) : (
+                "Generar Certificados"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };

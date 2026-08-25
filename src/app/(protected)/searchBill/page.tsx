@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
 import { getSalesAction } from "@/actions/sales";
 import SearchBillHeader from "@/components/Billing/SearchBillHeader";
+import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,11 @@ const SearchBillContent = async ({
     auth(),
     searchParams,
   ]);
-  const { sales, nextCursor } = await getSalesAction();
+  const [{ sales, nextCursor }, printSettings] = await Promise.all([
+    getSalesAction(),
+    getBusinessPrintSettingsAction(),
+  ]);
+  const qzTrayEnabled = "qzTray" in printSettings ? printSettings.qzTray : false;
   const initialParams: { from?: string; to?: string; showAll?: string } = {};
   if (params.from) initialParams.from = params.from;
   if (params.to) initialParams.to = params.to;
@@ -29,7 +34,7 @@ const SearchBillContent = async ({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
           <FilterBillPanel />
-          <SalesTable sales={sales} nextCursor={nextCursor} session={session} />
+          <SalesTable sales={sales} nextCursor={nextCursor} session={session} qzTrayEnabled={qzTrayEnabled} />
         </div>
       </div>
     </div>

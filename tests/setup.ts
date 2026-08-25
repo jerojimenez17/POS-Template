@@ -1,6 +1,21 @@
 import { vi } from 'vitest';
 import '@testing-library/jest-dom';
 
+// jsdom does not implement ResizeObserver; Radix UI primitives (@radix-ui/react-use-size,
+// used by Select/Popover/etc.) throw "ResizeObserver is not defined" without a polyfill.
+class ResizeObserverPolyfill {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    value: ResizeObserverPolyfill,
+    writable: true,
+    configurable: true,
+  });
+}
+
 export const mockDb = {
   $executeRawUnsafe: vi.fn().mockResolvedValue(0),
   $transaction: vi.fn().mockImplementation(async (arg) => {
@@ -71,6 +86,7 @@ export const mockDb = {
     findUnique: vi.fn().mockResolvedValue(null),
     upsert: vi.fn().mockResolvedValue({ id: 'cashbox-1', businessId: 'business-123', total: 0 }),
   },
+  // --- Our side (plan limits / daily usage / ranking / unpaid orders) ---
   planDefinition: {
     findUnique: vi.fn().mockResolvedValue({
       id: 'plan_pro',
@@ -104,6 +120,10 @@ export const mockDb = {
   orderUpdate: {
     findFirst: vi.fn().mockResolvedValue(null),
   },
+  // --- Upstream side (arca/voucher tests need business lookups) ---
+  business: {
+    findUnique: vi.fn().mockResolvedValue(null),
+  },
 };
 
 vi.mock('../src/lib/db', () => ({
@@ -116,6 +136,7 @@ vi.mock('../auth', () => ({
 
 vi.mock('next/server', () => ({
   revalidatePath: vi.fn(),
+  after: vi.fn(), // No-op en tests — el after() corre en background en prod (upstream: orders.ts / sales/process.ts lo importan)
 }));
 
 vi.mock('pusher', () => ({

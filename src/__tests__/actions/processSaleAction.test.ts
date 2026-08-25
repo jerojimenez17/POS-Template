@@ -807,6 +807,17 @@ describe("updateOrderAction — CAE validation", () => {
           stockMovement: {
             create: vi.fn().mockResolvedValue({}),
           },
+          // Fix 7C (sale edit syncs CashMovements/CashBox) — merged behavior from 8352abd
+          cashboxSession: {
+            findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
+          },
+          cashBox: {
+            update: vi.fn().mockResolvedValue({}),
+          },
+          cashMovement: {
+            findMany: vi.fn().mockResolvedValue([]),
+            create: vi.fn().mockResolvedValue({ id: "cash-movement-edit-1" }),
+          },
         };
         mockTx = tx;
         return callback(tx);

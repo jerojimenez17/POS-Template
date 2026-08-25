@@ -277,7 +277,9 @@ export default function ClientSelectionModal({
             clientId,
             businessId,
             items: orderItems,
-          total: calculatedTotal,
+            total: totalWithDiscount ?? calculatedTotal,
+            discount: discount || 0,
+            seller: seller || "",
             clientIvaCondition: orderClientIva || undefined,
             clientDocumentNumber: orderClientCuit || undefined,
             notes: orderNotes.trim() || undefined,
@@ -349,7 +351,7 @@ export default function ClientSelectionModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-hidden overflow-x-hidden flex flex-col sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{mode === "budget" ? "Crear Presupuesto" : "Crear Orden a Cuenta"}</DialogTitle>
           <DialogDescription>
@@ -357,12 +359,13 @@ export default function ClientSelectionModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden space-y-4">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar cliente..."
+                data-testid="search-input"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -392,9 +395,12 @@ export default function ClientSelectionModal({
                 <div
                   key={client.id}
                   onClick={() => {
-                    setSelectedClientId(client.id);
-                    setOrderClientCuit(client.cuit || "");
-                    setOrderClientIva(client.ivaCondition || "");
+                   setSelectedClientId(client.id);
+                   setOrderClientCuit(client.cuit || "");
+                   setOrderClientIva(client.ivaCondition || "");
+                   setExistingOrders([]);
+                   setSelectedExistingOrderId(null);
+                   setShowExistingOrderDialog(false);
                   }}
                   className={`p-3 cursor-pointer border-b last:border-b-0 transition-colors ${
                     selectedClientId === client.id
@@ -470,18 +476,18 @@ export default function ClientSelectionModal({
           <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
             <span className="text-sm text-muted-foreground">Total:</span>
             <span className="text-lg font-bold">
-              ${calculatedTotal.toLocaleString("es-AR")}
+              ${(totalWithDiscount ?? calculatedTotal).toLocaleString("es-AR")}
             </span>
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <DialogClose asChild>
             <Button variant="outline" disabled={isLoading}>
               Cancelar
             </Button>
           </DialogClose>
-          <Button onClick={handleSubmit} disabled={isLoading || !selectedClientId || isCheckingExistingOrder}>
+          <Button data-testid="submit-button" onClick={handleSubmit} disabled={isLoading || !selectedClientId}>
             {isLoading || isCheckingExistingOrder ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : null}
@@ -493,7 +499,7 @@ export default function ClientSelectionModal({
 
     {/* Create Client Modal */}
     <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-hidden overflow-x-hidden flex flex-col sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Crear Nuevo Cliente</DialogTitle>
           <DialogDescription>
@@ -501,7 +507,7 @@ export default function ClientSelectionModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="clientName">
               Nombre completo <span className="text-red-500">*</span>
@@ -561,7 +567,7 @@ export default function ClientSelectionModal({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <DialogClose asChild>
             <Button variant="outline" disabled={isCreatingClient}>
               Cancelar
@@ -579,7 +585,7 @@ export default function ClientSelectionModal({
 
     {/* Existing Order Dialog (R3: Smart Client Selection) */}
     <Dialog open={showExistingOrderDialog} onOpenChange={setShowExistingOrderDialog}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-hidden overflow-x-hidden flex flex-col sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
             {existingOrders.length > 1
@@ -593,7 +599,7 @@ export default function ClientSelectionModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-2 space-y-3 max-h-[260px] overflow-y-auto">
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden py-2 space-y-3 max-h-[260px]">
           {existingOrders.map((order) => {
             const isSelected = selectedExistingOrderId === order.id;
 
@@ -652,12 +658,12 @@ export default function ClientSelectionModal({
 
         <div className="p-3 bg-muted rounded-lg">
           <p className="text-sm text-muted-foreground">Total a agregar:</p>
-          <p className="text-lg font-bold">
-            ${total.toLocaleString("es-AR")}
+           <p className="text-lg font-bold">
+             <span>$</span><span>{total.toLocaleString("es-AR")}</span>
           </p>
         </div>
 
-        <DialogFooter className="flex-col gap-2">
+        <DialogFooter className="flex-col gap-2 shrink-0">
           <Button 
             onClick={addToExistingOrder} 
             disabled={isLoading || !selectedExistingOrderId}

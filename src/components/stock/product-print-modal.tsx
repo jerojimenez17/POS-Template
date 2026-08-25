@@ -38,6 +38,7 @@ function formatPrice(price: number): string {
 const TAG_WIDTH = "6.3cm";
 const TAG_HEIGHT_WITH_BARCODE = "3.2cm";
 const TAG_HEIGHT_WITHOUT_BARCODE = "2.8cm";
+const TAG_HEIGHT_WITHOUT_BARCODE_A4 = "4.5cm"; // A4 no-barcode is +20% of 2.8cm
 
 const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Props) => {
   const [paperSize, setPaperSize] = useState<"a4" | "thermal">(format);
@@ -49,7 +50,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
   const [showBarcode, setShowBarcode] = useState(false);
   const [key, setKey] = useState(0);
 
-  const tagsPerPage = 24;
+  const tagsPerPage = 13;
 
   const allTags: Array<{ product: ProductExtended; copyIndex: number; key: string }> = [];
   products.forEach((product) => {
@@ -196,12 +197,15 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
               font-weight: 900;
             }
             .no-barcode.has-price .label-description {
-              font-size: 12px;
+              font-size: 14px;
               font-weight: 600;
             }
             .no-barcode.has-price .label-price {
-              font-size: 20px;
-              font-weight: 700;
+              font-size: 68px;
+              font-weight: 900;
+            }
+            .label-container.no-barcode {
+              border-style: solid !important;
             }
           `;
       await printElement(printRef.current, {
@@ -337,7 +341,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                         <div
                           key={tag.key}
                           className={`flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white label-container ${!hasBarcode ? "no-barcode justify-between" : "has-barcode"} ${showPrice ? "has-price" : ""}`}
-                          style={{ width: TAG_WIDTH, minHeight: hasBarcode && showPrice ? TAG_HEIGHT_WITHOUT_BARCODE : hasBarcode ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE }}
+                          style={{ width: TAG_WIDTH, minHeight: hasBarcode && showPrice ? TAG_HEIGHT_WITHOUT_BARCODE : hasBarcode ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE_A4 }}
                         >
                           <div
                             className="label-description outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors text-sm font-semibold"
@@ -350,7 +354,7 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
                           </div>
                           {showPrice && (
                             <div
-                              className={`label-price outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors font-bold ${hasBarcode ? "text-lg" : "text-2xl"}`}
+                              className={`label-price outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors font-bold ${hasBarcode ? "text-lg" : "text-[48px]"}`}
                               contentEditable
                               suppressContentEditableWarning
                               spellCheck={false}

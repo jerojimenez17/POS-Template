@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Printer, FileText } from "lucide-react";
 import {
   DropdownMenu,
@@ -14,51 +13,50 @@ import { getBusinessBillingInfoAction } from "@/actions/business";
 import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES } from "@/lib/print";
 import QRCode from "qrcode";
 import { getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { buildReceiptBusinessInfo, type ReceiptBusinessInfo } from "@/lib/print/receipt-data";
 import { useState, useEffect } from "react";
 
 interface PrintOptionsPopoverProps {
   sale: BillState;
   session: Session | null;
+  qzTrayEnabled?: boolean;
 }
 
 export default function PrintOptionsPopover({
   sale,
   session,
+  qzTrayEnabled = false,
 }: PrintOptionsPopoverProps) {
-
 
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    let active = true;
     if (sale.CAE?.qrData) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQrSvgDataUrl(null);
       QRCode.toString(sale.CAE.qrData, { type: "svg", margin: 0, width: 60 })
         .then((svgString) => {
-          const dataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
-          setQrSvgDataUrl(dataUrl);
+          if (active) setQrSvgDataUrl(`data:image/svg+xml;base64,${btoa(svgString)}`);
         })
-        .catch(console.error);
+        .catch((error: unknown) => {
+          if (active) setQrSvgDataUrl(null);
+          console.error("Error generating receipt QR:", error);
+        });
     } else {
       setQrSvgDataUrl(null);
     }
+    return () => { active = false; };
   }, [sale.CAE?.qrData]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const hasCAE = Boolean(sale.CAE?.CAE);
-  const isRemito = !sale.CAE || sale.CAE.CAE === "";
+  const hasCAE = Boolean(sale.CAE?.CAE?.trim());
+  const isRemito = !hasCAE;
   const billTypeDisplay = getBillTypeDisplay(sale.billType, sale.CAE?.CAE, isRemito);
 
-  const getPrintData = (info: any): ThermalReceiptData => ({
-    businessName: session?.user?.businessName || "Mi Comercio",
-    businessInfo: info
-        ? {
-            razonSocial: info.razonSocial,
-            cuit: info.cuit,
-            condicionIva: info.condicionIva,
-            address: info.address,
-            inicioActividades: info.inicioActividades,
-          }
-      : undefined,
+  const getPrintData = (info: ReceiptBusinessInfo | null): ThermalReceiptData => ({
+    ...buildReceiptBusinessInfo(session?.user?.businessName || "Mi Comercio", sale.CAE?.CAE, info ?? undefined),
     date: sale.date || new Date(),
     documentType: sale.typeDocument || "DNI",
     billType: billTypeDisplay,
@@ -85,18 +83,21 @@ export default function PrintOptionsPopover({
       sale.totalWithDiscount ||
       sale.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0) *
         (1 - sale.discount / 100),
-    cae: sale.CAE?.CAE
+    pointOfSale: sale.ptoVenta ?? sale.CAE?.ptoVenta,
+    invoiceNumber: sale.CAE?.nroComprobante,
+    cae: sale.CAE?.CAE?.trim()
       ? {
           cae: sale.CAE.CAE,
           vencimiento: sale.CAE.vencimiento,
           qrData: sale.CAE.qrData,
+          ptoVenta: sale.CAE.ptoVenta ?? sale.ptoVenta,
         }
       : undefined,
   });
 
   const handlePrintThermal = async () => {
-    const info = await getBusinessBillingInfoAction();
-    await printThermalReceipt(getPrintData(info));
+    const info = hasCAE ? await getBusinessBillingInfoAction() : null;
+    await printThermalReceipt(getPrintData(info), qzTrayEnabled);
   };
 
   const handlePrintPDF = async () => {
@@ -105,11 +106,12 @@ export default function PrintOptionsPopover({
       targetWin.document.write("<html><head><title>Generando PDF...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
     }
 
-    const info = await getBusinessBillingInfoAction();
+    const info = hasCAE ? await getBusinessBillingInfoAction() : null;
     const receiptData = getPrintData(info);
     const content = document.createElement("div");
     content.innerHTML = buildPDFHTML(receiptData, {
       invoiceNumber: sale.CAE?.nroComprobante,
+      pointOfSale: sale.ptoVenta ?? sale.CAE?.ptoVenta,
       qrSvgDataUrl: qrSvgDataUrl,
     });
 
@@ -147,12 +149,12 @@ export default function PrintOptionsPopover({
           <Printer className="h-4 w-4 text-blue-500 dark:text-blue-400" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={handlePrintThermal}>
+      <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-gray-800">
+        <DropdownMenuItem onClick={handlePrintThermal} className="focus:bg-gray-100 dark:focus:bg-gray-700">
           <Printer className="mr-2 h-4 w-4" />
           Impresión Térmica
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handlePrintPDF}>
+        <DropdownMenuItem onClick={handlePrintPDF} className="focus:bg-gray-100 dark:focus:bg-gray-700">
           <FileText className="mr-2 h-4 w-4" />
           Generar PDF
         </DropdownMenuItem>

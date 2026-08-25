@@ -11,6 +11,8 @@ import { ArrowLeft, Settings } from "lucide-react";
 import * as z from "zod";
 import { ArcaFieldsSchema } from "@/schemas";
 import { ArcaData } from "@/models/Arca";
+import BusinessPrintSettingsSection from "@/components/AdminSettings/BusinessPrintSettingsSection";
+import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 
 /**
  * Static, server-rendered equivalent of <FeatureBlockedModal variant="feature" />.
@@ -92,6 +94,7 @@ export default async function AdminSettingsPage() {
   }
 
   const data: { success?: ArcaData; error?: string } = await getBusinessArcaData(businessId!);
+  const printSettings = await getBusinessPrintSettingsAction();
 
   if (data.error || !data.success) {
     return (
@@ -144,6 +147,7 @@ export default async function AdminSettingsPage() {
 
       <div className="max-w-5xl mx-auto px-4 py-6">
         <ArcaForm businessId={businessId || ""} initialData={initialData} />
+        {"qzTray" in printSettings && <BusinessPrintSettingsSection businessId={printSettings.businessId} qzTray={printSettings.qzTray} address={printSettings.address} />}
       </div>
     </div>
   );

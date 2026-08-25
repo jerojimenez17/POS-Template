@@ -15,6 +15,7 @@ import { Button } from "./../ui/button";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { pusherClient } from "@/lib/pusher-client";
 import { getSalesAction } from "@/actions/sales";
+import { isAFIPAuthorized } from "@/lib/utils/bill-type";
 
 import { Session } from "next-auth";
 
@@ -22,9 +23,10 @@ interface props {
   sales: BillState[];
   nextCursor: string | null;
   session: Session | null;
+  qzTrayEnabled?: boolean;
 }
 
-const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) => {
+const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnabled = false }: props) => {
   const user = session?.user;
   const [printTrigger, setPrintTrigger] = useState(0);
   const [externalState] = useState<BillState>();
@@ -45,6 +47,8 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    // The live list is local state because it is also updated by the Pusher subscription.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLiveSales(sales);
     setCursor(initialCursor);
     setHasMore(initialCursor !== null);
@@ -94,8 +98,8 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
     return liveSales
       .filter((sale) => {
         const { Remito, FacturaC } = filtersState;
-        const isFacturaC = sale.CAE && sale.CAE.CAE !== "";
-        const isRemito = !sale.CAE || sale.CAE.CAE === "";
+        const isFacturaC = isAFIPAuthorized(undefined, sale.CAE?.CAE);
+        const isRemito = !isFacturaC;
 
         if (FacturaC.active && Remito.active) return true;
         if (FacturaC.active) return isFacturaC;
@@ -149,6 +153,11 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
       })
       .sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [liveSales, filtersState]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentPage(1);
+  }, [filtersState, itemsPerPage]);
 
   const total = React.useMemo(() => {
     return filteredSales.reduce((acc, sale) => acc + (sale.totalWithDiscount || 0), 0);
@@ -206,7 +215,8 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
                 <SaleAccordion
                   session={session}
                   key={sale.id}
-                  sale={sale}
+                   sale={sale}
+                   qzTrayEnabled={qzTrayEnabled}
                 />
               ))}
               {currentSales.length === 0 && (
@@ -224,7 +234,7 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
               variant="outline"
               onClick={handleLoadMore}
               disabled={loadingMore}
-              className="gap-2"
+              className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <ChevronDown className={`h-4 w-4 ${loadingMore ? "animate-bounce" : ""}`} />
               {loadingMore ? "Cargando..." : "Cargar más"}
@@ -236,15 +246,15 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
       {/* Pagination */}
       <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-4 gap-4 mt-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500 font-medium">Filas por página:</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">Filas por página:</span>
           <Select
             value={itemsPerPage.toString()}
             onValueChange={(value) => setItemsPerPage(Number(value))}
           >
-            <SelectTrigger className="w-[70px] h-8">
+            <SelectTrigger className="w-[70px] h-8 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="text-gray-800">
+            <SelectContent className="border-gray-200 bg-white text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
               <SelectItem value="10">10</SelectItem>
               <SelectItem value="20">20</SelectItem>
               <SelectItem value="50">50</SelectItem>
@@ -254,25 +264,25 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session }: props) =
         </div>
 
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-500 font-medium">
+          <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">
             Página {currentPage} de {totalPages || 1}
           </span>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
+              className="h-8 w-8 border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-blue-500"
+               onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+               disabled={currentPage === 1}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-8 w-8 border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-blue-500"
               onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage >= totalPages}
+                disabled={currentPage >= totalPages}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

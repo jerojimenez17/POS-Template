@@ -111,7 +111,7 @@ export const createLedgerAccountAction = async (input: CreateLedgerInput) => {
         ...input.products.map((item) =>
           tx.product.update({
             where: { id: item.id },
-            data: { amount: { decrement: item.amount } },
+            data: { amount: { decrement: item.amount }, last_update: new Date() },
           })
         ),
         ...input.products.map((item) =>
@@ -264,7 +264,7 @@ export const addProductsToLedgerAction = async (
         ...products.map((item) =>
           tx.product.update({
             where: { id: item.id },
-            data: { amount: { decrement: item.amount } },
+            data: { amount: { decrement: item.amount }, last_update: new Date() },
           })
         ),
         ...products.map((item) =>

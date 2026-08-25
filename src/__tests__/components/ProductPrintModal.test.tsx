@@ -249,7 +249,7 @@ describe("ProductPrintModal Component", () => {
       expect(foundTag).toBeTruthy();
     });
 
-    it("should have tag height of 5cm when codebar is present (AC6)", () => {
+    it("should have tag minHeight of 2.8cm when barcode is generated for a product with codebar (AC6)", () => {
       render(
         <ProductPrintModal
           open={true}
@@ -257,14 +257,18 @@ describe("ProductPrintModal Component", () => {
           products={createProductsWithCodebar(1)}
         />
       );
+      // Barcodes only render after toggling "Generar" (showBarcode defaults to false).
+      // With showPrice enabled (the default), generated-barcode tags use the
+      // TAG_HEIGHT_WITHOUT_BARCODE (2.8cm) minHeight floor.
+      fireEvent.click(screen.getByRole("button", { name: /generar/i }));
       const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
       const foundTag = Array.from(tagCards).find(
-        (el) => el.style.height === "5cm"
+        (el) => el.style.minHeight === "2.8cm"
       );
       expect(foundTag).toBeTruthy();
     });
 
-    it("should have tag height of 3.5cm when no product has codebar (AC5)", () => {
+    it("should have tag minHeight of 4.5cm when no product has codebar (AC5)", () => {
       render(
         <ProductPrintModal
           open={true}
@@ -272,14 +276,16 @@ describe("ProductPrintModal Component", () => {
           products={createProductsWithoutCodebar(1)}
         />
       );
+      // A4 no-barcode tags use TAG_HEIGHT_WITHOUT_BARCODE_A4 = 4.5cm as their
+      // minHeight floor in the merged source.
       const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
       const foundTag = Array.from(tagCards).find(
-        (el) => el.style.height === "3.5cm"
+        (el) => el.style.minHeight === "4.5cm"
       );
       expect(foundTag).toBeTruthy();
     });
 
-    it("should use uniform 5cm height for mixed batch (AC7)", () => {
+    it("should use per-card minHeight for mixed batch once barcodes are generated (AC7)", () => {
       render(
         <ProductPrintModal
           open={true}
@@ -287,10 +293,14 @@ describe("ProductPrintModal Component", () => {
           products={createMixedProducts()}
         />
       );
-      const tagCards = document.querySelectorAll<HTMLElement>(".label-container, [class*='border-dashed']");
-      tagCards.forEach((card) => {
-        expect(card.style.height).toBe("5cm");
-      });
+      fireEvent.click(screen.getByRole("button", { name: /generar/i }));
+      const tagCards = document.querySelectorAll<HTMLElement>(".label-container");
+      expect(tagCards.length).toBe(2);
+      // hasBarcode = showBarcode && Boolean(codebar || code): both mixed products
+      // qualify after "Generar" (the no-codebar one falls back to its internal code),
+      // so with showPrice enabled (default) both cards take the 2.8cm floor.
+      expect(tagCards[0].style.minHeight).toBe("2.8cm");
+      expect(tagCards[1].style.minHeight).toBe("2.8cm");
     });
   });
 
@@ -333,8 +343,19 @@ describe("ProductPrintModal Component", () => {
   });
 
   describe("Barcode positioning (AC9)", () => {
-    it("should render barcode only for products with codebar", () => {
-      const mixed = createMixedProducts();
+    it("should render barcode only for products with codebar or internal code", () => {
+      // hasBarcode = showBarcode && Boolean(codebar || code): products fall back to
+      // their internal code when codebar is absent (long-standing contract, present
+      // in base and merged source). Only a product with neither gets no barcode.
+      const mixed = [
+        ...createMixedProducts(),
+        createMockProduct({
+          id: "mixed-neither",
+          code: null as unknown as string,
+          codebar: null,
+          description: "Mixed Neither",
+        }),
+      ];
       render(
         <ProductPrintModal
           open={true}
@@ -342,9 +363,12 @@ describe("ProductPrintModal Component", () => {
           products={mixed}
         />
       );
+      // Barcodes only render after toggling "Generar" (showBarcode defaults to false).
+      fireEvent.click(screen.getByRole("button", { name: /generar/i }));
       const barcodeElements = document.querySelectorAll(".label-barcode");
-      const codesWithBarcode = mixed.filter((p) => p.codebar);
+      const codesWithBarcode = mixed.filter((p) => p.codebar || p.code);
       expect(barcodeElements.length).toBe(codesWithBarcode.length);
+      expect(barcodeElements.length).toBe(2);
     });
 
     it("should display product code before barcode in DOM order (AC9)", () => {
@@ -355,6 +379,7 @@ describe("ProductPrintModal Component", () => {
           products={createProductsWithCodebar(1)}
         />
       );
+      fireEvent.click(screen.getByRole("button", { name: /generar/i }));
       const codeElements = document.querySelectorAll(".label-code");
       const barcodeElements = document.querySelectorAll(".label-barcode");
       expect(codeElements.length).toBeGreaterThan(0);

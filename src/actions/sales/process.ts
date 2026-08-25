@@ -39,8 +39,9 @@ interface ProcessSaleInput {
   CAE?: {
     CAE: string;
     vencimiento: string;
-    nroComprobante: number;
+    nroComprobante: number | string;
     qrData: string;
+    ptoVenta?: number | string;
   };
 }
 

@@ -23,6 +23,10 @@ describe('getVoucherNumberAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.INTERNAL_AFIP_API_KEY = "test-key";
+    // Merged action gates on AFIP_SDK_ACCESS_TOKEN before calling the cloud
+    // function (report-E §1.1 env rename); without it every call short-circuits
+    // with "Error de configuración de acceso".
+    process.env.AFIP_SDK_ACCESS_TOKEN = "test-access-token";
   });
 
   it('debe devolver error si el usuario no tiene sesion', async () => {

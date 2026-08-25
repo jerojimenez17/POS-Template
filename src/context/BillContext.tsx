@@ -11,12 +11,15 @@ export default interface BillContextProps {
   addItem: (product: Product) => void;
   removeItem: (product: Product) => void;
   onOrderResetRef: React.MutableRefObject<(() => void) | null>;
+  initialBillType?: string;
+  billTypeRef?: React.MutableRefObject<string>;
   printMode: PrintMode;
   setPrintMode: (mode: PrintMode) => void;
   qzTrayActive: boolean;
   setQzTrayActive: (active: boolean) => void;
-  focusPriceProductId: string | null;
-  setFocusPriceProductId: (id: string | null) => void;
+  qzTrayEnabled?: boolean;
+  focusPriceProductId?: string | null;
+  setFocusPriceProductId?: (id: string | null) => void;
 }
 
 export const BillContext = createContext<BillContextProps>(

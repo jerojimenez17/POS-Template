@@ -1,21 +1,53 @@
 "use client";
 
-import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
+import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 export interface PDFTemplateOptions {
   qrSvgDataUrl?: string | null;
-  invoiceNumber?: number;
+  invoiceNumber?: number | string;
+  pointOfSale?: number | string;
+}
+
+export const PDF_LAYOUT_SCALE = 1.3;
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function safeQrDataUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = value.trim().match(/^data:image\/(svg\+xml|png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/i);
+  if (!match) return null;
+  if (match[1].toLowerCase() === "svg+xml") {
+    try {
+      const svg = atob(match[2]);
+      if (/<\s*(script|foreignObject)\b|\bon[a-z]+\s*=|javascript\s*:/i.test(svg)) return null;
+    } catch {
+      return null;
+    }
+  }
+  return value.trim();
 }
 
 export const PDF_STYLES = `
+  :root { --pdf-layout-scale: ${PDF_LAYOUT_SCALE.toFixed(2)}; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { 
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 13px;
     line-height: 1.45;
     color: #1e293b;
   }
-  .invoice-container { width: 750px; margin: 0 auto; padding: 30px 35px; background: #fff; }
+  .invoice-container { width: 750px; max-width: 100%; margin: 0 auto; padding: 30px 35px; background: #fff; overflow-wrap: anywhere; }
+
+  /* Multi-page print stability */
+  .pdf-page { break-after: page; page-break-after: always; break-inside: avoid; max-width: 100%; overflow-wrap: anywhere; }
 
   /* ── Header ── */
   .header { text-align: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 3px solid #0f172a; }
@@ -31,19 +63,20 @@ export const PDF_STYLES = `
 
   /* ── Info grid ── */
   .info-grid { display: flex; gap: 14px; margin: 14px 0; }
-  .info-grid > * { flex: 1; }
+  .info-grid > * { flex: 1; min-width: 0; }
   .info-section { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 14px; }
   .info-section-title { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
-  .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; }
+  .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; gap: 8px; }
   .info-label { color: #64748b; }
-  .info-value { font-weight: 600; color: #0f172a; text-align: right; }
+  .info-value { font-weight: 600; color: #0f172a; text-align: right; overflow-wrap: anywhere; }
 
   /* ── Table ── */
-  table { width: 100%; border-collapse: collapse; margin: 14px 0; }
-  thead { background: #1e293b; color: #fff; }
+  table { width: 100%; max-width: 100%; border-collapse: collapse; margin: 14px 0; overflow-wrap: anywhere; }
+  thead { display: table-header-group; background: #1e293b; color: #fff; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
   th { padding: 8px 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
   th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: right; }
-  td { padding: 7px 8px; font-size: 11px; border-bottom: 1px solid #e2e8f0; color: #1e293b; }
+  td { padding: 7px 8px; font-size: 11px; border-bottom: 1px solid #e2e8f0; color: #1e293b; word-wrap: break-word; }
   td:nth-child(2), td:nth-child(3), td:nth-child(4) { text-align: right; }
   tbody tr:last-child td { border-bottom: none; }
 
@@ -59,7 +92,7 @@ export const PDF_STYLES = `
   .cae-section { margin-top: 24px; padding-top: 16px; border-top: 2px solid #e2e8f0; display: flex; align-items: flex-start; gap: 16px; }
   .cae-qr { width: 90px; flex-shrink: 0; background: #fff; padding: 4px; border: 1px solid #e2e8f0; border-radius: 4px; }
   .cae-qr img { width: 100%; height: auto; display: block; }
-  .cae-body { flex: 1; }
+  .cae-body { flex: 1; min-width: 0; }
   .cae-title { font-weight: 700; font-size: 12px; color: #0f172a; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
   .cae-row { font-size: 11px; margin-bottom: 3px; color: #475569; }
   .cae-row strong { color: #0f172a; font-weight: 700; }
@@ -100,6 +133,7 @@ function formatCurrency(value: number): string {
 export function buildPDFHTML(
   receiptData: {
     businessName: string;
+    documentKind?: DocumentPrintKind;
     businessInfo?: {
       razonSocial?: string | null;
       cuit?: string | null;
@@ -125,29 +159,39 @@ export function buildPDFHTML(
     discount?: number;
     discountAmount?: number;
     total: number;
+    pointOfSale?: number | string;
+    invoiceNumber?: number | string;
     cae?: {
       cae: string;
       vencimiento: string;
       qrData?: string;
+      ptoVenta?: number | string;
     };
   },
   options?: PDFTemplateOptions
 ): string {
-  const { qrSvgDataUrl, invoiceNumber } = options || {};
-  const billType = receiptData.billType || "Comprobante";
+  const { qrSvgDataUrl, invoiceNumber, pointOfSale } = options || {};
   const paidMethod = receiptData.paidMethod || "Efectivo";
   const subtotal = receiptData.subtotal ?? 0;
-  const invoiceNumberFormatted = formatInvoiceNumberFull(invoiceNumber);
+  const isOfficialInvoice = getDocumentPrintKind(receiptData.cae?.cae) === "official-invoice";
+  const billType = getBillTypeDisplay(receiptData.billType, receiptData.cae?.cae, !isOfficialInvoice);
   const docTitle = getDocTitle(billType, receiptData.cae);
+  const invoiceNumberFormatted = isOfficialInvoice
+    ? formatInvoiceNumberFull(
+        invoiceNumber ?? receiptData.invoiceNumber,
+        pointOfSale ?? receiptData.pointOfSale ?? receiptData.cae?.ptoVenta,
+      )
+    : "";
+  const validQrDataUrl = safeQrDataUrl(qrSvgDataUrl);
 
   // ── Client info ──
   const clientInfo = receiptData.client
     ? `<div class="info-section">
         <div class="info-section-title">Cliente</div>
-        <div class="info-row"><span class="info-label">Nombre</span><span class="info-value">${receiptData.client}</span></div>
+        <div class="info-row"><span class="info-label">Nombre</span><span class="info-value">${escapeHtml(receiptData.client)}</span></div>
         ${receiptData.clientIvaCondition && receiptData.clientIvaCondition.toLowerCase() !== "consumidor final" ? `
-          <div class="info-row"><span class="info-label">Cond. IVA</span><span class="info-value">${receiptData.clientIvaCondition.replace(/_/g, " ")}</span></div>
-          <div class="info-row"><span class="info-label">${receiptData.documentType || "Doc."}</span><span class="info-value">${receiptData.clientDocumentNumber || ""}</span></div>
+          <div class="info-row"><span class="info-label">Cond. IVA</span><span class="info-value">${escapeHtml(receiptData.clientIvaCondition.replace(/_/g, " "))}</span></div>
+          <div class="info-row"><span class="info-label">${escapeHtml(receiptData.documentType || "Doc.")}</span><span class="info-value">${escapeHtml(receiptData.clientDocumentNumber ?? "")}</span></div>
         ` : ""}
       </div>`
     : `<div class="info-section">
@@ -160,39 +204,29 @@ export function buildPDFHTML(
   const businessInfo = `
     <div class="info-section">
       <div class="info-section-title">Establecimiento</div>
-      ${receiptData.businessInfo?.cuit ? `<div class="info-row"><span class="info-label">CUIT</span><span class="info-value">${receiptData.businessInfo.cuit}</span></div>` : ""}
-      ${receiptData.businessInfo?.condicionIva ? `<div class="info-row"><span class="info-label">Cond. IVA</span><span class="info-value">${receiptData.businessInfo.condicionIva.replace(/_/g, " ")}</span></div>` : ""}
-      ${receiptData.businessInfo?.address ? `<div class="info-row"><span class="info-label">Dirección</span><span class="info-value">${receiptData.businessInfo.address}</span></div>` : ""}
-      ${inicioStr ? `<div class="info-row"><span class="info-label">Inicio Act.</span><span class="info-value">${inicioStr}</span></div>` : ""}
-      <div class="info-row" style="margin-bottom: 0;"><span class="info-label">Pago</span><span class="info-value">${paidMethod}</span></div>
+      ${receiptData.businessInfo?.cuit ? `<div class="info-row"><span class="info-label">CUIT</span><span class="info-value">${escapeHtml(receiptData.businessInfo.cuit)}</span></div>` : ""}
+      ${receiptData.businessInfo?.condicionIva ? `<div class="info-row"><span class="info-label">Cond. IVA</span><span class="info-value">${escapeHtml(receiptData.businessInfo.condicionIva.replace(/_/g, " "))}</span></div>` : ""}
+      ${receiptData.businessInfo?.address ? `<div class="info-row"><span class="info-label">Dirección</span><span class="info-value">${escapeHtml(receiptData.businessInfo.address)}</span></div>` : ""}
+      ${inicioStr ? `<div class="info-row"><span class="info-label">Inicio Act.</span><span class="info-value">${escapeHtml(inicioStr)}</span></div>` : ""}
+      <div class="info-row" style="margin-bottom: 0;"><span class="info-label">Pago</span><span class="info-value">${escapeHtml(paidMethod)}</span></div>
     </div>
   `;
 
-  // ── Products table ──
-  const itemsRows = receiptData.products.map(p => `
-    <tr>
-      <td>${p.description}</td>
-      <td>${p.amount}</td>
-      <td>$${formatCurrency(p.unitPrice)}</td>
-      <td>$${formatCurrency(p.subtotal)}</td>
-    </tr>
-  `).join("");
-
   // ── Totals ──
   const discountRow = receiptData.discountAmount
-    ? `<div class="total-row discount"><span class="total-label">Descuento (${receiptData.discount}%)</span><span class="total-value">-$${formatCurrency(receiptData.discountAmount)}</span></div>`
+    ? `<div class="total-row discount"><span class="total-label">Descuento (${escapeHtml(receiptData.discount)}%)</span><span class="total-value">-$${formatCurrency(receiptData.discountAmount)}</span></div>`
     : "";
 
-  // ── CAE section ──
-  const caeSection = receiptData.cae
+  // ── CAE section (official invoices only) ──
+  const caeSection = isOfficialInvoice && receiptData.cae
     ? `<div class="cae-section">
         <div class="cae-qr">
-          ${qrSvgDataUrl ? `<img src="${qrSvgDataUrl}" alt="QR" />` : ""}
+          ${validQrDataUrl ? `<img src="${escapeHtml(validQrDataUrl)}" alt="QR" />` : ""}
         </div>
         <div class="cae-body">
           <div class="cae-title">Comprobante Autorizado</div>
-          <div class="cae-row"><strong>CAE:</strong> ${receiptData.cae.cae}</div>
-          <div class="cae-row"><strong>Vencimiento:</strong> ${receiptData.cae.vencimiento}</div>
+          <div class="cae-row"><strong>CAE:</strong> ${escapeHtml(receiptData.cae.cae)}</div>
+          <div class="cae-row"><strong>Vencimiento:</strong> ${escapeHtml(receiptData.cae.vencimiento)}</div>
           <div class="cae-legal">
             El crédito fiscal discriminado en el presente comprobante, sólo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes (Ley N°27.618).
           </div>
@@ -200,12 +234,26 @@ export function buildPDFHTML(
       </div>`
     : "";
 
-  // ── Assemble ──
+  // ── Products table (paginated for multi-page stability) ──
+  const pageSize = 18;
+  const itemPages = Array.from({ length: Math.max(1, Math.ceil(receiptData.products.length / pageSize)) }, (_, pageIndex) =>
+    receiptData.products.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
+      .map(p => `
+        <tr>
+          <td>${escapeHtml(p.description)}</td>
+          <td>${escapeHtml(p.amount)}</td>
+          <td>$${formatCurrency(p.unitPrice)}</td>
+          <td>$${formatCurrency(p.subtotal)}</td>
+        </tr>`).join(""),
+  );
+  const table = (rows: string) => `<table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Subtotal</th></tr></thead><tbody>${rows}</tbody></table>`;
+
   return `
-    <div class="invoice-container">
+    <div class="invoice-container" style="max-width: 100%;">
+      <div class="pdf-page">
       <div class="header">
-        <div class="company-name">${receiptData.businessName}</div>
-        ${receiptData.businessInfo?.razonSocial ? `<div class="company-details">${receiptData.businessInfo.razonSocial}</div>` : ""}
+        <div class="company-name">${escapeHtml(receiptData.businessName)}</div>
+        ${isOfficialInvoice && receiptData.businessInfo?.razonSocial ? `<div class="company-details">${escapeHtml(receiptData.businessInfo.razonSocial)}</div>` : ""}
       </div>
 
       <div class="doc-box">
@@ -223,19 +271,10 @@ export function buildPDFHTML(
         ${businessInfo}
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th>Producto</th>
-            <th>Cant.</th>
-            <th>Precio</th>
-            <th>Subtotal</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsRows}
-        </tbody>
-      </table>
+      ${table(itemPages[0] ?? "")}
+      </div>
+      ${itemPages.slice(1).map((rows) => `<div class="pdf-page">${table(rows)}</div>`).join("")}
+      <div class="pdf-page">
 
       <div class="totals-section">
         <div class="total-row"><span class="total-label">Subtotal</span><span class="total-value">$${formatCurrency(subtotal)}</span></div>
@@ -247,6 +286,7 @@ export function buildPDFHTML(
 
       <div class="footer">
         <div class="thanks">¡Gracias por su compra!</div>
+      </div>
       </div>
     </div>
   `;

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createProductsBulk, previewProductsBulk } from '../src/actions/stock';
+import { parseExcelIva } from '../src/utils/iva-parser';
 import { mockDb } from './setup';
 
 vi.mock('next/cache', () => ({
@@ -63,10 +64,15 @@ describe('createProductsBulk with updateExisting', () => {
           code: expect.objectContaining({ in: ['PROD001'] }),
         }),
       }));
-      expect(db.$executeRawUnsafe).toHaveBeenCalled();
-      expect(vi.mocked(db.$executeRawUnsafe).mock.calls[0]).toEqual(
-        expect.arrayContaining(['product-id-1', 100, 100])
-      );
+      // Merged bulk writes updates via tx.product.update inside the batch
+      // transaction (stock/bulk.ts) — no longer raw SQL.
+      expect(db.product.update).toHaveBeenCalled();
+      const updateCall = vi.mocked(db.product.update).mock.calls[0];
+      expect(updateCall[0].where).toEqual(expect.objectContaining({ id: 'product-id-1' }));
+      expect(updateCall[0].data).toEqual(expect.objectContaining({
+        price: 100,
+        salePrice: 100,
+      }));
       expect(db.product.createMany).not.toHaveBeenCalled();
       expect(result.success).toContain('1');
     });
@@ -237,8 +243,9 @@ describe('createProductsBulk with updateExisting', () => {
 
         await createProductsBulk(productWithAmount, true);
 
-        expect(db.$executeRawUnsafe).toHaveBeenCalled();
-        expect(vi.mocked(db.$executeRawUnsafe).mock.calls[0]).toContain(75);
+        expect(db.product.update).toHaveBeenCalled();
+        const updateCall = vi.mocked(db.product.update).mock.calls[0];
+        expect(updateCall[0].data).toEqual(expect.objectContaining({ amount: 75 }));
       });
 
       it('cuando colAmount NO está definido (undefined) → mantener stock actual', async () => {
@@ -260,10 +267,13 @@ describe('createProductsBulk with updateExisting', () => {
 
         await createProductsBulk(productWithoutAmount, true);
 
-        expect(db.$executeRawUnsafe).toHaveBeenCalled();
-        const rawArgs = vi.mocked(db.$executeRawUnsafe).mock.calls[0];
-        expect(rawArgs).toContain('product-id-1');
-        expect(rawArgs[10]).toBeNull();
+        // Merged mechanism: tx.product.update; amount is only written when
+        // explicitly provided in the Excel row (bulk.ts "Only update amount if
+        // explicitly provided").
+        expect(db.product.update).toHaveBeenCalled();
+        const updateCall = vi.mocked(db.product.update).mock.calls[0];
+        expect(updateCall[0].where).toEqual(expect.objectContaining({ id: 'product-id-1' }));
+        expect(updateCall[0].data).not.toHaveProperty('amount');
       });
     });
   });
@@ -290,8 +300,11 @@ describe('createProductsBulk with price adjustments', () => {
       expect.objectContaining({
         data: expect.arrayContaining([
           expect.objectContaining({
-            price: 114.95,
-            salePrice: 172.425,
+            // Merged batch rounds to the nearest 10 (roundToNearest10):
+            // price = round10(100 * 0.95 * 1.21 = 114.95) = 110
+            // salePrice = round10(110 * 1.5 = 165) = 170
+            price: 110,
+            salePrice: 170,
             gain: 50,
           }),
         ]),
@@ -315,8 +328,9 @@ describe('createProductsBulk with price adjustments', () => {
       expect.objectContaining({
         data: expect.arrayContaining([
           expect.objectContaining({
+            // round10(200 * 0.9) = 180; round10(180 * 1.3 = 234) = 230
             price: 180,
-            salePrice: 234,
+            salePrice: 230,
             gain: 30,
           }),
         ]),
@@ -340,8 +354,9 @@ describe('createProductsBulk with price adjustments', () => {
       expect.objectContaining({
         data: expect.arrayContaining([
           expect.objectContaining({
-            price: 110.5,
-            salePrice: 132.6,
+            // round10(100 * 1.105 = 110.5) = 110; round10(110 * 1.2 = 132) = 130
+            price: 110,
+            salePrice: 130,
             gain: 20,
           }),
         ]),
@@ -388,7 +403,7 @@ describe('createProductsBulk with price adjustments', () => {
 
     await createProductsBulk(productInput, true, true);
 
-    expect(db.$executeRawUnsafe).toHaveBeenCalled();
+    expect(db.product.update).toHaveBeenCalled();
     expect(db.product.createMany).not.toHaveBeenCalled();
   });
 
@@ -516,13 +531,20 @@ describe('createProductsBulk con IVA de Excel', () => {
     vi.mocked(db.product.createMany).mockResolvedValue({ count: 1 });
   });
 
-  it('debería aplicar el 21% de IVA para la letra A, ignorando el IVA del proveedor', async () => {
+  // Post-split contract: the Excel "IVA" column is parsed CLIENT-SIDE by
+  // excel-upload-modal via parseExcelIva (src/utils/iva-parser), which forwards
+  // the resolved percent as the action's `iva` argument. The server batch never
+  // reads item.iva itself. These tests pin that end-to-end percent handling.
+
+  it('debería aplicar el 21% resuelto de la letra A (parseExcelIva + acción)', async () => {
     const productInput = [
       { code: 'PROD001', description: 'Test A', price: 100, iva: 'A' },
     ];
+    const resolved = parseExcelIva('A'); // modal-layer step
 
-    await createProductsBulk(productInput, true, false, 0, 10.5, 0, 'supplier-1');
+    await createProductsBulk(productInput, true, false, 0, resolved.percent ?? 0, 0, 'supplier-1');
 
+    expect(resolved).toEqual({ percent: 21, hasLetter: true });
     expect(db.product.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.arrayContaining([
@@ -539,8 +561,9 @@ describe('createProductsBulk con IVA de Excel', () => {
     const productInput = [
       { code: 'PROD001', description: 'Test P', price: 100, iva: '10.5%' },
     ];
+    const resolved = parseExcelIva('10.5%');
 
-    await createProductsBulk(productInput, true, false, 0, 21, 0, 'supplier-1');
+    await createProductsBulk(productInput, true, false, 0, resolved.percent ?? 0, 0, 'supplier-1');
 
     expect(db.product.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -558,9 +581,11 @@ describe('createProductsBulk con IVA de Excel', () => {
     const productInput = [
       { code: 'PROD001', description: 'Test 0', price: 100, iva: '0%' },
     ];
+    const resolved = parseExcelIva('0%');
 
-    await createProductsBulk(productInput, true, false, 0, 21, 0, 'supplier-1');
+    await createProductsBulk(productInput, true, false, 0, resolved.percent ?? 0, 0, 'supplier-1');
 
+    expect(resolved.percent).toBe(0);
     expect(db.product.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.arrayContaining([

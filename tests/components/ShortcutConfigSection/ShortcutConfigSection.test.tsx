@@ -141,10 +141,11 @@ describe("ShortcutConfigSection", () => {
       ).toBeInTheDocument();
     });
 
-    // Each key label should appear
-    expect(screen.getByText("F1")).toBeInTheDocument();
-    expect(screen.getByText("F2")).toBeInTheDocument();
-    expect(screen.getByText("F3")).toBeInTheDocument();
+    // Each key label should appear (merged section renders desktop + mobile
+    // layouts, so key labels match more than once)
+    expect(screen.getAllByText("F1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("F2").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("F3").length).toBeGreaterThan(0);
 
     // Selected product info should be shown (description — $price)
     expect(screen.getByText(/Producto Precio Variable/)).toBeInTheDocument();

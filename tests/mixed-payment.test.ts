@@ -79,6 +79,38 @@ vi.mock('../src/lib/pusher-server', () => ({
   },
 }));
 
+// Merged processSaleAction defers Pusher/revalidation into next/server after()
+// (report-F). The shared setup mocks after() as a no-op, so this suite overrides
+// it to track callbacks and exposes __flushAfter so tests can drain them
+// deterministically before asserting on Pusher events.
+vi.mock('next/server', () => {
+  const pending: Promise<unknown>[] = [];
+  return {
+    revalidatePath: vi.fn(),
+    revalidateTag: vi.fn(),
+    __flushAfter: () => Promise.all(pending),
+    after: (callback: () => unknown) => {
+      const p = Promise.resolve().then(callback);
+      pending.push(p);
+      return p;
+    },
+  };
+});
+
+const flushAfter = async () => {
+  const serverModule = (await import('next/server')) as unknown as {
+    __flushAfter: () => Promise<unknown>;
+  };
+  await serverModule.__flushAfter();
+};
+
+// Runs a sale through the action AND drains any deferred after() work.
+const processSale = async (input: Parameters<typeof processSaleAction>[0]) => {
+  const result = await processSaleAction(input);
+  await flushAfter();
+  return result;
+};
+
 const baseInput = {
   total: 100,
   totalWithDiscount: 100,
@@ -109,7 +141,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
         paidMethod: 'Efectivo',
       };
 
-      await processSaleAction(input);
+      await processSale(input);
 
       expect(pusherServer.trigger).toHaveBeenCalledWith(
         'movements-business-123',
@@ -131,7 +163,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
         twoMethods: true,
       };
 
-      await processSaleAction(input);
+      await processSale(input);
 
       const triggerCalls = (pusherServer.trigger as ReturnType<typeof vi.fn>).mock.calls;
       const movementsCalls = triggerCalls.filter(
@@ -156,7 +188,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
         twoMethods: true,
       };
 
-      await processSaleAction(input);
+      await processSale(input);
 
       const triggerCalls = (pusherServer.trigger as ReturnType<typeof vi.fn>).mock.calls;
       const movementsCalls = triggerCalls.filter(
@@ -181,14 +213,14 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
         twoMethods: true,
       };
 
-      await processSaleAction(input);
+      await processSale(input);
 
       const triggerCalls = (pusherServer.trigger as ReturnType<typeof vi.fn>).mock.calls;
       const movementsCalls = triggerCalls.filter(
         call => call[0] === 'movements-business-123' && call[1] === 'new-movement'
       );
 
-      expect(movementsCalls.length).toBe(2);
+      expect(movementsCalls.length, 'CALLS:' + JSON.stringify(triggerCalls)).toBe(2);
     });
   });
 
@@ -196,7 +228,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
     it('BUG2-REG-1: CashRegister subscription expects new-movement event name', async () => {
       const { pusherServer } = await import('../src/lib/pusher-server');
 
-      await processSaleAction(baseInput);
+      await processSale(baseInput);
 
       expect(pusherServer.trigger).toHaveBeenCalledWith(
         expect.any(String),
@@ -208,7 +240,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
     it('BUG2-REG-2: CashRegister subscription expects movements-{businessId} channel', async () => {
       const { pusherServer } = await import('../src/lib/pusher-server');
 
-      await processSaleAction(baseInput);
+      await processSale(baseInput);
 
       const channelsTriggered = (pusherServer.trigger as ReturnType<typeof vi.fn>).mock.calls.map(call => call[0]);
       expect(channelsTriggered.some(ch => ch.startsWith('movements-'))).toBe(true);
@@ -222,7 +254,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
         paidMethod: 'Efectivo',
       };
 
-      await processSaleAction(input);
+      await processSale(input);
 
       expect(pusherServer.trigger).toHaveBeenCalledWith(
         'movements-business-123',
@@ -244,7 +276,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
         paidMethod: 'Tarjeta',
       };
 
-      await processSaleAction(input);
+      await processSale(input);
 
       const triggerCalls = (pusherServer.trigger as ReturnType<typeof vi.fn>).mock.calls;
       const movementsCalls = triggerCalls.filter(
@@ -259,7 +291,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
     it('BUG2-COMP-1: processSaleAction should match createMovement trigger pattern', async () => {
       const { pusherServer } = await import('../src/lib/pusher-server');
 
-      await processSaleAction(baseInput);
+      await processSale(baseInput);
 
       expect(pusherServer.trigger).toHaveBeenCalledWith(
         'movements-business-123',
@@ -271,7 +303,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
     it('BUG2-COMP-2: TotalPanel expects refreshCount update via refreshTotal state', async () => {
       const { pusherServer } = await import('../src/lib/pusher-server');
 
-      await processSaleAction({
+      await processSale({
         ...baseInput,
         paidMethod: 'Efectivo',
       });
@@ -298,7 +330,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
         twoMethods: true,
       };
 
-      await processSaleAction(input);
+      await processSale(input);
 
       expect(pusherServer.trigger).toHaveBeenCalledWith(
         'movements-business-123',
@@ -322,7 +354,7 @@ describe('Mixed Payment Pusher Flow - Bug 2', () => {
         twoMethods: true,
       };
 
-      await processSaleAction(input);
+      await processSale(input);
 
       const triggerCalls = (pusherServer.trigger as ReturnType<typeof vi.fn>).mock.calls;
       const movementsCalls = triggerCalls.filter(

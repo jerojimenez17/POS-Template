@@ -6,6 +6,20 @@ import { BillContext } from "@/context/BillContext";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 
+// Cashbox guard (fix-searchbar union): merged components call useCashbox() and throw
+// outside CashboxProvider. Mocked following tests/components/BillButtons.shortcuts.test.tsx.
+vi.mock("@/context/CashboxContext", () => ({
+  useCashbox: vi.fn(() => ({
+    hasActiveSession: true,
+    setHasActiveSession: vi.fn(),
+    isClosing: false,
+    setIsClosing: vi.fn(),
+    isOpeningModalOpen: false,
+    setIsOpeningModalOpen: vi.fn(),
+  })),
+  CashboxProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock("@/hooks/useFeatures", () => ({
   useFeatures: vi.fn(),
 }));
@@ -14,14 +28,14 @@ import { useFeatures } from "@/hooks/useFeatures";
 
 // Production routes barcode lookups through getProductsByCode (returns array) when
 // no supplierId is active. getProductByCode is only called when supplierId is set.
+// Manual typing routes through getProductsFiltered (array contract, report-E D2).
 const mockGetProductsByCode = vi.fn().mockResolvedValue([]);
-const mockGetProductsBySearch = vi.fn().mockResolvedValue([]);
+const mockGetProductsFiltered = vi.fn().mockResolvedValue([]);
 
 vi.mock("@/actions/stock", () => ({
   getProductByCode: vi.fn().mockResolvedValue(null),
   getProductsByCode: (...args: unknown[]) => mockGetProductsByCode(...args),
-  getProductsBySearch: (...args: unknown[]) => mockGetProductsBySearch(...args),
-  getProductsFiltered: vi.fn().mockResolvedValue({ products: [], total: 0, page: 1, pageSize: 25, totalPages: 0 }),
+  getProductsFiltered: (...args: unknown[]) => mockGetProductsFiltered(...args),
   getSuppliersForFilter: vi.fn().mockResolvedValue([]),
 }));
 
@@ -132,7 +146,7 @@ describe("PrintableTable Barcode Scanning", () => {
       isOverLimit: () => false,
     } as never);
     mockGetProductsByCode.mockResolvedValue([]);
-    mockGetProductsBySearch.mockResolvedValue([]);
+    mockGetProductsFiltered.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -180,7 +194,7 @@ describe("PrintableTable Barcode Scanning", () => {
       // Advance past the 300ms manual search debounce
       vi.advanceTimersByTime(300);
 
-      expect(mockGetProductsBySearch).toHaveBeenCalledWith("123");
+      expect(mockGetProductsFiltered).toHaveBeenCalledWith({ search: "123", supplierId: undefined });
       expect(mockGetProductsByCode).not.toHaveBeenCalled();
     });
   });
@@ -209,7 +223,7 @@ describe("PrintableTable Barcode Scanning", () => {
   });
 
   describe("Manual Typing Still Works", () => {
-    it("should call getProductsBySearch for manual typing", async () => {
+    it("should call getProductsFiltered for manual typing", async () => {
       vi.useFakeTimers();
       renderWithMocks();
       const input = screen.getByPlaceholderText(/Buscar producto/i);
@@ -228,7 +242,7 @@ describe("PrintableTable Barcode Scanning", () => {
 
       vi.advanceTimersByTime(300);
 
-      expect(mockGetProductsBySearch).toHaveBeenCalledWith("test");
+      expect(mockGetProductsFiltered).toHaveBeenCalledWith({ search: "test", supplierId: undefined });
       expect(mockGetProductsByCode).not.toHaveBeenCalled();
     });
   });
@@ -415,7 +429,7 @@ describe("PrintableTable Barcode Scanning", () => {
   describe("Preserving Existing Behavior", () => {
     it("should still show suggestions for manual typing with 2 or more characters", async () => {
       const mockProduct = createMockProduct({ description: "Test Search Product" });
-      mockGetProductsBySearch.mockResolvedValue([mockProduct]);
+      mockGetProductsFiltered.mockResolvedValue([mockProduct]);
 
       vi.useFakeTimers();
       renderWithMocks();
@@ -435,7 +449,7 @@ describe("PrintableTable Barcode Scanning", () => {
 
       vi.advanceTimersByTime(300);
 
-      expect(mockGetProductsBySearch).toHaveBeenCalledWith("test");
+      expect(mockGetProductsFiltered).toHaveBeenCalledWith({ search: "test", supplierId: undefined });
     });
 
     it("should clear search input after successful barcode scan", async () => {

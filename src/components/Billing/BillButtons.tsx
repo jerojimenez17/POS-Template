@@ -4,6 +4,7 @@ import { Session } from "next-auth";
 import { Button } from "../ui/button";
 import { useContext, useEffect, useRef, useState, useCallback } from "react";
 import { BillContext } from "@/context/BillContext";
+import BillTypes from "@/models/billType";
 import typeBillState from "@/models/BillState";
 import CAE from "@/models/CAE";
 import { createAfipVoucherAction } from "@/actions/afip";
@@ -35,6 +36,9 @@ import {
 } from "@/actions/shortcuts";
 import type { ShortcutMap, ShortcutKey } from "@/models/ShortcutConfig";
 import Product from "@/models/Product";
+import { createBillCheckoutSnapshot } from "@/utils/billing";
+import { formatAfipPointSaleErrorForUser, sanitizeAfipText } from "@/services/afip/point-sale-validation";
+import { isValidCae } from "@/services/afip/voucher-response";
 
 interface props {
   session: Session | null;
@@ -58,7 +62,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [openEditModal, setOpenEditModal] = useState(false);
   const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
-  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem } =
+  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem, initialBillType, billTypeRef } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
@@ -70,6 +74,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== "undefined" ? navigator.onLine : true
   );
+  // Jero (5cefac7): default comprobante type from context, Factura B fallback
+  const defaultBillType = initialBillType ?? BillTypes.B;
 
   const checkSession = useCallback(() => {
     if (!hasActiveSession) {
@@ -122,20 +128,36 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     const handleKeyDown = async (e: KeyboardEvent) => {
       if (isEditing) return;
 
-      const map = shortcutMapRef.current;
-      const shortcutCfg = map[e.key as ShortcutKey];
-
-      if (shortcutCfg && shortcutCfg.productId) {
-        e.preventDefault();
+      // F1/F2/F3 — shortcut product lookup (if configured)
+      // Restored from merge stage-3 (upstream 6c3fbac): always preventDefault,
+      // add with amount=1/salePrice=0 and request price focus. No empty-cart
+      // guard here — shortcuts are how the first product enters the bill.
+      if (["F1", "F2", "F3"].includes(e.key)) {
+        e.preventDefault(); // Always prevent browser defaults (Chrome opens help on F1)
+        const map = shortcutMapRef.current;
+        const shortcutCfg = map[e.key as ShortcutKey];
+        if (!shortcutCfg || !shortcutCfg.productId) return; // No shortcut configured → no-op
         if (!checkSession()) return;
-        if (BillState.products?.length === 0) return;
+        if (session?.user.email) {
+          dispatch({ type: "sellerName", payload: session.user.email || "" });
+        }
         const product = await getProductByShortcutAction(e.key as ShortcutKey);
         if ("success" in product && product.success && product.data) {
-          addItem(product.data as Product);
+          const productToAdd = { ...product.data, amount: 1, salePrice: 0 } as Product;
+          addItem(productToAdd);
+          setFocusPriceProductId(productToAdd.id);
+          toast.success("Producto agregado — ingrese el precio");
+        } else if ("success" in product && product.success && !product.data) {
+          // Config exists but product is null (deleted) — show error
+          toast.error("El producto configurado para este atajo ya no existe");
+        } else {
+          const errResult = product as { error?: string };
+          toast.error(errResult.error || "Error al obtener producto");
         }
         return;
       }
 
+      // F4 — Factura modal
       if (e.key === 'F4') {
         e.preventDefault();
         if (!checkSession()) return;
@@ -146,6 +168,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         setFacturaKey(k => k + 1);
         setOpenFacturaModal(true);
       }
+      // F9 — Remito modal
       if (e.key === 'F9') {
         e.preventDefault();
         if (!checkSession()) return;
@@ -185,73 +208,98 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     return true;
   };
 
-  const handleCreateVoucher = async (): Promise<CAE | null> => {
+  const handleCreateVoucher = async (checkout: typeBillState): Promise<CAE | null> => {
     if (!checkConnection()) { setBlockButton(false); return null; }
     try {
       console.log("Calling createAfipVoucherAction");
-      const resp = await createAfipVoucherAction(BillState);
+       const resp = await createAfipVoucherAction(checkout);
 
-      if (resp.error) {
-        // Check if it's a plan error
-        const parsed = parsePlanError(resp.error);
-        if (parsed.isPlanError) {
-          setPlanError(parsed);
-          setOpenFeatureBlockedModal(true);
+      if ("error" in resp) {
+        // Check plan-gate first (our plan system)
+        if (typeof resp.error === "string") {
+          const parsed = parsePlanError(resp.error);
+          if (parsed.isPlanError) {
+            setPlanError(parsed);
+            setOpenFeatureBlockedModal(true);
+          } else {
+            // Not a plan error (e.g., missing credentials) - show as toast
+            toast.error(resp.error);
+          }
         } else {
-          // Not a plan error (e.g., missing credentials) - show as toast
-          toast.error(resp.error);
+          // Structured AFIP/ARCA point-of-sale rejection (Jero f485810)
+          toast.error(formatAfipPointSaleErrorForUser(resp.error));
         }
         setBlockButton(false);
         return null;
       }
 
-      const afipData = resp.data.afip || resp.data;
-      if (afipData?.CAE) {
-        setCreateVoucherError(false);
-        const newCAE: CAE = {
-          CAE: afipData.CAE,
-          vencimiento: afipData.CAEFchVto,
-          nroComprobante: resp.data.nroCbte || afipData.nroCbte || 0,
-          qrData: resp.data.qrData || afipData.qrData || "",
-        };
+       if (resp.success && isValidCae(resp.data.cae)) {
+         setCreateVoucherError(false);
+         const newCAE: CAE = {
+           CAE: resp.data.cae,
+           vencimiento: resp.data.vencimiento,
+           nroComprobante: resp.data.nroComprobante,
+           qrData: resp.data.qrData,
+           ptoVenta: resp.data.ptoVenta ?? checkout.ptoVenta,
+         };
         dispatch({ type: "CAE", payload: newCAE });
         setLocalCAE(newCAE);
         toast.success("Factura generada correctamente");
         setBlockButton(false);
         return newCAE;
-      } else {
-        const errorMsg = typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data);
-        toast.error(errorMsg);
-        setResponse(errorMsg);
+       } else {
+         const errorMsg = "La Cloud Function respondió sin un CAE válido";
+         toast.error(errorMsg);
+         setResponse(errorMsg);
         setBlockButton(false);
         return null;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      setResponse(err.message);
-      toast.error(err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? sanitizeAfipText(err.message) : "Error inesperado al generar la factura";
+       setResponse(message);
+       toast.error(message);
       setCreateVoucherError(true);
       setBlockButton(false);
-      console.error(err);
+       console.error("[createVoucher] client failure", { errorType: typeof err, message });
       return null;
     }
   };
 
-  const handleSaveSale = async (billState: typeBillState) => {
-    if (!checkConnection()) { setBlockButton(false); return; }
+  /** Minimal product fields needed by server actions (Jero: reduce payload) */
+  const toMinimalProducts = (products: typeBillState["products"]) =>
+    products.map((p) => ({
+      id: p.id,
+      code: p.code,
+      description: p.description,
+      price: p.price,
+      salePrice: p.salePrice,
+      amount: p.amount,
+    }));
+
+  const handleSaveSale = async (billState: typeBillState): Promise<boolean> => {
+    if (!checkConnection()) { setBlockButton(false); return false; }
     try {
-      const result = await processSaleAction(billState);
+      // Send only minimal product data to reduce Server Action payload
+      const result = await processSaleAction({
+        ...billState,
+        products: toMinimalProducts(billState.products),
+      });
       if ('error' in result && result.error) {
         toast.error(result.error as string);
         setSaveError(true);
+        return false;
       } else {
         setSaveError(false);
+        return true;
       }
-      setBlockButton(false);
     } catch (err) {
       console.error(err);
-      setBlockButton(false);
       setSaveError(true);
+      toast.error(
+        "Error al guardar la venta: " +
+          (err instanceof Error ? err.message : "Error inesperado"),
+      );
+      return false;
     }
   };
 
@@ -306,12 +354,13 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         }
       }
 
+      const checkout = createBillCheckoutSnapshot(BillState, billTypeRef?.current);
       let caeData: CAE | null = null;
       if (afip && !isUpdate) {
-        caeData = await handleCreateVoucher();
+        caeData = await handleCreateVoucher(checkout);
         // If AFIP billing was requested but failed (plan error, missing credentials, etc.),
         // do NOT save the sale — abort immediately.
-        if (!caeData) {
+        if (!caeData?.CAE?.trim()) {
           setBlockButton(false);
           return undefined;
         }
@@ -319,7 +368,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
 
       if (isUpdate && orderId) {
         const updateResult = await updateOrderAction(orderId, {
-          ...BillState,
+          ...checkout,
+          products: toMinimalProducts(checkout.products),
           totalWithDiscount: totalAmount,
         });
 
@@ -330,12 +380,18 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         toast.success("Venta actualizada correctamente");
         router.push(`/sales/${orderId}`);
       } else {
-        await handleSaveSale({
-          ...BillState,
+        const saveSuccess = await handleSaveSale({
+          ...checkout,
           CAE: caeData || localCAE,
           totalWithDiscount: totalAmount,
         });
+        if (!saveSuccess) {
+          // Save failed but error was already shown by handleSaveSale
+          setBlockButton(false);
+          return undefined;
+        }
         toast.success(afip ? "Factura guardada correctamente" : "Remito guardado correctamente");
+        setBlockButton(false);
       }
       return caeData || localCAE;
     } catch (err) {
@@ -514,7 +570,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
                   dispatch({ type: "billType", payload: "Presupuesto" });
                   handlePrint(undefined, targetWin);
                   setTimeout(() => {
-                    dispatch({ type: "removeAll", payload: null });
+                    dispatch({ type: "removeAll", payload: null, defaultBillType });
                     if (onOrderResetRef.current) {
                       onOrderResetRef.current();
                     }
@@ -535,9 +591,17 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               amount: p.amount,
             }))}
             total={BillState.total}
+            discount={BillState.discount}
+            totalWithDiscount={Math.round(
+              BillState.products.reduce(
+                (acc, act) => acc + act.salePrice * act.amount,
+                0,
+              ) * (1 - BillState.discount * 0.01)
+            )}
+            seller={session?.user?.email || ""}
             businessId={session?.user?.businessId || ""}
             onSuccess={() => {
-              dispatch({ type: "removeAll", payload: null });
+              dispatch({ type: "removeAll", payload: null, defaultBillType });
               if (onOrderResetRef.current) {
                 onOrderResetRef.current();
               }
@@ -569,14 +633,19 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               setBlockButton(false);
               return;
             }
-            // Disparar impresión y limpiar estado después
-            handlePrint(caeResult, targetWin);
-            setTimeout(() => {
-              dispatch({ type: "removeAll", payload: null });
-              if (onOrderResetRef.current) {
-                onOrderResetRef.current();
-              }
-            }, 1500);
+            // Jero guards: only print/reset when no validation error is showing
+            // and the total is greater than zero.
+            if (!openErrorModal && BillState.total > 0) {
+              handlePrint(caeResult, targetWin);
+              setTimeout(() => {
+                dispatch({ type: "removeAll", payload: null, defaultBillType });
+                if (onOrderResetRef.current) {
+                  onOrderResetRef.current();
+                }
+              }, 5000);
+            } else if (targetWin) {
+              targetWin.close();
+            }
             setBlockButton(false);
           } catch (err) {
             if (targetWin) targetWin.close();
@@ -606,14 +675,19 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               setBlockButton(false);
               return;
             }
-            // Disparar impresión y limpiar estado después
-            handlePrint(caeResult, targetWin);
-            setTimeout(() => {
-              dispatch({ type: "removeAll", payload: null });
-              if (onOrderResetRef.current) {
-                onOrderResetRef.current();
-              }
-            }, 1500);
+            // Jero guards: only print/reset when no validation error is showing
+            // and the total is greater than zero.
+            if (!openErrorModal && BillState.total > 0) {
+              handlePrint(caeResult, targetWin);
+              setTimeout(() => {
+                dispatch({ type: "removeAll", payload: null, defaultBillType });
+                if (onOrderResetRef.current) {
+                  onOrderResetRef.current();
+                }
+              }, 5000);
+            } else if (targetWin) {
+              targetWin.close();
+            }
             setBlockButton(false);
           } catch (err) {
             if (targetWin) targetWin.close();

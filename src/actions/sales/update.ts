@@ -10,8 +10,10 @@ import { assertWritePermission } from "@/lib/auth-gates";
 interface CaeData {
   CAE: string;
   vencimiento: string;
-  nroComprobante: number;
+  /** AFIP returns numeric fields as strings in some response shapes */
+  nroComprobante: number | string;
   qrData: string;
+  ptoVenta?: number | string;
 }
 
 interface UpdateCaeInput {
@@ -143,7 +145,7 @@ export const deleteOrderAction = async (orderId: string) => {
         if (item.productId) {
           await tx.product.update({
             where: { id: item.productId },
-            data: { amount: { increment: item.quantity } },
+            data: { amount: { increment: item.quantity }, last_update: new Date() },
           });
         }
       }

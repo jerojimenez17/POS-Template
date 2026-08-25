@@ -22,6 +22,9 @@ vi.mock("@/components/ui/dialog", () => {
     },
     DialogContent: ({ children }: { children: React.ReactNode }) =>
       dialogOpen ? <div data-testid="dialog-content">{children}</div> : null,
+    // Merged BarcodeModal renders an accessible DialogTitle; without this export
+    // the whole suite crashes at import time.
+    DialogTitle: ({ children }: { children?: React.ReactNode }) => <h2>{children}</h2>,
     DialogTrigger: ({ children }: any) => (
       <div data-testid="dialog-trigger" onClick={() => onOpenChange?.(true)}>
         {children}
@@ -117,8 +120,9 @@ describe("BarcodeModal Component", () => {
     it("should have tag height of 3.5cm when codebar is null (AC1)", () => {
       renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
       const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
+      // Tag cards size via min-height (style={{ width, minHeight }}).
       const foundTag = Array.from(tagCards).find(
-        (el) => el.style.height === "3.5cm"
+        (el) => el.style.minHeight === "3.5cm"
       );
       expect(foundTag).toBeTruthy();
     });
@@ -129,7 +133,7 @@ describe("BarcodeModal Component", () => {
       );
       const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
       const foundTag = Array.from(tagCards).find(
-        (el) => el.style.height === "5cm"
+        (el) => el.style.minHeight === "5cm"
       );
       expect(foundTag).toBeTruthy();
     });
@@ -179,22 +183,27 @@ describe("BarcodeModal Component", () => {
       renderAndOpen(
         <BarcodeModal {...defaultProps} codebar="123456789012" />
       );
-      expect(screen.getByText(/Código interno:/)).toBeInTheDocument();
-      expect(screen.getByText(/Código de barras:/)).toBeInTheDocument();
+      // Current selector: "Generar desde:" grid with two source buttons.
+      expect(screen.getByText("Generar desde:")).toBeInTheDocument();
+      expect(screen.getByText("Código Interno")).toBeInTheDocument();
+      expect(screen.getByText("Código Barras")).toBeInTheDocument();
     });
 
     it("should NOT show source selector when codebar is absent", () => {
       renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
-      expect(screen.queryByText(/Código interno:/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Código de barras:/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Generar desde:")).not.toBeInTheDocument();
     });
 
-    it("should switch to codebar source when clicking 'Código de barras' button", () => {
+    it("should switch to codebar source when clicking 'Código Barras' button", () => {
       renderAndOpen(
         <BarcodeModal {...defaultProps} codebar="779123456" />
       );
-      const barcodeButton = screen.getByText(/Código de barras: 779123456/);
-      fireEvent.click(barcodeButton);
+      const barcodeButton = screen.getByText("Código Barras").closest("button");
+      expect(barcodeButton).toBeTruthy();
+      fireEvent.click(barcodeButton!);
+      // Selected source renders as the raised white card in the toggle grid.
+      expect(barcodeButton!.className).toContain("bg-white");
+      // And the barcode regenerates from the selected source.
       expect(vi.mocked(JsBarcode)).toHaveBeenCalled();
     });
   });

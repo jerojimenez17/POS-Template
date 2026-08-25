@@ -1,11 +1,26 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import PrintableTable from "@/components/Billing/PrintableTable";
 import { BillContext } from "@/context/BillContext";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import CAE from "@/models/CAE";
+
+// Cashbox guard (fix-searchbar union): merged components call useCashbox() and throw
+// "useCashbox must be used within a CashboxProvider" outside the provider.
+// Mocked here following the pre-existing pattern in tests/components/BillButtons.shortcuts.test.tsx.
+vi.mock("@/context/CashboxContext", () => ({
+  useCashbox: vi.fn(() => ({
+    hasActiveSession: true,
+    setHasActiveSession: vi.fn(),
+    isClosing: false,
+    setIsClosing: vi.fn(),
+    isOpeningModalOpen: false,
+    setIsOpeningModalOpen: vi.fn(),
+  })),
+  CashboxProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
 
 vi.mock("@/hooks/useFeatures", () => ({
   useFeatures: vi.fn(),
@@ -453,7 +468,28 @@ describe("PrintableTable Component", () => {
       expect(screen.getByText("Test Business Name")).toBeTruthy();
     });
 
-    it("should display billing info when available", async () => {
+    it("should display billing info for official-invoice documents (CAE present)", async () => {
+      // Merged gating (report-C): the fiscal block (CUIT/Condición IVA/Inicio/Dirección)
+      // renders ONLY when documentKind === "official-invoice", i.e. a CAE exists.
+      const billState = createMockBillState({ CAE: createMockCAE() });
+
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/CUIT:/)).toBeTruthy();
+      });
+      expect(screen.getByText("20123456789")).toBeTruthy();
+    });
+
+    it("should hide fiscal business info for remitos (documentKind gating)", async () => {
       renderWithContext(
         <PrintableTable
           printTrigger={0}
@@ -463,11 +499,11 @@ describe("PrintableTable Component", () => {
         />
       );
 
+      // Business name still prints, but the AFIP fiscal data must not.
       await waitFor(() => {
         expect(screen.getByText(/Test Business/)).toBeTruthy();
       });
-      expect(screen.getByText(/CUIT:/)).toBeTruthy();
-      expect(screen.getByText("20123456789")).toBeTruthy();
+      expect(screen.queryByText(/CUIT:/)).toBeNull();
     });
   });
 
@@ -566,6 +602,7 @@ describe("PrintableTable Component", () => {
       const billState = createMockBillState({
         products,
         discount: 10,
+        totalWithDiscount: 90,
       });
 
       renderWithContext(
@@ -578,8 +615,14 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      expect(screen.getByText(/Descuento/)).toBeTruthy();
-      expect(screen.getByText("$90,00")).toBeTruthy();
+      // Merged totals show BOTH the DiscountControl label ("Descuento") and the
+      // discount line ("Descuento (10 %)") — match all of them. Total row displays
+      // BillState.totalWithDiscount verbatim (reducer owns post-discount math).
+      expect(screen.getAllByText(/Descuento/).length).toBeGreaterThanOrEqual(2);
+      const totalsSection = within(
+        (screen.getByText("Total").closest(".w-72") as HTMLElement)
+      );
+      expect(totalsSection.getByText("$90,00")).toBeTruthy();
     });
 
     it("should display unit price formatted correctly", () => {
@@ -882,25 +925,24 @@ describe("PrintableTable Component", () => {
         />,
       );
 
-      // Verify the product amount text is visible
-      expect(screen.getByText("5")).toBeTruthy();
+      // Verify the product amount text is visible (screen + hidden print-only copy)
+      expect(screen.getAllByText("5").length).toBeGreaterThan(0);
 
       // Verify a span contains the amount (not an input) in display mode
       const amountSpan = container.querySelector(
-        'span.w-12.text-center.font-medium.tabular-nums',
+        'span[title="Click para editar cantidad"]',
       );
-      // NOTE: After feature implementation, this span is replaced by InlineAmountInput
-      // which also renders a span. This test ensures the display mode shows a span.
-      if (amountSpan) {
-        expect(amountSpan.textContent).toBe("5");
-      }
+      expect(amountSpan).toBeTruthy();
+      expect(amountSpan?.textContent).toBe("5");
 
-      // Verify no input with numeric inputMode exists initially in display mode
-      const numericInput = container.querySelector('input[inputmode="numeric"]');
-      expect(numericInput).toBeNull();
+      // No edit-mode numeric input inside the QUANTITY cell in display mode.
+      // (The DiscountControl footer input is type=number too, so an unscoped
+      // query would false-positive.)
+      const quantityCell = (amountSpan as HTMLElement).closest("td");
+      expect(quantityCell?.querySelector("input[type='number']")).toBeNull();
     });
 
-    it("double-click on the amount span switches to an <input> pre-filled with the amount [AC-02]", () => {
+    it("single click on the amount span switches to a numeric <input> pre-filled [merged inline editor]", () => {
       const products = [
         createMockProduct({ id: "1", description: "Prod Unit", amount: 7, unit: "unidades" }),
       ];
@@ -916,16 +958,18 @@ describe("PrintableTable Component", () => {
         />,
       );
 
-      // Find the amount element — currently a span, later will be InlineAmountInput
+      // Merged editor lives INLINE in PrintableTable: a span opens on SINGLE click
+      // (title="Click para editar cantidad") and swaps for <input type="number">.
       const amountElement = container.querySelector('span[title="Click para editar cantidad"]') as HTMLElement | null;
       expect(amountElement).toBeTruthy();
       expect(amountElement?.textContent).toBe("7");
 
-      // Double-click to enter edit mode
-      fireEvent.doubleClick(amountElement);
+      // Capture the quantity cell BEFORE clicking: editing replaces the span node.
+      const quantityCell = amountElement!.closest("td");
 
-      // After double-click, an <input> with inputMode="numeric" should appear
-      const input = container.querySelector('input[inputmode="numeric"]') as HTMLInputElement;
+      fireEvent.click(amountElement);
+
+      const input = quantityCell?.querySelector("input[type='number']") as HTMLInputElement;
       expect(input).toBeTruthy();
       expect(input.value).toBe("7");
     });
