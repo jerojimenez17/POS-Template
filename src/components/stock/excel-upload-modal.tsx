@@ -38,6 +38,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [adjustmentIva, setAdjustmentIva] = useState("0");
   const [adjustmentGain, setAdjustmentGain] = useState(0);
   const [updateOnly, setUpdateOnly] = useState(false);
+  const [metadataOnly, setMetadataOnly] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
   useEffect(() => {
@@ -177,7 +178,17 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         const detected = detectColumns(headerRow);
         const hasAutoDetect = detected.code !== -1 && detected.description !== -1 && detected.price !== -1;
 
-        const indices = hasAutoDetect ? detected : fallbackIndices;
+        // When auto-detect succeeds, use detected columns but let manual overrides take precedence
+        const indices = hasAutoDetect ? { ...detected } : { ...fallbackIndices };
+        if (hasAutoDetect) {
+          // Override auto-detected columns with manually specified ones
+          if (colAmount && fallbackIndices.amount >= 0) indices.amount = fallbackIndices.amount;
+          if (colBrand && fallbackIndices.brand >= 0) indices.brand = fallbackIndices.brand;
+          if (colCategory && fallbackIndices.category >= 0) indices.category = fallbackIndices.category;
+          if (colSubCategory && fallbackIndices.subCategory >= 0) indices.subCategory = fallbackIndices.subCategory;
+          if (colCodebar && fallbackIndices.codebar >= 0) indices.codebar = fallbackIndices.codebar;
+          if (colIva && fallbackIndices.iva >= 0) indices.iva = fallbackIndices.iva;
+        }
         const dataStartRow = hasAutoDetect ? 1 : Math.max(0, startRow - 1);
 
         console.log(`Hoja "${sheetName}": ${sheetRows.length} filas, ` +
@@ -239,7 +250,8 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         adjustmentDiscount, 
         parseFloat(adjustmentIva), 
         adjustmentGain, 
-        selectedSupplierId || undefined
+        selectedSupplierId || undefined,
+        metadataOnly
       );
       
       if (result.error) {
@@ -279,7 +291,8 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
           adjustmentDiscount,
           parseFloat(adjustmentIva),
           adjustmentGain,
-          selectedSupplierId || undefined
+          selectedSupplierId || undefined,
+          metadataOnly
         );
 
         if ('error' in result) {
@@ -552,10 +565,24 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                disabled={!updateExisting}
                className="h-4 w-4 rounded border-gray-300"
              />
-             <Label htmlFor="updateOnly" className={`text-sm font-normal cursor-pointer ${!updateExisting ? 'text-muted-foreground' : ''}`}>
-               Solo actualizar (no crear nuevos productos)
-             </Label>
-           </div>
+              <Label htmlFor="updateOnly" className={`text-sm font-normal cursor-pointer ${!updateExisting ? 'text-muted-foreground' : ''}`}>
+                Solo actualizar (no crear nuevos productos)
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="metadataOnly"
+                checked={metadataOnly}
+                onChange={(e) => setMetadataOnly(e.target.checked)}
+                disabled={!updateExisting}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <Label htmlFor="metadataOnly" className={`text-sm font-normal cursor-pointer ${!updateExisting ? 'text-muted-foreground' : ''}`}>
+                Actualizar solo metadatos (marca, categoría, descripción, código de barras)
+              </Label>
+            </div>
            
            {errorMsg && (
              <div className="p-3 text-sm text-red-600 bg-red-100 rounded-md border border-red-200">
@@ -569,6 +596,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
               <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-200">Nuevos: {previewData?.createdCount}</Badge>
               <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">A Actualizar: {previewData?.updatedCount}</Badge>
               <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-200">Ignorados: {previewData?.ignoredCount}</Badge>
+              {metadataOnly && <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-200">Solo metadatos</Badge>}
             </div>
             <div className="border rounded-md max-h-[400px] overflow-auto">
               <Table>
@@ -577,9 +605,11 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                     <TableHead>Estado</TableHead>
                     <TableHead>Código</TableHead>
                     <TableHead>Descripción</TableHead>
-                    <TableHead>Precio Original</TableHead>
-                    <TableHead>Precio Ajustado</TableHead>
-                    <TableHead>Stock</TableHead>
+                    {!metadataOnly && <TableHead>Precio Original</TableHead>}
+                    {!metadataOnly && <TableHead>Precio Ajustado</TableHead>}
+                    {metadataOnly && <TableHead>Marca</TableHead>}
+                    {!metadataOnly && <TableHead>Stock</TableHead>}
+                    {metadataOnly && <TableHead>Stock</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -592,18 +622,23 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                       </TableCell>
                       <TableCell>{item.code}</TableCell>
                       <TableCell>{item.description}</TableCell>
-                      <TableCell>${item.price.toLocaleString("es-AR")}</TableCell>
-                      <TableCell>
-                        ${(() => {
-                          const parsed = parseExcelIva(item.iva);
-                          const rowIva = parsed.percent !== null ? parsed.percent : parseFloat(adjustmentIva);
-                          const withDiscount = item.price * (1 - adjustmentDiscount / 100);
-                          const withIva = withDiscount * (1 + rowIva / 100);
-                          const withGain = withIva * (1 + adjustmentGain / 100);
-                          return (Math.round(withGain / 10) * 10).toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-                        })()}
-                      </TableCell>
-                      <TableCell>{item.amount ?? "-"}</TableCell>
+                      {!metadataOnly && (
+                        <>
+                          <TableCell>${item.price.toLocaleString("es-AR")}</TableCell>
+                          <TableCell>
+                            ${(() => {
+                              const parsed = parseExcelIva(item.iva);
+                              const rowIva = parsed.percent !== null ? parsed.percent : parseFloat(adjustmentIva);
+                              const withDiscount = item.price * (1 - adjustmentDiscount / 100);
+                              const withIva = withDiscount * (1 + rowIva / 100);
+                              const withGain = withIva * (1 + adjustmentGain / 100);
+                              return (Math.round(withGain / 10) * 10).toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                            })()}
+                          </TableCell>
+                        </>
+                      )}
+                      {metadataOnly && <TableCell>{item.brandName || "-"}</TableCell>}
+                      <TableCell>{metadataOnly ? "Sin cambios" : (item.amount ?? "-")}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
