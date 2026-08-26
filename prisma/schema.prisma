@@ -375,6 +375,7 @@ model Order {
   cashboxSession   CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
 
   @@index([businessId, date])
+  @@index([businessId, paidStatus, status, date])
 }
 
 enum OrderUpdateType {
