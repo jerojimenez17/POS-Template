@@ -61,7 +61,32 @@ interface GetUnpaidOrdersInput {
   businessId: string;
   status?: string;
   orderId?: string;
+  search?: string;
 }
+
+interface AccountLedgerOrder {
+  id: string;
+  date: Date;
+  client: { id: string; name: string | null } | null;
+}
+
+const compareAccountLedgerOrders = (
+  first: AccountLedgerOrder,
+  second: AccountLedgerOrder,
+): number => {
+  const firstClientName = first.client?.name?.toLowerCase() || "";
+  const secondClientName = second.client?.name?.toLowerCase() || "";
+
+  if (firstClientName < secondClientName) return -1;
+  if (firstClientName > secondClientName) return 1;
+
+  const firstDate = first.date instanceof Date ? first.date.getTime() : 0;
+  const secondDate = second.date instanceof Date ? second.date.getTime() : 0;
+  const dateDifference = secondDate - firstDate;
+  if (dateDifference !== 0) return dateDifference;
+
+  return first.id < second.id ? -1 : first.id > second.id ? 1 : 0;
+};
 
 const addItemsToOrderSchema = z.object({
   orderId: z.string(),
@@ -475,35 +500,51 @@ export const updateOrderDiscount = async (input: UpdateOrderDiscountInput): Prom
 export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<ActionResult> => {
   try {
     const session = await auth();
-    const businessId = session?.user?.businessId || input.businessId;
+    const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
 
-    let orders;
+    let orders: unknown[];
     if (input.orderId) {
-      orders = await db.order.findUnique({
+      const order = await db.order.findUnique({
         where: { id: input.orderId, businessId },
         include: {
           client: true,
           cashMovements: true,
         },
       } as never);
-      orders = orders ? [orders] : [];
+      orders = order ? [order] : [];
     } else {
       const isPending = input.status === "pendiente";
       const paidStatus = (input.status === "pagado" ? "pago" : input.status) as PaidStatus | undefined;
-      orders = await db.order.findMany({
+      const search = input.search?.trim();
+      const listOrders = await db.order.findMany({
         where: {
           businessId,
           // Si estamos buscando "pendientes", filtramos por status = pendiente
           ...(isPending ? { status: "pendiente" } : { status: { not: "pendiente" } }),
           // Y solo aplicamos el filtro de paidStatus si no es "pending" ni "all"
           ...(!isPending && paidStatus && paidStatus !== ("all" as never) ? { paidStatus } : {}),
+          ...(search ? { client: { name: { contains: search, mode: "insensitive" as const } } } : {}),
         },
-        include: {
-          client: true,
+        select: {
+          id: true,
+          date: true,
+          total: true,
+          status: true,
+          paidStatus: true,
+          clientId: true,
+          notes: true,
+          client: { select: { id: true, name: true } },
         },
-        orderBy: { date: "desc" },
+        orderBy: [
+          { client: { name: "asc" } },
+          { date: "desc" },
+          { id: "asc" },
+        ],
       });
+      // PostgreSQL relation ordering does not guarantee the old JS semantics
+      // for NULL clients or collation. Sort only the already reduced projection.
+      orders = [...listOrders].sort(compareAccountLedgerOrders);
     }
 
     return { success: true, data: orders };
