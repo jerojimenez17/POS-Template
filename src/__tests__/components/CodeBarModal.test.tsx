@@ -119,7 +119,7 @@ describe("CodeBarModal Component", () => {
   });
 
   describe("Tag dimensions (AC1, AC2)", () => {
-    it("should have tag width of 45mm with or without codebar (AC1)", () => {
+    it("should have tag width of 55mm with or without codebar (AC1)", () => {
       renderAndOpen(
         <CodeBarModal
           code="CODE001"
@@ -131,7 +131,7 @@ describe("CodeBarModal Component", () => {
       );
       const tagCards = document.querySelectorAll<HTMLElement>(".label-container");
       expect(tagCards).toHaveLength(1);
-      expect((tagCards[0] as HTMLElement).style.width).toBe("45mm");
+      expect((tagCards[0] as HTMLElement).style.width).toBe("55mm");
 
       cleanup();
       renderAndOpen(
@@ -144,10 +144,10 @@ describe("CodeBarModal Component", () => {
         />
       );
       const barcodeTag = document.querySelector<HTMLElement>(".label-container");
-      expect(barcodeTag?.style.width).toBe("45mm");
+      expect(barcodeTag?.style.width).toBe("55mm");
     });
 
-    it("should have tag height of 55mm when codebar is absent (AC1)", () => {
+    it("should have tag height of 45mm when codebar is absent (AC1)", () => {
       renderAndOpen(
         <CodeBarModal
           code="CODE001"
@@ -158,10 +158,10 @@ describe("CodeBarModal Component", () => {
         />
       );
       const tag = document.querySelector<HTMLElement>(".label-container");
-      expect(tag?.style.height).toBe("55mm");
+      expect(tag?.style.height).toBe("45mm");
     });
 
-    it("should have tag height of 55mm when codebar is present (AC1)", () => {
+    it("should have tag height of 45mm when codebar is present (AC1)", () => {
       renderAndOpen(
         <CodeBarModal
           code="CODE001"
@@ -172,7 +172,7 @@ describe("CodeBarModal Component", () => {
         />
       );
       const tag = document.querySelector<HTMLElement>(".label-container");
-      expect(tag?.style.height).toBe("55mm");
+      expect(tag?.style.height).toBe("45mm");
     });
 
     it("should not use a legacy height when codebar is absent", () => {
@@ -186,7 +186,7 @@ describe("CodeBarModal Component", () => {
         />
       );
       const tag = document.querySelector<HTMLElement>(".label-container");
-      expect(tag?.style.height).toBe("55mm");
+      expect(tag?.style.height).toBe("45mm");
       expect(tag?.style.height).not.toBe("3.5cm");
     });
   });

@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { printElement } from "@/lib/print";
 import CodeBarButton from "./codebarButton";
+import { LABEL_45X55_PAGE_STYLE, LABEL_55X45_HEIGHT, LABEL_55X45_WIDTH } from "./product-print-modal";
 
 interface Props {
   code: string;
@@ -30,8 +31,8 @@ function formatPrice(price: number): string {
   return `$${rounded}`;
 }
 
-const TAG_WIDTH = "45mm";
-const TAG_HEIGHT = "55mm";
+const TAG_WIDTH = LABEL_55X45_WIDTH;
+const TAG_HEIGHT = LABEL_55X45_HEIGHT;
 
 const CodeBarModal = ({ code, codebar, description, salePrice }: Props) => {
   const hasCodebar = Boolean(codebar?.trim());
@@ -79,72 +80,9 @@ const CodeBarModal = ({ code, codebar, description, salePrice }: Props) => {
     if (printRef.current) {
       await printElement(printRef.current, {
         documentTitle: `CodigoBarras_${barcodeValue}`,
-        pageStyle: `
-          @page { size: 45mm 55mm portrait; margin: 0; }
-          html, body { width: 45mm; height: 55mm; margin: 0; padding: 0; }
-          @media print {
-            html, body { width: 45mm; height: 55mm; margin: 0; padding: 0; }
-            body { color: #000; background: #fff; -webkit-print-color-adjust: exact; }
-            .no-print { display: none !important; }
-            .label-container {
-              width: 45mm !important;
-              height: 55mm !important;
-              box-sizing: border-box;
-              overflow: hidden;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              padding: 2mm;
-              color: #000;
-              background: #fff;
-              page-break-inside: avoid;
-            }
-            .label-container:not(:last-child) {
-              page-break-after: always;
-              break-after: page;
-            }
-            .label-description {
-              font-size: 3.2mm;
-              font-weight: 700;
-              text-align: center;
-              line-height: 1.1;
-              margin-bottom: 0.5mm;
-              overflow-wrap: anywhere;
-              word-wrap: break-word;
-              max-width: 100%;
-              width: 100%;
-            }
-            .label-price {
-              font-size: 5mm;
-              font-weight: 800;
-              text-align: center;
-              margin-bottom: 0.5mm;
-            }
-            .label-code {
-              font-size: 10px;
-              text-align: center;
-              margin-top: 0.25mm;
-            }
-            .label-barcode {
-              text-align: center;
-              margin: 0.5mm 0;
-              min-width: 0;
-              max-width: 100%;
-              width: 100%;
-              overflow: hidden;
-            }
-            .label-barcode svg {
-              display: block;
-              min-width: 0;
-              max-width: 100%;
-              width: 100%;
-              height: auto;
-            }
-          }
-        `,
+        pageStyle: LABEL_45X55_PAGE_STYLE,
         format: "thermal",
-        orientation: "portrait",
+        orientation: "landscape",
         // The PDF fallback preserves the content, but final physical size still depends on print scale.
         fallbackToPDF: true,
       });
@@ -277,7 +215,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice }: Props) => {
         </div>
 
         <p className="no-print text-sm text-muted-foreground">
-          En la impresión seleccioná escala 100%, márgenes ninguno y orientación vertical.
+          En la impresión seleccioná escala 100%, márgenes ninguno y orientación horizontal (landscape). Las preferencias del navegador o driver pueden prevalecer.
         </p>
 
         <DialogFooter>

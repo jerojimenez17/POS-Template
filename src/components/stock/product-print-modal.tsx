@@ -87,13 +87,16 @@ const THERMAL_PAGE_STYLE = `@page { size: 55mm 65mm; margin: 0; }
   .no-barcode.has-price .label-price { font-size: 36px; font-weight: 900; }
 }`;
 
-const LABEL_45X55_PAGE_STYLE = `@page { size: 45mm 55mm portrait; margin: 0; }
-html, body { width: 45mm; height: 55mm; margin: 0; padding: 0; }
+export const LABEL_55X45_WIDTH = "55mm";
+export const LABEL_55X45_HEIGHT = "45mm";
+
+export const LABEL_45X55_PAGE_STYLE = `@page { size: 55mm 45mm landscape; margin: 0; }
+html, body { width: 55mm; height: 45mm; margin: 0; padding: 0; }
 @media print {
-  html, body { width: 45mm; height: 55mm; margin: 0; padding: 0; }
+  html, body { width: 55mm; height: 45mm; margin: 0; padding: 0; }
   body { color: #000; background: #fff; -webkit-print-color-adjust: exact; }
   .no-print { display: none !important; }
-  .label-container { width: 45mm !important; height: 55mm !important; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2mm; color: #000; background: #fff; page-break-inside: avoid; max-width: 100%; }
+  .label-container { width: 55mm !important; height: 45mm !important; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2mm; color: #000; background: #fff; page-break-inside: avoid; max-width: 100%; }
   .label-container:not(:last-child) { page-break-after: always; break-after: page; }
   .label-description { max-width: 100%; width: 100%; overflow-wrap: anywhere; word-wrap: break-word; text-align: center; }
   .label-barcode { min-width: 0; max-width: 100%; width: 100%; overflow: hidden; }
@@ -128,7 +131,7 @@ export const PRODUCT_PRINT_FORMAT_CONFIG: Record<ProductPrintFormat, ProductPrin
     },
   },
   "label-45x55": {
-    width: "45mm", height: "55mm", pageSize: "45mm 55mm", orientation: "portrait",
+    width: LABEL_55X45_WIDTH, height: LABEL_55X45_HEIGHT, pageSize: "55mm 45mm", orientation: "landscape",
     pageStyle: LABEL_45X55_PAGE_STYLE, printFormat: "thermal", barcode: { width: (price) => price ? 1.8 : 2.5, height: 48 },
     layout: {
       kind: "label", tagsPerPage: 1,
@@ -137,7 +140,7 @@ export const PRODUCT_PRINT_FORMAT_CONFIG: Record<ProductPrintFormat, ProductPrin
       getPriceClassName: () => "label-price font-bold",
       getCodeClassName: () => "label-code text-center text-[10px]",
       getTagClassName: ({ hasBarcode, showPrice }) => `label-container flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white ${!hasBarcode ? "no-barcode" : "has-barcode"} ${showPrice ? "has-price" : ""}`,
-      getTagStyle: ({ index, total }) => ({ width: "45mm", height: "55mm", boxSizing: "border-box", padding: "2mm", overflow: "hidden", ...(index < total - 1 ? { pageBreakAfter: "always" } : {}) }),
+      getTagStyle: ({ index, total }) => ({ width: LABEL_55X45_WIDTH, height: LABEL_55X45_HEIGHT, boxSizing: "border-box", padding: "2mm", overflow: "hidden", ...(index < total - 1 ? { pageBreakAfter: "always" } : {}) }),
     },
   },
 };
@@ -189,11 +192,11 @@ const ProductPrintModal = ({ open, onOpenChange, products, format = "a4" }: Prop
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="w-full max-w-2xl"><DialogHeader><DialogTitle>Imprimir Etiquetas</DialogTitle></DialogHeader>
       <div className="flex items-center gap-4 py-4"><div className="flex flex-col gap-2"><Label htmlFor="copies">Copias por producto</Label><Input id="copies" type="number" min={1} max={50} value={copies} onChange={(event) => { const value = parseInt(event.target.value, 10); if (!Number.isNaN(value)) setCopies(Math.max(1, Math.min(50, value))); }} className="w-24" /></div>
-        <div className="flex flex-col gap-2"><Label htmlFor="paper-size">Tamaño de papel</Label><Select value={paperSize} onValueChange={(value) => { if (value in PRODUCT_PRINT_FORMAT_CONFIG) setPaperSize(value as ProductPrintFormat); }}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="a4">Hoja A4</SelectItem><SelectItem value="thermal">Etiqueta (55×65mm)</SelectItem><SelectItem value="label-45x55">Etiqueta (45 × 55 mm)</SelectItem></SelectContent></Select></div>
+        <div className="flex flex-col gap-2"><Label htmlFor="paper-size">Tamaño de papel</Label><Select value={paperSize} onValueChange={(value) => { if (value in PRODUCT_PRINT_FORMAT_CONFIG) setPaperSize(value as ProductPrintFormat); }}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="a4">Hoja A4</SelectItem><SelectItem value="thermal">Etiqueta (55×65mm)</SelectItem><SelectItem value="label-45x55">Etiqueta (55 × 45 mm)</SelectItem></SelectContent></Select></div>
         <div className="flex items-center gap-2 mt-5"><Checkbox id="show-price" checked={showPrice} onCheckedChange={(checked) => setShowPrice(Boolean(checked))} /><Label htmlFor="show-price" className="cursor-pointer">Mostrar precio</Label></div>
         <Button variant="outline" onClick={() => { setShowBarcode((value) => !value); setKey((value) => value + 1); }} className="mt-5">{showBarcode ? "Quitar" : "Generar"}</Button></div>
       <div className="no-print border rounded-md p-4 bg-slate-50 max-h-96 overflow-y-auto"><div ref={printRef}>{config.layout.kind === "a4" ? pages.map((page, pageIndex) => <div key={pageIndex} style={pageIndex < pages.length - 1 ? { pageBreakAfter: "always" } : undefined}><div style={{ display: "grid", gridTemplateColumns: `repeat(3, ${config.width})`, gap: "2mm", justifyContent: "center" }}>{page.map((tag, tagIndex) => renderTag(tag, pageIndex * config.layout.tagsPerPage + tagIndex))}</div></div>) : allTags.map((tag, index) => renderTag(tag, index))}</div></div>
-      {config.layout.kind === "label" && <p className="no-print text-sm text-muted-foreground">En la impresión seleccioná escala 100%, márgenes ninguno y orientación vertical.</p>}
+      {config.layout.kind === "label" && <p className="no-print text-sm text-muted-foreground">En la impresión seleccioná escala 100%, márgenes ninguno y orientación horizontal (landscape). Las preferencias del navegador o driver pueden prevalecer.</p>}
       <DialogFooter><Button type="submit" className="text-xl" onClick={handlePrint}>Imprimir</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
