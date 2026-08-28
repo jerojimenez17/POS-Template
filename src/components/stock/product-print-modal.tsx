@@ -134,7 +134,7 @@ export const PRODUCT_PRINT_FORMAT_CONFIG: Record<ProductPrintFormat, ProductPrin
     pageStyle: THERMAL_PAGE_STYLE, printFormat: "thermal", barcode: { width: (price) => price ? 1.8 : 2.5, height: 48 },
     layout: {
       kind: "thermal", tagsPerPage: 1,
-      editableDescription: false, editablePrice: true,
+      editableDescription: true, editablePrice: true,
       getDescriptionClassName: () => "label-description text-sm font-semibold",
       getPriceClassName: ({ hasBarcode }) => `label-price outline-none focus:bg-blue-50 dark:focus:bg-gray-800 rounded px-1 transition-colors font-bold ${hasBarcode ? "text-xl" : "text-3xl"}`,
       getCodeClassName: ({ hasBarcode }) => `label-code text-center ${!hasBarcode ? "text-[8px]" : "text-[10px]"}`,
@@ -147,7 +147,7 @@ export const PRODUCT_PRINT_FORMAT_CONFIG: Record<ProductPrintFormat, ProductPrin
     pageStyle: LABEL_45X55_PAGE_STYLE, printFormat: "thermal", barcode: { width: (price) => price ? 1.8 : 2.5, height: 48 },
     layout: {
       kind: "label", tagsPerPage: 1,
-      editableDescription: false, editablePrice: false,
+      editableDescription: true, editablePrice: false,
       getDescriptionClassName: () => "label-description text-sm font-semibold",
       getPriceClassName: () => "label-price font-bold",
       getCodeClassName: () => "label-code text-center text-[10px]",
