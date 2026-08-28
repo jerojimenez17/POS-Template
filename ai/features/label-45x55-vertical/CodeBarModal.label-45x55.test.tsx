@@ -67,14 +67,14 @@ function labels() {
 }
 
 function expectAuthoredLabelSize(label: HTMLElement) {
-  expect(label.style.width).toBe("45mm");
-  expect(label.style.height).toBe("55mm");
+  expect(label.style.width).toBe("55mm");
+  expect(label.style.height).toBe("45mm");
 }
 
-describe("CodeBarModal — etiqueta individual 45 × 55 mm portrait", () => {
+describe("CodeBarModal — etiqueta individual 55 × 45 mm landscape", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("renders every label at exactly 45mm × 55mm, regardless of barcode availability", () => {
+  it("renders every label at exactly 55mm × 45mm, regardless of barcode availability", () => {
     renderOpen();
     expect(labels()).toHaveLength(1);
     expectAuthoredLabelSize(labels()[0]);
@@ -85,23 +85,23 @@ describe("CodeBarModal — etiqueta individual 45 × 55 mm portrait", () => {
     expectAuthoredLabelSize(labels()[0]);
   });
 
-  it("prints with the exact portrait page, thermal format, and safe print CSS", async () => {
+  it("prints with the exact landscape page, thermal format, and safe print CSS", async () => {
     renderOpen();
     fireEvent.click(screen.getByRole("button", { name: /imprimir/i }));
     await Promise.resolve();
 
     const options = vi.mocked(printElement).mock.calls[0]?.[1];
-    expect(options).toEqual(expect.objectContaining({ format: "thermal", orientation: "portrait" }));
+    expect(options).toEqual(expect.objectContaining({ format: "thermal", orientation: "landscape" }));
     expect(options?.fallbackToPDF).not.toBe(false);
-    expect(options?.pageStyle).toMatch(/@page\s*\{\s*size:\s*45mm 55mm portrait;\s*margin:\s*0;\s*\}/);
+    expect(options?.pageStyle).toMatch(/@page\s*\{\s*size:\s*55mm 45mm landscape;\s*margin:\s*0;\s*\}/);
     expect(options?.pageStyle).toContain("html, body");
-    expect(options?.pageStyle).toContain("width: 45mm");
-    expect(options?.pageStyle).toContain("height: 55mm");
+    expect(options?.pageStyle).toContain("width: 55mm");
+    expect(options?.pageStyle).toContain("height: 45mm");
     expect(options?.pageStyle).toContain("overflow: hidden");
     expect(options?.pageStyle).toMatch(/\.no-print\s*\{[^}]*display:\s*none/);
     expect(options?.pageStyle).toContain("page-break-after");
-    expect(options?.pageStyle).not.toMatch(/landscape|55mm\s+45mm|auto-fill|grid-template/i);
-    expect(screen.getByText(/escala 100%|márgenes ninguno|orientación vertical/i)).toBeInTheDocument();
+    expect(options?.pageStyle).not.toMatch(/portrait|45mm\s+55mm|auto-fill|grid-template/i);
+    expect(screen.getByText(/escala 100%|márgenes ninguno|orientación horizontal|landscape/i)).toBeInTheDocument();
   });
 
   it("keeps description, internal code, and barcode in order and makes price optional", () => {

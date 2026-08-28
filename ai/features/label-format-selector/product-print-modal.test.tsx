@@ -76,7 +76,7 @@ describe("ProductPrintModal — selector explícito de formatos", () => {
     openModal();
     const options = screen.getByRole("combobox", { name: "Tamaño de papel" }).querySelectorAll("option");
     expect(Array.from(options).map((option) => option.value)).toEqual(["a4", "thermal", "label-45x55"]);
-    expect(screen.getByRole("option", { name: "Etiqueta (45 × 55 mm)" })).toHaveValue("label-45x55");
+    expect(screen.getByRole("option", { name: "Etiqueta (55 × 45 mm)" })).toHaveValue("label-45x55");
   });
 
   it("mantiene A4, su grid de tres columnas, contenido y paginación por grupos", () => {
@@ -106,7 +106,7 @@ describe("ProductPrintModal — selector explícito de formatos", () => {
     expect(options?.pageStyle).not.toMatch(/45mm\s+55mm|portrait|55mm\s+45mm/);
   });
 
-  it("aplica 45 × 55 solo al elegir label-45x55, con portrait y salto por copia", () => {
+  it("aplica 55 × 45 solo al elegir label-45x55, con landscape y salto por copia", () => {
     openModal();
     fireEvent.change(screen.getByRole("combobox", { name: "Tamaño de papel" }), { target: { value: "label-45x55" } });
     expect(screen.getByRole("combobox", { name: "Tamaño de papel" })).toHaveValue("label-45x55");
@@ -114,8 +114,8 @@ describe("ProductPrintModal — selector explícito de formatos", () => {
     // Validate the authored inline declaration. HappyDOM normalizes physical
     // units through getComputedStyle/toHaveStyle (45mm/55mm become pixels),
     // which would produce a false negative for AC5.
-    expect(label?.style.width).toBe("45mm");
-    expect(label?.style.height).toBe("55mm");
+    expect(label?.style.width).toBe("55mm");
+    expect(label?.style.height).toBe("45mm");
     expect(label?.style.boxSizing).toBe("border-box");
     expect(label).toHaveTextContent(/Producto de prueba/);
     expect(label).toHaveTextContent(/INT-001/);
@@ -126,14 +126,14 @@ describe("ProductPrintModal — selector explícito de formatos", () => {
     expect(Array.from(document.querySelectorAll<HTMLElement>(".label-container")).slice(0, 2).every((node) => node.style.pageBreakAfter === "always")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /imprimir/i }));
     const options = printOptions();
-    expect(options).toEqual(expect.objectContaining({ format: "thermal", orientation: "portrait" }));
-    expect(options?.pageStyle).toMatch(/@page\s*\{\s*size:\s*45mm 55mm portrait;\s*margin:\s*0/);
-    expect(options?.pageStyle).toMatch(/html, body[^{]*\{[^}]*width:\s*45mm[^}]*height:\s*55mm/);
+    expect(options).toEqual(expect.objectContaining({ format: "thermal", orientation: "landscape" }));
+    expect(options?.pageStyle).toMatch(/@page\s*\{\s*size:\s*55mm 45mm landscape;\s*margin:\s*0/);
+    expect(options?.pageStyle).toMatch(/html, body[^{]*\{[^}]*width:\s*55mm[^}]*height:\s*45mm/);
     expect(options?.pageStyle).toMatch(/\.no-print[^{]*\{[^}]*display:\s*none/);
-    expect(options?.pageStyle).not.toMatch(/auto-fill|grid-template|landscape|55mm\s+45mm/);
+    expect(options?.pageStyle).not.toMatch(/auto-fill|grid-template|portrait|45mm\s+55mm/);
   });
 
-  it("mantiene precio opcional, fallback de barcode y overflow seguro en 45 × 55", () => {
+  it("mantiene precio opcional, fallback de barcode y overflow seguro en 55 × 45", () => {
     openModal({ products: [product({ description: "Descripción larga ".repeat(8), codebar: null, code: "7791234567890" })] });
     fireEvent.change(screen.getByRole("combobox", { name: "Tamaño de papel" }), { target: { value: "label-45x55" } });
     const label = document.querySelector<HTMLElement>(".label-container");
