@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { clientFormSchema } from "@/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +9,14 @@ import type { ClientListItem } from "@/actions/clients";
 
 interface ClientFormProps { client?: ClientListItem; onSubmit: (value: Record<string, string>) => Promise<void>; onCancel: () => void; busy?: boolean; }
 const fields = [["name", "Nombre"], ["cellPhone", "Teléfono"], ["address", "Dirección"], ["cuit", "CUIT"]] as const;
+const getInitialValues = (client?: ClientListItem): Record<string, string> => ({ name: client?.name ?? "", cellPhone: client?.cellPhone ?? "", address: client?.address ?? "", cuit: client?.cuit ?? "", ivaCondition: client?.ivaCondition ?? "", email: client?.email ?? "" });
 
 export default function ClientForm({ client, onSubmit, onCancel, busy }: ClientFormProps) {
-  const [values, setValues] = useState<Record<string, string>>({ name: client?.name ?? "", cellPhone: client?.cellPhone ?? "", address: client?.address ?? "", cuit: client?.cuit ?? "", ivaCondition: client?.ivaCondition ?? "", email: client?.email ?? "" });
+  const [values, setValues] = useState<Record<string, string>>(() => getInitialValues(client));
   const [error, setError] = useState<string>();
+  useEffect(() => { // eslint-disable-next-line react-hooks/set-state-in-effect
+    setValues(getInitialValues(client)); setError(undefined);
+  }, [client]);
   const change = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }));
   const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const parsed = clientFormSchema.safeParse(values); if (!parsed.success) { setError(parsed.error.issues[0]?.message ?? "Datos inválidos"); return; } setError(undefined); await onSubmit(parsed.data); };
   return <form onSubmit={submit} className="grid gap-4" noValidate>
