@@ -26,6 +26,7 @@ export function PusherListener({ businessId }: Props) {
 
     return () => {
       channel.unbind("orders-update", handleUpdate);
+      pusherClient.unsubscribe(channelName);
     };
   }, [businessId, router]);
 
