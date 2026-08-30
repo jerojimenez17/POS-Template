@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import CodeBarModal from "@/components/stock/code-bar-modal";
 import JsBarcode from "jsbarcode";
@@ -101,7 +101,7 @@ describe("CodeBarModal Component", () => {
           unit="Unidad"
         />
       );
-      expect(screen.getByText("$99.99/u")).toBeInTheDocument();
+      expect(screen.getByText("$100")).toBeInTheDocument();
     });
 
     it("should render product code on tag card", () => {
@@ -119,7 +119,7 @@ describe("CodeBarModal Component", () => {
   });
 
   describe("Tag dimensions (AC1, AC2)", () => {
-    it("should have tag width of 6cm", () => {
+    it("should have tag width of 55mm with or without codebar (AC1)", () => {
       renderAndOpen(
         <CodeBarModal
           code="CODE001"
@@ -129,31 +129,11 @@ describe("CodeBarModal Component", () => {
           unit="Unidad"
         />
       );
-      const tagCards = document.querySelectorAll<HTMLElement>('[style*="width"]');
-      const foundTag = Array.from(tagCards).find(
-        (el) => el.style.width === "6.3cm"
-      );
-      expect(foundTag).toBeTruthy();
-    });
+      const tagCards = document.querySelectorAll<HTMLElement>(".label-container");
+      expect(tagCards).toHaveLength(1);
+      expect((tagCards[0] as HTMLElement).style.width).toBe("55mm");
 
-    it("should have tag height of 3.5cm when codebar is null (AC1)", () => {
-      renderAndOpen(
-        <CodeBarModal
-          code="CODE001"
-          codebar={undefined}
-          description="Test Product"
-          salePrice={99.99}
-          unit="Unidad"
-        />
-      );
-      const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
-      const foundTag = Array.from(tagCards).find(
-        (el) => el.style.height === "3.5cm"
-      );
-      expect(foundTag).toBeTruthy();
-    });
-
-    it("should have tag height of 5cm when codebar is present (AC2)", () => {
+      cleanup();
       renderAndOpen(
         <CodeBarModal
           code="CODE001"
@@ -163,14 +143,11 @@ describe("CodeBarModal Component", () => {
           unit="Unidad"
         />
       );
-      const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
-      const foundTag = Array.from(tagCards).find(
-        (el) => el.style.height === "5cm"
-      );
-      expect(foundTag).toBeTruthy();
+      const barcodeTag = document.querySelector<HTMLElement>(".label-container");
+      expect(barcodeTag?.style.width).toBe("55mm");
     });
 
-    it("should not have inline height when codebar is absent (no height set)", () => {
+    it("should have tag height of 45mm when codebar is absent (AC1)", () => {
       renderAndOpen(
         <CodeBarModal
           code="CODE001"
@@ -180,11 +157,37 @@ describe("CodeBarModal Component", () => {
           unit="Unidad"
         />
       );
-      const tagCards = document.querySelectorAll<HTMLElement>('[style*="height"]');
-      const tagsWithWrongHeight = Array.from(tagCards).filter(
-        (el) => el.style.height && el.style.height !== "3.5cm"
+      const tag = document.querySelector<HTMLElement>(".label-container");
+      expect(tag?.style.height).toBe("45mm");
+    });
+
+    it("should have tag height of 45mm when codebar is present (AC1)", () => {
+      renderAndOpen(
+        <CodeBarModal
+          code="CODE001"
+          codebar="123456789012"
+          description="Test Product"
+          salePrice={99.99}
+          unit="Unidad"
+        />
       );
-      expect(tagsWithWrongHeight.length).toBe(0);
+      const tag = document.querySelector<HTMLElement>(".label-container");
+      expect(tag?.style.height).toBe("45mm");
+    });
+
+    it("should not use a legacy height when codebar is absent", () => {
+      renderAndOpen(
+        <CodeBarModal
+          code="CODE001"
+          codebar={undefined}
+          description="Test Product"
+          salePrice={99.99}
+          unit="Unidad"
+        />
+      );
+      const tag = document.querySelector<HTMLElement>(".label-container");
+      expect(tag?.style.height).toBe("45mm");
+      expect(tag?.style.height).not.toBe("3.5cm");
     });
   });
 
@@ -231,19 +234,12 @@ describe("CodeBarModal Component", () => {
           unit="Unidad"
         />
       );
-      const allElements = document.querySelectorAll("div, span, svg");
-      let codeIndex = -1;
-      let barcodeIndex = -1;
-      allElements.forEach((el, idx) => {
-        if (el.textContent?.trim() === "CODE001") codeIndex = idx;
-        if (el.tagName === "SVG") {
-          const hasRef = el.hasAttribute("ref") || el.classList.contains("w-full");
-          if (hasRef && barcodeIndex === -1) barcodeIndex = idx;
-        }
-      });
-      expect(codeIndex).toBeGreaterThan(-1);
-      expect(barcodeIndex).toBeGreaterThan(-1);
-      expect(codeIndex).toBeLessThan(barcodeIndex);
+      const label = document.querySelector<HTMLElement>(".label-container");
+      const code = label?.querySelector<HTMLElement>(".label-code");
+      const barcode = label?.querySelector("svg");
+      expect(code).toBeInTheDocument();
+      expect(barcode).toBeInTheDocument();
+      expect(code!.compareDocumentPosition(barcode as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
   });
 

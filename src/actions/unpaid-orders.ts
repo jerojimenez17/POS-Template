@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { auth } from "../../auth";
+import { auth } from "@/auth";
 import { after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
@@ -59,6 +59,15 @@ interface UpdateOrderDiscountInput {
 }
 
 export type LedgerStatus = "all" | "inpago" | "pago" | "pagado" | "pendiente" | "cancelado";
+
+/** The business in the request is only a legacy consistency check, never an
+ * authorization source. Server actions are public endpoints. */
+const getAuthorizedBusinessId = async (requestedBusinessId?: string): Promise<string | null> => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId || (requestedBusinessId && requestedBusinessId !== businessId)) return null;
+  return businessId;
+};
 
 export interface AccountLedgerOrder {
   id: string;
@@ -163,7 +172,8 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
     const featureResult = await requireFeature("hasClientLedger");
     if (!featureResult.success) return { success: false, error: featureResult.error };
     const session = await auth();
-    const businessId = session?.user?.businessId || input.businessId;
+    const businessId = session?.user?.businessId;
+    if (input.businessId && input.businessId !== businessId) return { success: false, error: "No autorizado" };
     if (!businessId) return { success: false, error: "No autorizado" };
     const allowNegativeStock = (session?.user?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
 
@@ -175,10 +185,11 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
         where: { id: input.clientId },
       });
       if (!client) throw new Error("Cliente no encontrado");
+      if (client.businessId && client.businessId !== businessId) throw new Error("Cliente no encontrado");
 
       const productIds = input.items.map(i => i.productId);
       const products = await tx.product.findMany({
-        where: { id: { in: productIds } },
+        where: { id: { in: productIds }, businessId },
         select: { id: true, amount: true },
       });
       const productMap = new Map(products.map(p => [p.id, p]));
@@ -301,8 +312,7 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
 
 export const registerPayment = async (input: RegisterPaymentInput): Promise<ActionResult> => {
   try {
-    const session = await auth();
-    const businessId = session?.user?.businessId || input.businessId;
+    const businessId = await getAuthorizedBusinessId(input.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
     const movement = await db.$transaction(async (tx) => {
@@ -311,6 +321,7 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
         include: { client: true, cashMovements: true },
       });
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
 
       const totalPaidBefore = order.cashMovements.reduce(
         (sum, cm) => sum + cm.total,
@@ -372,8 +383,7 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
 
 export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<ActionResult> => {
   try {
-    const session = await auth();
-    const businessId = session?.user?.businessId || input.businessId;
+    const businessId = await getAuthorizedBusinessId(input.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
     // Hoist ranking data for after()
@@ -385,10 +395,18 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
         include: { client: true, items: { include: { product: true } } },
       });
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
 
       if (order.paidStatus === "pago") {
         throw new Error("No se puede cancelar una orden ya pagado");
       }
+
+      const productIds = [...new Set(order.items.flatMap((item) => item.productId ? [item.productId] : []))];
+      const ownedProducts = await tx.product.findMany({
+        where: { id: { in: productIds }, businessId },
+        select: { id: true },
+      });
+      if (ownedProducts.length !== productIds.length) throw new Error("Producto no encontrado");
 
       // 🚀 FASE 2: Bulk UPDATE en vez de for...of con updates individuales
       const stockChanges: { id: string; change: number }[] = [];
@@ -408,8 +426,8 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
       }
 
       // Delete related records before deleting the order
-      await tx.stockMovement.deleteMany({ where: { orderId: input.orderId } });
-      await tx.cashMovement.deleteMany({ where: { orderId: input.orderId } });
+      await tx.stockMovement.deleteMany({ where: { orderId: input.orderId, businessId } });
+      await tx.cashMovement.deleteMany({ where: { orderId: input.orderId, businessId } });
 
       // Delete the order (cascades to OrderItem and OrderUpdate)
       await tx.order.delete({ where: { id: input.orderId } });
@@ -470,8 +488,7 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
 export const updateOrderDiscount = async (input: UpdateOrderDiscountInput): Promise<ActionResult> => {
   try {
     const validatedInput = updateOrderDiscountSchema.parse(input);
-    const session = await auth();
-    const businessId = session?.user?.businessId || validatedInput.businessId;
+    const businessId = await getAuthorizedBusinessId(validatedInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
     const result = await db.$transaction(async (tx) => {
@@ -481,6 +498,7 @@ export const updateOrderDiscount = async (input: UpdateOrderDiscountInput): Prom
       });
 
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar el descuento de una orden pagado");
 
       // Calculate subtotal from items (sum of all item subTotals)
@@ -639,16 +657,15 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
   }
 };
 
-export const getClientUnpaidOrders = async (clientId: string, businessId: string): Promise<ActionResult<{ id: string; total: number; date: Date; itemsCount: number; status: string; paidStatus: string }[]>> => {
+export const getClientUnpaidOrders = async (clientId: string, legacyBusinessId?: string): Promise<ActionResult<{ id: string; total: number; date: Date; itemsCount: number; status: string; paidStatus: string }[]>> => {
   try {
-    const session = await auth();
-    const businessIdFinal = session?.user?.businessId || businessId;
-    if (!businessIdFinal) return { success: false, error: "No autorizado" };
+    const businessId = await getAuthorizedBusinessId(legacyBusinessId);
+    if (!businessId) return { success: false, error: "No autorizado" };
 
     const orders = await db.order.findMany({
       where: {
         clientId,
-        businessId: businessIdFinal,
+        businessId,
         paidStatus: "inpago",
         status: { in: ["pendiente", "confirmado", "consignacion"] },
       },
@@ -678,12 +695,37 @@ export const getClientUnpaidOrders = async (clientId: string, businessId: string
   }
 };
 
+/** Legacy ClientSelectionModal contract; the optional businessId is only a
+ * consistency check and is never an authorization source. */
+export const getClientUnpaidOrder = async (clientId: string, legacyBusinessId?: string): Promise<ActionResult<unknown | null>> => {
+  try {
+    const businessId = await getAuthorizedBusinessId(legacyBusinessId);
+    if (!businessId) return { success: false, error: "No autorizado" };
+
+    const result = await db.$transaction(async (tx) => tx.order.findFirst({
+      where: {
+        clientId,
+        businessId,
+        paidStatus: "inpago",
+        status: { in: ["pendiente", "confirmado", "consignacion"] },
+      },
+      include: { items: true },
+      orderBy: { date: "desc" },
+    }));
+    const order = result && result.businessId && result.businessId !== businessId ? null : result;
+    return { success: true, data: order };
+  } catch (error) {
+    console.error("Error getting client unpaid order:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Error al obtener la orden" };
+  }
+};
+
 export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchema>): Promise<ActionResult> => {
   try {
     const validatedInput = addItemsToOrderSchema.parse(input);
-    const session = await auth();
-    const businessId = session?.user?.businessId || validatedInput.businessId;
+    const businessId = await getAuthorizedBusinessId(validatedInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
+    const session = await auth();
     const allowNegativeStock = (session?.user?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
 
     // Hoist ranking data for after()
@@ -696,10 +738,11 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
       });
 
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
 
       const products = await tx.product.findMany({
-        where: { id: { in: validatedInput.items.map(i => i.productId) } },
+        where: { id: { in: validatedInput.items.map(i => i.productId) }, businessId },
       });
       const productMap = new Map(products.map(p => [p.id, p]));
 
@@ -833,6 +876,8 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
       });
 
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
+      if (orderItem.orderId !== order.id) throw new Error("Item no encontrado");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
 
       const quantityDiff = validatedInput.quantity !== undefined 
@@ -840,8 +885,8 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
         : 0;
 
       if (quantityDiff > 0 && orderItem.productId) {
-        const product = await tx.product.findUnique({
-          where: { id: orderItem.productId },
+        const product = await tx.product.findFirst({
+          where: { id: orderItem.productId, businessId },
         });
         if (!product) {
           throw new Error("Producto no encontrado");
@@ -981,6 +1026,8 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
       });
 
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
+      if (orderItem.orderId !== order.id) throw new Error("Item no encontrado");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
 
       await tx.orderItem.delete({

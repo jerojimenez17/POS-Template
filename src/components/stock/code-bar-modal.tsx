@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { printElement } from "@/lib/print";
 import CodeBarButton from "./codebarButton";
+import { LABEL_45X55_PAGE_STYLE, LABEL_55X45_HEIGHT, LABEL_55X45_WIDTH } from "./product-print-modal";
 
 interface Props {
   code: string;
@@ -30,12 +31,11 @@ function formatPrice(price: number): string {
   return `$${rounded}`;
 }
 
-const TAG_WIDTH = "6.3cm";
-const TAG_HEIGHT_WITH_BARCODE = "5cm";
-const TAG_HEIGHT_WITHOUT_BARCODE = "3.5cm";
+const TAG_WIDTH = LABEL_55X45_WIDTH;
+const TAG_HEIGHT = LABEL_55X45_HEIGHT;
 
-const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) => {
-  const hasCodebar = Boolean(codebar);
+const CodeBarModal = ({ code, codebar, description, salePrice }: Props) => {
+  const hasCodebar = Boolean(codebar?.trim());
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
   const [copies, setCopies] = useState(1);
@@ -45,8 +45,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
   const [barcodeSource, setBarcodeSource] = useState<"code" | "codebar">("code");
 
   const formattedPrice = formatPrice(salePrice);
-  const tagHeight = hasCodebar ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE;
-  const barcodeValue = barcodeSource === "codebar" && codebar ? codebar : code;
+  const barcodeValue = barcodeSource === "codebar" && codebar?.trim() ? codebar.trim() : code;
 
   const generateBarcodes = useCallback(() => {
     barcodeRefs.current.forEach((barcodeEl) => {
@@ -55,21 +54,20 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
           format: "CODE128",
           lineColor: "#000000",
           width: 2,
-          height: hasCodebar ? 60 : 40,
+          height: 42,
           displayValue: true,
           fontSize: 10,
           margin: 0,
         });
       }
     });
-  }, [barcodeValue, hasCodebar]);
+  }, [barcodeValue]);
 
   useEffect(() => {
     if (isDialogOpen) {
       generateBarcodes();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [generateBarcodes, isDialogOpen, key, copies, showPrice]);
 
   const handleCopiesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value, 10);
@@ -82,48 +80,11 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
     if (printRef.current) {
       await printElement(printRef.current, {
         documentTitle: `CodigoBarras_${barcodeValue}`,
-        pageStyle: `
-          @page { size: 60mm auto; margin: 0; }
-          @media print {
-            body { -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
-            .no-print { display: none !important; }
-            .label-container {
-              width: 6.3cm !important;
-              overflow: hidden;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              padding: 2mm;
-              box-sizing: border-box;
-            }
-            .label-description {
-              font-size: 12px;
-              font-weight: 700;
-              text-align: center;
-              line-height: 1.1;
-              margin-bottom: 2px;
-              word-wrap: break-word;
-              width: 100%;
-            }
-            .label-price {
-              font-size: 20px;
-              font-weight: 800;
-              text-align: center;
-              margin-bottom: 2px;
-            }
-            .label-code {
-              font-size: 10px;
-              text-align: center;
-              margin-top: 1px;
-            }
-            .label-barcode {
-              text-align: center;
-              margin: 2px 0px;
-            }
-          }
-        `,
+        pageStyle: LABEL_45X55_PAGE_STYLE,
         format: "thermal",
+        orientation: "landscape",
+        // The PDF fallback preserves the content, but final physical size still depends on print scale.
+        fallbackToPDF: true,
       });
     }
   };
@@ -213,47 +174,49 @@ const CodeBarModal = ({ code, codebar, description, salePrice, unit }: Props) =>
         <div className="no-print border rounded-md p-4 bg-slate-50 max-h-96 overflow-y-auto">
           <div
             ref={printRef}
-            className="mx-auto grid gap-3"
+            className="mx-auto flex flex-col"
             style={{
-              gridTemplateColumns: `repeat(auto-fill, minmax(${TAG_WIDTH}, 1fr))`,
               width: "100%",
+              gap: "2mm",
             }}
           >
             {cards.map((_, index) => (
               <div
                 key={index}
-                className="flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white"
-                style={{ width: TAG_WIDTH, height: tagHeight }}
+                className="label-container flex flex-col text-black items-center border border-dashed border-gray-300 rounded p-2 bg-white"
+                style={{
+                  width: TAG_WIDTH,
+                  height: TAG_HEIGHT,
+                  boxSizing: "border-box",
+                  padding: "2mm",
+                  gap: "1mm",
+                }}
               >
-                <div className="text-center font-semibold text-sm mb-1 truncate w-full">
+                <div className="label-description min-w-0 max-w-full overflow-hidden text-center font-semibold text-sm mb-1 w-full break-words">
                   {description}
                 </div>
                 {showPrice && (
-                  <div className="text-center font-bold text-xl mt-1">
+                  <div className="label-price text-center font-bold text-xl mt-1">
                     {formattedPrice}
                   </div>
                 )}
-                <div className="text-center text-xs mt-1">
+                <div className="label-code text-center text-xs mt-1">
                   {code}
                 </div>
                 <svg
                   ref={(el) => {
-                    if (el) {
-                      el.setAttribute("ref", "");
-                      if (el.tagName !== "SVG") {
-                        Object.defineProperty(el, "tagName", { get: () => "SVG" });
-                      }
-                      barcodeRefs.current[index] = el;
-                    } else {
-                      barcodeRefs.current[index] = null;
-                    }
+                    barcodeRefs.current[index] = el;
                   }}
-                  className="w-full"
+                  className="label-barcode min-w-0 max-w-full w-full overflow-hidden"
                 />
               </div>
             ))}
           </div>
         </div>
+
+        <p className="no-print text-sm text-muted-foreground">
+          En la impresión seleccioná escala 100%, márgenes ninguno y orientación horizontal (landscape). Las preferencias del navegador o driver pueden prevalecer.
+        </p>
 
         <DialogFooter>
           <Button

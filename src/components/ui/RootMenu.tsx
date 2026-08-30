@@ -27,6 +27,10 @@ const RootMenu = () => {
           <MenuCard url="/account-ledger" title="Fichero">
             <BookOpen className="w-16 h-16" strokeWidth={1.5} />
           </MenuCard>
+
+          <MenuCard url="/clients" title="Clientes">
+            <Users className="w-16 h-16" strokeWidth={1.5} />
+          </MenuCard>
           
           <MenuCard url="/cashRegister" title="Caja">
             <Calculator className="w-16 h-16" strokeWidth={1.5} />

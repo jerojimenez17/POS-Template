@@ -37,6 +37,45 @@ interface UnpaidOrderItem {
   subTotal: number;
 }
 
+interface ExistingOrder {
+  id: string;
+  total: number;
+  date: Date;
+  itemsCount: number;
+  status: string;
+  paidStatus: string;
+}
+
+function normalizeUnpaidOrdersResponse(payload: unknown): ExistingOrder[] {
+  const candidate =
+    Array.isArray(payload)
+      ? payload
+      : typeof payload === "object" && payload !== null && "orders" in payload
+        ? (payload as { orders: unknown }).orders
+        : typeof payload === "object" && payload !== null && "data" in payload
+          ? (payload as { data: unknown }).data
+          : [payload];
+
+  if (!Array.isArray(candidate)) return [];
+
+  return candidate.filter(
+    (order): order is ExistingOrder =>
+      typeof order === "object" &&
+      order !== null &&
+      "id" in order &&
+      typeof order.id === "string" &&
+      "total" in order &&
+      typeof order.total === "number"
+  ).map((order) => ({
+    id: order.id,
+    total: order.total,
+    date: order.date instanceof Date ? order.date : new Date(order.date),
+    itemsCount: order.itemsCount,
+    status: order.status,
+    paidStatus: order.paidStatus,
+  }));
+}
+
 interface ClientSelectionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -90,10 +129,11 @@ export default function ClientSelectionModal({
   const [orderNotes, setOrderNotes] = useState("");
 
   // Smart client selection state (R3)
-  const [existingOrders, setExistingOrders] = useState<{ id: string; total: number; date: Date; itemsCount: number; status: string; paidStatus: string }[]>([]);
+  const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
   const [selectedExistingOrderId, setSelectedExistingOrderId] = useState<string | null>(null);
   const [showExistingOrderDialog, setShowExistingOrderDialog] = useState(false);
   const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
+  const [checkedClientId, setCheckedClientId] = useState<string | null>(null);
 
   const fetchClients = async () => {
     setIsFetchingClients(true);
@@ -120,6 +160,7 @@ export default function ClientSelectionModal({
       setExistingOrders([]);
       setSelectedExistingOrderId(null);
       setShowExistingOrderDialog(false);
+      setCheckedClientId(null);
     }
   }, [open]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -151,7 +192,12 @@ export default function ClientSelectionModal({
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success(result.success || "Cliente creado correctamente");
+        const successValue: unknown = result.success;
+        toast.success(
+          typeof successValue === "string"
+            ? successValue
+            : "Cliente creado correctamente"
+        );
         setIsCreateModalOpen(false);
         setNewClientName("");
         setNewClientCellPhone("");
@@ -177,9 +223,18 @@ export default function ClientSelectionModal({
       return;
     }
 
+    if (checkedClientId === selectedClientId) {
+      if (existingOrders.length > 0) {
+        setShowExistingOrderDialog(true);
+      } else {
+        await createNewOrder(selectedClientId);
+      }
+      return;
+    }
+
     setIsCheckingExistingOrder(true);
     try {
-      const result = await getClientUnpaidOrders(selectedClientId, businessId);
+      const result = await getClientUnpaidOrders(selectedClientId);
       
       if (result.success && result.data && result.data.length > 0) {
         setExistingOrders(result.data);
@@ -193,6 +248,37 @@ export default function ClientSelectionModal({
     } catch (error) {
       console.error("Error checking existing orders:", error);
       await createNewOrder(selectedClientId);
+    } finally {
+      setIsCheckingExistingOrder(false);
+    }
+  };
+
+  const checkClientOrders = async (clientId: string) => {
+    setIsCheckingExistingOrder(true);
+    try {
+      const actionResult = await getClientUnpaidOrders(clientId);
+      let orders = actionResult.success && actionResult.data ? actionResult.data : [];
+
+      // The route is a compatibility path for clients where the server action
+      // is not available in the current transition. Prefer the action result,
+      // but use the route when it returns the more complete data set.
+      const response = await fetch(
+        `/api/unpaid-orders?clientId=${encodeURIComponent(clientId)}`
+      );
+      if (response.ok) {
+        const payload: unknown = await response.json();
+        const routeOrders = normalizeUnpaidOrdersResponse(payload);
+        if (orders.length === 0) orders = routeOrders;
+      }
+
+      setExistingOrders(orders);
+      setCheckedClientId(clientId);
+      if (orders.length > 0) {
+        setSelectedExistingOrderId(orders[0].id);
+        setShowExistingOrderDialog(true);
+      }
+    } catch (error) {
+      console.error("Error checking existing orders:", error);
     } finally {
       setIsCheckingExistingOrder(false);
     }
@@ -363,6 +449,8 @@ export default function ClientSelectionModal({
                    setExistingOrders([]);
                    setSelectedExistingOrderId(null);
                    setShowExistingOrderDialog(false);
+                   setCheckedClientId(null);
+                   void checkClientOrders(client.id);
                   }}
                   className={`p-3 cursor-pointer border-b last:border-b-0 transition-colors ${
                     selectedClientId === client.id
