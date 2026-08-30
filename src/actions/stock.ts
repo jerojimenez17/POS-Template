@@ -146,7 +146,8 @@ export const previewProductsBulk = async (
   discount?: number,
   iva?: number,
   gain?: number,
-  supplierId?: string
+  supplierId?: string,
+  metadataOnly?: boolean
 ): Promise<PreviewProductsBulkResult> => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
@@ -160,10 +161,45 @@ export const previewProductsBulk = async (
         code: { in: codes },
         ...(supplierId ? { supplierId } : {})
       },
-      select: { code: true, price: true, salePrice: true, supplierId: true }
+      select: {
+        code: true, price: true, salePrice: true, supplierId: true,
+        ...(metadataOnly ? { brandId: true, categoryId: true, subCategoryId: true, description: true, codebar: true } : {})
+      }
     });
 
     const existingMap = new Map(existingProducts.map(p => [p.code, p]));
+
+    // Resolve brand/category/subcategory maps for metadata comparison
+    let brandMap = new Map<string, string>();
+    let categoryMap = new Map<string, string>();
+    let subcategoryMap = new Map<string, string>();
+
+    if (metadataOnly) {
+      const brandNames = Array.from(new Set(productsData.map(p => p.brandName?.trim()).filter(Boolean))) as string[];
+      const categoryNames = Array.from(new Set(productsData.map(p => p.categoryName?.trim()).filter(Boolean))) as string[];
+      const subCategoryNames = Array.from(new Set(productsData.map(p => p.subCategoryName?.trim()).filter(Boolean))) as string[];
+
+      if (brandNames.length > 0) {
+        const brands = await db.brand.findMany({
+          where: { businessId: session.user.businessId, name: { in: brandNames, mode: "insensitive" } }
+        });
+        brandMap = new Map(brands.map(b => [b.name.trim().toLowerCase(), b.id]));
+      }
+
+      if (categoryNames.length > 0) {
+        const categories = await db.category.findMany({
+          where: { businessId: session.user.businessId, name: { in: categoryNames, mode: "insensitive" } }
+        });
+        categoryMap = new Map(categories.map(c => [c.name.trim().toLowerCase(), c.id]));
+      }
+
+      if (subCategoryNames.length > 0) {
+        const subcategories = await db.subcategory.findMany({
+          where: { businessId: session.user.businessId, name: { in: subCategoryNames, mode: "insensitive" } }
+        });
+        subcategoryMap = new Map(subcategories.map(sc => [`${sc.categoryId}:${sc.name.trim().toLowerCase()}`, sc.id]));
+      }
+    }
 
     let createdCount = 0;
     let updatedCount = 0;
@@ -177,43 +213,84 @@ export const previewProductsBulk = async (
       let status: "create" | "update" | "ignore" = "create";
 
       if (exists) {
-        const priceStr = item.price.toString().replace(',', '.');
-        const filePrice = parseFloat(priceStr);
-        const isPriceValid = !isNaN(filePrice);
+        if (metadataOnly) {
+          // Metadata-only mode: compare brand, category, subcategory, description, codebar
+          const brandName = item.brandName?.trim();
+          const categoryName = item.categoryName?.trim();
+          const subCategoryName = item.subCategoryName?.trim();
 
-        let costPrice = filePrice;
-        let salePrice = filePrice;
+          // Resolve file values to DB IDs (undefined = name not found in DB maps, null = no name in file)
+          const fileBrandRaw = brandName ? brandMap.get(brandName.toLowerCase()) : undefined;
+          const fileCategoryRaw = categoryName ? categoryMap.get(categoryName.toLowerCase()) : undefined;
 
-        const parsed = parseExcelIva(item.iva);
-        const rowIva = parsed.percent !== null ? parsed.percent : (iva ?? 0);
-        const hasExcelIva = parsed.percent !== null;
+          // A change means: file has a name AND (it doesn't exist in DB yet OR it maps to a different ID)
+          const brandChanged = brandName
+            ? (fileBrandRaw === undefined || fileBrandRaw !== existing.brandId)
+            : false;
+          const categoryChanged = categoryName
+            ? (fileCategoryRaw === undefined || fileCategoryRaw !== existing.categoryId)
+            : false;
 
-        if (applyPriceFormula || hasExcelIva) {
-          const d = discount ?? 0;
-          const g = gain ?? 0;
-          costPrice = roundToNearest10(filePrice * (1 - d / 100) * (1 + rowIva / 100));
-          salePrice = roundToNearest10(costPrice * (1 + g / 100));
-        }
+          let subCategoryChanged = false;
+          if (subCategoryName && fileCategoryRaw) {
+            const fileSubRaw = subcategoryMap.get(`${fileCategoryRaw}:${subCategoryName.toLowerCase()}`);
+            subCategoryChanged = fileSubRaw === undefined || fileSubRaw !== existing.subCategoryId;
+          } else if (subCategoryName && !fileCategoryRaw) {
+            // Category is new too, so subcategory is definitely changing
+            subCategoryChanged = true;
+          }
 
-        const priceSame = isPriceValid &&
-          Math.abs(costPrice - existing.price) < 0.001 &&
-          Math.abs(salePrice - existing.salePrice) < 0.001;
+          const descriptionChanged = item.description?.toString() !== existing.description;
+          const codebarChanged = (item.codebar || null) !== existing.codebar;
 
-        const supplierSame =
-          (supplierId === undefined && existing.supplierId === null) ||
-          supplierId === existing.supplierId;
-
-        const unchanged = priceSame && supplierSame;
-
-        if (updateExisting && !unchanged) {
-          status = "update";
-          updatedCount++;
+          if (brandChanged || categoryChanged || subCategoryChanged || descriptionChanged || codebarChanged) {
+            status = "update";
+            updatedCount++;
+          } else {
+            status = "ignore";
+            ignoredCount++;
+          }
         } else {
-          status = "ignore";
-          ignoredCount++;
+          // Standard mode: compare prices and supplier
+          const priceStr = item.price.toString().replace(',', '.');
+          const filePrice = parseFloat(priceStr);
+          const isPriceValid = !isNaN(filePrice);
+
+          let costPrice = filePrice;
+          let salePrice = filePrice;
+
+          const parsed = parseExcelIva(item.iva);
+          const rowIva = parsed.percent !== null ? parsed.percent : (iva ?? 0);
+          const hasExcelIva = parsed.percent !== null;
+
+          if (applyPriceFormula || hasExcelIva) {
+            const d = discount ?? 0;
+            const g = gain ?? 0;
+            costPrice = roundToNearest10(filePrice * (1 - d / 100) * (1 + rowIva / 100));
+            salePrice = roundToNearest10(costPrice * (1 + g / 100));
+          }
+
+          const priceSame = isPriceValid &&
+            Math.abs(costPrice - existing.price) < 0.001 &&
+            Math.abs(salePrice - existing.salePrice) < 0.001;
+
+          const supplierSame =
+            (supplierId === undefined && existing.supplierId === null) ||
+            supplierId === existing.supplierId;
+
+          const unchanged = priceSame && supplierSame;
+
+          if (updateExisting && !unchanged) {
+            status = "update";
+            updatedCount++;
+          } else {
+            status = "ignore";
+            ignoredCount++;
+          }
         }
       } else {
-        if (updateOnly) {
+        if (updateOnly || metadataOnly) {
+          // metadataOnly implies update-only for existing products; new products are ignored
           status = "ignore";
           ignoredCount++;
         } else {
@@ -252,7 +329,8 @@ export const processBulkProductBatch = async (
   discount?: number,
   iva?: number,
   gain?: number,
-  supplierId?: string
+  supplierId?: string,
+  metadataOnly?: boolean
 ): Promise<{ createdCount: number; updatedCount: number } | { error: string }> => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
@@ -421,38 +499,56 @@ export const processBulkProductBatch = async (
       const existingProduct = existingProductMap.get(item.code.toString());
 
       if (existingProduct) {
-        const priceSame = isPriceValid &&
-          Math.abs(costPrice - existingProduct.price) < 0.001 &&
-          Math.abs(salePrice - existingProduct.salePrice) < 0.001;
-
-        const supplierSame =
-          (supplierId === undefined && existingProduct.supplierId === null) ||
-          supplierId === existingProduct.supplierId;
-
-        if (supplierSame && priceSame) {
-          continue;
-        }
-
-        if (updateExisting || updateOnly) {
+        if (metadataOnly) {
+          // Metadata-only mode: skip price comparison, always update if metadata differs
           toUpdate.push({
             id: existingProduct.id,
             description: item.description.toString(),
-            price: isPriceValid ? costPrice : 0,
-            salePrice: isPriceValid ? salePrice : 0,
-            gain: (applyPriceFormula || hasExcelIva) ? gainValue : existingProduct.gain,
-            unit: item.unit || "unidades",
+            price: existingProduct.price,
+            salePrice: existingProduct.salePrice,
+            gain: existingProduct.gain,
+            unit: existingProduct.unit || "unidades",
             brandId: resolvedBrandId,
             categoryId: resolvedCategoryId,
             subCategoryId: resolvedSubCategoryId,
-            amount: item.amount !== null && item.amount !== undefined
-              ? (isNaN(parsedAmount) ? 0 : parsedAmount)
-              : null,
-            supplierId: supplierId || null,
+            amount: existingProduct.amount,
+            supplierId: existingProduct.supplierId,
           });
           updatedCount++;
+        } else {
+          const priceSame = isPriceValid &&
+            Math.abs(costPrice - existingProduct.price) < 0.001 &&
+            Math.abs(salePrice - existingProduct.salePrice) < 0.001;
+
+          const supplierSame =
+            (supplierId === undefined && existingProduct.supplierId === null) ||
+            supplierId === existingProduct.supplierId;
+
+          if (supplierSame && priceSame) {
+            continue;
+          }
+
+          if (updateExisting || updateOnly) {
+            toUpdate.push({
+              id: existingProduct.id,
+              description: item.description.toString(),
+              price: isPriceValid ? costPrice : 0,
+              salePrice: isPriceValid ? salePrice : 0,
+              gain: (applyPriceFormula || hasExcelIva) ? gainValue : existingProduct.gain,
+              unit: item.unit || "unidades",
+              brandId: resolvedBrandId,
+              categoryId: resolvedCategoryId,
+              subCategoryId: resolvedSubCategoryId,
+              amount: item.amount !== null && item.amount !== undefined
+                ? (isNaN(parsedAmount) ? 0 : parsedAmount)
+                : null,
+              supplierId: supplierId || null,
+            });
+            updatedCount++;
+          }
         }
       } else {
-        if (updateOnly) {
+        if (updateOnly || metadataOnly) {
           continue;
         }
 

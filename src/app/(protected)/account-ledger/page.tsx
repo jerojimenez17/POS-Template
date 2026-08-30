@@ -60,6 +60,7 @@ async function OrdersTable({ status, search, session }: OrdersTableProps) {
   const result = await getUnpaidOrders({
     businessId: session.user.businessId,
     status: statusParam,
+    search: search,
   }) as { success: boolean; data?: OrderWithClient[]; error?: string };
 
   if (!result.success) {
@@ -70,24 +71,7 @@ async function OrdersTable({ status, search, session }: OrdersTableProps) {
     );
   }
 
-  let orders = result.data || [];
-
-  // Filter by search term
-  if (search) {
-    const term = search.toLowerCase();
-    orders = orders.filter(
-      (o) => o.client?.name?.toLowerCase().includes(term)
-    );
-  }
-
-  // Sort alphabetically by client name
-  orders.sort((a, b) => {
-    const nameA = a.client?.name?.toLowerCase() || "";
-    const nameB = b.client?.name?.toLowerCase() || "";
-    if (nameA < nameB) return -1;
-    if (nameA > nameB) return 1;
-    return 0;
-  });
+  const orders = result.data || [];
 
   if (orders.length === 0) {
     return (
