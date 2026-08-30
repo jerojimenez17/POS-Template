@@ -17,6 +17,12 @@ export async function GET() {
         name: true,
         cellPhone: true,
         address: true,
+        cuit: true,
+        ivaCondition: true,
+        email: true,
+        balance: true,
+        date: true,
+        last_update: true,
       },
     });
 
