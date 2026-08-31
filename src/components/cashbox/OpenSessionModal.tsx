@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useCashbox } from "@/context/CashboxContext";
 
 export const OpenSessionModal = ({ 
   isOpen, 
@@ -24,6 +25,7 @@ export const OpenSessionModal = ({
   const [initialBalance, setInitialBalance] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { setHasActiveSession } = useCashbox();
 
   const handleOpenSession = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +44,9 @@ export const OpenSessionModal = ({
       toast.error(result.error as string);
     } else {
       toast.success("Sesión de caja abierta exitosamente");
+      setHasActiveSession(true);
+      setInitialBalance("");
+      onClose();
       router.refresh();
     }
     
