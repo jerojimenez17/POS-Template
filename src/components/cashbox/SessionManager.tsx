@@ -21,18 +21,16 @@ export const SessionManager = ({ hasActiveSession: hasActiveSessionProp }: Sessi
     setIsOpeningModalOpen
   } = useCashbox();
 
-  // Sync prop with context
+  // Sync prop with context and manage modal visibility
   useEffect(() => {
-    setHasActiveSession(!!hasActiveSessionProp);
-  }, [hasActiveSessionProp, setHasActiveSession]);
-
-  // Handle default visibility logic
-  useEffect(() => {
-    // If no session and not in closing process, open the modal by default
-    if (!hasActiveSession && !isClosing) {
+    const isActive = !!hasActiveSessionProp;
+    setHasActiveSession(isActive);
+    if (!isActive && !isClosing) {
       setIsOpeningModalOpen(true);
+    } else if (isActive) {
+      setIsOpeningModalOpen(false);
     }
-  }, [hasActiveSession, isClosing, setIsOpeningModalOpen]);
+  }, [hasActiveSessionProp, isClosing, setHasActiveSession, setIsOpeningModalOpen]);
 
   return (
     <>
