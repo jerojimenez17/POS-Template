@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { MovementType, PaidStatus } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
 import { requireFeature } from "@/lib/auth-gates";
@@ -57,12 +58,7 @@ interface UpdateOrderDiscountInput {
   businessId: string;
 }
 
-interface GetUnpaidOrdersInput {
-  businessId: string;
-  status?: string;
-  orderId?: string;
-  search?: string;
-}
+export type LedgerStatus = "all" | "inpago" | "pago" | "pagado" | "pendiente" | "cancelado";
 
 /** The business in the request is only a legacy consistency check, never an
  * authorization source. Server actions are public endpoints. */
@@ -73,28 +69,62 @@ const getAuthorizedBusinessId = async (requestedBusinessId?: string): Promise<st
   return businessId;
 };
 
-interface AccountLedgerOrder {
+export interface AccountLedgerOrder {
   id: string;
   date: Date;
+  total: number;
+  status: string;
+  paidStatus: string;
+  clientId: string | null;
   client: { id: string; name: string | null } | null;
+  notes: string | null;
 }
 
-const compareAccountLedgerOrders = (
-  first: AccountLedgerOrder,
-  second: AccountLedgerOrder,
-): number => {
-  const firstClientName = first.client?.name?.toLowerCase() || "";
-  const secondClientName = second.client?.name?.toLowerCase() || "";
+export interface AccountLedgerPage {
+  orders: AccountLedgerOrder[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
 
-  if (firstClientName < secondClientName) return -1;
-  if (firstClientName > secondClientName) return 1;
+export interface GetUnpaidOrdersInput {
+  businessId: string;
+  status?: LedgerStatus | string;
+  orderId?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string | null;
+}
 
-  const firstDate = first.date instanceof Date ? first.date.getTime() : 0;
-  const secondDate = second.date instanceof Date ? second.date.getTime() : 0;
-  const dateDifference = secondDate - firstDate;
-  if (dateDifference !== 0) return dateDifference;
+const MAX_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 50;
 
-  return first.id < second.id ? -1 : first.id > second.id ? 1 : 0;
+interface LedgerCursor {
+  // PostgreSQL sorts NULL after every value for ASC. Keep NULL distinct from
+  // the empty string: they are adjacent in the display, but not the same key.
+  clientName: string | null;
+  date: string;
+  id: string;
+  status: string;
+  search: string;
+}
+
+const encodeCursor = (cursor: LedgerCursor): string =>
+  Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+
+const decodeCursor = (value: string | null | undefined, status: string, search: string): LedgerCursor | null => {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const candidate = parsed as Partial<LedgerCursor>;
+     if (candidate.status !== status || candidate.search !== search ||
+         (candidate.clientName !== null && typeof candidate.clientName !== "string") ||
+        typeof candidate.date !== "string" || Number.isNaN(Date.parse(candidate.date)) ||
+        typeof candidate.id !== "string" || candidate.id.length === 0) return null;
+     return candidate as LedgerCursor;
+  } catch {
+    return null;
+  }
 };
 
 const addItemsToOrderSchema = z.object({
@@ -521,7 +551,6 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
     const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
 
-    let orders: unknown[];
     if (input.orderId) {
       const order = await db.order.findUnique({
         where: { id: input.orderId, businessId },
@@ -530,11 +559,53 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
           cashMovements: true,
         },
       } as never);
-      orders = order ? [order] : [];
+      return { success: true, data: order ? [order] : [] };
     } else {
-      const isPending = input.status === "pendiente";
-      const paidStatus = (input.status === "pagado" ? "pago" : input.status) as PaidStatus | undefined;
-      const search = input.search?.trim();
+      const status = input.status || "inpago";
+      // Older callers omitted every pagination field and consumed the raw
+      // array. Keep that response shape while all explicit ledger requests
+      // use the paginated envelope.
+      const legacyArrayResponse = input.status === undefined &&
+        input.limit === undefined && input.cursor === undefined;
+      const isPending = status === "pendiente";
+      const paidStatus = (status === "pagado" ? "pago" : status) as PaidStatus | undefined;
+      const search = input.search?.trim() || "";
+      const requestedLimit = input.limit ?? DEFAULT_PAGE_SIZE;
+      const normalizedLimit = Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : DEFAULT_PAGE_SIZE;
+      // These tabs are intentionally not client-configurable. In particular,
+      // do not let a large (or small) limit turn the fixed-size tabs into an
+      // unbounded/arbitrary batch API.
+      const limit = isPending || status === "inpago"
+        ? MAX_PAGE_SIZE
+        : Math.min(Math.max(normalizedLimit, 1), MAX_PAGE_SIZE);
+      const decodedCursor = decodeCursor(input.cursor, status, search);
+      // An invalid cursor is an explicit first-page reset. Never manufacture a
+      // boundary value: doing so can silently skip rows (especially null names).
+      const invalidCursor = Boolean(input.cursor) && decodedCursor === null;
+      const cursor = decodedCursor;
+      const cursorDate = cursor ? new Date(cursor.date) : null;
+      const continuation: Prisma.OrderWhereInput[] = cursor
+        ? cursor.clientName === null
+          ? [
+              // ASC puts NULL after every non-NULL client name. Once the
+              // cursor is in that bucket, only NULL names can follow it.
+              { client: null, date: { lt: cursorDate as Date } },
+              { client: null, date: cursorDate as Date, id: { gt: cursor.id } },
+            ]
+          : [
+              // These branches are the lexicographic expansion of the exact
+              // ORDER BY below: name ASC (NULLS LAST), date DESC, id ASC.
+              // In particular, do not include NULL clients after an empty
+              // name; PostgreSQL treats those as different sort keys.
+              { client: { name: { gt: cursor.clientName } } },
+              { client: { name: cursor.clientName }, date: { lt: cursorDate as Date } },
+              { client: { name: cursor.clientName }, date: cursorDate as Date, id: { gt: cursor.id } },
+            ]
+        : invalidCursor
+          // This redundant, true branch makes the reset explicit while keeping
+          // the same predicate shape for callers inspecting the query.
+          ? [{ businessId }]
+          : [];
       const listOrders = await db.order.findMany({
         where: {
           businessId,
@@ -543,6 +614,7 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
           // Y solo aplicamos el filtro de paidStatus si no es "pending" ni "all"
           ...(!isPending && paidStatus && paidStatus !== ("all" as never) ? { paidStatus } : {}),
           ...(search ? { client: { name: { contains: search, mode: "insensitive" as const } } } : {}),
+          ...(continuation.length ? { OR: continuation } : {}),
         },
         select: {
           id: true,
@@ -559,13 +631,20 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
           { date: "desc" },
           { id: "asc" },
         ],
+        take: limit + 1,
       });
-      // PostgreSQL relation ordering does not guarantee the old JS semantics
-      // for NULL clients or collation. Sort only the already reduced projection.
-      orders = [...listOrders].sort(compareAccountLedgerOrders);
+      const hasMore = listOrders.length > limit;
+      const orders = (hasMore ? listOrders.slice(0, limit) : listOrders) as AccountLedgerOrder[];
+      const last = orders[orders.length - 1];
+      const nextCursor = hasMore && last
+        ? encodeCursor({
+             clientName: last.client ? last.client.name : null,
+             date: last.date.toISOString(), id: last.id, status, search,
+           })
+        : null;
+      if (legacyArrayResponse) return { success: true, data: orders };
+      return { success: true, data: { orders, nextCursor, hasMore } };
     }
-
-    return { success: true, data: orders };
   } catch (error) {
     console.error("Error getting unpaid orders:", error);
     return {
