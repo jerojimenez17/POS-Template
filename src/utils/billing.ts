@@ -52,6 +52,9 @@ export interface BillCheckoutSnapshot extends BillState {
 export function createBillCheckoutSnapshot(state: BillState, selectedBillType?: string): BillCheckoutSnapshot {
   return {
     ...state,
+    products: state.products.map((product) => ({ ...product })),
+    CAE: state.CAE ? { ...state.CAE } : undefined,
+    date: new Date(state.date),
     billType: normalizeBillType(selectedBillType ?? state.billType),
   };
 }

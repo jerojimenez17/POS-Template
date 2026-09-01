@@ -32,10 +32,11 @@ const INITIAL_STATE: BillState = {
 interface props {
   children: ReactElement | ReactElement[];
   initialBillType?: string;
+  defaultPtoVenta?: number;
   qzTrayEnabled?: boolean;
 }
 
-const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: props) => {
+const BillProvider = ({ children, initialBillType, defaultPtoVenta, qzTrayEnabled = false }: props) => {
   // /newBill supplies the business-derived type explicitly. Standalone and
   // unknown paths use the new-sale Factura B fallback.
   const effectiveInitialBillType = normalizeBillType(initialBillType, BillTypes.B);
@@ -46,7 +47,7 @@ const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: prop
   const [BillState, reducerDispatch] = useReducer(BillReducer, undefined, getInitialState);
   const dispatch = (action: BillAction) => {
     if (action.type === "removeAll" && action.defaultBillType === undefined) {
-      reducerDispatch({ ...action, defaultBillType: effectiveInitialBillType });
+      reducerDispatch({ ...action, defaultBillType: effectiveInitialBillType, defaultPtoVenta });
       return;
     }
     reducerDispatch(action);
@@ -87,6 +88,7 @@ const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: prop
     removeItem: removeItem,
     onOrderResetRef: onOrderResetRef,
     initialBillType: effectiveInitialBillType,
+    defaultPtoVenta,
     billTypeRef,
     printMode: printMode,
     setPrintMode: setPrintMode,

@@ -2,8 +2,9 @@
 import { Session } from "next-auth";
 import PrintableTable from "./PrintableTable";
 import BillButtons from "./BillButtons";
-import { useState, useRef } from "react";
+import React, { useState, useRef, useContext, useEffect } from "react";
 import CAE from "@/models/CAE";
+import { BillContext } from "@/context/BillContext";
 
 interface props {
   session: Session | null;
@@ -13,6 +14,16 @@ interface props {
 const ProductsTable = ({ session, isEditing, orderId }: props) => {
   const [printTrigger, setPrintTrigger] = useState<{count: number, cae?: CAE}>({count: 0});
   const printWindowRef = useRef<Window | null>(null);
+  const { BillState } = useContext(BillContext);
+
+  useEffect(() => {
+    if (BillState.products.length === 0 && printTrigger.cae?.CAE) {
+      const t = setTimeout(() => {
+        setPrintTrigger(prev => (prev.cae?.CAE ? { ...prev, cae: undefined } : prev));
+      }, 900);
+      return () => clearTimeout(t);
+    }
+  }, [BillState.products.length, BillState.CAE?.CAE, printTrigger.cae?.CAE]);
 
   const handlePrint = (cae?: CAE, win?: Window | null) => {
     printWindowRef.current = win || null;

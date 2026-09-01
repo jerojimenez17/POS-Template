@@ -15,6 +15,7 @@ export default interface BillContextProps {
   billTypeRef?: React.MutableRefObject<string>;
   printMode: PrintMode;
   setPrintMode: (mode: PrintMode) => void;
+  defaultPtoVenta?: number;
   qzTrayEnabled?: boolean;
   focusPriceProductId?: string | null;
   setFocusPriceProductId?: (id: string | null) => void;

@@ -119,6 +119,25 @@ const PrintableTable = ({
   }, [state.CAE, state.CAE?.qrData, forceCae]);
 
   const activeCae = forceCae || state.CAE;
+  const bannerCae = state.CAE;
+  const [displayBannerCae, setDisplayBannerCae] = useState<CAE | null>(null);
+  const [isBannerExiting, setIsBannerExiting] = useState(false);
+
+  useEffect(() => {
+    const hasCae = !!bannerCae?.CAE?.trim();
+    if (hasCae && bannerCae) {
+      setDisplayBannerCae(bannerCae);
+      setIsBannerExiting(false);
+    } else if (!hasCae && displayBannerCae?.CAE) {
+      setIsBannerExiting(true);
+      const t = setTimeout(() => {
+        setDisplayBannerCae(null);
+        setIsBannerExiting(false);
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [bannerCae?.CAE, bannerCae?.qrData, bannerCae?.vencimiento, displayBannerCae?.CAE]);
+
   const receiptBusinessInfo = useMemo(
     () => buildReceiptBusinessInfo(
       session?.user?.businessName || "Mi Comercio",
@@ -474,13 +493,18 @@ const PrintableTable = ({
         </div>
       </div>
 
-      {/* CAE Section - Print only */}
-      {isClient && receiptBusinessInfo.documentKind === "official-invoice" && activeCae?.CAE && (
-        <div className="print-visible mt-8 text-xs border-t border-gray-300 pt-4 pb-8">
+      {isClient && receiptBusinessInfo.documentKind === "official-invoice" && displayBannerCae?.CAE && (
+        <div
+          className={cn(
+            "mt-8 text-xs border-t border-gray-300 pt-4 pb-8 overflow-hidden transition-all duration-300 ease-in-out print-visible",
+            isBannerExiting ? "max-h-0 opacity-0 -translate-y-2 pt-0 pb-0 border-transparent" : "max-h-[400px] opacity-100 translate-y-0"
+          )}
+          aria-hidden={isBannerExiting}
+        >
           <div className="flex items-center justify-between gap-4">
-            {activeCae.qrData ? (
+            {displayBannerCae.qrData ? (
               <div className="shrink-0 bg-white p-1 rounded-sm">
-                <QRCodeSVG value={activeCae.qrData} size={110} level="M" includeMargin={false} />
+                <QRCodeSVG value={displayBannerCae.qrData} size={110} level="M" includeMargin={false} />
               </div>
             ) : (
               <div className="w-[110px] shrink-0"></div>
@@ -489,10 +513,10 @@ const PrintableTable = ({
             <div className="flex-1 text-center">
               <p className="font-bold text-[14px] mb-2 uppercase tracking-wide">Comprobante Autorizado</p>
               <p className="mb-1">
-                  <span className="font-bold text-gray-700">CAE:</span> <span className="text-[13px]">{activeCae.CAE}</span>
+                  <span className="font-bold text-gray-700">CAE:</span> <span className="text-[13px]">{displayBannerCae.CAE}</span>
               </p>
               <p className="mb-3">
-                <span className="font-bold text-gray-700">Vencimiento:</span> <span className="text-[13px]">{activeCae.vencimiento}</span>
+                <span className="font-bold text-gray-700">Vencimiento:</span> <span className="text-[13px]">{displayBannerCae.vencimiento}</span>
               </p>
               <div className="w-full h-px bg-gray-200 my-2 mx-auto max-w-[200px]"></div>
               <p className="text-[9px] leading-tight italic text-gray-500 max-w-[300px] mx-auto">
