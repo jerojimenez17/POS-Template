@@ -1,10 +1,11 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { auth } from "../../auth";
+import { auth } from "@/auth";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { PaidStatus } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
@@ -56,11 +57,74 @@ interface UpdateOrderDiscountInput {
   businessId: string;
 }
 
-interface GetUnpaidOrdersInput {
-  businessId: string;
-  status?: string;
-  orderId?: string;
+export type LedgerStatus = "all" | "inpago" | "pago" | "pagado" | "pendiente" | "cancelado";
+
+/** The business in the request is only a legacy consistency check, never an
+ * authorization source. Server actions are public endpoints. */
+const getAuthorizedBusinessId = async (requestedBusinessId?: string): Promise<string | null> => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId || (requestedBusinessId && requestedBusinessId !== businessId)) return null;
+  return businessId;
+};
+
+export interface AccountLedgerOrder {
+  id: string;
+  date: Date;
+  total: number;
+  status: string;
+  paidStatus: string;
+  clientId: string | null;
+  client: { id: string; name: string | null } | null;
+  notes: string | null;
 }
+
+export interface AccountLedgerPage {
+  orders: AccountLedgerOrder[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface GetUnpaidOrdersInput {
+  businessId: string;
+  status?: LedgerStatus | string;
+  orderId?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+const MAX_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 50;
+
+interface LedgerCursor {
+  // PostgreSQL sorts NULL after every value for ASC. Keep NULL distinct from
+  // the empty string: they are adjacent in the display, but not the same key.
+  clientName: string | null;
+  date: string;
+  id: string;
+  status: string;
+  search: string;
+}
+
+const encodeCursor = (cursor: LedgerCursor): string =>
+  Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+
+const decodeCursor = (value: string | null | undefined, status: string, search: string): LedgerCursor | null => {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const candidate = parsed as Partial<LedgerCursor>;
+    if (candidate.status !== status || candidate.search !== search ||
+        (candidate.clientName !== null && typeof candidate.clientName !== "string") ||
+        typeof candidate.date !== "string" || Number.isNaN(Date.parse(candidate.date)) ||
+        typeof candidate.id !== "string" || candidate.id.length === 0) return null;
+    return candidate as LedgerCursor;
+  } catch {
+    return null;
+  }
+};
 
 const addItemsToOrderSchema = z.object({
   orderId: z.string(),
@@ -107,18 +171,20 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
     const featureResult = await requireFeature("hasClientLedger");
     if (!featureResult.success) return { success: false, error: featureResult.error };
     const session = await auth();
-    const businessId = session?.user?.businessId || input.businessId;
+    const businessId = session?.user?.businessId;
+    if (input.businessId && input.businessId !== businessId) return { success: false, error: "No autorizado" };
     if (!businessId) return { success: false, error: "No autorizado" };
 
-    return await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       const client = await tx.client.findUnique({
         where: { id: input.clientId },
       });
       if (!client) throw new Error("Cliente no encontrado");
+      if (client.businessId && client.businessId !== businessId) throw new Error("Cliente no encontrado");
 
       const productIds = input.items.map(i => i.productId);
       const products = await tx.product.findMany({
-        where: { id: { in: productIds } },
+        where: { id: { in: productIds }, businessId },
         select: { id: true, amount: true },
       });
       const productMap = new Map(products.map(p => [p.id, p]));
@@ -218,8 +284,9 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
     revalidateTag(CACHE_TAGS.ORDERS, "max");
     revalidateTag(CACHE_TAGS.STOCK, "max");
     revalidateTag(CACHE_TAGS.CLIENTS, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+
+    return result;
   } catch (error) {
     console.error("Error creating unpaid order:", error);
     return {
@@ -231,8 +298,7 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
 
 export const registerPayment = async (input: RegisterPaymentInput): Promise<ActionResult> => {
   try {
-    const session = await auth();
-    const businessId = session?.user?.businessId || input.businessId;
+    const businessId = await getAuthorizedBusinessId(input.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
     const permission = await assertWritePermission();
@@ -244,6 +310,7 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
         include: { client: true, cashMovements: true },
       });
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
 
       const totalPaidBefore = order.cashMovements.reduce(
         (sum, cm) => sum + cm.total,
@@ -288,7 +355,6 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
     revalidateTag(CACHE_TAGS.ORDERS, "max");
     revalidateTag(CACHE_TAGS.CLIENTS, "max");
     revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
     await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
 
     return { success: true };
@@ -303,23 +369,30 @@ export const registerPayment = async (input: RegisterPaymentInput): Promise<Acti
 
 export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<ActionResult> => {
   try {
-    const session = await auth();
-    const businessId = session?.user?.businessId || input.businessId;
+    const businessId = await getAuthorizedBusinessId(input.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
     const permission = await assertWritePermission();
     if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
-    return await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: input.orderId },
         include: { client: true, items: { include: { product: true } } },
       });
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
 
       if (order.paidStatus === "pago") {
         throw new Error("No se puede cancelar una orden ya pagado");
       }
+
+      const productIds = [...new Set(order.items.flatMap((item) => item.productId ? [item.productId] : []))];
+      const ownedProducts = await tx.product.findMany({
+        where: { id: { in: productIds }, businessId },
+        select: { id: true },
+      });
+      if (ownedProducts.length !== productIds.length) throw new Error("Producto no encontrado");
 
       for (const item of order.items) {
         if (item.productId) {
@@ -365,8 +438,8 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
       }
 
       // Delete related records before deleting the order
-      await tx.stockMovement.deleteMany({ where: { orderId: input.orderId } });
-      await tx.cashMovement.deleteMany({ where: { orderId: input.orderId } });
+      await tx.stockMovement.deleteMany({ where: { orderId: input.orderId, businessId } });
+      await tx.cashMovement.deleteMany({ where: { orderId: input.orderId, businessId } });
 
       // Delete the order (cascades to OrderItem and OrderUpdate)
       await tx.order.delete({ where: { id: input.orderId } });
@@ -378,6 +451,8 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
     revalidateTag(CACHE_TAGS.STOCK, "max");
     revalidateTag(CACHE_TAGS.CLIENTS, "max");
     await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+
+    return result;
   } catch (error) {
     console.error("Error canceling unpaid order:", error);
     return {
@@ -391,8 +466,7 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
 export const updateOrderDiscount = async (input: UpdateOrderDiscountInput): Promise<ActionResult> => {
   try {
     const validatedInput = updateOrderDiscountSchema.parse(input);
-    const session = await auth();
-    const businessId = session?.user?.businessId || validatedInput.businessId;
+    const businessId = await getAuthorizedBusinessId(validatedInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
     const result = await db.$transaction(async (tx) => {
@@ -402,6 +476,7 @@ export const updateOrderDiscount = async (input: UpdateOrderDiscountInput): Prom
       });
 
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar el descuento de una orden pagado");
 
       // Calculate subtotal from items (sum of all item subTotals)
@@ -451,40 +526,112 @@ export const updateOrderDiscount = async (input: UpdateOrderDiscountInput): Prom
 export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<ActionResult> => {
   try {
     const session = await auth();
-    const businessId = session?.user?.businessId || input.businessId;
+    const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
 
-    let orders;
     if (input.orderId) {
-      orders = await db.order.findUnique({
+      const order = await db.order.findUnique({
         where: { id: input.orderId, businessId },
         include: {
           client: true,
           cashMovements: true,
         },
       } as never);
-      orders = orders ? [orders] : [];
-    } else if (input.status === "all") {
-      orders = await db.order.findMany({
+      return { success: true, data: order ? [order] : [] };
+    } else if (input.status === "all" && input.limit === undefined && input.cursor === undefined && input.search === undefined) {
+      // Legacy AccountLedgerContent contract: unfiltered full list (including
+      // "pendiente" status orders) returned as a raw array.
+      const orders = await db.order.findMany({
         where: { businessId },
         include: { client: true },
         orderBy: { date: "desc" },
       });
+      return { success: true, data: orders };
     } else {
-      const isPending = input.status === "pendiente";
-      const paidStatus = (input.status === "pagado" ? "pago" : input.status) as PaidStatus | undefined;
-      orders = await db.order.findMany({
+      const status = input.status || "inpago";
+      // Older callers omitted every pagination field and consumed the raw
+      // array. Keep that response shape while all explicit ledger requests
+      // use the paginated envelope.
+      const legacyArrayResponse = input.status === undefined &&
+        input.limit === undefined && input.cursor === undefined;
+      const isPending = status === "pendiente";
+      const paidStatus = (status === "pagado" ? "pago" : status) as PaidStatus | undefined;
+      const search = input.search?.trim() || "";
+      const requestedLimit = input.limit ?? DEFAULT_PAGE_SIZE;
+      const normalizedLimit = Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : DEFAULT_PAGE_SIZE;
+      // These tabs are intentionally not client-configurable. In particular,
+      // do not let a large (or small) limit turn the fixed-size tabs into an
+      // unbounded/arbitrary batch API.
+      const limit = isPending || status === "inpago"
+        ? MAX_PAGE_SIZE
+        : Math.min(Math.max(normalizedLimit, 1), MAX_PAGE_SIZE);
+      const decodedCursor = decodeCursor(input.cursor, status, search);
+      // An invalid cursor is an explicit first-page reset. Never manufacture a
+      // boundary value: doing so can silently skip rows (especially null names).
+      const invalidCursor = Boolean(input.cursor) && decodedCursor === null;
+      const cursor = decodedCursor;
+      const cursorDate = cursor ? new Date(cursor.date) : null;
+      const continuation: Prisma.OrderWhereInput[] = cursor
+        ? cursor.clientName === null
+          ? [
+              // ASC puts NULL after every non-NULL client name. Once the
+              // cursor is in that bucket, only NULL names can follow it.
+              { client: null, date: { lt: cursorDate as Date } },
+              { client: null, date: cursorDate as Date, id: { gt: cursor.id } },
+            ]
+          : [
+              // These branches are the lexicographic expansion of the exact
+              // ORDER BY below: name ASC (NULLS LAST), date DESC, id ASC.
+              // In particular, do not include NULL clients after an empty
+              // name; PostgreSQL treats those as different sort keys.
+              { client: { name: { gt: cursor.clientName } } },
+              { client: { name: cursor.clientName }, date: { lt: cursorDate as Date } },
+              { client: { name: cursor.clientName }, date: cursorDate as Date, id: { gt: cursor.id } },
+            ]
+        : invalidCursor
+          // This redundant, true branch makes the reset explicit while keeping
+          // the same predicate shape for callers inspecting the query.
+          ? [{ businessId }]
+          : [];
+      const listOrders = await db.order.findMany({
         where: {
           businessId,
+          // Si estamos buscando "pendientes", filtramos por status = pendiente
           ...(isPending ? { status: "pendiente" } : { status: { not: "pendiente" } }),
-          ...(!isPending && paidStatus ? { paidStatus } : {}),
+          // Y solo aplicamos el filtro de paidStatus si no es "pending" ni "all"
+          ...(!isPending && paidStatus && paidStatus !== ("all" as never) ? { paidStatus } : {}),
+          ...(search ? { client: { name: { contains: search, mode: "insensitive" as const } } } : {}),
+          ...(continuation.length ? { OR: continuation } : {}),
         },
-        include: { client: true },
-        orderBy: { date: "desc" },
+        select: {
+          id: true,
+          date: true,
+          total: true,
+          status: true,
+          paidStatus: true,
+          clientId: true,
+          notes: true,
+          client: { select: { id: true, name: true } },
+        },
+        orderBy: [
+          { client: { name: "asc" } },
+          { date: "desc" },
+          { id: "asc" },
+        ],
+        take: limit + 1,
       });
+      const hasMore = listOrders.length > limit;
+      const orders = (hasMore ? listOrders.slice(0, limit) : listOrders) as AccountLedgerOrder[];
+      const last = orders[orders.length - 1];
+      const nextCursor = hasMore && last
+        ? encodeCursor({
+            clientName: last.client ? last.client.name : null,
+            date: last.date.toISOString(), id: last.id, status, search,
+          })
+        : null;
+      if (legacyArrayResponse) return { success: true, data: orders };
+      return { success: true, data: { orders, nextCursor, hasMore } };
     }
-
-    return { success: true, data: orders };
   } catch (error) {
     console.error("Error getting unpaid orders:", error);
     return {
@@ -497,42 +644,73 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
   }
 };
 
-export const getClientUnpaidOrder = async (clientId: string, businessId: string): Promise<ActionResult> => {
+export const getClientUnpaidOrders = async (clientId: string, legacyBusinessId?: string): Promise<ActionResult<{ id: string; total: number; date: Date; itemsCount: number; status: string; paidStatus: string }[]>> => {
   try {
-    const session = await auth();
-    const businessIdFinal = session?.user?.businessId || businessId;
-    if (!businessIdFinal) return { success: false, error: "No autorizado" };
+    const businessId = await getAuthorizedBusinessId(legacyBusinessId);
+    if (!businessId) return { success: false, error: "No autorizado" };
 
-    return await db.$transaction(async (tx) => {
-      const order = await tx.order.findFirst({
-        where: {
-          clientId,
-          businessId: businessIdFinal,
-          paidStatus: "inpago",
-        },
-        include: {
-          items: true,
-          client: true,
-        },
-        orderBy: { date: "desc" },
-      });
-
-      return { success: true, data: order };
+    const orders = await db.order.findMany({
+      where: {
+        clientId,
+        businessId,
+        paidStatus: "inpago",
+        status: { in: ["pendiente", "confirmado", "consignacion"] },
+      },
+      include: {
+        _count: { select: { items: true } },
+      },
+      orderBy: { date: "desc" },
     });
+
+    return {
+      success: true,
+      data: orders.map(o => ({
+        id: o.id,
+        total: o.total,
+        date: o.date,
+        itemsCount: o._count.items,
+        status: o.status,
+        paidStatus: o.paidStatus,
+      })),
+    };
   } catch (error) {
-    console.error("Error getting client unpaid order:", error);
+    console.error("Error getting client unpaid orders:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al obtener la orden",
+      error: error instanceof Error ? error.message : "Error al obtener las órdenes",
     };
+  }
+};
+
+/** Legacy ClientSelectionModal contract; the optional businessId is only a
+ * consistency check and is never an authorization source. */
+export const getClientUnpaidOrder = async (clientId: string, legacyBusinessId?: string): Promise<ActionResult<unknown | null>> => {
+  try {
+    const businessId = await getAuthorizedBusinessId(legacyBusinessId);
+    if (!businessId) return { success: false, error: "No autorizado" };
+
+    const result = await db.$transaction(async (tx) => tx.order.findFirst({
+      where: {
+        clientId,
+        businessId,
+        paidStatus: "inpago",
+        status: { in: ["pendiente", "confirmado", "consignacion"] },
+      },
+      include: { items: true },
+      orderBy: { date: "desc" },
+    }));
+    const order = result && result.businessId && result.businessId !== businessId ? null : result;
+    return { success: true, data: order };
+  } catch (error) {
+    console.error("Error getting client unpaid order:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Error al obtener la orden" };
   }
 };
 
 export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchema>): Promise<ActionResult> => {
   try {
     const validatedInput = addItemsToOrderSchema.parse(input);
-    const session = await auth();
-    const businessId = session?.user?.businessId || validatedInput.businessId;
+    const businessId = await getAuthorizedBusinessId(validatedInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
     const permission = await assertWritePermission();
@@ -545,11 +723,12 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
       });
 
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
 
       for (const item of validatedInput.items) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
+        const product = await tx.product.findFirst({
+          where: { id: item.productId, businessId },
         });
         if (!product) {
           throw new Error(`Producto ${item.description || item.productId} no encontrado`);
@@ -635,7 +814,6 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
       revalidateTag(CACHE_TAGS.ORDERS, "max");
       revalidateTag(CACHE_TAGS.STOCK, "max");
       revalidateTag(CACHE_TAGS.CLIENTS, "max");
-      revalidateTag(CACHE_TAGS.ORDERS, "max");
       await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
 
       return { success: true };
@@ -672,6 +850,8 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
       });
 
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
+      if (orderItem.orderId !== order.id) throw new Error("Item no encontrado");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
 
       const quantityDiff = validatedInput.quantity !== undefined 
@@ -679,8 +859,8 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
         : 0;
 
       if (quantityDiff > 0 && orderItem.productId) {
-        const product = await tx.product.findUnique({
-          where: { id: orderItem.productId },
+        const product = await tx.product.findFirst({
+          where: { id: orderItem.productId, businessId },
         });
         if (!product || product.amount < quantityDiff) {
           throw new Error("Stock insuficiente");
@@ -804,6 +984,8 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
       });
 
       if (!order) throw new Error("Orden no encontrada");
+      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
+      if (orderItem.orderId !== order.id) throw new Error("Item no encontrado");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
 
       await tx.orderItem.delete({

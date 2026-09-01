@@ -112,6 +112,29 @@ export const ClientSchema = z.object({
   balance: z.coerce.number(),
 });
 
+const optionalClientText = (max: number) => z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().max(max).optional(),
+);
+
+export const clientFormSchema = z.object({
+  name: z.string().trim().min(1, "El nombre es obligatorio").max(100, "El nombre no puede superar los 100 caracteres"),
+  address: optionalClientText(200),
+  cellPhone: optionalClientText(50),
+  cuit: optionalClientText(20),
+  ivaCondition: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.enum(["Consumidor Final", "Responsable Inscripto", "Monotributista", "Exento"], { errorMap: () => ({ message: "La condición de IVA no es válida" }) }).optional(),
+  ),
+  email: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().trim().toLowerCase().email("El email no es válido").max(254).optional(),
+  ),
+}).strict();
+
+export const updateClientSchema = clientFormSchema.extend({ id: z.string().trim().min(1, "El cliente es obligatorio") }).strict();
+export const deleteClientSchema = z.object({ id: z.string().trim().min(1, "El cliente es obligatorio") }).strict();
+
 export const BillParametersSchema = z.object({
   clientCondition: z.string(),
   paidMethod: z.string(),

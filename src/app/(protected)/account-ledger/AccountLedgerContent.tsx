@@ -97,6 +97,7 @@ export default function AccountLedgerContent({
     channel.bind("orders-update", handleUpdate);
     return () => {
       channel.unbind("orders-update", handleUpdate);
+      pusherClient.unsubscribe(channelName);
     };
   }, [businessId]);
 

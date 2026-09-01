@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCashbox } from "@/context/CashboxContext";
 
 interface ZReport {
   totalSales: number;
@@ -42,6 +43,7 @@ export const CloseSessionModal = ({
   const [finalBalance, setFinalBalance] = useState<string>("");
   const [zReport, setZReport] = useState<ZReport | null>(null);
   const router = useRouter();
+  const { setHasActiveSession } = useCashbox();
 
   const handleCloseSession = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +68,7 @@ export const CloseSessionModal = ({
     setZReport(null);
     setFinalBalance("");
     onClosingChange?.(false);
+    setHasActiveSession(false);
     onClose();
     router.refresh();
   };

@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { parsePlanError } from "@/lib/plan-error";
 import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { useCashbox } from "@/context/CashboxContext";
 
 export const OpenSessionModal = ({ 
   isOpen, 
@@ -27,6 +28,7 @@ export const OpenSessionModal = ({
   const [loading, setLoading] = useState(false);
   const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const router = useRouter();
+  const { setHasActiveSession } = useCashbox();
 
   const handleOpenSession = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +51,8 @@ export const OpenSessionModal = ({
         toast.error(result.error);
       }
     } else {
+      setHasActiveSession(true);
+      setInitialBalance("");
       onClose();
       router.refresh();
     }
