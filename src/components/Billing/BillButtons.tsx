@@ -52,7 +52,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [errorMessage, setErrorMessage] = useState("");
   const [response, setResponse] = useState("");
   const [respAfip, setRespAfip] = useState<CAE | undefined>();
-  const [localCAE, setLocalCAE] = useState<CAE>({ CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" });
+  const EMPTY_CAE: CAE = { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" };
+  const [localCAE, setLocalCAE] = useState<CAE>(EMPTY_CAE);
   const [openRemitoModal, setOpenRemitoModal] = useState(false);
   const [openFacturaModal, setOpenFacturaModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);
@@ -358,13 +359,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         toast.success("Venta actualizada correctamente");
         router.push(`/sales/${orderId}`);
       } else {
+        const caeForSave: CAE = caeData ?? EMPTY_CAE;
         const saveSuccess = await handleSaveSale({
           ...checkout,
-          CAE: caeData || localCAE,
+          CAE: caeForSave,
           totalWithDiscount: totalAmount,
         });
         if (saveSuccess) {
-          toast.success("Factura guardada correctamente");
+          toast.success(afip ? "Factura guardada correctamente" : "Venta guardada correctamente");
           setBlockButton(false);
         } else {
           // Save failed but error was already shown by handleSaveSale
@@ -372,7 +374,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           return undefined;
         }
       }
-      return caeData || localCAE;
+      return caeData ?? (afip ? undefined : EMPTY_CAE);
     } catch (err) {
       if (!isOnline) {
         toast.error("Operación cancelada: Sin conexión a internet");
@@ -387,6 +389,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   };
   const resetCheckout = () => {
     dispatch({ type: "removeAll", payload: null, defaultBillType, defaultPtoVenta });
+    setLocalCAE(EMPTY_CAE);
+    setRespAfip(undefined);
     onOrderResetRef.current?.();
   };
   const acquireConfirmation = () => {
