@@ -99,20 +99,24 @@ export const BillReducer = (
     }
     case "removeAll":
       return {
-        ...state,
         products: [],
-        documentNumber: 0,
-        billType: action.defaultBillType ?? BillTypes.B,
-        IVACondition: "Consumidor Final",
-        nroAsociado: 0,
+        id: "",
         total: 0,
-        date: new Date(),
-        paidMethod: "Efectivo",
         totalWithDiscount: 0,
+        discount: 0,
+        seller: "",
+        date: new Date(),
+        documentNumber: 0,
+        typeDocument: "",
+        IVACondition: "Consumidor Final",
+        paidMethod: "Efectivo",
+        twoMethods: false,
+        totalSecondMethod: 0,
         pago: false,
         entrega: 0,
-        discount: 0,
-        typeDocument: "",
+        nroAsociado: 0,
+        billType: action.defaultBillType ?? BillTypes.B,
+        ptoVenta: action.defaultPtoVenta ?? 12,
         CAE: { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" },
       };
     case "changePrice":
@@ -191,6 +195,8 @@ export const BillReducer = (
         ...state,
         billType: action.payload,
       };
+    case "ptoVenta":
+      return { ...state, ptoVenta: action.payload };
     case "documentNumber": {
       return {
         ...state,

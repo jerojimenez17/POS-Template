@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ArcaFieldsSchema } from "@/schemas";
 import { CheckCircle2, XCircle, Plus, Trash2, Shield, ShieldCheck, Loader2 } from "lucide-react";
 import {
@@ -45,6 +46,7 @@ interface ArcaFormProps {
 }
 
 export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
+  const router = useRouter();
   const [error, setError] = useState<string | undefined>("");
   const [success, setSuccess] = useState<string | undefined>("");
   const [isPending, startTransition] = useTransition();
@@ -131,6 +133,7 @@ export const ArcaForm = ({ businessId, initialData }: ArcaFormProps) => {
       if (result.success) {
         setShowGenDialog(false);
         setSuccess(result.success);
+        router.refresh();
       }
     } catch {
       setGenError("Error inesperado al generar certificados");

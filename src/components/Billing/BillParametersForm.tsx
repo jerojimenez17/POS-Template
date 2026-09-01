@@ -96,11 +96,12 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
   useEffect(() => {
     const initialPtoVenta = ptoVentas[0];
     if (!dispatch || !BillState || initialPtoVenta === undefined) return;
-    if (BillState.ptoVenta === initialPtoVenta && BillState.billType === defaultBillType) return;
-    dispatch({
-      type: "setState",
-      payload: { ...BillState, ptoVenta: initialPtoVenta, billType: defaultBillType },
-    });
+    if (BillState.ptoVenta !== initialPtoVenta) {
+      dispatch({ type: "ptoVenta", payload: initialPtoVenta });
+    }
+    if (BillState.billType !== defaultBillType) {
+      dispatch({ type: "billType", payload: defaultBillType });
+    }
   }, [dispatch, BillState, defaultBillType, ptoVentas]);
 
   useEffect(() => {
@@ -148,12 +149,11 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
           ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
          });
           if (dispatch) dispatch({ type: "billType", payload: defaultBillType });
-          if (dispatch && ptoVentas.length > 0) dispatch({ type: "setState", payload: { ...BillState, ptoVenta: ptoVentas[0], billType: defaultBillType } });
          if (billTypeRef) billTypeRef.current = defaultBillType;
         setEditParameters(false);
       };
     }
-  }, [form, onOrderResetRef, defaultBillType, dispatch, billTypeRef, ptoVentas, BillState]);
+  }, [form, onOrderResetRef, defaultBillType, dispatch, billTypeRef, ptoVentas]);
 
   const currentDate = useMemo(() => new Date(), []);
 
@@ -245,7 +245,7 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
                          onValueChange={(val) => {
                            const point = Number(val);
                            field.onChange(point);
-                           if (dispatch && BillState) dispatch({ type: "setState", payload: { ...BillState, ptoVenta: point, billType: watchBillType } });
+                            dispatch?.({ type: "ptoVenta", payload: point });
                          }}
                       >
                         <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">

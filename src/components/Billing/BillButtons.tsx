@@ -41,7 +41,7 @@ import { isValidCae } from "@/services/afip/voucher-response";
 
 interface props {
   session: Session | null;
-  handlePrint: (cae?: CAE, win?: Window | null) => void;
+  handlePrint: (cae?: CAE, win?: Window | null, snapshot?: typeBillState) => void;
   isEditing?: boolean;
   orderId?: string;
 }
@@ -58,7 +58,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   const [openEditModal, setOpenEditModal] = useState(false);
   const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
-  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem, initialBillType, billTypeRef } =
+  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem, initialBillType, billTypeRef, defaultPtoVenta } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
@@ -69,6 +69,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
   );
   const businessId = (session?.user as { businessId?: string })?.businessId;
   const defaultBillType = initialBillType ?? BillTypes.B;
+  const confirmationLock = useRef(false);
   const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
   const shortcutMapRef = useRef(shortcutMap);
   // Sync ref with state after render
@@ -159,6 +160,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         return;
       }
 
+
       // F7 — Remito modal
       if (e.key === 'F7') {
         e.preventDefault();
@@ -216,42 +218,46 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     if (!checkConnection()) return null;
     try {
       console.log("Calling createAfipVoucherAction");
-       const resp = await createAfipVoucherAction(checkout);
+      const resp = await createAfipVoucherAction(checkout);
 
-       if ("error" in resp) {
-         toast.error(typeof resp.error === "string" ? resp.error : formatAfipPointSaleErrorForUser(resp.error));
+      if ("error" in resp) {
+        toast.error(typeof resp.error === "string" ? resp.error : formatAfipPointSaleErrorForUser(resp.error));
         setBlockButton(false);
         return null;
       }
 
-       if (resp.success && isValidCae(resp.data.cae)) {
-         setCreateVoucherError(false);
-         const newCAE: CAE = {
-           CAE: resp.data.cae,
-           vencimiento: resp.data.vencimiento,
-           nroComprobante: resp.data.nroComprobante,
-           qrData: resp.data.qrData,
-           ptoVenta: resp.data.ptoVenta ?? checkout.ptoVenta,
-         };
+      const rawData = resp.data as any;
+      const rawCae = rawData?.cae ?? rawData?.CAE ?? rawData?.afip?.CAE ?? rawData?.afip?.cae;
+      const caeString = typeof rawCae === "string" ? rawCae.trim() : rawCae ? String(rawCae).trim() : "";
+
+      if (resp.success && caeString.length > 0) {
+        setCreateVoucherError(false);
+        const newCAE: CAE = {
+          CAE: caeString,
+          vencimiento: String(rawData?.vencimiento ?? rawData?.CAEFchVto ?? rawData?.afip?.CAEFchVto ?? ""),
+          nroComprobante: Number(rawData?.nroComprobante ?? rawData?.nroCbte ?? 0),
+          qrData: String(rawData?.qrData ?? ""),
+          ptoVenta: rawData?.ptoVenta ?? checkout.ptoVenta,
+        };
         dispatch({ type: "CAE", payload: newCAE });
         setLocalCAE(newCAE);
         toast.success("Factura generada correctamente");
         setBlockButton(false);
         return newCAE;
-       } else {
-         const errorMsg = "La Cloud Function respondió sin un CAE válido";
-         toast.error(errorMsg);
-         setResponse(errorMsg);
+      } else {
+        const errorMsg = "La Cloud Function respondió sin un CAE válido";
+        toast.error(errorMsg);
+        setResponse(errorMsg);
         setBlockButton(false);
         return null;
       }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? sanitizeAfipText(err.message) : "Error inesperado al generar la factura";
-       setResponse(message);
-       toast.error(message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? sanitizeAfipText(err.message) : "Error inesperado al generar la factura";
+      setResponse(message);
+      toast.error(message);
       setCreateVoucherError(true);
       setBlockButton(false);
-       console.error("[createVoucher] client failure", { errorType: typeof err, message });
+      console.error("[createVoucher] client failure", { errorType: typeof err, message });
       return null;
     }
   };
@@ -378,6 +384,20 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
       setBlockButton(false);
       throw err;
     }
+  };
+  const resetCheckout = () => {
+    dispatch({ type: "removeAll", payload: null, defaultBillType, defaultPtoVenta });
+    onOrderResetRef.current?.();
+  };
+  const acquireConfirmation = () => {
+    if (confirmationLock.current) return false;
+    confirmationLock.current = true;
+    setBlockButton(true);
+    return true;
+  };
+  const releaseConfirmation = () => {
+    confirmationLock.current = false;
+    setBlockButton(false);
   };
   const [blockButton, setBlockButton] = useState(false);
   return (
@@ -543,14 +563,9 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                   if (targetWin) {
                     targetWin.document.write("<html><head><title>Generando Presupuesto...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando presupuesto, por favor espere...</h2></body></html>");
                   }
-                  dispatch({ type: "billType", payload: "Presupuesto" });
-                  handlePrint(undefined, targetWin);
-                  setTimeout(() => {
-                    dispatch({ type: "removeAll", payload: null, defaultBillType });
-                    if (onOrderResetRef.current) {
-                      onOrderResetRef.current();
-                    }
-                  }, 5000);
+                   const snapshot = createBillCheckoutSnapshot(BillState, "Presupuesto");
+                   handlePrint(undefined, targetWin, snapshot);
+                   resetCheckout();
                 }}
               />
             </>
@@ -577,10 +592,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
             seller={session?.user?.email || ""}
             businessId={session?.user?.businessId || ""}
             onSuccess={() => {
-              dispatch({ type: "removeAll", payload: null, defaultBillType });
-              if (onOrderResetRef.current) {
-                onOrderResetRef.current();
-              }
+               resetCheckout();
             }}
           />
         </>
@@ -603,38 +615,34 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
             </DialogClose>
             <DialogClose asChild>
               <Button
-                autoFocus
-                onClick={async () => {
-                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+                 autoFocus
+                 onClick={async () => {
+                   if (!acquireConfirmation()) return;
+                   const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
                   if (targetWin) {
                     targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
                   }
 
-                  setBlockButton(true);
-                  try {
-                    const caeResult = await createSale(true, false);
+                   try {
+                     const caeResult = await createSale(true, false);
                     if (!caeResult) {
                       if (targetWin) targetWin.close();
-                      setBlockButton(false);
-                      return;
-                    }
-                    if (!openErrorModal && BillState.total > 0) {
-                      handlePrint(caeResult, targetWin);
-                      setTimeout(() => {
-                        dispatch({ type: "removeAll", payload: null, defaultBillType });
-                        if (onOrderResetRef.current) {
-                          onOrderResetRef.current();
-                        }
-                      }, 5000);
-                    } else if (targetWin) {
-                       targetWin.close();
-                    }
-                    setOpenFacturaModal(false);
-                    setBlockButton(false);
-                  } catch (err) {
-                    if (targetWin) targetWin.close();
-                    console.error(err);
-                  }
+                       return;
+                     }
+                     if (BillState.total > 0) {
+                       const snapshot = createBillCheckoutSnapshot({ ...BillState, CAE: caeResult }, billTypeRef?.current);
+                       handlePrint(caeResult, targetWin, snapshot);
+                       resetCheckout();
+                     } else if (targetWin) {
+                        targetWin.close();
+                     }
+                     setOpenFacturaModal(false);
+                   } catch (err) {
+                     if (targetWin) targetWin.close();
+                     console.error(err);
+                   } finally {
+                     releaseConfirmation();
+                   }
                 }}
                 className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900"
               >
@@ -709,38 +717,34 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
             </DialogClose>
             <DialogClose asChild>
               <Button
-                autoFocus
-                onClick={async () => {
-                  const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
+                 autoFocus
+                 onClick={async () => {
+                   if (!acquireConfirmation()) return;
+                   const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
                   if (targetWin) {
                     targetWin.document.write("<html><head><title>Generando Documento...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
                   }
 
-                  setBlockButton(true);
-                  try {
-                    const caeResult = await createSale(false, false);
+                   try {
+                     const caeResult = await createSale(false, false);
                     if (!caeResult) {
                       if (targetWin) targetWin.close();
-                      setBlockButton(false);
-                      return;
-                    }
-                    if (!openErrorModal && BillState.total > 0) {
-                      handlePrint(caeResult, targetWin);
-                      setTimeout(() => {
-                        dispatch({ type: "removeAll", payload: null, defaultBillType });
-                        if (onOrderResetRef.current) {
-                          onOrderResetRef.current();
-                        }
-                      }, 5000);
-                    } else if (targetWin) {
-                       targetWin.close();
-                    }
-                    setOpenRemitoModal(false);
-                    setBlockButton(false);
-                  } catch (err) {
-                    if (targetWin) targetWin.close();
-                    console.error(err);
-                  }
+                       return;
+                     }
+                     if (BillState.total > 0) {
+                       const snapshot = createBillCheckoutSnapshot(BillState, billTypeRef?.current);
+                       handlePrint(caeResult, targetWin, snapshot);
+                       resetCheckout();
+                     } else if (targetWin) {
+                        targetWin.close();
+                     }
+                     setOpenRemitoModal(false);
+                   } catch (err) {
+                     if (targetWin) targetWin.close();
+                     console.error(err);
+                   } finally {
+                     releaseConfirmation();
+                   }
                 }}
                 className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900"
               >
