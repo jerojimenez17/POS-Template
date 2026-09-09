@@ -127,6 +127,8 @@ export default function PrintOptionsPopover({
       await exportToPDF(content as HTMLElement, {
         documentTitle: filename,
         format: "a4",
+        orientation: "portrait",
+        margin: 10,
         filename: filename,
         targetWindow: targetWin,
       });

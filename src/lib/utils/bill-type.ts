@@ -30,11 +30,13 @@ export function getBillTypeDisplay(
   cae?: string | null,
   isRemito?: boolean
 ): string {
+  const normalizedType = normalizeBillType(billType);
+  if (normalizedType === "Presupuesto") return "Presupuesto";
+
   // CAE is the only proof that this is an official invoice. Without it, do
   // not display a fiscal invoice type even when a legacy numeric type exists.
   if (!cae?.trim()) return isRemito ? "Remito" : "Comprobante";
 
-  const normalizedType = normalizeBillType(billType);
   if (normalizedType) return normalizedType;
 
   console.warn("Legacy sale without persisted billType; using Factura C fallback");

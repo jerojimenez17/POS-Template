@@ -4,6 +4,7 @@ import PrintableTable from "./PrintableTable";
 import BillButtons from "./BillButtons";
 import React, { useState, useRef, useContext, useEffect } from "react";
 import CAE from "@/models/CAE";
+import BillState from "@/models/BillState";
 import { BillContext } from "@/context/BillContext";
 
 interface props {
@@ -12,7 +13,7 @@ interface props {
   orderId?: string;
 }
 const ProductsTable = ({ session, isEditing, orderId }: props) => {
-  const [printTrigger, setPrintTrigger] = useState<{count: number, cae?: CAE}>({count: 0});
+  const [printTrigger, setPrintTrigger] = useState<{count: number, cae?: CAE, snapshot?: BillState}>({count: 0});
   const printWindowRef = useRef<Window | null>(null);
   const { BillState } = useContext(BillContext);
 
@@ -25,9 +26,9 @@ const ProductsTable = ({ session, isEditing, orderId }: props) => {
     }
   }, [BillState.products.length, BillState.CAE?.CAE, printTrigger.cae?.CAE]);
 
-  const handlePrint = (cae?: CAE, win?: Window | null) => {
+  const handlePrint = (cae?: CAE, win?: Window | null, snapshot?: BillState) => {
     printWindowRef.current = win || null;
-    setPrintTrigger(prev => ({ count: prev.count + 1, cae }));
+    setPrintTrigger(prev => ({ count: prev.count + 1, cae, snapshot }));
   };
 
   return (
@@ -36,6 +37,7 @@ const ProductsTable = ({ session, isEditing, orderId }: props) => {
         session={session}
         printTrigger={printTrigger.count}
         forceCae={printTrigger.cae}
+        printSnapshot={printTrigger.snapshot}
         targetWindowRef={printWindowRef}
         className="h-auto w-full"
         handleClose={function (): void {

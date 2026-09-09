@@ -1,4 +1,4 @@
-import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "@/lib/utils/bill-type";
 import { getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 
@@ -104,8 +104,9 @@ function sanitize(text: string): string {
 export function generateThermalReceipt(data: ThermalReceiptData): string {
   const lines: string[] = [];
   
+  const isPresupuesto = normalizeBillType(data.billType) === "Presupuesto";
   const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
-  const isAFIPInvoice = getDocumentPrintKind(data.cae?.cae) === "official-invoice";
+  const isAFIPInvoice = !isPresupuesto && getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice";
   
   lines.push(ESCPOS.INIT);
   lines.push(ESCPOS.ALIGN_CENTER);
@@ -116,7 +117,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   lines.push(ESCPOS.BOLD_OFF);
   lines.push(ESCPOS.LINE_FEED);
   
-  const isOfficialInvoice = getDocumentPrintKind(data.cae?.cae) === "official-invoice";
+  const isOfficialInvoice = !isPresupuesto && getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice";
   if (isOfficialInvoice && data.businessInfo?.razonSocial) {
     lines.push(sanitize(data.businessInfo.razonSocial));
   }
@@ -170,7 +171,9 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
     }
   }
   
-  lines.push(formatLine("Pago:", sanitize(data.paidMethod)));
+  if (!isPresupuesto) {
+    lines.push(formatLine("Pago:", sanitize(data.paidMethod)));
+  }
   lines.push(formatLine("Vendedor:", sanitize(data.seller || "")));
   
   lines.push(ESCPOS.ALIGN_CENTER);
@@ -220,7 +223,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   
   lines.push(ESCPOS.LINE_FEED);
   lines.push(ESCPOS.BOLD_ON);
-  lines.push("* GRACIAS POR SU COMPRA *");
+  lines.push(isPresupuesto ? "* PRESUPUESTO — NO VALIDO COMO FACTURA *" : "* GRACIAS POR SU COMPRA *");
   lines.push(ESCPOS.BOLD_OFF);
   lines.push(ESCPOS.LINE_FEED);
   lines.push(ESCPOS.LINE_FEED);
@@ -233,8 +236,9 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
 function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | null): string {
   const qrHtml = qrDataUrl ? `<div class="qr-container"><img src="${qrDataUrl}" alt="QR" /></div>` : "";
   const dateStr = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(data.date);
+  const isPresupuesto = normalizeBillType(data.billType) === "Presupuesto";
   const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
-  const isAFIPInvoice = getDocumentPrintKind(data.cae?.cae) === "official-invoice";
+  const isAFIPInvoice = !isPresupuesto && getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice";
   const invoiceNum = isAFIPInvoice ? formatInvoiceNumberFull(data.invoiceNumber, data.pointOfSale ?? data.cae?.ptoVenta) : "";
   const docType = data.documentType || "DNI";
 
@@ -306,7 +310,7 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
         ` : ''}
 
         <div class="divider"></div>
-        <div class="info-row"><span class="info-label">Pago:</span><span>${sanitize(data.paidMethod)}</span></div>
+        ${!isPresupuesto ? `<div class="info-row"><span class="info-label">Pago:</span><span>${sanitize(data.paidMethod)}</span></div>` : ''}
         <div class="info-row"><span class="info-label">Vendedor:</span><span>${sanitize(data.seller || "")}</span></div>
 
         <div class="divider"></div>
@@ -335,7 +339,7 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
 
         ${qrHtml}
 
-        <div class="footer">¡GRACIAS POR SU COMPRA!</div>
+        <div class="footer">${isPresupuesto ? "PRESUPUESTO — NO VÁLIDO COMO FACTURA" : "¡GRACIAS POR SU COMPRA!"}</div>
       </div>
 
       <script>
@@ -453,6 +457,10 @@ export async function printThermalReceipt(data: ThermalReceiptData, qzTrayEnable
   }
 }
 
+export const PDF_A4_PAGE_STYLE = "@page { size: A4 portrait; margin: 10mm; } @media print { @page { size: A4 portrait; margin: 10mm; } html, body { width: 210mm; } }";
+// A4 10mm
+// PDF_A4_PAGE_STYLE A4 portrait 10mm
+
 const DEFAULT_PAGE_STYLE = [
   "@page { size: auto; margin: 10mm; }",
   "@media print {",
@@ -487,7 +495,7 @@ async function tryBrowserPrint(
   options: BrowserPrintOptions = {}
 ): Promise<boolean> {
   const documentTitle = options.documentTitle || "document";
-  const pageStyle = options.pageStyle || DEFAULT_PAGE_STYLE;
+  const pageStyle = options.format === "a4" ? PDF_A4_PAGE_STYLE : (options.pageStyle || DEFAULT_PAGE_STYLE);
 
   const sanitizedTitle = documentTitle
     .replace(/&/g, "&amp;")
