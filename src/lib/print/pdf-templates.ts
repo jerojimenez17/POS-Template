@@ -1,6 +1,6 @@
 "use client";
 
-import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "@/lib/utils/bill-type";
 import { getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 export interface PDFTemplateOptions {
@@ -10,6 +10,11 @@ export interface PDFTemplateOptions {
 }
 
 export const PDF_LAYOUT_SCALE = 1.3;
+
+export const PDF_A4_PAGE_STYLE =
+  "@page { size: A4 portrait; margin: 10mm; } @media print { @page { size: A4 portrait; margin: 10mm; } html, body { width: 210mm; } }";
+// PDF_A4_PAGE_STYLE A4 portrait 10mm
+// A4 10mm
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -36,6 +41,8 @@ function safeQrDataUrl(value: unknown): string | null {
 }
 
 export const PDF_STYLES = `
+  @page { size: A4 portrait; margin: 10mm; }
+  @media print { @page { size: A4 portrait; margin: 10mm; } html, body { width: 210mm; } }
   :root { --pdf-layout-scale: ${PDF_LAYOUT_SCALE.toFixed(2)}; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { 
@@ -44,8 +51,8 @@ export const PDF_STYLES = `
     line-height: 1.4;
     color: #1a1a1a;
   }
-   .invoice-container { padding: calc(30px * var(--pdf-layout-scale)); width: calc(750px * var(--pdf-layout-scale)); max-width: 100%; margin: 0 auto; overflow-wrap: anywhere; }
-   .pdf-page { break-after: page; page-break-after: always; break-inside: avoid; max-width: 100%; overflow-wrap: anywhere; }
+    .invoice-container { padding: calc(30px * var(--pdf-layout-scale)); width: min(calc(750px * var(--pdf-layout-scale)), 190mm); max-width: 100%; margin: 0 auto; overflow-wrap: anywhere; }
+    .pdf-page { min-height: 277mm; width: 190mm; max-width: 100%; margin: 0 auto; box-sizing: border-box; break-after: page; page-break-after: always; break-inside: avoid; overflow-wrap: anywhere; }
   .header { text-align: center; margin-bottom: calc(20px * var(--pdf-layout-scale)); border-bottom: 2px solid #2563EB; padding-bottom: calc(15px * var(--pdf-layout-scale)); }
   .company-name { font-size: calc(26px * var(--pdf-layout-scale)); font-weight: 700; color: #2563EB; text-transform: uppercase; letter-spacing: 1px; line-height: 1.1; }
   .company-details { font-size: calc(12px * var(--pdf-layout-scale)); color: #666; margin-top: calc(5px * var(--pdf-layout-scale)); }
@@ -131,7 +138,9 @@ export function buildPDFHTML(
   const seller = receiptData.seller || "";
   const paidMethod = receiptData.paidMethod || "Efectivo";
   const subtotal = receiptData.subtotal ?? 0;
-  const isOfficialInvoice = getDocumentPrintKind(receiptData.cae?.cae) === "official-invoice";
+  const normalizedBillTypeForKind = normalizeBillType(receiptData.billType);
+  const isPresupuesto = normalizedBillTypeForKind === "Presupuesto";
+  const isOfficialInvoice = !isPresupuesto && getDocumentPrintKind(receiptData.cae?.cae, receiptData.billType) === "official-invoice";
   const billType = getBillTypeDisplay(receiptData.billType, receiptData.cae?.cae, !isOfficialInvoice);
   const officialCae = receiptData.cae;
   const validQrDataUrl = typeof qrSvgDataUrl === "string" && /^data:image\/(?:svg\+xml|png|jpeg|webp);base64,/i.test(qrSvgDataUrl.trim())
@@ -143,7 +152,7 @@ export function buildPDFHTML(
     timeStyle: "short",
   }).format(receiptData.date);
 
-  const invoiceNumberFormatted = isOfficialInvoice
+  const invoiceNumberFormatted = isOfficialInvoice && !isPresupuesto
     ? formatInvoiceNumberFull(
         invoiceNumber ?? receiptData.invoiceNumber,
         pointOfSale ?? receiptData.pointOfSale ?? receiptData.cae?.ptoVenta,
@@ -171,13 +180,13 @@ export function buildPDFHTML(
        <div class="info-row"><span class="info-label">Vendedor:</span><span class="info-value">${escapeHtml(seller)}</span></div>
        <div class="info-row"><span class="info-label">Medio de Pago:</span><span class="info-value">${escapeHtml(paidMethod)}</span></div>
     </div>
-   ` : `<div class="info-section"><div class="info-section-title">Comprobante</div><div class="info-row"><span class="info-label">Vendedor:</span><span class="info-value">${escapeHtml(seller)}</span></div><div class="info-row"><span class="info-label">Medio de Pago:</span><span class="info-value">${escapeHtml(paidMethod)}</span></div></div>`;
+   ` : isPresupuesto ? `<div class="info-section"><div class="info-section-title">Presupuesto</div><div class="info-row"><span class="info-label">Vendedor:</span><span class="info-value">${escapeHtml(seller)}</span></div></div>` : `<div class="info-section"><div class="info-section-title">Comprobante</div><div class="info-row"><span class="info-label">Vendedor:</span><span class="info-value">${escapeHtml(seller)}</span></div><div class="info-row"><span class="info-label">Medio de Pago:</span><span class="info-value">${escapeHtml(paidMethod)}</span></div></div>`;
 
   const discountRow = receiptData.discountAmount
      ? `<div class="total-row discount"><span>Descuento (${escapeHtml(receiptData.discount)}%)</span><span>-$${escapeHtml(receiptData.discountAmount.toFixed(2))}</span></div>`
     : "";
 
-  const caeSection = isOfficialInvoice
+  const caeSection = isOfficialInvoice && !isPresupuesto
     ? `<div class="cae-banner">
         <div class="cae-qr">
            ${validQrDataUrl ? `<img src="${escapeHtml(validQrDataUrl)}" alt="QR" style="width: 100%; height: auto; display: block;" />` : ""}
@@ -248,7 +257,7 @@ export function buildPDFHTML(
 
       ${caeSection}
 
-      <div class="thank-you">¡Gracias por su compra!</div>
+      <div class="thank-you">${isPresupuesto ? "Presupuesto — No válido como factura" : "¡Gracias por su compra!"}</div>
       </div>
     </div>
   `;

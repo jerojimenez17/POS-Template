@@ -70,6 +70,7 @@ export async function exportToPDF(
     orientation,
     margin,
   } = mergedOptions;
+  const effectiveOrientation = format === "a4" ? "portrait" : orientation;
   const { jsPDF } = await import("jspdf");
   const pages = Array.from(element.querySelectorAll<HTMLElement>(".pdf-page"));
   const canvases = pages.length > 0
@@ -77,13 +78,13 @@ export async function exportToPDF(
     : [await captureElement(element, mergedOptions)];
   
   const formatDims = getFormatDimensions(format);
-  const isLandscape = orientation === "landscape";
+  const isLandscape = effectiveOrientation === "landscape";
   
   const pageWidth = isLandscape ? formatDims.height : formatDims.width;
   const pageHeight = isLandscape ? formatDims.width : formatDims.height;
   
   const pdf = new jsPDF({
-    orientation: orientation,
+    orientation: effectiveOrientation,
     unit: "mm",
     format: format === "thermal" ? [pageWidth, pageHeight] : format,
   });
@@ -146,6 +147,7 @@ export async function downloadElementAsPDF(
   options: PrintOptions = {}
 ): Promise<void> {
   const mergedOptions = { ...DEFAULT_OPTIONS, ...options, filename };
+  const effectiveOrientation = mergedOptions.format === "a4" ? "portrait" : mergedOptions.orientation;
   const { jsPDF } = await import("jspdf");
   
   const pages = Array.from(element.querySelectorAll<HTMLElement>(".pdf-page"));
@@ -154,11 +156,12 @@ export async function downloadElementAsPDF(
     : [await captureElement(element, mergedOptions)];
   
   const formatDims = getFormatDimensions(mergedOptions.format);
-  const pageWidth = formatDims.width;
-  const pageHeight = formatDims.height;
+  const isLandscape = effectiveOrientation === "landscape";
+  const pageWidth = isLandscape ? formatDims.height : formatDims.width;
+  const pageHeight = isLandscape ? formatDims.width : formatDims.height;
   
   const pdf = new jsPDF({
-    orientation: mergedOptions.orientation,
+    orientation: effectiveOrientation,
     unit: "mm",
     format: mergedOptions.format === "thermal" ? [pageWidth, pageHeight] : mergedOptions.format,
   });

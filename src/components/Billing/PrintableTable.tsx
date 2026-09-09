@@ -13,7 +13,7 @@ import { getBusinessBillingInfoAction } from "@/actions/business";
 import moment from "moment";
 import { QRCodeSVG } from "qrcode.react";
 import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES, type PrintOptions } from "@/lib/print";
-import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
+import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "@/lib/utils/bill-type";
 import QRCode from "qrcode";
 import CAE from "@/models/CAE";
 import { buildReceiptBusinessInfo } from "@/lib/print/receipt-data";
@@ -26,6 +26,7 @@ interface Props {
   handleClose: () => void;
   session: Session | null;
   externalState?: BillState;
+  printSnapshot?: BillState | null;
   forceCae?: CAE;
   targetWindowRef?: React.MutableRefObject<Window | null>;
 }
@@ -61,11 +62,14 @@ const PrintableTable = ({
   session,
   className,
   externalState,
+  printSnapshot,
   forceCae,
   targetWindowRef,
 }: Props) => {
   const { BillState, addItem, removeItem, printMode, qzTrayEnabled } = React.useContext(BillContext);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
+  const effectiveState: BillState = (printSnapshot ?? externalState ?? BillState ?? defaultBillState) as BillState;
+  const effectiveCae: CAE | undefined = forceCae || effectiveState.CAE;
   const [isClient, setIsClient] = useState(false);
   const [billingInfo, setBillingInfo] = useState<{
     razonSocial?: string | null;
@@ -94,12 +98,12 @@ const PrintableTable = ({
 
   useEffect(() => {
     let active = true;
-    const activeCae = forceCae || state.CAE;
-    if (activeCae?.qrData) {
+    const activeCaeQr = effectiveCae;
+    if (activeCaeQr?.qrData) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setQrGenerationFailed(false);
       setQrSvgDataUrl(null);
-      QRCode.toString(activeCae.qrData, { type: "svg", margin: 0, width: 60 })
+      QRCode.toString(activeCaeQr.qrData, { type: "svg", margin: 0, width: 60 })
         .then((svgString) => {
           const dataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
           if (active) setQrSvgDataUrl(dataUrl);
@@ -116,10 +120,10 @@ const PrintableTable = ({
       setQrGenerationFailed(false);
     }
     return () => { active = false; };
-  }, [state.CAE, state.CAE?.qrData, forceCae]);
+  }, [effectiveCae, effectiveCae?.qrData, forceCae]);
 
-  const activeCae = forceCae || state.CAE;
-  const bannerCae = state.CAE;
+  const activeCae = effectiveCae;
+  const bannerCae = effectiveState.CAE;
   const [displayBannerCae, setDisplayBannerCae] = useState<CAE | null>(null);
   const [isBannerExiting, setIsBannerExiting] = useState(false);
 
@@ -143,43 +147,45 @@ const PrintableTable = ({
       session?.user?.businessName || "Mi Comercio",
       activeCae?.CAE,
       billingInfo ?? undefined,
+      effectiveState.billType,
     ),
-    [session?.user?.businessName, activeCae?.CAE, billingInfo],
+    [session?.user?.businessName, activeCae?.CAE, billingInfo, effectiveState.billType],
   );
   const isRemito = receiptBusinessInfo.documentKind === "remito";
-  const billTypeDisplay = getBillTypeDisplay(state.billType, activeCae?.CAE, isRemito);
+  const isPresupuesto = normalizeBillType(effectiveState.billType) === "Presupuesto" || receiptBusinessInfo.documentKind === "presupuesto";
+  const billTypeDisplay = getBillTypeDisplay(effectiveState.billType, activeCae?.CAE, isRemito);
 
   const handlePrint = useCallback(async () => {
-    const activeCae = forceCae || state.CAE;
-    const subtotal = Math.round(state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
+    const activeCaePrint = forceCae || effectiveState.CAE;
+    const subtotal = Math.round(effectiveState.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
     const receiptData: ThermalReceiptData = {
       ...receiptBusinessInfo,
-      date: state.date || new Date(),
-      documentType: state.typeDocument || "DNI",
+      date: effectiveState.date || new Date(),
+      documentType: effectiveState.typeDocument || "DNI",
       billType: billTypeDisplay,
-      seller: state.seller || session?.user?.email || "",
-      paidMethod: state.paidMethod || "Efectivo",
-      client: state.client,
-      clientIvaCondition: state.clientIvaCondition,
-      clientDocumentNumber: state.clientDocumentNumber,
-      products: state.products.map((p) => ({
+      seller: effectiveState.seller || session?.user?.email || "",
+      paidMethod: effectiveState.paidMethod || "Efectivo",
+      client: effectiveState.client,
+      clientIvaCondition: effectiveState.clientIvaCondition,
+      clientDocumentNumber: effectiveState.clientDocumentNumber,
+      products: effectiveState.products.map((p) => ({
         description: p.description,
         amount: p.amount,
         unitPrice: p.salePrice,
         subtotal: Math.round(p.salePrice * p.amount),
       })),
       subtotal,
-      discount: state.discount > 0 ? state.discount : undefined,
-      discountAmount: state.discount > 0 ? Math.round(subtotal * (state.discount / 100)) : undefined,
-      total: Math.round(Number(state.totalWithDiscount || subtotal * (1 - state.discount / 100))),
-      cae: activeCae?.CAE ? {
-        cae: activeCae.CAE,
-        vencimiento: activeCae.vencimiento,
-        qrData: activeCae.qrData,
-        ptoVenta: activeCae.ptoVenta ?? state.ptoVenta,
+      discount: effectiveState.discount > 0 ? effectiveState.discount : undefined,
+      discountAmount: effectiveState.discount > 0 ? Math.round(subtotal * (effectiveState.discount / 100)) : undefined,
+      total: Math.round(Number(effectiveState.totalWithDiscount || subtotal * (1 - effectiveState.discount / 100))),
+      cae: activeCaePrint?.CAE ? {
+        cae: activeCaePrint.CAE,
+        vencimiento: activeCaePrint.vencimiento,
+        qrData: activeCaePrint.qrData,
+        ptoVenta: activeCaePrint.ptoVenta ?? effectiveState.ptoVenta,
       } : undefined,
-      pointOfSale: state.ptoVenta ?? activeCae?.ptoVenta,
-      invoiceNumber: activeCae?.nroComprobante,
+      pointOfSale: effectiveState.ptoVenta ?? activeCaePrint?.ptoVenta,
+      invoiceNumber: activeCaePrint?.nroComprobante,
     };
 
     if (printMode === "thermal") {
@@ -187,8 +193,8 @@ const PrintableTable = ({
     } else {
       const content = document.createElement("div");
       content.innerHTML = buildPDFHTML(receiptData, {
-        invoiceNumber: activeCae?.nroComprobante,
-        pointOfSale: state.ptoVenta ?? activeCae?.ptoVenta,
+        invoiceNumber: activeCaePrint?.nroComprobante,
+        pointOfSale: effectiveState.ptoVenta ?? activeCaePrint?.ptoVenta,
         qrSvgDataUrl: qrSvgDataUrl,
       });
 
@@ -198,13 +204,17 @@ const PrintableTable = ({
 
       document.body.appendChild(content);
       try {
-        const filename = activeCae?.CAE
-          ? `Factura_${activeCae?.nroComprobante || "000000000000"}`
-          : `Comprobante_${state.id || Date.now()}`;
+        const filename = isPresupuesto
+          ? `Presupuesto_${effectiveState.id || Date.now()}`
+          : activeCaePrint?.CAE
+            ? `Factura_${activeCaePrint?.nroComprobante || "000000000000"}`
+            : `Comprobante_${effectiveState.id || Date.now()}`;
 
         await exportToPDF(content as HTMLElement, {
           documentTitle: filename,
           format: "a4",
+          orientation: "portrait",
+          margin: 10,
           filename: filename,
           targetWindow: targetWindowRef?.current || null,
         } as PrintOptions);
@@ -212,7 +222,7 @@ const PrintableTable = ({
         document.body.removeChild(content);
       }
     }
-  }, [state, session, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef, qzTrayEnabled, receiptBusinessInfo]);
+  }, [effectiveState, session, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef, qzTrayEnabled, receiptBusinessInfo, isPresupuesto]);
 
   useEffect(() => {
     // Keep the externally supplied bill synchronized with the printable view.
@@ -222,13 +232,13 @@ const PrintableTable = ({
 
   useEffect(() => {
     if (printTrigger > lastPrintTrigger.current && isClient) {
-      const activeCae = forceCae || state.CAE;
-      if (activeCae?.qrData && !qrSvgDataUrl && !qrGenerationFailed) return;
+      const activeCaeEff = effectiveCae;
+      if (activeCaeEff?.qrData && !qrSvgDataUrl && !qrGenerationFailed) return;
 
       lastPrintTrigger.current = printTrigger;
       handlePrint();
     }
-  }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, qrGenerationFailed, forceCae, state.CAE, state.CAE?.qrData]);
+  }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, qrGenerationFailed, forceCae, effectiveCae, effectiveCae?.qrData]);
 
   // Prevent browser defaults for F1/F2/F3 (Chrome opens help on F1)
   useEffect(() => {
@@ -255,20 +265,20 @@ const PrintableTable = ({
   };
 
   const sortedProducts = useMemo(
-    () => [...state.products].sort(sortByDescription),
-    [state.products]
+    () => [...effectiveState.products].sort(sortByDescription),
+    [effectiveState.products]
   );
 
   const totals = useMemo(() => {
-    const subtotal = Math.round(state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
-    const discountAmount = state.discount > 0 ? Math.round(subtotal * (state.discount / 100)) : 0;
-    const total = state.discount > 0
-      ? Math.round(subtotal * (1 - state.discount / 100))
-      : state.totalWithDiscount !== undefined
-        ? Math.round(Number(state.totalWithDiscount))
+    const subtotal = Math.round(effectiveState.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
+    const discountAmount = effectiveState.discount > 0 ? Math.round(subtotal * (effectiveState.discount / 100)) : 0;
+    const total = effectiveState.discount > 0
+      ? Math.round(subtotal * (1 - effectiveState.discount / 100))
+      : effectiveState.totalWithDiscount !== undefined
+        ? Math.round(Number(effectiveState.totalWithDiscount))
         : subtotal;
     return { subtotal, discountAmount, total };
-  }, [state.products, state.discount, state.totalWithDiscount]);
+  }, [effectiveState.products, effectiveState.discount, effectiveState.totalWithDiscount]);
 
   const hasSupplierFilter = session?.user?.business?.features?.hasSupplierFilter ?? false;
   const allowNegativeStock = session?.user?.business?.features?.hasNegativeStock ?? false;
@@ -296,7 +306,7 @@ const PrintableTable = ({
 
           <div className="mt-2 text-sm grid grid-cols-2 gap-4 text-left">
             <div>
-              <p><span className="font-semibold">Fecha:</span> {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}</p>
+              <p><span className="font-semibold">Fecha:</span> {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(effectiveState.date || new Date())}</p>
                <p>
                 <span className="font-semibold">
                   {receiptBusinessInfo.documentKind === "official-invoice" ? "Factura:" : "Comprobante:"}
@@ -304,23 +314,23 @@ const PrintableTable = ({
                  {billTypeDisplay}
                </p>
                {receiptBusinessInfo.documentKind === "official-invoice" &&
-                 formatInvoiceNumberFull(activeCae?.nroComprobante, state.ptoVenta ?? activeCae?.ptoVenta) && (
-                 <p><span className="font-semibold">N°:</span> {formatInvoiceNumberFull(activeCae?.nroComprobante, state.ptoVenta ?? activeCae?.ptoVenta)}</p>
+                 formatInvoiceNumberFull(activeCae?.nroComprobante, effectiveState.ptoVenta ?? activeCae?.ptoVenta) && (
+                 <p><span className="font-semibold">N°:</span> {formatInvoiceNumberFull(activeCae?.nroComprobante, effectiveState.ptoVenta ?? activeCae?.ptoVenta)}</p>
                )}
-              <p><span className="font-semibold">Vendedor:</span> {state.seller || session?.user?.email}</p>
-              <p><span className="font-semibold">Medio de Pago:</span> {state.paidMethod}</p>
+              <p><span className="font-semibold">Vendedor:</span> {effectiveState.seller || session?.user?.email}</p>
+              {!isPresupuesto && <p><span className="font-semibold">Medio de Pago:</span> {effectiveState.paidMethod}</p>}
 
 
                 <div className="mt-3 text-xs border-t border-gray-200 pt-2">
-                  <p><span className="font-semibold">Cliente:</span> {state.client}</p>
-                  {state.clientIvaCondition && (
-                    <p><span className="font-semibold">Condición IVA:</span> {state.clientIvaCondition.replace(/_/g, " ")}</p>
+                  <p><span className="font-semibold">Cliente:</span> {effectiveState.client}</p>
+                  {effectiveState.clientIvaCondition && (
+                    <p><span className="font-semibold">Condición IVA:</span> {effectiveState.clientIvaCondition.replace(/_/g, " ")}</p>
                   )}
-                  {state.clientIvaCondition &&
-                   state.clientIvaCondition.toLowerCase() !== "consumidor final" &&
-                   state.clientIvaCondition.toLowerCase() !== "consumidor_final" &&
-                   state.clientDocumentNumber && (
-                    <p><span className="font-semibold">Documento:</span> {state.clientDocumentNumber}</p>
+                  {effectiveState.clientIvaCondition &&
+                   effectiveState.clientIvaCondition.toLowerCase() !== "consumidor final" &&
+                   effectiveState.clientIvaCondition.toLowerCase() !== "consumidor_final" &&
+                   effectiveState.clientDocumentNumber && (
+                    <p><span className="font-semibold">Documento:</span> {effectiveState.clientDocumentNumber}</p>
                   )}
                 </div>
 
@@ -467,9 +477,9 @@ const PrintableTable = ({
                 <DiscountControl editable={!externalState} />
               </div>
 
-              {state.discount > 0 && (
+              {effectiveState.discount > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Descuento ({state.discount}%)</span>
+                  <span className="text-gray-500 dark:text-gray-400">Descuento ({effectiveState.discount}%)</span>
                   <span className="font-medium text-green-600 dark:text-green-400 tabular-nums">
                     -${totals.discountAmount.toLocaleString("es-AR", {
                       minimumFractionDigits: 2,
