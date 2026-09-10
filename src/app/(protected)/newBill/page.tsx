@@ -2,6 +2,7 @@ import BillParametersForm from "@/components/Billing/BillParametersForm";
 import ProductsTable from "@/components/Billing/ProductsTable";
 import PrintModeSelector from "@/components/Billing/PrintModeSelector";
 import BillProvider from "@/context/BillProvider";
+import ReturnManagerButton from "@/components/Billing/ReturnManagerButton";
 import { auth } from "../../../../auth";
 import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
@@ -49,6 +50,7 @@ const NewBillPage = async () => {
               <BillParametersForm ptoVentas={ptoVentas} initialBillType={initialBillType} />
               <div className="flex items-center gap-3">
                 <SessionManager hasActiveSession={hasActiveSession} />
+                <ReturnManagerButton session={session} />
                 <PrintModeSelector />
               </div>
             </div>

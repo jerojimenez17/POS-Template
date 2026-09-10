@@ -15,6 +15,8 @@ import { Button } from "./../ui/button";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { pusherClient } from "@/lib/pusher-client";
 import { getSalesAction } from "@/actions/sales";
+import { getSalesWithReturnsAction } from "@/actions/sales/returns";
+import { calculateGrossTotal, calculateReturnsTotal, calculateNetTotal } from "@/lib/sales-aggregates";
 import { isAFIPAuthorized } from "@/lib/utils/bill-type";
 
 import { Session } from "next-auth";
@@ -24,9 +26,10 @@ interface props {
   nextCursor: string | null;
   session: Session | null;
   qzTrayEnabled?: boolean;
+  returnsTotal?: number;
 }
 
-const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnabled = false }: props) => {
+const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnabled = false, returnsTotal }: props) => {
   const user = session?.user;
   const [printTrigger, setPrintTrigger] = useState(0);
   const [externalState] = useState<BillState>();
@@ -38,7 +41,22 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
   const [hasMore, setHasMore] = useState(initialCursor !== null);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const { filtersState, seller } = useContext(FiltersContext);
+  const filtersContext = useContext(FiltersContext);
+  const filtersState = filtersContext?.filtersState ?? {
+    FacturaC: { active: false, filter: "facturac" },
+    Remito: { active: true, filter: "remito" },
+    Debito: { active: false, filter: "debito" },
+    UnPago: { active: false, filter: "Credito 1 pago" },
+    Ahora3: { active: false, filter: "ahora 3" },
+    Ahora6: { active: false, filter: "ahora 6" },
+    Transferencia: { active: false, filter: "transferencia" },
+    CuentaDNI: { active: false, filter: "cuentaDNI" },
+    Efectivo: { active: true, filter: "efectivo" },
+    Seller: { active: false, filter: "Seleccionar Vendedor" },
+    startDate: { active: false, date: new Date() },
+    endDate: { active: false, date: new Date() },
+  };
+  const seller = filtersContext?.seller ?? (() => {});
   useEffect(() => {
     if (user?.email !== process.env.ADMIN_EMAIL && user?.email) {
       seller(user.email);
@@ -157,9 +175,28 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
     setCurrentPage(1);
   }, [filtersState, itemsPerPage]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const total = React.useMemo(() => {
     return filteredSales.reduce((acc, sale) => acc + (sale.totalWithDiscount || 0), 0);
   }, [filteredSales]);
+
+  const grossTotal = React.useMemo(() => calculateGrossTotal(filteredSales.map((s) => ({ total: s.totalWithDiscount || s.total || 0 }))), [filteredSales]);
+  const [returnsTotalState, setReturnsTotalState] = useState(returnsTotal ?? 0);
+  useEffect(() => {
+    if (returnsTotal !== undefined) {
+      setReturnsTotalState(returnsTotal);
+      return;
+    }
+    getSalesWithReturnsAction({ take: 100 }).then((res) => {
+      const rTotal = calculateReturnsTotal(res.entries.filter((e) => e.kind === "RETURN").map((e) => ({ total: (e as { total: number }).total })));
+      setReturnsTotalState(rTotal);
+    }).catch(() => {
+      setReturnsTotalState(0);
+    });
+  }, [returnsTotal]);
+
+  const returnsTotalValue = returnsTotalState;
+  const netTotal = React.useMemo(() => calculateNetTotal(grossTotal, returnsTotalValue), [grossTotal, returnsTotalValue]);
 
   const totalPages = Math.ceil(filteredSales.length / itemsPerPage);
   const currentSales = React.useMemo(() => {
@@ -173,11 +210,14 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
       <div className="h-20 my-8 sm:my-2 md:my-6 lg:my-4">
         <p className="p-3 text-2xl text-gray-900 dark:text-gray-100 font-bold">
           Total: $
-          {total.toLocaleString("es-AR", {
+          {netTotal.toLocaleString("es-AR", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}
         </p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">Ventas brutas: ${grossTotal}</p>
+        <p className="text-sm text-red-600">Devoluciones: -${returnsTotalValue}</p>
+        <p className="text-sm font-semibold">Neto: ${netTotal}</p>
       </div>
       <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-5">
         <div className="overflow-x-auto">

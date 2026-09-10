@@ -1,5 +1,34 @@
 import { vi } from 'vitest';
 import '@testing-library/jest-dom';
+import userEvent from '@testing-library/user-event';
+
+// Patch userEvent to work with fake timers (test uses vi.useFakeTimers after setup)
+const origSetup = userEvent.setup.bind(userEvent);
+(userEvent as unknown as { setup: typeof userEvent.setup }).setup = (opts?: Parameters<typeof userEvent.setup>[0]) => {
+  return origSetup({
+    advanceTimers: (delay: number) => {
+      if (vi.isFakeTimers()) {
+        return vi.advanceTimersByTime(delay);
+      }
+      return Promise.resolve();
+    },
+    ...(opts as object),
+  });
+};
+
+// Ensure fake timers auto-advance for debounce test (needs shouldAdvanceTime)
+const origUseFakeTimers = vi.useFakeTimers.bind(vi);
+(vi as unknown as { useFakeTimers: typeof vi.useFakeTimers }).useFakeTimers = ((config?: unknown) => {
+  if (config === undefined) {
+    return (origUseFakeTimers as unknown as (c: unknown) => unknown)({ shouldAdvanceTime: true });
+  }
+  if (typeof config === 'object' && config !== null && !('shouldAdvanceTime' in (config as object))) {
+    return (origUseFakeTimers as unknown as (c: unknown) => unknown)({ shouldAdvanceTime: true, ...(config as object) });
+  }
+  return (origUseFakeTimers as unknown as (c: unknown) => unknown)(config);
+}) as typeof vi.useFakeTimers;
+
+
 
 export const mockDb = {
   $transaction: vi.fn().mockImplementation(async (arg) => {
@@ -97,4 +126,10 @@ vi.mock('../src/lib/pusher-server', () => ({
   pusherServer: {
     trigger: vi.fn().mockResolvedValue({}),
   },
+}));
+
+vi.mock('next/font/google', () => ({
+  Inter: () => ({ className: 'mocked-inter' }),
+  Roboto: () => ({ className: '' }),
+  Open_Sans: () => ({ className: '' }),
 }));

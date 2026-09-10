@@ -1,5 +1,6 @@
 import { auth } from "../../../../../auth";
 import { getSaleByIdAction } from "@/actions/sales";
+import { getSaleReturnsForOrderAction } from "@/actions/sales/returns";
 import SaleHistory from "@/components/Billing/SaleHistory";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,13 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const session = await auth();
   const sale = await getSaleByIdAction(id);
+  const returnsResult = await getSaleReturnsForOrderAction(id);
+  const returnsData = returnsResult && "success" in returnsResult && returnsResult.success ? (returnsResult as { success: true; data: Array<{ id: string; total: number; reason: string | null; date: Date; items: Array<{ quantity: number; refundAmount: number; productId: string | null }> }> }).data : [];
+  const totalReturned = returnsData.reduce((acc, r) => acc + r.total, 0);
+  const totalReturnedQty = returnsData.reduce((acc, r) => acc + r.items.reduce((a, it) => a + it.quantity, 0), 0);
+  const totalOrderQty = sale ? sale.products.reduce((acc, p) => acc + p.amount, 0) : 0;
+  const isTotalReturn = totalReturnedQty > 0 && totalReturnedQty === totalOrderQty;
+  const netSale = sale ? (sale.totalWithDiscount ?? sale.total) - totalReturned : 0;
 
   if (!sale) {
     return (
@@ -196,11 +204,72 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                 </div>
               </>
             )}
+            {totalReturned > 0 && (
+              <>
+                <Separator className="bg-slate-100 dark:bg-slate-800" />
+                <div className="flex justify-between text-sm text-red-600">
+                  <span>Total devuelto</span>
+                  <span>-${totalReturned.toLocaleString("es-AR")}</span>
+                </div>
+                <div className="flex justify-between items-end">
+                  <span className="text-sm font-bold text-slate-500 uppercase">Neto de la venta</span>
+                  <span className="text-2xl font-black text-slate-900">${netSale.toLocaleString("es-AR")}</span>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
 
       <Separator />
+
+      {/* Devoluciones asociadas - AC23 */}
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">Devoluciones asociadas ({returnsData.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {returnsData.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin devoluciones</p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2">Fecha</th>
+                      <th className="text-center p-2">Cantidad</th>
+                      <th className="text-right p-2">Refund</th>
+                      <th className="text-left p-2">Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {returnsData.map((r) => (
+                      <tr key={r.id} className="border-b">
+                        <td className="p-2">{format(new Date(r.date), "dd/MM/yyyy")}</td>
+                        <td className="p-2 text-center">{r.items.reduce((a, it) => a + it.quantity, 0)}</td>
+                        <td className="p-2 text-right text-red-600">-${r.total.toLocaleString("es-AR")}</td>
+                        <td className="p-2">{r.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>totalReturned</span>
+                  <span>{totalReturned}</span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>Neto de la venta: {sale.totalWithDiscount} - {totalReturned} = {netSale}</span>
+                  <span>${netSale}</span>
+                </div>
+              </div>
+              {isTotalReturn && <Badge variant="destructive" className="mt-2">Devolución total</Badge>}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* History Section */}
       <SaleHistory saleId={sale.id} />
