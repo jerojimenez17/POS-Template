@@ -53,6 +53,7 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
     defaultValues: {
       paidMethod: PaidMethods.EFECTIVO,
       clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+      clientDocumentType: "",
       discount: 0,
       twoMethods: false,
       billType: defaultBillType,
@@ -141,6 +142,7 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
         form.reset({
           paidMethod: PaidMethods.EFECTIVO,
           clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+          clientDocumentType: "",
           discount: 0,
           twoMethods: false,
            billType: defaultBillType,
@@ -166,7 +168,8 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
 
   const onSubmit = (data: z.infer<typeof BillParametersSchema>) => {
     const documentNumber = data.documentNumber ?? 0;
-    
+    const docType = data.clientDocumentType || (data.clientCondition !== ClientConditions.CONSUMIDOR_FINAL ? "DNI" : "");
+    const isValidDocType = docType === "CUIT" || docType === "DNI";
     dispatch({
       type: "setState",
       payload: {
@@ -178,7 +181,7 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
         totalWithDiscount: BillState.totalWithDiscount,
         seller: BillState.seller,
         date: currentDate,
-        typeDocument: data.clientCondition,
+        typeDocument: isValidDocType ? docType : "",
         documentNumber,
         IVACondition: data.clientCondition,
         clientIvaCondition: data.clientCondition,
@@ -287,28 +290,46 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
               />
 
                {watchClientCondition !== ClientConditions.CONSUMIDOR_FINAL && (
-                <FormField
-                  control={form.control}
-                  name="documentNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm text-gray-600 dark:text-gray-300">
-                        {watchClientCondition === ClientConditions.CUIT
-                          ? "CUIT"
-                          : "DNI"}
-                      </FormLabel>
-                      <Input
-                        className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
-                        type="number"
-                        name={field.name}
-                        value={field.value || ""}
-                        onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                        onBlur={field.onBlur}
-                        ref={field.ref}
-                      />
-                    </FormItem>
-                  )}
-                />
+                <>
+                  <FormField
+                    control={form.control}
+                    name="clientDocumentType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Tipo Doc.</FormLabel>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
+                            <SelectValue placeholder="Seleccione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DNI">DNI</SelectItem>
+                            <SelectItem value="CUIT">CUIT</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="documentNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm text-gray-600 dark:text-gray-300">
+                          {form.watch("clientDocumentType") === "CUIT" ? "CUIT" : "DNI"}
+                        </FormLabel>
+                        <Input
+                          className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
+                          type="number"
+                          name={field.name}
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                          onBlur={field.onBlur}
+                          ref={field.ref}
+                        />
+                      </FormItem>
+                    )}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -477,16 +498,9 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
       </div>
 
       {/* CUIT/DNI */}
-       {watchClientCondition === ClientConditions.CUIT && form.getValues().documentNumber > 0 && (
+       {form.getValues().documentNumber > 0 && (
         <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-          <span>CUIT:</span>
-          <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>
-        </div>
-      )}
-
-       {watchClientCondition === ClientConditions.DNI && form.getValues().documentNumber > 0 && (
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-          <span>DNI:</span>
+          <span>{form.getValues().clientDocumentType || "Doc"}:</span>
           <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>
         </div>
       )}

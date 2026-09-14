@@ -136,7 +136,8 @@ export const updateClientSchema = clientFormSchema.extend({ id: z.string().trim(
 export const deleteClientSchema = z.object({ id: z.string().trim().min(1, "El cliente es obligatorio") }).strict();
 
 export const BillParametersSchema = z.object({
-  clientCondition: z.string(),
+  clientCondition: z.enum(["Consumidor Final", "Responsable Inscripto", "Monotributista", "Exento"]),
+  clientDocumentType: z.enum(["", "CUIT", "DNI"]).default(""),
   paidMethod: z.string(),
   twoMethods: z.boolean(),
   discount: z.coerce.number(),
@@ -145,6 +146,10 @@ export const BillParametersSchema = z.object({
   secondPaidMethod: z.string().optional(),
   totalSecondMethod: z.coerce.number().optional(),
   ptoVenta: z.coerce.number().optional(),
+}).superRefine((data, ctx) => {
+  if (data.clientCondition !== "Consumidor Final" && !data.documentNumber) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["documentNumber"], message: "Documento requerido para esta condición IVA" });
+  }
 });
 export const AccountSchema = z
   .object({

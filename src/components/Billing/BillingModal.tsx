@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import Select from "./Select";
 import BillState from "@/models/BillState";
+import ClientConditions from "@/models/ClientConditions";
 import { toast } from "sonner";
 import { createAfipVoucherAction } from "@/actions/afip";
 import { updateOrderCaeAction } from "@/actions/sales/update";
@@ -36,7 +37,8 @@ const BillingModal = ({
   onSuccess,
 }: BillingModalProps) => {
   const [loading, setLoading] = useState(false);
-  const [ivaCondition, setIvaCondition] = useState("Consumidor Final");
+  const [ivaCondition, setIvaCondition] = useState<string>(ClientConditions.CONSUMIDOR_FINAL);
+  const [documentType, setDocumentType] = useState<string>("");
   const [documentNumber, setDocumentNumber] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
   const [discount, setDiscount] = useState<number>(0);
@@ -60,7 +62,8 @@ const BillingModal = ({
   useEffect(() => {
     if (sale) {
       const timeoutId = window.setTimeout(() => {
-        setIvaCondition(sale.IVACondition || "Consumidor Final");
+        setIvaCondition(sale.IVACondition || ClientConditions.CONSUMIDOR_FINAL);
+        setDocumentType(sale.typeDocument || "");
         setDocumentNumber(sale.documentNumber?.toString() || "");
         setPaymentMethod(sale.paidMethod || "Efectivo");
         setDiscount(sale.discount || 0);
@@ -72,13 +75,14 @@ const BillingModal = ({
   const handleBilling = async () => {
     setLoading(true);
     try {
-      // Prepare BillState for AFIP
-      // Note: We are transforming the current sale data combined with modal inputs
+      const docNum = documentNumber ? Number(documentNumber) : 0;
+      const docType = documentType || (ivaCondition !== ClientConditions.CONSUMIDOR_FINAL ? "DNI" : "");
       const billToProcess: BillState = {
         ...sale,
         billType: effectiveBillType,
         IVACondition: ivaCondition,
-        documentNumber: Number(documentNumber),
+        typeDocument: docType,
+        documentNumber: docNum,
         paidMethod: paymentMethod,
         discount: discount,
       };
@@ -175,34 +179,43 @@ const BillingModal = ({
                 id="iva"
                 active={true}
                 value={ivaCondition}
-                options={["Consumidor Final", "CUIT", "DNI"]}
+                options={Object.values(ClientConditions)}
                 handleChange={(e) => {
                   setIvaCondition(e.target.value);
-                  if (e.target.value === "Consumidor Final") {
+                  if (e.target.value === ClientConditions.CONSUMIDOR_FINAL) {
                     setDocumentNumber("");
+                    setDocumentType("");
                   }
                 }}
               />
             </div>
           </div>
 
-          {/* Document Number */}
-          {ivaCondition !== "Consumidor Final" && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label
-                htmlFor="docNumber"
-                className="text-right text-sm text-gray-500"
-              >
-                {ivaCondition === "CUIT" ? "CUIT" : "DNI"}
-              </label>
-              <Input
-                id="docNumber"
-                value={documentNumber}
-                onChange={handleDocumentNumberChange}
-                maxLength={ivaCondition === "CUIT" ? 11 : 8}
-                className="col-span-3 border-gray-300"
-              />
-            </div>
+          {ivaCondition !== ClientConditions.CONSUMIDOR_FINAL && (
+            <>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="docType" className="text-right text-sm text-gray-500">Tipo Doc.</label>
+                <div className="col-span-3">
+                  <Select
+                    id="docType"
+                    active={true}
+                    value={documentType}
+                    options={["DNI", "CUIT"]}
+                    handleChange={(e) => setDocumentType(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="docNumber" className="text-right text-sm text-gray-500">{documentType === "CUIT" ? "CUIT" : "DNI"}</label>
+                <Input
+                  id="docNumber"
+                  value={documentNumber}
+                  onChange={handleDocumentNumberChange}
+                  maxLength={documentType === "CUIT" ? 11 : 8}
+                  className="col-span-3 border-gray-300"
+                />
+              </div>
+            </>
           )}
 
           {/* Forma de Pago */}
