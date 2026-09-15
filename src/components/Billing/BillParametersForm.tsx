@@ -167,13 +167,15 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
   const structuredVoucherError = voucherError && typeof voucherError !== "string" ? voucherError : null;
 
   const onSubmit = (data: z.infer<typeof BillParametersSchema>) => {
-    const documentNumber = data.documentNumber ?? 0;
+    const documentNumber = data.documentNumber ?? "";
+    const { documentNumber: rawDocumentNumber, ...formData } = data;
+    void rawDocumentNumber;
     const docType = data.clientDocumentType || (data.clientCondition !== ClientConditions.CONSUMIDOR_FINAL ? "DNI" : "");
     const isValidDocType = docType === "CUIT" || docType === "DNI";
     dispatch({
       type: "setState",
       payload: {
-        ...data,
+         ...formData,
         discount: BillState.discount,
         id: "",
         products: BillState.products,
@@ -182,10 +184,12 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
         seller: BillState.seller,
         date: currentDate,
         typeDocument: isValidDocType ? docType : "",
-        documentNumber,
+        // BillState keeps the legacy numeric field for AFIP callers, while
+        // the canonical client snapshot remains the exact entered string.
+        documentNumber: documentNumber ? Number(documentNumber) : 0,
         IVACondition: data.clientCondition,
         clientIvaCondition: data.clientCondition,
-        clientDocumentNumber: String(documentNumber),
+        clientDocumentNumber: documentNumber || undefined,
       },
     });
     
@@ -319,10 +323,10 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
                         </FormLabel>
                         <Input
                           className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
-                          type="number"
+                           type="text"
                           name={field.name}
-                          value={field.value || ""}
-                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                           value={field.value || ""}
+                           onChange={(e) => field.onChange(e.target.value)}
                           onBlur={field.onBlur}
                           ref={field.ref}
                         />
@@ -498,7 +502,7 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
       </div>
 
       {/* CUIT/DNI */}
-       {form.getValues().documentNumber > 0 && (
+        {form.getValues().documentNumber && (
         <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
           <span>{form.getValues().clientDocumentType || "Doc"}:</span>
           <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>

@@ -35,6 +35,7 @@ interface ProcessSaleInput {
   products: SaleProduct[];
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
+  clientDocumentType?: "CUIT" | "DNI" | "";
   CAE?: {
     CAE: string;
     vencimiento: string;
@@ -47,6 +48,13 @@ interface ProcessSaleInput {
 
 export const processSaleAction = async (billState: ProcessSaleInput) => {
   try {
+    const clientDocumentType = billState.clientDocumentType;
+    if (clientDocumentType !== undefined && clientDocumentType !== "" && clientDocumentType !== "CUIT" && clientDocumentType !== "DNI") {
+      return { error: "Tipo de documento inválido" };
+    }
+    const clientDocumentNumber = billState.clientDocumentNumber && billState.clientDocumentNumber.trim()
+      ? billState.clientDocumentNumber
+      : null;
     const session = await auth();
     const businessId = session?.user?.businessId;
     if (!businessId) return { error: "No autorizado" };
@@ -83,7 +91,8 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           businessId: businessId,
           clientId: billState.clientId,
           clientIvaCondition: billState.clientIvaCondition,
-          clientDocumentNumber: billState.clientDocumentNumber,
+          clientDocumentNumber,
+          clientDocumentType: clientDocumentType || null,
           CAE: billState.CAE,
           cashboxSessionId: activeSession.id,
           items: {

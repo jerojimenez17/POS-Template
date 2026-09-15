@@ -1,7 +1,7 @@
 "use client";
 
 import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "@/lib/utils/bill-type";
-import { getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
+import { buildReceiptClientData, getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 export interface PDFTemplateOptions {
   qrSvgDataUrl?: string | null;
@@ -159,14 +159,19 @@ export function buildPDFHTML(
       )
     : "";
 
-  const clientInfo = receiptData.client
+  const client = buildReceiptClientData({
+    name: receiptData.client,
+    ivaCondition: receiptData.clientIvaCondition,
+    documentType: receiptData.documentType === "CUIT" || receiptData.documentType === "DNI" ? receiptData.documentType : null,
+    documentNumber: receiptData.clientDocumentNumber,
+  });
+  const hasClientData = Boolean(client.name || client.ivaCondition || (client.documentType && client.documentNumber));
+  const clientInfo = isOfficialInvoice && hasClientData
     ? `<div class="info-section">
         <div class="info-section-title">Datos del Cliente</div>
-        <div class="info-row"><span class="info-label">Nombre:</span><span class="info-value">${escapeHtml(receiptData.client)}</span></div>
-        ${receiptData.clientIvaCondition && receiptData.clientIvaCondition.toLowerCase() !== "consumidor final" ? `
-          <div class="info-row"><span class="info-label">Cond. IVA:</span><span class="info-value">${escapeHtml(receiptData.clientIvaCondition.replace(/_/g, " "))}</span></div>
-          <div class="info-row"><span class="info-label">${escapeHtml(receiptData.documentType)}:</span><span class="info-value">${escapeHtml(receiptData.clientDocumentNumber)}</span></div>
-        ` : ""}
+        ${client.name ? `<div class="info-row"><span class="info-label">Nombre:</span><span class="info-value">${escapeHtml(client.name)}</span></div>` : ""}
+        ${client.ivaCondition ? `<div class="info-row"><span class="info-label">Cond. IVA:</span><span class="info-value">${escapeHtml(client.ivaCondition)}</span></div>` : ""}
+        ${client.documentType && client.documentNumber ? `<div class="info-row"><span class="info-label">${client.documentType}:</span><span class="info-value">${escapeHtml(client.documentNumber)}</span></div>` : ""}
       </div>`
     : "";
 

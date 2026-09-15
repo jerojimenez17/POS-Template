@@ -368,6 +368,7 @@ model Order {
 
   // Billing fields
   clientIvaCondition   String?
+  clientDocumentType   String?
   clientDocumentNumber String?
   CAE                  Json?
 

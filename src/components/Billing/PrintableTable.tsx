@@ -161,7 +161,7 @@ const PrintableTable = ({
     const receiptData: ThermalReceiptData = {
       ...receiptBusinessInfo,
       date: effectiveState.date || new Date(),
-      documentType: effectiveState.typeDocument || "DNI",
+       documentType: effectiveState.clientDocumentType || effectiveState.typeDocument,
       billType: billTypeDisplay,
       seller: effectiveState.seller || session?.user?.email || "",
       paidMethod: effectiveState.paidMethod || "Efectivo",

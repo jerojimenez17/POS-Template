@@ -75,14 +75,15 @@ const BillingModal = ({
   const handleBilling = async () => {
     setLoading(true);
     try {
-      const docNum = documentNumber ? Number(documentNumber) : 0;
       const docType = documentType || (ivaCondition !== ClientConditions.CONSUMIDOR_FINAL ? "DNI" : "");
       const billToProcess: BillState = {
         ...sale,
         billType: effectiveBillType,
         IVACondition: ivaCondition,
         typeDocument: docType,
-        documentNumber: docNum,
+        documentNumber: documentNumber ? Number(documentNumber) : 0,
+        clientDocumentType: docType ? docType as "CUIT" | "DNI" : undefined,
+        clientDocumentNumber: documentNumber,
         paidMethod: paymentMethod,
         discount: discount,
       };
@@ -109,7 +110,8 @@ const BillingModal = ({
              ptoVenta: resp.data.ptoVenta ?? sale.ptoVenta,
           },
           IVACondition: ivaCondition,
-          documentNumber: Number(documentNumber),
+          documentType: docType as "CUIT" | "DNI" | "",
+          documentNumber,
           paidMethod: paymentMethod,
           billType: billToProcess.billType,
         });

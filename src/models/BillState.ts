@@ -11,6 +11,7 @@ export default interface BillState {
   date: Date;
   typeDocument: string;
   documentNumber: number;
+  clientDocumentType?: "" | "CUIT" | "DNI";
   secondPaidMethod?: string;
   totalSecondMethod?: number | null;
   IVACondition: string;

@@ -12,7 +12,7 @@ import { printThermalReceipt, exportToPDF, buildPDFHTML, PDF_STYLES, type Therma
 import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 import { useState, useEffect } from "react";
 import type { Session } from "next-auth";
-import { buildReceiptBusinessInfo } from "@/lib/print/receipt-data";
+import { buildReceiptBusinessInfo, normalizeHistoricalDocumentType } from "@/lib/print/receipt-data";
 
 interface OrderItem {
   id: string;
@@ -33,6 +33,9 @@ interface Props {
     discountAmount: number;
     seller: string | null;
     paidMethod: string | null;
+    clientIvaCondition: string | null;
+    clientDocumentType: string | null;
+    clientDocumentNumber: string | null;
     client: { name: string | null } | null;
     items: OrderItem[];
     status: string;
@@ -52,14 +55,20 @@ export default function PrintOrderButton({ order, session }: Props) {
   const getPrintData = (): ThermalReceiptData => {
     const subtotal = order.items.reduce((sum, i) => sum + i.subTotal, 0);
     const billType = order.status === "pendiente" ? "Presupuesto" : "Comprobante";
+    const clientDocumentNumber = order.clientDocumentNumber?.trim()
+      ? order.clientDocumentNumber
+      : undefined;
+    const documentType = normalizeHistoricalDocumentType(order.clientDocumentType, clientDocumentNumber);
     return {
       ...buildReceiptBusinessInfo(session?.user?.businessName || "Mi Comercio", undefined),
       date: new Date(order.date),
-      documentType: "DNI",
+      documentType,
       billType,
       seller: order.seller || session?.user?.email || "",
       paidMethod: order.paidMethod || "Efectivo",
       client: order.client?.name || undefined,
+      clientIvaCondition: order.clientIvaCondition || undefined,
+      clientDocumentNumber,
       products: order.items.map(i => ({
         description: i.description || "Producto",
         amount: i.quantity,

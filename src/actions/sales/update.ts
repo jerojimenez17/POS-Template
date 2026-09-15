@@ -5,6 +5,8 @@ import { auth } from "@/auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { z } from "zod";
+import { Prisma } from "@prisma/client";
 interface UpdateCaeInput {
   CAE: {
     CAE: string;
@@ -14,7 +16,8 @@ interface UpdateCaeInput {
     ptoVenta?: number | string;
   };
   IVACondition: string;
-  documentNumber: number;
+  documentType?: "" | "CUIT" | "DNI";
+  documentNumber?: string | number;
   paidMethod: string;
   billType?: string;
 }
@@ -23,6 +26,22 @@ export const updateOrderCaeAction = async (
   orderId: string,
   data: UpdateCaeInput
 ) => {
+  const parsed = z.object({
+    CAE: z.object({ CAE: z.string(), vencimiento: z.string(), nroComprobante: z.union([z.string(), z.number()]), qrData: z.string(), ptoVenta: z.union([z.string(), z.number()]).optional() }),
+    IVACondition: z.string(),
+    documentType: z.enum(["", "CUIT", "DNI"]).optional(),
+    documentNumber: z.union([z.string(), z.number()]).optional(),
+    paidMethod: z.string(),
+    billType: z.string().optional(),
+  }).safeParse(data);
+  if (!parsed.success) return { error: "Datos de facturación inválidos" };
+  const normalizedDocumentNumber = parsed.data.documentNumber === undefined || String(parsed.data.documentNumber).trim() === ""
+    ? null : String(parsed.data.documentNumber);
+  const documentRequired = parsed.data.IVACondition.trim().toLowerCase() !== "consumidor final" &&
+    parsed.data.IVACondition.trim().toLowerCase() !== "consumidor_final";
+  if (documentRequired && normalizedDocumentNumber === null) {
+    return { error: "El número de documento es obligatorio para esta condición de IVA" };
+  }
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
@@ -31,10 +50,11 @@ export const updateOrderCaeAction = async (
     await db.order.update({
       where: { id: orderId, businessId },
       data: {
-        CAE: data.CAE,
-        clientIvaCondition: data.IVACondition,
-        clientDocumentNumber: String(data.documentNumber),
-        paymentMethod: data.paidMethod,
+        CAE: parsed.data.CAE,
+        clientIvaCondition: parsed.data.IVACondition,
+        clientDocumentType: parsed.data.documentType || null,
+        clientDocumentNumber: normalizedDocumentNumber,
+        paymentMethod: parsed.data.paidMethod,
       },
     });
 
@@ -48,6 +68,9 @@ export const updateOrderCaeAction = async (
     revalidateTag(CACHE_TAGS.ORDERS, "max");
     return { success: true };
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      return { error: "Orden no encontrada" };
+    }
     console.error("Error updating sale CAE:", error);
     return { error: "Error al actualizar CAE de la venta" };
   }
