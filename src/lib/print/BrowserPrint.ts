@@ -1,5 +1,5 @@
 import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "@/lib/utils/bill-type";
-import { getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
+import { buildReceiptClientData, getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 
 export const ESCPOS = {
@@ -98,6 +98,7 @@ function sanitize(text: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/N[°º]/g, "Nro")
+    .replace(/[<>]/g, "")
     .replace(/[^\x20-\x7E]/g, "");
 }
 
@@ -160,15 +161,11 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   
   lines.push(formatLine("Tipo:", billTypeDisplay));
   
-  const docType = data.documentType || "DNI";
-  if (data.client) {
-    lines.push(formatLine("Cliente:", sanitize(data.client)));
-    if (data.clientIvaCondition && 
-        data.clientIvaCondition.toLowerCase() !== "consumidor final" &&
-        data.clientIvaCondition.toLowerCase() !== "consumidor_final") {
-      lines.push(formatLine(docType + ":", data.clientDocumentNumber || ""));
-      lines.push(formatLine("Cond.IVA:", data.clientIvaCondition.replace(/_/g, " ")));
-    }
+  const client = buildReceiptClientData({ name: data.client, ivaCondition: data.clientIvaCondition, documentType: data.documentType === "CUIT" || data.documentType === "DNI" ? data.documentType : null, documentNumber: data.clientDocumentNumber });
+  if (isAFIPInvoice && (client.name || client.ivaCondition || (client.documentType && client.documentNumber))) {
+    if (client.name) lines.push(formatLine("Cliente:", sanitize(client.name)));
+    if (isAFIPInvoice && client.documentType && client.documentNumber) lines.push(formatLine(client.documentType + ":", sanitize(client.documentNumber)));
+    if (isAFIPInvoice && client.ivaCondition) lines.push(formatLine("Cond.IVA:", sanitize(client.ivaCondition)));
   }
   
   if (!isPresupuesto) {
@@ -233,14 +230,14 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
 
 
 
-function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | null): string {
+export function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | null): string {
   const qrHtml = qrDataUrl ? `<div class="qr-container"><img src="${qrDataUrl}" alt="QR" /></div>` : "";
   const dateStr = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(data.date);
   const isPresupuesto = normalizeBillType(data.billType) === "Presupuesto";
   const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
   const isAFIPInvoice = !isPresupuesto && getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice";
   const invoiceNum = isAFIPInvoice ? formatInvoiceNumberFull(data.invoiceNumber, data.pointOfSale ?? data.cae?.ptoVenta) : "";
-  const docType = data.documentType || "DNI";
+  const client = buildReceiptClientData({ name: data.client, ivaCondition: data.clientIvaCondition, documentType: data.documentType === "CUIT" || data.documentType === "DNI" ? data.documentType : null, documentNumber: data.clientDocumentNumber });
 
   const productsHtml = data.products.map(p => `
     <div class="product-row">
@@ -298,14 +295,14 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
         ${invoiceNum ? `<div class="info-row"><span class="info-label">Nro:</span><span>${invoiceNum}</span></div>` : ''}
         <div class="info-row"><span class="info-label">Tipo:</span><span>${billTypeDisplay}</span></div>
         
-        ${data.client ? `
-          <div class="divider"></div>
-          <div class="info-row"><span class="info-label">Cliente:</span><span>${sanitize(data.client)}</span></div>
-          ${data.clientIvaCondition && 
-            data.clientIvaCondition.toLowerCase() !== "consumidor final" &&
-            data.clientIvaCondition.toLowerCase() !== "consumidor_final" ? `
-            <div class="info-row"><span class="info-label">${docType}:</span><span>${data.clientDocumentNumber || ""}</span></div>
-            <div class="info-row"><span class="info-label">Cond.IVA:</span><span>${data.clientIvaCondition.replace(/_/g, " ")}</span></div>
+         ${isAFIPInvoice && (client.name || client.ivaCondition || (client.documentType && client.documentNumber)) ? `
+           <div class="divider"></div>
+           ${client.name ? `<div class="info-row"><span class="info-label">Cliente:</span><span>${escapeThermalHtml(client.name)}</span></div>` : ''}
+          ${isAFIPInvoice && client.documentType && client.documentNumber ? `
+            <div class="info-row"><span class="info-label">${client.documentType}:</span><span>${escapeThermalHtml(client.documentNumber)}</span></div>
+          ` : ''}
+          ${isAFIPInvoice && client.ivaCondition ? `
+            <div class="info-row"><span class="info-label">Cond.IVA:</span><span>${escapeThermalHtml(client.ivaCondition)}</span></div>
           ` : ''}
         ` : ''}
 
@@ -360,6 +357,10 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
     </body>
     </html>
   `;
+}
+
+function escapeThermalHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 async function tryFallbackHTMLPrint(data: ThermalReceiptData, qrDataUrl: string | null): Promise<boolean> {

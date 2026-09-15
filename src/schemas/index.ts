@@ -142,12 +142,14 @@ export const BillParametersSchema = z.object({
   twoMethods: z.boolean(),
   discount: z.coerce.number(),
   billType: z.string(),
-  documentNumber: z.coerce.number().default(0),
+  // Keep this as text so identifiers such as DNI values with leading zeroes
+  // survive the form boundary. AFIP compatibility is handled by the caller.
+  documentNumber: z.string().default(""),
   secondPaidMethod: z.string().optional(),
   totalSecondMethod: z.coerce.number().optional(),
   ptoVenta: z.coerce.number().optional(),
 }).superRefine((data, ctx) => {
-  if (data.clientCondition !== "Consumidor Final" && !data.documentNumber) {
+    if (data.clientCondition !== "Consumidor Final" && !data.documentNumber.trim()) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["documentNumber"], message: "Documento requerido para esta condición IVA" });
   }
 });

@@ -8,6 +8,7 @@ import { fail } from "@/lib/action-result";
 import { PAGINATION } from "@/lib/pagination";
 import { Prisma } from "@prisma/client";
 import { parseCAE } from "@/lib/cae";
+import { normalizeHistoricalDocumentType } from "@/lib/print/receipt-data";
 
 type OrderWithItems = Prisma.OrderGetPayload<{
   include: { items: true; client: true };
@@ -15,6 +16,9 @@ type OrderWithItems = Prisma.OrderGetPayload<{
 
 function mapOrderToBillState(order: OrderWithItems): BillState {
   const cae = parseCAE(order.CAE);
+  const legacyDocument = order.clientDocumentNumber || "";
+  // Legacy rows did not store the selected type: retain the documented length fallback.
+  const clientDocumentType = normalizeHistoricalDocumentType(order.clientDocumentType, legacyDocument) || undefined;
 
   return {
     id: order.id,
@@ -49,13 +53,14 @@ function mapOrderToBillState(order: OrderWithItems): BillState {
     seller: order.seller || "",
     discount: order.discountPercentage,
     date: order.date,
-    typeDocument: order.clientIvaCondition || "DNI",
-    documentNumber: order.clientDocumentNumber ? Number(order.clientDocumentNumber) : 0,
+    typeDocument: clientDocumentType || "",
+    documentNumber: legacyDocument ? Number(legacyDocument) : 0,
     secondPaidMethod: order.paymentMethod2 || undefined,
     totalSecondMethod: order.totalMethod2 || undefined,
     IVACondition: order.clientIvaCondition || "Consumidor Final",
     clientIvaCondition: order.clientIvaCondition || undefined,
     clientDocumentNumber: order.clientDocumentNumber || undefined,
+    clientDocumentType,
     CAE: cae,
     ptoVenta: typeof cae?.ptoVenta === "number" ? cae.ptoVenta : undefined,
     twoMethods: !!order.paymentMethod2 && order.totalMethod2 !== null && order.totalMethod2 > 0,
