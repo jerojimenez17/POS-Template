@@ -18,13 +18,16 @@ const ProductsTable = ({ session, isEditing, orderId }: props) => {
   const { BillState } = useContext(BillContext);
 
   useEffect(() => {
-    if (BillState.products.length === 0 && printTrigger.cae?.CAE) {
+    if (BillState.products.length === 0 && (printTrigger.cae?.CAE || printTrigger.snapshot)) {
       const t = setTimeout(() => {
-        setPrintTrigger(prev => (prev.cae?.CAE ? { ...prev, cae: undefined } : prev));
+        setPrintTrigger(prev => {
+          const needsClean = prev.cae?.CAE || prev.snapshot;
+          return needsClean ? { ...prev, cae: undefined, snapshot: undefined } : prev;
+        });
       }, 900);
       return () => clearTimeout(t);
     }
-  }, [BillState.products.length, BillState.CAE?.CAE, printTrigger.cae?.CAE]);
+  }, [BillState.products.length, BillState.CAE?.CAE, printTrigger.cae?.CAE, printTrigger.snapshot]);
 
   const handlePrint = (cae?: CAE, win?: Window | null, snapshot?: BillState) => {
     printWindowRef.current = win || null;
