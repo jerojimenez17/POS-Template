@@ -24,6 +24,7 @@ import { Barcode, ScanBarcode, Printer, X, Check, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { printElement } from "@/lib/print";
 import { updateProduct } from "@/actions/stock";
+import { LABEL_45X55_PAGE_STYLE, LABEL_55X45_HEIGHT, LABEL_55X45_WIDTH } from "./product-print-modal";
 
 const Scanner = dynamic(
   () => import("@yudiel/react-qr-scanner").then((m) => m.Scanner),
@@ -77,7 +78,7 @@ function formatPrice(price: number, unit?: string | null): string {
   const [copies, setCopies] = useState(1);
   const [showPrice, setShowPrice] = useState(true);
   const [barcodeSource, setBarcodeSource] = useState<"code" | "codebar">("code");
-  const [paperSize, setPaperSize] = useState<"a4" | "thermal">("thermal");
+  const [paperSize, setPaperSize] = useState<"a4" | "thermal" | "thermal5545">("thermal");
 
   const barcodeRefs = useRef<(SVGSVGElement | null)[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
@@ -87,7 +88,10 @@ function formatPrice(price: number, unit?: string | null): string {
   const tagHeight = hasCodebar ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE;
   const barcodeValue =
     barcodeSource === "codebar" && effectiveCodebar ? effectiveCodebar : code;
+  const is5545 = paperSize === "thermal5545";
   const isThermal = paperSize === "thermal";
+  const previewWidth = is5545 ? LABEL_55X45_WIDTH : TAG_WIDTH;
+  const previewHeight = is5545 ? LABEL_55X45_HEIGHT : tagHeight;
 
   const renderBarcode = useCallback((el: SVGSVGElement | null, value: string) => {
     if (!el || !value) return;
@@ -96,7 +100,7 @@ function formatPrice(price: number, unit?: string | null): string {
         format: "CODE128",
         lineColor: "#000000",
         width: 2,
-        height: hasCodebar ? 60 : 40,
+        height: is5545 ? 42 : hasCodebar ? 60 : 40,
         displayValue: true,
         fontSize: 10,
         margin: 0,
@@ -104,7 +108,7 @@ function formatPrice(price: number, unit?: string | null): string {
     } catch {
       // silently ignore if SVG ref is stale
     }
-  }, [hasCodebar]);
+  }, [hasCodebar, is5545]);
 
   useEffect(() => {
     if (!open || !code) return;
@@ -132,8 +136,22 @@ function formatPrice(price: number, unit?: string | null): string {
   };
 
   const handlePrint = async () => {
-    if (printRef.current) {
-      const pageStyle = isThermal
+    if (!printRef.current) return;
+
+    if (is5545) {
+      // Upstream #112/#113 55×45 landscape format: dedicated @page style with
+      // landscape orientation; the PDF fallback preserves the physical size.
+      await printElement(printRef.current, {
+        documentTitle: `CodigoBarras_${barcodeValue}`,
+        pageStyle: LABEL_45X55_PAGE_STYLE,
+        format: "thermal",
+        orientation: "landscape",
+        fallbackToPDF: true,
+      });
+      return;
+    }
+
+    const pageStyle = isThermal
         ? `
           @page { size: 60mm auto; margin: 0; }
           @media print {
@@ -231,9 +249,8 @@ function formatPrice(price: number, unit?: string | null): string {
       await printElement(printRef.current, {
         documentTitle: `CodigoBarras_${barcodeValue}`,
         pageStyle,
-        format: paperSize,
+        format: isThermal ? "thermal" : "a4",
       });
-    }
   };
 
   const cards = Array.from({ length: copies }, (_, i) => i);
@@ -395,12 +412,13 @@ function formatPrice(price: number, unit?: string | null): string {
                   <Label htmlFor="paper-size" className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider block">
                     Tamaño de Papel
                   </Label>
-                  <Select value={paperSize} onValueChange={(v: "a4" | "thermal") => setPaperSize(v)}>
+                  <Select value={paperSize} onValueChange={(v: "a4" | "thermal" | "thermal5545") => setPaperSize(v)}>
                     <SelectTrigger id="paper-size" className="w-full h-8 text-xs bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="thermal" className="text-xs">Etiqueta (Térmica)</SelectItem>
+                      <SelectItem value="thermal5545" className="text-xs">Etiqueta 55×45 (horizontal)</SelectItem>
                       <SelectItem value="a4" className="text-xs">Hoja A4 (Grilla)</SelectItem>
                     </SelectContent>
                   </Select>
@@ -447,6 +465,13 @@ function formatPrice(price: number, unit?: string | null): string {
                   </Label>
                 </div>
               </div>
+
+              {is5545 && (
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-snug">
+                  En la impresión seleccioná escala 100%, márgenes ninguno y orientación horizontal (landscape).
+                  Las preferencias del navegador o driver pueden prevalecer.
+                </p>
+              )}
             </div>
 
             {/* ── Barcode Preview ── */}
@@ -465,7 +490,7 @@ function formatPrice(price: number, unit?: string | null): string {
                       <div
                         key={i}
                         className="label-container flex flex-col text-black items-center border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-900"
-                        style={{ width: TAG_WIDTH, minHeight: tagHeight }}
+                        style={{ width: previewWidth, minHeight: previewHeight }}
                       >
                         <span
                           contentEditable
