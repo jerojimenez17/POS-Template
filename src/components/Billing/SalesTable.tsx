@@ -14,8 +14,8 @@ import {
 import { Button } from "./../ui/button";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { pusherClient } from "@/lib/pusher-client";
-import { getSalesAction } from "@/actions/sales";
-import { isAFIPAuthorized } from "@/lib/utils/bill-type";
+import { getSalesAction } from "@/actions/sales/get-sales";
+import { serializeSalesFilters } from "./serialize-sales-filters";
 
 import { Session } from "next-auth";
 
@@ -25,6 +25,15 @@ interface props {
   session: Session | null;
   qzTrayEnabled?: boolean;
 }
+
+const dedupe = (items: BillState[]): BillState[] => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+};
 
 const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnabled = false }: props) => {
   const user = session?.user;
@@ -39,6 +48,11 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
   const [loadingMore, setLoadingMore] = useState(false);
 
   const { filtersState, seller } = useContext(FiltersContext);
+  const filters = React.useMemo(() => serializeSalesFilters(filtersState), [filtersState]);
+  const filterSnapshot = React.useMemo(() => JSON.stringify(filters), [filters]);
+  const snapshotRef = React.useRef(filterSnapshot);
+  const initialQueryRef = React.useRef(false);
+  const requestRef = React.useRef(0);
   useEffect(() => {
     if (user?.email !== process.env.ADMIN_EMAIL && user?.email) {
       seller(user.email);
@@ -48,10 +62,13 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     // The live list is local state because it is also updated by the Pusher subscription.
+    requestRef.current += 1;
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoadingMore(false);
     setLiveSales(sales);
     setCursor(initialCursor);
     setHasMore(initialCursor !== null);
+    setCurrentPage(1);
   }, [sales, initialCursor]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -61,9 +78,15 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
       const channel = pusherClient.subscribe(channelName);
       
       const handleUpdate = async () => {
-        const result = await getSalesAction();
+        const requestId = ++requestRef.current;
+        setLoadingMore(false);
+        const result = await getSalesAction({ cursor: undefined, filters });
+        if (requestId !== requestRef.current) return;
         if (result) {
-          setLiveSales(result.sales);
+          setLiveSales(dedupe(result.sales));
+          setCursor(result.nextCursor);
+          setHasMore(result.nextCursor !== null);
+          setCurrentPage(1);
         }
       };
 
@@ -73,15 +96,39 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
         channel.unbind("orders-update", handleUpdate);
       };
     }
-  }, [session?.user?.businessId]);
+  }, [session?.user?.businessId, filters]);
+
+  useEffect(() => {
+    // The page intentionally does not provide server-rendered sales. The
+    // initial request must be made here, after FiltersContext is available,
+    // rather than reusing an unfiltered server response.
+    const requiresSellerScope = Boolean(user?.email && user.email !== process.env.ADMIN_EMAIL);
+    const sellerScopeReady = !requiresSellerScope || filters.seller === user?.email;
+    const needsInitialQuery = !initialQueryRef.current && sales.length === 0 && initialCursor === null && sellerScopeReady;
+    if (!needsInitialQuery && snapshotRef.current === filterSnapshot) return;
+    initialQueryRef.current = true;
+    snapshotRef.current = filterSnapshot;
+    const requestId = ++requestRef.current;
+    setLoadingMore(false);
+    setCurrentPage(1);
+    void getSalesAction({ cursor: undefined, filters }).then((result) => {
+      if (requestId !== requestRef.current) return;
+      setLiveSales(dedupe(result.sales));
+      setCursor(result.nextCursor);
+      setHasMore(result.nextCursor !== null);
+    }).catch((error: unknown) => console.error("Error loading filtered sales:", error));
+    return () => { requestRef.current += 1; };
+  }, [filterSnapshot, filters, initialCursor, sales.length, user?.email]);
 
   const handleLoadMore = async () => {
     if (!cursor || loadingMore) return;
+    const requestId = requestRef.current;
     setLoadingMore(true);
     try {
-      const result = await getSalesAction({ cursor });
+      const result = await getSalesAction({ cursor, filters });
+      if (requestId !== requestRef.current) return;
       if (result.sales.length > 0) {
-        setLiveSales((prev) => [...prev, ...result.sales]);
+        setLiveSales((prev) => dedupe([...prev, ...result.sales]));
         setCursor(result.nextCursor);
         setHasMore(result.nextCursor !== null);
       } else {
@@ -90,69 +137,9 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
     } catch (error) {
       console.error("Error loading more sales:", error);
     } finally {
-      setLoadingMore(false);
+      if (requestId === requestRef.current) setLoadingMore(false);
     }
   };
-
-  const filteredSales = React.useMemo(() => {
-    return liveSales
-      .filter((sale) => {
-        const { Remito, FacturaC } = filtersState;
-        const isFacturaC = isAFIPAuthorized(undefined, sale.CAE?.CAE);
-        const isRemito = !isFacturaC;
-
-        if (FacturaC.active && Remito.active) return true;
-        if (FacturaC.active) return isFacturaC;
-        if (Remito.active) return isRemito;
-        return false;
-      })
-      .filter((sale) => {
-        const {
-          Debito,
-          UnPago,
-          Ahora3,
-          Ahora6,
-          Transferencia,
-          Efectivo,
-          CuentaDNI,
-        } = filtersState;
-
-        const anyPaidMethodActive =
-          Debito.active ||
-          UnPago.active ||
-          Ahora3.active ||
-          Ahora6.active ||
-          Transferencia.active ||
-          Efectivo.active ||
-          CuentaDNI.active;
-
-        if (!anyPaidMethodActive) return true;
-
-        const method = sale.paidMethod?.toLowerCase();
-        return (
-          (Efectivo.active && method === Efectivo.filter.toLowerCase()) ||
-          (Debito.active && method === Debito.filter.toLowerCase()) ||
-          (UnPago.active && method === UnPago.filter.toLowerCase()) ||
-          (Ahora3.active && method === Ahora3.filter.toLowerCase()) ||
-          (Ahora6.active && method === Ahora6.filter.toLowerCase()) ||
-          (CuentaDNI.active && method === CuentaDNI.filter.toLowerCase()) ||
-          (Transferencia.active && method === Transferencia.filter.toLowerCase())
-        );
-      })
-      .filter((sale) => {
-        const { endDate, startDate } = filtersState;
-        const saleTime = sale.date.getTime();
-        return (
-          (!startDate.active || saleTime >= startDate.date.getTime()) &&
-          (!endDate.active || saleTime <= endDate.date.getTime())
-        );
-      })
-      .filter((sale) => {
-        const { Seller } = filtersState;
-        return !Seller.active || Seller.filter === sale.seller;
-      })
-      .sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [liveSales, filtersState]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -160,19 +147,19 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
   }, [filtersState, itemsPerPage]);
 
   const total = React.useMemo(() => {
-    return filteredSales.reduce((acc, sale) => acc + (sale.totalWithDiscount || 0), 0);
-  }, [filteredSales]);
+    return liveSales.reduce((acc, sale) => acc + (sale.totalWithDiscount || 0), 0);
+  }, [liveSales]);
 
-  const totalPages = Math.ceil(filteredSales.length / itemsPerPage);
+  const totalPages = Math.ceil(liveSales.length / itemsPerPage);
   const currentSales = React.useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredSales.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredSales, currentPage, itemsPerPage]);
+    return liveSales.slice(startIndex, startIndex + itemsPerPage);
+  }, [liveSales, currentPage, itemsPerPage]);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setCurrentPage(1);
-  }, [filteredSales.length, itemsPerPage]);
+  }, [liveSales.length, itemsPerPage]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
@@ -182,7 +169,7 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
         <div className="flex items-center justify-between px-5 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              {filteredSales.length} resultado{filteredSales.length !== 1 ? "s" : ""}
+              {liveSales.length} resultado{liveSales.length !== 1 ? "s" : ""}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -212,12 +199,13 @@ const SalesTable = ({ sales = [], nextCursor: initialCursor, session, qzTrayEnab
             {/* Table Body (Accordions) */}
             <div className="flex flex-col divide-y divide-gray-100 dark:divide-gray-700">
               {currentSales.map((sale) => (
-                <SaleAccordion
-                  session={session}
-                  key={sale.id}
-                   sale={sale}
-                   qzTrayEnabled={qzTrayEnabled}
-                />
+                <React.Fragment key={sale.id}>
+                  <SaleAccordion
+                    session={session}
+                    sale={{ ...sale, seller: sale.seller ?? "" }}
+                    qzTrayEnabled={qzTrayEnabled}
+                  />
+                </React.Fragment>
               ))}
               {currentSales.length === 0 && (
                 <div className="p-8 text-center text-gray-500 dark:text-gray-400">

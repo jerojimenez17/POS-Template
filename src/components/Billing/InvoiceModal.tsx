@@ -122,10 +122,6 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
           IVACondition: ivaCondition,
           documentNumber,
           paidMethod,
-          twoMethods,
-          secondPaidMethod: twoMethods ? secondPaidMethod : null,
-          totalSecondMethod: twoMethods ? totalSecondMethod : null,
-          discount,
           billType,
         });
 
@@ -206,7 +202,7 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
                   {showDocInput ? (
                     <div className="sm:col-span-2">
                       <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                        {ivaCondition === ClientConditions.CUIT ? "CUIT" : "DNI"}
+                        {sale.clientDocumentType === "CUIT" ? "CUIT" : "DNI"}
                       </Label>
                       <input
                         type="number"

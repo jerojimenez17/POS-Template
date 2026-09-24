@@ -194,7 +194,7 @@ export default function CheckoutModal({
                     {showDocInput ? (
                       <div>
                         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                          {ivaCondition === ClientConditions.CUIT ? "CUIT" : "DNI"}
+                          {BillState.clientDocumentType === "CUIT" ? "CUIT" : "DNI"}
                         </Label>
                         <input
                           type="number"

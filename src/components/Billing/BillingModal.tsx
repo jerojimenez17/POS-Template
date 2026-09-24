@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState, useMemo } from "react";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import Select from "./Select";
 import BillState from "@/models/BillState";
+import ClientConditions from "@/models/ClientConditions";
 import { toast } from "sonner";
 import { createAfipVoucherAction } from "@/actions/afip";
 import { updateOrderCaeAction } from "@/actions/sales/update";
@@ -37,7 +38,8 @@ const BillingModal = ({
   onSuccess,
 }: BillingModalProps) => {
   const [loading, setLoading] = useState(false);
-  const [ivaCondition, setIvaCondition] = useState("Consumidor Final");
+  const [ivaCondition, setIvaCondition] = useState<string>(ClientConditions.CONSUMIDOR_FINAL);
+  const [documentType, setDocumentType] = useState<string>("");
   const [documentNumber, setDocumentNumber] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
   const [discount, setDiscount] = useState<number>(0);
@@ -58,11 +60,11 @@ const BillingModal = ({
   // historical C value must not override a Responsable Inscripto default.
   const effectiveBillType = defaultBillType;
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (sale) {
       const timeoutId = window.setTimeout(() => {
-        setIvaCondition(sale.IVACondition || "Consumidor Final");
+        setIvaCondition(sale.IVACondition || ClientConditions.CONSUMIDOR_FINAL);
+        setDocumentType(sale.typeDocument || "");
         setDocumentNumber(sale.documentNumber?.toString() || "");
         setPaymentMethod(sale.paidMethod || "Efectivo");
         setDiscount(sale.discount || 0);
@@ -70,18 +72,19 @@ const BillingModal = ({
       return () => window.clearTimeout(timeoutId);
     }
   }, [sale, open]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleBilling = async () => {
     setLoading(true);
     try {
-      // Prepare BillState for AFIP
-      // Note: We are transforming the current sale data combined with modal inputs
+      const docType = documentType || (ivaCondition !== ClientConditions.CONSUMIDOR_FINAL ? "DNI" : "");
       const billToProcess: BillState = {
         ...sale,
         billType: effectiveBillType,
         IVACondition: ivaCondition,
-        documentNumber: Number(documentNumber),
+        typeDocument: docType,
+        documentNumber: documentNumber ? Number(documentNumber) : 0,
+        clientDocumentType: docType ? docType as "CUIT" | "DNI" : undefined,
+        clientDocumentNumber: documentNumber,
         paidMethod: paymentMethod,
         discount: discount,
       };
@@ -108,7 +111,8 @@ const BillingModal = ({
              ptoVenta: resp.data.ptoVenta ?? sale.ptoVenta,
           },
           IVACondition: ivaCondition,
-          documentNumber: Number(documentNumber),
+          documentType: docType as "CUIT" | "DNI" | "",
+          documentNumber,
           paidMethod: paymentMethod,
           billType: billToProcess.billType,
         });
@@ -122,7 +126,7 @@ const BillingModal = ({
         onSuccess();
         onOpenChange(false);
       } else {
-        toast.error("Error al crear factura: La respuesta no contiene un CAE válido");
+        toast.error("Error al crear factura: La respuesta no contiene un CAE v├ílido");
       }
     } catch (error) {
       const safeMessage = error instanceof Error ? sanitizeAfipText(error.message) : "unknown";
@@ -193,33 +197,48 @@ const BillingModal = ({
                   id="iva"
                   active={true}
                   value={ivaCondition}
-                  options={["Consumidor Final", "CUIT", "DNI"]}
+                  options={Object.values(ClientConditions)}
                   handleChange={(e) => {
                     setIvaCondition(e.target.value);
-                    if (e.target.value === "Consumidor Final") {
+                    if (e.target.value === ClientConditions.CONSUMIDOR_FINAL) {
                       setDocumentNumber("");
+                      setDocumentType("");
                     }
                   }}
                 />
               </div>
-              {ivaCondition !== "Consumidor Final" && (
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                    {ivaCondition === "CUIT" ? "CUIT" : "DNI"}
-                  </label>
-                  <Input
-                    id="docNumber"
-                    value={documentNumber}
-                    onChange={handleDocumentNumberChange}
-                    maxLength={ivaCondition === "CUIT" ? 11 : 8}
-                    className="h-9 text-sm rounded-md"
-                  />
-                </div>
+              {ivaCondition !== ClientConditions.CONSUMIDOR_FINAL && (
+                <>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                      Tipo Doc.
+                    </label>
+                    <Select
+                      id="docType"
+                      active={true}
+                      value={documentType}
+                      options={["DNI", "CUIT"]}
+                      handleChange={(e) => setDocumentType(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                      {documentType === "CUIT" ? "CUIT" : "DNI"}
+                    </label>
+                    <Input
+                      id="docNumber"
+                      value={documentNumber}
+                      onChange={handleDocumentNumberChange}
+                      maxLength={documentType === "CUIT" ? 11 : 8}
+                      className="h-9 text-sm rounded-md"
+                    />
+                  </div>
+                </>
               )}
-              {ivaCondition === "Consumidor Final" && (
+              {ivaCondition === ClientConditions.CONSUMIDOR_FINAL && (
                 <div className="flex items-end pb-1">
                   <span className="text-xs text-muted-foreground/60 italic">
-                    Consumidor Final — no requiere documento
+                    Consumidor Final ÔÇö no requiere documento
                   </span>
                 </div>
               )}

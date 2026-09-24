@@ -8,6 +8,7 @@ import { PrintMode } from "./BillContext";
 import type { BillAction } from "./billActions";
 import { normalizeBillType } from "@/utils/billing";
 import BillTypes from "@/models/billType";
+import { getBillRowId } from "@/utils/bill-row";
 
 const INITIAL_STATE: BillState = {
   twoMethods: false,
@@ -32,10 +33,11 @@ const INITIAL_STATE: BillState = {
 interface props {
   children: ReactElement | ReactElement[];
   initialBillType?: string;
+  defaultPtoVenta?: number;
   qzTrayEnabled?: boolean;
 }
 
-const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: props) => {
+const BillProvider = ({ children, initialBillType, defaultPtoVenta, qzTrayEnabled = false }: props) => {
   // /newBill supplies the business-derived type explicitly. Standalone and
   // unknown paths use the new-sale Factura B fallback.
   const effectiveInitialBillType = normalizeBillType(initialBillType, BillTypes.B);
@@ -46,7 +48,7 @@ const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: prop
   const [BillState, reducerDispatch] = useReducer(BillReducer, undefined, getInitialState);
   const dispatch = (action: BillAction) => {
     if (action.type === "removeAll" && action.defaultBillType === undefined) {
-      reducerDispatch({ ...action, defaultBillType: effectiveInitialBillType });
+      reducerDispatch({ ...action, defaultBillType: effectiveInitialBillType, defaultPtoVenta });
       return;
     }
     reducerDispatch(action);
@@ -76,17 +78,23 @@ const BillProvider = ({ children, initialBillType, qzTrayEnabled = false }: prop
     dispatch({ type: "addItem", payload: product });
   };
 
+  const addIndependentItem = (product: Product) => {
+    dispatch({ type: "addIndependentItem", payload: product });
+  };
+
   const removeItem = (product: Product) => {
-    dispatch({ type: "removeItem", payload: { id: product.id } });
+    dispatch({ type: "removeItem", payload: { id: getBillRowId(product) } });
   };
 
   const values = {
     BillState: BillState,
     dispatch: dispatch,
     addItem: addItem,
+    addIndependentItem: addIndependentItem,
     removeItem: removeItem,
     onOrderResetRef: onOrderResetRef,
     initialBillType: effectiveInitialBillType,
+    defaultPtoVenta,
     billTypeRef,
     printMode: printMode,
     setPrintMode: setPrintMode,

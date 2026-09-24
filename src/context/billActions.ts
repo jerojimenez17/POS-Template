@@ -4,9 +4,10 @@ import CAE from "@/models/CAE";
 
 export type BillAction =
   | { type: "addItem"; payload: Product }
+  | { type: "addIndependentItem"; payload: Product }
   | { type: "addUnit"; payload: Product }
   | { type: "removeUnit"; payload: { id: string } }
-  | { type: "removeAll"; payload: null; defaultBillType?: string }
+  | { type: "removeAll"; payload: null; defaultBillType?: string; defaultPtoVenta?: number }
   | { type: "removeItem"; payload: { id: string } }
   | { type: "updateunit"; payload: { id: string } }
   | { type: "updateTotal"; payload: Product }
@@ -23,6 +24,7 @@ export type BillAction =
   | { type: "date"; payload: Date }
   | { type: "paidMethod"; payload: string }
   | { type: "billType"; payload: string }
+  | { type: "ptoVenta"; payload: number }
   | { type: "CAE"; payload: CAE }
   | { type: "setState"; payload: BillState }
   | { type: "updateSalePrice"; payload: { id: string; salePrice: number } }

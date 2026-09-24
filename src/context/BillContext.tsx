@@ -17,6 +17,8 @@ export default interface BillContextProps {
   setPrintMode: (mode: PrintMode) => void;
   qzTrayActive: boolean;
   setQzTrayActive: (active: boolean) => void;
+  addIndependentItem?: (product: Product) => void;
+  defaultPtoVenta?: number;
   qzTrayEnabled?: boolean;
   focusPriceProductId?: string | null;
   setFocusPriceProductId?: (id: string | null) => void;

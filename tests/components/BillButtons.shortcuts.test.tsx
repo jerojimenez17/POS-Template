@@ -130,6 +130,7 @@ const defaultBillContextMock = {
   },
   dispatch: vi.fn(),
   addItem: vi.fn(),
+  addIndependentItem: vi.fn(),
   addUnit: vi.fn(),
   removeUnit: vi.fn(),
   removeAll: vi.fn(),
@@ -156,11 +157,6 @@ const defaultBillContextMock = {
   setQzTrayActive: vi.fn(),
   focusPriceProductId: null,
   setFocusPriceProductId: vi.fn(),
-};
-
-const billContextWithProduct = {
-  ...defaultBillContextMock,
-  BillState: { ...defaultBillContextMock.BillState, products: [mockProduct] },
 };
 
 describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
@@ -235,7 +231,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       });
     });
 
-    it("still fetches shortcut configs on mount when isEditing is true (merged behavior)", async () => {
+    it("should NOT fetch shortcuts when isEditing is true (AC24)", async () => {
       render(
         <BillButtonsDefault
           session={sessionMock}
@@ -245,16 +241,15 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
         { billContextMock: defaultBillContextMock, sessionMock }
       );
 
-      // Merged behavior (report-B kept ours): the mount fetch is NOT gated by
-      // isEditing � only key handling is.
+      // Wait a bit to ensure no fetch happened
       await waitFor(() => {
-        expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
+        expect(shortcutsActions.getShortcutConfigsAction).not.toHaveBeenCalled();
       });
     });
   });
 
   describe("F1/F2/F3 with shortcut configured (AC18)", () => {
-    it("should fetch product and dispatch addItem with salePrice=0 when F1 is pressed and configured", async () => {
+    it("should fetch product and dispatch an independent row with salePrice=0 when F1 is pressed and configured", async () => {
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
         data: [
@@ -283,7 +278,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       // Wait for mount fetch
@@ -291,26 +286,24 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-      // Press F1 (merged guard: requires a non-empty bill)
+      // Press F1
       fireEvent.keyDown(window, { key: "F1" });
 
       await waitFor(() => {
-        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F1");
-        expect(defaultBillContextMock.addItem).toHaveBeenCalledWith(
+        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F1", "business-123");
+        expect(defaultBillContextMock.addIndependentItem).toHaveBeenCalledWith(
           expect.objectContaining({
             id: "shortcut-prod-1",
             salePrice: 0,
             amount: 1,
+            cartRowId: expect.any(String),
           })
         );
+        expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
       });
     });
 
-    it.skip("should set focusPriceProductId after adding shortcut product", async () => {/*
-       FEATURE-PENDING (pre-existing, merge-neutral): neither our HEAD nor the merged
-       region calls setFocusPriceProductId in the shortcut handler (verified via git).
-       The price-autofocus pairing remains unimplemented; revisit with a product call.
-       */
+    it("should set focusPriceProductId after adding shortcut product", async () => {
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
         data: [
@@ -339,20 +332,19 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       await waitFor(() => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-      // Merged guard: shortcut lookups require a non-empty bill.
       fireEvent.keyDown(window, { key: "F1" });
 
       await waitFor(() => {
-        expect(defaultBillContextMock.setFocusPriceProductId).toHaveBeenCalledWith(
-          "shortcut-prod-1"
-        );
+        const addedRow = vi.mocked(defaultBillContextMock.addIndependentItem).mock.calls[0]?.[0];
+        expect(addedRow?.cartRowId).toEqual(expect.any(String));
+        expect(defaultBillContextMock.setFocusPriceProductId).toHaveBeenCalledWith(addedRow?.cartRowId);
       });
     });
 
@@ -387,24 +379,26 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       await waitFor(() => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-      // Merged guard: shortcut lookups require a non-empty bill.
       fireEvent.keyDown(window, { key: "F2" });
 
       await waitFor(() => {
-        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F2");
-        expect(defaultBillContextMock.addItem).toHaveBeenCalledWith(
+        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F2", "business-123");
+        expect(defaultBillContextMock.addIndependentItem).toHaveBeenCalledWith(
           expect.objectContaining({
             id: "shortcut-prod-2",
             salePrice: 0,
+            amount: 1,
+            cartRowId: expect.any(String),
           })
         );
+        expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
       });
     });
 
@@ -439,24 +433,26 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       await waitFor(() => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-      // Merged guard: shortcut lookups require a non-empty bill.
       fireEvent.keyDown(window, { key: "F3" });
 
       await waitFor(() => {
-        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F3");
-        expect(defaultBillContextMock.addItem).toHaveBeenCalledWith(
+        expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F3", "business-123");
+        expect(defaultBillContextMock.addIndependentItem).toHaveBeenCalledWith(
           expect.objectContaining({
             id: "shortcut-prod-3",
             salePrice: 0,
+            amount: 1,
+            cartRowId: expect.any(String),
           })
         );
+        expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
       });
     });
   });
@@ -474,19 +470,19 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       await waitFor(() => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-      // Merged guard: shortcut lookups require a non-empty bill.
       fireEvent.keyDown(window, { key: "F1" });
 
       // Should NOT fetch product or add item
       expect(shortcutsActions.getProductByShortcutAction).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
     });
 
     it("should do nothing when F2 is pressed and no shortcut is configured", async () => {
@@ -501,18 +497,18 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       await waitFor(() => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-      // Merged guard: shortcut lookups require a non-empty bill.
       fireEvent.keyDown(window, { key: "F2" });
 
       expect(shortcutsActions.getProductByShortcutAction).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
     });
 
     it("should do nothing when F3 is pressed and no shortcut is configured", async () => {
@@ -538,11 +534,12 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       expect(shortcutsActions.getProductByShortcutAction).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
     });
   });
 
   describe("Remapped keys (AC1-AC9)", () => {
-     it("should open Remito modal when F9 is pressed and prevent the browser default (merged keymap)", async () => {
+     it("should open Remito modal when F7 is pressed and prevent the browser default (AC1)", async () => {
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
         data: [],
@@ -556,18 +553,20 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       await waitFor(() => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-       const event = new KeyboardEvent("keydown", { key: "F9", cancelable: true });
+       const event = new KeyboardEvent("keydown", { key: "F7", cancelable: true });
        window.dispatchEvent(event);
 
        await waitFor(() => {
-         expect(screen.getAllByText("Confirmar Remito").length).toBeGreaterThan(0);
+         expect(
+           screen.getByRole("heading", { name: "Confirmar Remito" })
+         ).toBeInTheDocument();
        });
        expect(event.defaultPrevented).toBe(true);
        expect(defaultBillContextMock.dispatch).toHaveBeenCalledWith({
@@ -576,7 +575,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
        });
      });
 
-     it("should open Factura modal when F4 is pressed and prevent the browser default (merged keymap)", async () => {
+     it("should open Factura modal when F9 is pressed and prevent the browser default (AC2)", async () => {
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
         data: [],
@@ -588,19 +587,19 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       await waitFor(() => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-       const event = new KeyboardEvent("keydown", { key: "F4", cancelable: true });
+       const event = new KeyboardEvent("keydown", { key: "F9", cancelable: true });
        window.dispatchEvent(event);
 
        await waitFor(() => {
          expect(
-           screen.getByText("Confirmar Factura")
+           screen.getByRole("heading", { name: "Confirmar Factura" })
          ).toBeInTheDocument();
        });
        expect(event.defaultPrevented).toBe(true);
@@ -620,11 +619,11 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
        fireEvent.keyDown(window, { key: "F4" });
 
-       expect(screen.queryByText("Confirmar Factura")).not.toBeInTheDocument();
-       expect(screen.queryByText("Confirmar Remito")).not.toBeInTheDocument();
+       expect(screen.queryByRole("heading", { name: "Confirmar Factura" })).not.toBeInTheDocument();
+       expect(screen.queryByRole("heading", { name: "Confirmar Remito" })).not.toBeInTheDocument();
      });
 
-     it.each(["F4", "F9"])("should block %s when the cashbox session is inactive (AC5, merged keymap)", async (key) => {
+     it.each(["F7", "F9"])("should block %s when the cashbox session is inactive (AC5)", async (key) => {
        const setIsOpeningModalOpen = vi.fn();
         vi.mocked(useCashbox).mockReturnValue({
           ...activeCashboxMock,
@@ -641,26 +640,28 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
        fireEvent.keyDown(window, { key });
 
-       expect(screen.queryByText(/Confirmar (Factura|Remito)/)).not.toBeInTheDocument();
-       expect(toast.error).toHaveBeenCalledWith("Debe abrir una sesión de caja antes de realizar esta operación");
+       expect(screen.queryByRole("heading", { name: "Confirmar Factura" })).not.toBeInTheDocument();
+       expect(screen.queryByRole("heading", { name: "Confirmar Remito" })).not.toBeInTheDocument();
+       expect(toast.error).toHaveBeenCalledWith("Debe abrir una sesi├│n de caja antes de realizar esta operaci├│n");
        expect(setIsOpeningModalOpen).toHaveBeenCalledWith(true);
      });
 
-     it("should ignore F4 and F9 while editing (AC6, merged keymap)", async () => {
+     it("should ignore F7 and F9 while editing (AC6)", async () => {
        render(<BillButtonsDefault session={sessionMock} handlePrint={vi.fn()} isEditing={true} />, {
          billContextMock: defaultBillContextMock,
          sessionMock,
        });
 
-       fireEvent.keyDown(window, { key: "F9" });
+       fireEvent.keyDown(window, { key: "F7" });
        fireEvent.keyDown(window, { key: "F9" });
 
-       expect(screen.queryByText(/Confirmar (Factura|Remito)/)).not.toBeInTheDocument();
+       expect(screen.queryByRole("heading", { name: "Confirmar Factura" })).not.toBeInTheDocument();
+       expect(screen.queryByRole("heading", { name: "Confirmar Remito" })).not.toBeInTheDocument();
        expect(defaultBillContextMock.dispatch).not.toHaveBeenCalled();
        expect(salesActions.processSaleAction).not.toHaveBeenCalled();
      });
 
-      it("should preserve the non-AFIP route when confirming F9-Remito (AC7, merged keymap)", async () => {
+      it("should preserve the non-AFIP route when confirming F7 (AC7)", async () => {
         const billContext = { ...defaultBillContextMock, BillState: { ...defaultBillContextMock.BillState, total: 10, products: [{ ...mockProduct, salePrice: 10 }] } };
         const handlePrint = vi.fn();
         vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({ success: true, data: [] });
@@ -670,9 +671,9 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
         });
         render(<BillButtonsDefault session={sessionMock} handlePrint={handlePrint} isEditing={false} />, { billContextMock: billContext, sessionMock });
        await waitFor(() => expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled());
-       fireEvent.keyDown(window, { key: "F9" });
-       await screen.findAllByText("Confirmar Remito");
-       fireEvent.click(screen.getAllByRole("button", { name: /Confirmar/ })[0]);
+       fireEvent.keyDown(window, { key: "F7" });
+       await screen.findByRole("heading", { name: "Confirmar Remito" });
+       fireEvent.click(screen.getByRole("button", { name: "Confirmar Remito" }));
         await waitFor(() => expect(salesActions.processSaleAction).toHaveBeenCalled());
         expect(afipActions.createAfipVoucherAction).not.toHaveBeenCalled();
         expect(salesActions.processSaleAction).toHaveBeenCalledWith(expect.objectContaining({
@@ -683,21 +684,17 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
         expect(handlePrint).toHaveBeenCalled();
       });
 
-     it("should preserve the AFIP route when confirming F4-Factura (AC8, merged keymap)", async () => {
-       vi.mocked(useCashbox).mockReturnValue(activeCashboxMock); // AC5 overrides persist — re-arm active session
-       const billContext = { ...defaultBillContextMock, BillState: { ...defaultBillContextMock.BillState, total: 10, products: [{ ...mockProduct, salePrice: 10 }] } };
+     it("should preserve the AFIP route when confirming F9 (AC8)", async () => {
+       const billContext = { ...defaultBillContextMock, BillState: { ...defaultBillContextMock.BillState, total: 10, products: [{ ...mockProduct, salePrice: 10 }], internalUiOnly: { selected: true } } };
+       const handlePrint = vi.fn();
        vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({ success: true, data: [] });
-        // Merged action returns the FLAT AfipVoucherSuccessData (report-E §1.1 /
-        // verify Gate 4.4); handleCreateVoucher reads resp.data.cae directly and
-        // isValidCae demands the full 14-digit numeric code.
-        vi.mocked(afipActions.createAfipVoucherAction).mockResolvedValue({
+         vi.mocked(afipActions.createAfipVoucherAction).mockResolvedValue({
           success: true,
           data: {
             cae: "12345678901234",
             vencimiento: "20300101",
             nroComprobante: 1,
-            qrData: "",
-            ptoVenta: 1,
+            qrData: "https://arca.test/qr/12345678901234",
             sourcePath: "data",
           },
         });
@@ -705,30 +702,73 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           success: true,
           orderId: "order-1",
         });
-       render(<BillButtonsDefault session={sessionMock} handlePrint={vi.fn()} isEditing={false} />, { billContextMock: billContext, sessionMock });
+       render(<BillButtonsDefault session={sessionMock} handlePrint={handlePrint} isEditing={false} />, { billContextMock: billContext, sessionMock });
        await waitFor(() => expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled());
-       fireEvent.keyDown(window, { key: "F4" });
-       await screen.findAllByText("Confirmar Factura");
+       fireEvent.keyDown(window, { key: "F9" });
+       await screen.findByRole("heading", { name: "Confirmar Factura" });
        fireEvent.click(screen.getByRole("button", { name: "Facturar" }));
-        await waitFor(() => expect(afipActions.createAfipVoucherAction).toHaveBeenCalled());
-        expect(salesActions.processSaleAction).toHaveBeenCalled();
-        expect(afipActions.createAfipVoucherAction).toHaveBeenCalledWith(billContext.BillState);
-      });
+         await waitFor(() => expect(afipActions.createAfipVoucherAction).toHaveBeenCalled());
+         expect(afipActions.createAfipVoucherAction).toHaveBeenCalledWith({
+           id: "",
+           seller: "",
+           typeDocument: "",
+           IVACondition: "Consumidor Final",
+           twoMethods: false,
+           secondPaidMethod: "Debito",
+           totalSecondMethod: 0,
+           billType: "Factura C",
+           paidMethod: "Efectivo",
+           discount: 0,
+           documentNumber: 0,
+           total: 10,
+           totalWithDiscount: 0,
+           date: defaultBillContextMock.BillState.date.toISOString(),
+           products: [{
+             id: "shortcut-prod-1",
+             code: "VAR001",
+             description: "Producto Precio Variable",
+             price: 0,
+             salePrice: 10,
+             amount: 1,
+           }],
+         });
+         const afipDTO = vi.mocked(afipActions.createAfipVoucherAction).mock.calls[0]?.[0] as Record<string, unknown>;
+         expect(afipDTO).not.toHaveProperty("internalUiOnly");
+         expect(afipDTO).not.toHaveProperty("CAE");
+         expect(afipDTO).not.toHaveProperty("nroAsociado");
+         expect(afipDTO).not.toHaveProperty("fiscalSnapshot");
+         expect(afipDTO).not.toHaveProperty("fiscalBreakdown");
+         const [afipProduct] = afipDTO.products as Array<Record<string, unknown>>;
+         expect(Object.keys(afipProduct).sort()).toEqual([
+           "amount",
+           "code",
+           "description",
+           "id",
+           "price",
+           "salePrice",
+         ]);
+         expect(afipProduct).not.toHaveProperty("suplier");
+         expect(salesActions.processSaleAction).toHaveBeenCalledWith(expect.objectContaining({
+           CAE: expect.objectContaining({ CAE: "12345678901234" }),
+         }));
+         expect(handlePrint).toHaveBeenCalledWith(
+           expect.objectContaining({ CAE: "12345678901234" }),
+           null,
+           expect.objectContaining({ products: expect.any(Array) }),
+         );
+       });
 
-      it.each(["F4", "F9"])("should cancel %s without saving, printing, or resetting (merged keymap)", async (key) => {
-        vi.mocked(useCashbox).mockReturnValue(activeCashboxMock); // re-arm after AC5
+      it.each(["F7", "F9"])("should cancel %s without saving, printing, or resetting", async (key) => {
         const handlePrint = vi.fn();
         vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({ success: true, data: [] });
         render(<BillButtonsDefault session={sessionMock} handlePrint={handlePrint} isEditing={false} />, {
-          billContextMock: billContextWithProduct,
+          billContextMock: defaultBillContextMock,
           sessionMock,
         });
         await waitFor(() => expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled());
 
         fireEvent.keyDown(window, { key });
-        // The CheckoutModal renders the title AND the confirm button with the
-        // same text — query all occurrences.
-        await screen.findAllByText(key === "F4" ? "Confirmar Factura" : "Confirmar Remito");
+        await screen.findByRole("heading", { name: key === "F7" ? "Confirmar Remito" : "Confirmar Factura" });
         fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
         expect(salesActions.processSaleAction).not.toHaveBeenCalled();
@@ -818,22 +858,11 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       });
     });
 
-    it("opens budget modal even without hasBudget (gating moved to confirm flow, pre-merged behavior)", async () => {
-      // Mock session without budget feature
-      const sessionNoBudget = {
-        ...sessionMock,
-        user: {
-            ...sessionMock.user,
-            business: {
-              ...sessionMock.user.business,
-              features: {
-                ...sessionMock.user.business.features,
-                hasBudget: false,
-                plan: Plan.BASIC,
-              },
-            },
-        },
-      };
+    it("should NOT open Presupuesto modal when F5 is pressed but hasBudget is false", async () => {
+      vi.mocked(useFeatures).mockReturnValue({
+        ...featureMock,
+        hasFeature: vi.fn((feature: string) => feature !== "hasBudget"),
+      });
 
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
@@ -850,11 +879,11 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       render(
         <BillButtonsDefault
-          session={sessionNoBudget}
+          session={sessionMock}
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProducts, sessionMock: sessionNoBudget }
+        { billContextMock: billContextWithProducts, sessionMock }
       );
 
       await waitFor(() => {
@@ -863,10 +892,11 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       fireEvent.keyDown(window, { key: "F5" });
 
-      // Merged (and our HEAD) open the modal on F5 whenever products exist;
-      // plan gating is enforced by useFeatures at confirmation time.
+      // Check no budget-related dialog opened
       await waitFor(() => {
-        expect(screen.getByText("Presupuesto")).toBeInTheDocument();
+        expect(screen.queryByText("Presupuesto")).not.toBeInTheDocument();
+        expect(screen.getByText("Funcionalidad no disponible")).toBeInTheDocument();
+        expect(screen.getByText(/Presupuestos/)).toBeInTheDocument();
       });
     });
   });
@@ -899,10 +929,9 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
         { billContextMock: defaultBillContextMock, sessionMock }
       );
 
-      // Merged behavior: mount fetch runs even while editing; only keypress
-      // processing is disabled by the isEditing guard.
+      // Wait a tick to ensure no fetch happens
       await waitFor(() => {
-        expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
+        expect(shortcutsActions.getShortcutConfigsAction).not.toHaveBeenCalled();
       });
 
       // Press F1 (should be ignored because isEditing is true)
@@ -910,18 +939,16 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       expect(shortcutsActions.getProductByShortcutAction).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
 
       // Press F4 (should also be ignored)
       fireEvent.keyDown(window, { key: "F4" });
-      expect(screen.queryByText("Confirmar Factura")).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Confirmar Factura" })).not.toBeInTheDocument();
     });
   });
 
   describe("Error handling", () => {
-    it.skip("shows toast when getProductByShortcutAction returns error", async () => {/*
-       FEATURE-PENDING (merge-neutral): merged handler (like our HEAD) ignores
-       lookup errors silently; no toast branch exists on either side.
-       */
+    it("should show toast when getProductByShortcutAction returns error", async () => {
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
         data: [
@@ -952,14 +979,13 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       await waitFor(() => {
         expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled();
       });
 
-      // Merged guard: shortcut lookups require a non-empty bill.
       fireEvent.keyDown(window, { key: "F1" });
 
       await waitFor(() => {
@@ -969,10 +995,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
     // ─── Bug A: Missing { success: true, data: null } handling (AC10/T8) ───
 
-    it.skip("shows 'producto ya no existe' toast when shortcut product was deleted (Bug A / AC10)", async () => {/*
-       FEATURE-PENDING (merge-neutral): no {success:true, data:null} toast branch
-       exists in ours' HEAD nor in the merged handler.
-       */
+    it("should show 'producto ya no existe' toast when getProductByShortcutAction returns success:true, data:null (Bug A / AC10)", async () => {
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
         data: [
@@ -1040,7 +1063,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
           handlePrint={vi.fn()}
           isEditing={false}
         />,
-        { billContextMock: billContextWithProduct, sessionMock }
+        { billContextMock: defaultBillContextMock, sessionMock }
       );
 
       await waitFor(() => {
@@ -1056,12 +1079,15 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
         shortcutsActions.getProductByShortcutAction
       ).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
 
        // Remapped keys should still work normally (F7 → remito)
-       fireEvent.keyDown(window, { key: "F9" });
+       fireEvent.keyDown(window, { key: "F7" });
 
        await waitFor(() => {
-         expect(screen.getAllByText("Confirmar Remito").length).toBeGreaterThan(0);
+         expect(
+           screen.getByRole("heading", { name: "Confirmar Remito" })
+         ).toBeInTheDocument();
        });
     });
   });

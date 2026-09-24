@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Session } from "next-auth";
 import { Button } from "../ui/button";
@@ -36,18 +36,20 @@ import {
 } from "@/actions/shortcuts";
 import type { ShortcutMap, ShortcutKey } from "@/models/ShortcutConfig";
 import Product from "@/models/Product";
-import { createBillCheckoutSnapshot } from "@/utils/billing";
+import { createBillCheckoutSnapshot, createBillStateSnapshot } from "@/utils/billing";
 import { formatAfipPointSaleErrorForUser, sanitizeAfipText } from "@/services/afip/point-sale-validation";
 import { isValidCae } from "@/services/afip/voucher-response";
 
 interface props {
   session: Session | null;
-  handlePrint: (cae?: CAE, win?: Window | null) => void;
+  handlePrint: (cae?: CAE, win?: Window | null, snapshot?: typeBillState) => void;
   isEditing?: boolean;
   orderId?: string;
   ptoVentas?: number[];
+  onSaleCreated?: () => void;
+  onSaleFocusCancelled?: () => void;
 }
-const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVentas }: props) => {
+const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVentas, onSaleCreated, onSaleFocusCancelled }: props) => {
   const { hasFeature } = useFeatures();
   const canUseBudget = hasFeature("hasBudget");
   const canUseLedger = hasFeature("hasClientLedger");
@@ -56,37 +58,40 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [errorMessage, setErrorMessage] = useState("");
   const [response, setResponse] = useState("");
   const [respAfip, setRespAfip] = useState<CAE | undefined>();
-  const [localCAE, setLocalCAE] = useState<CAE>({ CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" });
+  const EMPTY_CAE: CAE = { CAE: "", nroComprobante: 0, vencimiento: "", qrData: "" };
+  const [localCAE, setLocalCAE] = useState<CAE>(EMPTY_CAE);
   const [openRemitoModal, setOpenRemitoModal] = useState(false);
   const [openFacturaModal, setOpenFacturaModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);
   const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
-  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem, initialBillType, billTypeRef } =
+  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem, addIndependentItem, initialBillType, billTypeRef, defaultPtoVenta } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
   const [openFeatureBlockedModal, setOpenFeatureBlockedModal] = useState(false);
+  const [featureBlockedName, setFeatureBlockedName] = useState<string | null>(null);
   const [openLedgerBlockedModal, setOpenLedgerBlockedModal] = useState(false);
   const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
-  const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
+  const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexi├│n
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== "undefined" ? navigator.onLine : true
   );
   // Jero (5cefac7): default comprobante type from context, Factura B fallback
   const defaultBillType = initialBillType ?? BillTypes.B;
+  const confirmationLock = useRef(false);
 
   const checkSession = useCallback(() => {
     if (!hasActiveSession) {
-      toast.error("Debe abrir una sesión de caja antes de realizar esta operación");
+      toast.error("Debe abrir una sesi├│n de caja antes de realizar esta operaci├│n");
       setIsOpeningModalOpen(true);
       return false;
     }
     return true;
   }, [hasActiveSession, setIsOpeningModalOpen]);
 
-  // Verificar estado de conexión al montar el componente
+  // Verificar estado de conexi├│n al montar el componente
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -110,6 +115,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
 
   // Fetch shortcut config on mount
   useEffect(() => {
+    if (isEditing) return;
     const loadShortcuts = async () => {
       const result = await getShortcutConfigsAction(session?.user?.businessId ?? "");
       if ("success" in result && result.success && result.data) {
@@ -121,34 +127,37 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       }
     };
     loadShortcuts();
-  }, [session?.user?.businessId]);
+  }, [session?.user?.businessId, isEditing]);
 
   // Global keydown listeners for keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
       if (isEditing) return;
 
-      // F1/F2/F3 — shortcut product lookup (if configured)
+      // F1/F2/F3 ÔÇö shortcut product lookup (if configured)
       // Restored from merge stage-3 (upstream 6c3fbac): always preventDefault,
       // add with amount=1/salePrice=0 and request price focus. No empty-cart
-      // guard here — shortcuts are how the first product enters the bill.
+      // guard here ÔÇö shortcuts are how the first product enters the bill.
       if (["F1", "F2", "F3"].includes(e.key)) {
         e.preventDefault(); // Always prevent browser defaults (Chrome opens help on F1)
         const map = shortcutMapRef.current;
         const shortcutCfg = map[e.key as ShortcutKey];
-        if (!shortcutCfg || !shortcutCfg.productId) return; // No shortcut configured → no-op
+        if (!shortcutCfg || !shortcutCfg.productId) return; // No shortcut configured ÔåÆ no-op
         if (!checkSession()) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
-        const product = await getProductByShortcutAction(e.key as ShortcutKey);
+        const product = await getProductByShortcutAction(
+          e.key as ShortcutKey,
+          session?.user?.businessId ?? undefined,
+        );
         if ("success" in product && product.success && product.data) {
-          const productToAdd = { ...product.data, amount: 1, salePrice: 0 } as Product;
-          addItem(productToAdd);
-          setFocusPriceProductId(productToAdd.id);
-          toast.success("Producto agregado — ingrese el precio");
+          const productToAdd = { ...product.data, cartRowId: crypto.randomUUID(), amount: 1, salePrice: 0 } as Product;
+          (addIndependentItem ?? addItem)(productToAdd);
+          setFocusPriceProductId?.(productToAdd.cartRowId ?? productToAdd.id);
+          toast.success("Producto agregado ÔÇö ingrese el precio");
         } else if ("success" in product && product.success && !product.data) {
-          // Config exists but product is null (deleted) — show error
+          // Config exists but product is null (deleted) ÔÇö show error
           toast.error("El producto configurado para este atajo ya no existe");
         } else {
           const errResult = product as { error?: string };
@@ -157,27 +166,25 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         return;
       }
 
-      // F4 — Factura modal
-      if (e.key === 'F4') {
+      // F7 ÔÇö Remito modal
+      if (e.key === 'F7') {
         e.preventDefault();
         if (!checkSession()) return;
-        if (BillState.products?.length === 0) return;
-        if (session?.user.email) {
-          dispatch({ type: "sellerName", payload: session.user.email || "" });
-        }
-        setFacturaKey(k => k + 1);
-        setOpenFacturaModal(true);
-      }
-      // F9 — Remito modal
-      if (e.key === 'F9') {
-        e.preventDefault();
-        if (!checkSession()) return;
-        if (BillState.products?.length === 0) return;
         if (session?.user.email) {
           dispatch({ type: "sellerName", payload: session.user.email || "" });
         }
         setRemitoKey(k => k + 1);
         setOpenRemitoModal(true);
+      }
+      // F9 ÔÇö Factura modal
+      if (e.key === 'F9') {
+        e.preventDefault();
+        if (!checkSession()) return;
+        if (session?.user.email) {
+          dispatch({ type: "sellerName", payload: session.user.email || "" });
+        }
+        setFacturaKey(k => k + 1);
+        setOpenFacturaModal(true);
       }
       if (e.key === 'F10') {
         e.preventDefault();
@@ -189,6 +196,11 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       if (e.key === 'F5') {
         e.preventDefault();
         if (!checkSession()) return;
+        if (!canUseBudget) {
+          setFeatureBlockedName("Presupuestos");
+          setOpenFeatureBlockedModal(true);
+          return;
+        }
         if (BillState.products?.length > 0) {
           setOpenBudgetModal(true);
         }
@@ -197,12 +209,12 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, dispatch, BillState.products?.length, isEditing, addItem, setFocusPriceProductId, checkSession]);
+  }, [session, dispatch, BillState.products?.length, isEditing, addItem, addIndependentItem, setFocusPriceProductId, checkSession, canUseBudget]);
 
-  // Función para verificar conexión y mostrar error
+  // Funci├│n para verificar conexi├│n y mostrar error
   const checkConnection = () => {
     if (!isOnline) {
-      toast.error("Sin conexión a internet");
+      toast.error("Sin conexi├│n a internet");
       return false;
     }
     return true;
@@ -212,7 +224,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     if (!checkConnection()) { setBlockButton(false); return null; }
     try {
       console.log("Calling createAfipVoucherAction");
-       const resp = await createAfipVoucherAction(checkout);
+      const resp = await createAfipVoucherAction(checkout);
 
       if ("error" in resp) {
         // Check plan-gate first (our plan system)
@@ -233,34 +245,36 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         return null;
       }
 
-       if (resp.success && isValidCae(resp.data.cae)) {
-         setCreateVoucherError(false);
-         const newCAE: CAE = {
-           CAE: resp.data.cae,
-           vencimiento: resp.data.vencimiento,
-           nroComprobante: resp.data.nroComprobante,
-           qrData: resp.data.qrData,
-           ptoVenta: resp.data.ptoVenta ?? checkout.ptoVenta,
-         };
+      // resp.data is normalized by the service layer (AfipVoucherSuccessData);
+      // no multi-shape parsing needed (branch improvement over the legacy `as any`).
+      if (resp.success && isValidCae(resp.data.cae)) {
+        setCreateVoucherError(false);
+        const newCAE: CAE = {
+          CAE: resp.data.cae,
+          vencimiento: resp.data.vencimiento,
+          nroComprobante: resp.data.nroComprobante,
+          qrData: resp.data.qrData,
+          ptoVenta: resp.data.ptoVenta ?? checkout.ptoVenta,
+        };
         dispatch({ type: "CAE", payload: newCAE });
         setLocalCAE(newCAE);
         toast.success("Factura generada correctamente");
         setBlockButton(false);
         return newCAE;
-       } else {
-         const errorMsg = "La Cloud Function respondió sin un CAE válido";
-         toast.error(errorMsg);
-         setResponse(errorMsg);
+      } else {
+        const errorMsg = "La Cloud Function respondi├│ sin un CAE v├ílido";
+        toast.error(errorMsg);
+        setResponse(errorMsg);
         setBlockButton(false);
         return null;
       }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? sanitizeAfipText(err.message) : "Error inesperado al generar la factura";
-       setResponse(message);
-       toast.error(message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? sanitizeAfipText(err.message) : "Error inesperado al generar la factura";
+      setResponse(message);
+      toast.error(message);
       setCreateVoucherError(true);
       setBlockButton(false);
-       console.error("[createVoucher] client failure", { errorType: typeof err, message });
+      console.error("[createVoucher] client failure", { errorType: typeof err, message });
       return null;
     }
   };
@@ -303,7 +317,11 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     }
   };
 
-  const createSale = async (afip: boolean, isUpdate: boolean = false): Promise<CAE | undefined> => {
+  const createSale = async (
+    afip: boolean,
+    isUpdate: boolean = false,
+    billState: typeBillState = BillState,
+  ): Promise<CAE | undefined> => {
     if (!checkConnection()) return undefined;
     try {
       setBlockButton(true);
@@ -311,11 +329,11 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       setOpenEditModal(false);
 
       const totalAmount =
-        BillState.products.reduce(
+        billState.products.reduce(
           (acc, act) => acc + act.salePrice * act.amount,
           0,
         ) *
-        (1 - BillState.discount * 0.01);
+        (1 - billState.discount * 0.01);
 
       if (totalAmount <= 0) {
         setErrorMessage("El monto debe ser mayor a 0");
@@ -324,9 +342,9 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         return;
       }
 
-      // Validación de pagos divididos: monto > 0 y suma igual al total
-      if (BillState.twoMethods) {
-        const secondAmount = BillState.totalSecondMethod || 0;
+      // Validaci├│n de pagos divididos: monto > 0 y suma igual al total
+      if (billState.twoMethods) {
+        const secondAmount = billState.totalSecondMethod || 0;
         if (secondAmount < 1) {
           setErrorMessage("El monto del segundo medio de pago debe ser mayor a $1");
           setOpenErrorModal(true);
@@ -341,25 +359,25 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         }
       }
 
-      // Validación: Condición IVA requiere número de documento
-      const ivaCond = BillState.clientIvaCondition || BillState.IVACondition;
+      // Validaci├│n: Condici├│n IVA requiere n├║mero de documento
+      const ivaCond = billState.clientIvaCondition || billState.IVACondition;
       if (ivaCond && ivaCond !== "Consumidor Final") {
-        const docNum = BillState.clientDocumentNumber || BillState.documentNumber;
+        const docNum = billState.clientDocumentNumber || billState.documentNumber;
         if (!docNum || String(docNum).trim() === "" || Number(docNum) === 0) {
           const tipoDoc = ivaCond === "CUIT" ? "CUIT" : "DNI";
-          setErrorMessage(`Debe ingresar un ${tipoDoc} para la condición ${ivaCond}`);
+          setErrorMessage(`Debe ingresar un ${tipoDoc} para la condici├│n ${ivaCond}`);
           setOpenErrorModal(true);
           setBlockButton(false);
           return;
         }
       }
 
-      const checkout = createBillCheckoutSnapshot(BillState, billTypeRef?.current);
+      const checkout = createBillCheckoutSnapshot(billState, billState.billType);
       let caeData: CAE | null = null;
       if (afip && !isUpdate) {
         caeData = await handleCreateVoucher(checkout);
         // If AFIP billing was requested but failed (plan error, missing credentials, etc.),
-        // do NOT save the sale — abort immediately.
+        // do NOT save the sale ÔÇö abort immediately.
         if (!caeData?.CAE?.trim()) {
           setBlockButton(false);
           return undefined;
@@ -380,9 +398,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         toast.success("Venta actualizada correctamente");
         router.push(`/sales/${orderId}`);
       } else {
+        const caeForSave: CAE = caeData ?? EMPTY_CAE;
         const saveSuccess = await handleSaveSale({
           ...checkout,
-          CAE: caeData || localCAE,
+          CAE: caeForSave,
           totalWithDiscount: totalAmount,
         });
         if (!saveSuccess) {
@@ -390,13 +409,13 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
           setBlockButton(false);
           return undefined;
         }
-        toast.success(afip ? "Factura guardada correctamente" : "Remito guardado correctamente");
+        toast.success(afip ? "Factura guardada correctamente" : "Venta guardada correctamente");
         setBlockButton(false);
       }
-      return caeData || localCAE;
+      return caeData ?? (afip ? undefined : EMPTY_CAE);
     } catch (err) {
       if (!isOnline) {
-        toast.error("Operación cancelada: Sin conexión a internet");
+        toast.error("Operaci├│n cancelada: Sin conexi├│n a internet");
       } else if (err instanceof Error && err.message.includes("ya fue facturada")) {
         toast.error(err.message);
       } else {
@@ -407,6 +426,22 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       setBlockButton(false);
       throw err;
     }
+  };
+  const resetCheckout = () => {
+    dispatch({ type: "removeAll", payload: null, defaultBillType, defaultPtoVenta });
+    setLocalCAE(EMPTY_CAE);
+    setRespAfip(undefined);
+    onOrderResetRef.current?.();
+  };
+  const acquireConfirmation = () => {
+    if (confirmationLock.current) return false;
+    confirmationLock.current = true;
+    setBlockButton(true);
+    return true;
+  };
+  const releaseConfirmation = () => {
+    confirmationLock.current = false;
+    setBlockButton(false);
   };
   const [blockButton, setBlockButton] = useState(false);
   return (
@@ -456,7 +491,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <line x1="16" y1="17" x2="8" y2="17" />
             </svg>
             Facturar
-            <kbd className="ml-1 text-[10px] bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded border border-white/10">F4</kbd>
+            <kbd className="ml-1 text-[10px] bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded border border-white/10">F9</kbd>
           </Button>
 
           <Button
@@ -487,7 +522,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
               <path d="M12 18h.01" />
             </svg>
             Remito
-            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F9</kbd>
+            <kbd className="ml-1 text-[10px] bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-500">F7</kbd>
           </Button>
 
           <Button
@@ -567,14 +602,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
                   if (targetWin) {
                     targetWin.document.write("<html><head><title>Generando Presupuesto...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando presupuesto, por favor espere...</h2></body></html>");
                   }
-                  dispatch({ type: "billType", payload: "Presupuesto" });
-                  handlePrint(undefined, targetWin);
-                  setTimeout(() => {
-                    dispatch({ type: "removeAll", payload: null, defaultBillType });
-                    if (onOrderResetRef.current) {
-                      onOrderResetRef.current();
-                    }
-                  }, 5000);
+                   const snapshot = createBillCheckoutSnapshot(BillState, "Presupuesto");
+                   handlePrint(undefined, targetWin, snapshot);
+                   resetCheckout();
+                   onSaleCreated?.();
                 }}
               />
             </>
@@ -601,17 +632,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
             seller={session?.user?.email || ""}
             businessId={session?.user?.businessId || ""}
             onSuccess={() => {
-              dispatch({ type: "removeAll", payload: null, defaultBillType });
-              if (onOrderResetRef.current) {
-                onOrderResetRef.current();
-              }
+               resetCheckout();
+               onSaleCreated?.();
             }}
           />
         </>
       )}
 
       {blockButton && <Spinner />}
-      
       <CheckoutModal
         key={`factura-${facturaKey}`}
         open={openFacturaModal}
@@ -619,7 +647,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         type="factura"
         ptoVentas={ptoVentas}
         onConfirm={async () => {
-          setBlockButton(true);
+          if (!acquireConfirmation()) return;
+          const confirmationSnapshot = createBillStateSnapshot(BillState, billTypeRef?.current);
           setOpenFacturaModal(false);
           const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
           if (targetWin) {
@@ -627,29 +656,26 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
           }
 
           try {
-            const caeResult = await createSale(true, false);
+            const caeResult = await createSale(true, false, confirmationSnapshot);
             if (!caeResult) {
               if (targetWin) targetWin.close();
-              setBlockButton(false);
               return;
             }
-            // Jero guards: only print/reset when no validation error is showing
-            // and the total is greater than zero.
-            if (!openErrorModal && BillState.total > 0) {
-              handlePrint(caeResult, targetWin);
-              setTimeout(() => {
-                dispatch({ type: "removeAll", payload: null, defaultBillType });
-                if (onOrderResetRef.current) {
-                  onOrderResetRef.current();
-                }
-              }, 5000);
+            if (confirmationSnapshot.total > 0) {
+              // Jero #118/#119: print from a snapshot so the immediate reset
+              // can't race with the print (and remito never inherits the CAE).
+              const snapshot = createBillStateSnapshot({ ...confirmationSnapshot, CAE: caeResult }, confirmationSnapshot.billType);
+               handlePrint(caeResult, targetWin, snapshot);
+               resetCheckout();
+               onSaleCreated?.();
             } else if (targetWin) {
               targetWin.close();
             }
-            setBlockButton(false);
           } catch (err) {
             if (targetWin) targetWin.close();
             console.error(err);
+          } finally {
+            releaseConfirmation();
           }
         }}
       />
@@ -661,7 +687,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         type="remito"
         ptoVentas={ptoVentas}
         onConfirm={async () => {
-          setBlockButton(true);
+          if (!acquireConfirmation()) return;
+          const confirmationSnapshot = createBillStateSnapshot(BillState, billTypeRef?.current);
           setOpenRemitoModal(false);
           const targetWin = printMode !== 'thermal' ? window.open("", "_blank") : null;
           if (targetWin) {
@@ -669,29 +696,24 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
           }
 
           try {
-            const caeResult = await createSale(false, false);
+            const caeResult = await createSale(false, false, confirmationSnapshot);
             if (!caeResult) {
               if (targetWin) targetWin.close();
-              setBlockButton(false);
               return;
             }
-            // Jero guards: only print/reset when no validation error is showing
-            // and the total is greater than zero.
-            if (!openErrorModal && BillState.total > 0) {
-              handlePrint(caeResult, targetWin);
-              setTimeout(() => {
-                dispatch({ type: "removeAll", payload: null, defaultBillType });
-                if (onOrderResetRef.current) {
-                  onOrderResetRef.current();
-                }
-              }, 5000);
+            if (confirmationSnapshot.total > 0) {
+              const snapshot = createBillStateSnapshot(confirmationSnapshot, confirmationSnapshot.billType);
+               handlePrint(caeResult, targetWin, snapshot);
+               resetCheckout();
+               onSaleCreated?.();
             } else if (targetWin) {
               targetWin.close();
             }
-            setBlockButton(false);
           } catch (err) {
             if (targetWin) targetWin.close();
             console.error(err);
+          } finally {
+            releaseConfirmation();
           }
         }}
       />
@@ -700,15 +722,15 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar actualización</DialogTitle>
+            <DialogTitle>Confirmar actualizaci├│n</DialogTitle>
           </DialogHeader>
           <DialogDescription>
-            ¿Está seguro que desea sobreescribir esta venta? Se registrará un
+            ┬┐Est├í seguro que desea sobreescribir esta venta? Se registrar├í un
             historial detallado de los cambios.
           </DialogDescription>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" className="rounded-lg">
+              <Button variant="outline" className="rounded-lg" onClick={onSaleFocusCancelled}>
                 Cancelar
               </Button>
             </DialogClose>
@@ -759,10 +781,13 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         open={openFeatureBlockedModal}
         onOpenChange={(open) => {
           setOpenFeatureBlockedModal(open);
-          if (!open) setPlanError(null);
+          if (!open) {
+            setPlanError(null);
+            setFeatureBlockedName(null);
+          }
         }}
         variant={planError?.variant ?? "feature"}
-        feature={planError?.feature ?? "Facturación electrónica (ARCA)"}
+        feature={featureBlockedName ?? planError?.feature ?? "Facturaci├│n electr├│nica (ARCA)"}
         resource={planError?.resource}
         limitValue={planError?.limitValue}
       />
@@ -833,7 +858,7 @@ export const BillButtons: React.FC<BillButtonsProps> = ({
           className="flex flex-col items-center justify-center p-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white rounded-xl shadow-lg border border-emerald-500 transition-all font-semibold relative overflow-hidden group"
         >
           <CheckCircle className="h-6 w-6 mb-2 group-hover:scale-110 transition-transform" />
-          <span className="text-sm">Efectivo / Débito</span>
+          <span className="text-sm">Efectivo / D├®bito</span>
           <kbd className="mt-2 text-xs bg-emerald-800 px-2 py-0.5 rounded opacity-80 border border-emerald-700">F1</kbd>
         </button>
 
@@ -870,7 +895,7 @@ export const BillButtons: React.FC<BillButtonsProps> = ({
                 className="bg-zinc-900 text-white border border-zinc-700 text-xs px-3 py-1.5 rounded-lg shadow-xl max-w-xs leading-relaxed z-50"
                 sideOffset={5}
               >
-                La función de Cuenta Corriente requiere una suscripción **Plan PRO** o superior.
+                La funci├│n de Cuenta Corriente requiere una suscripci├│n **Plan PRO** o superior.
                 <Tooltip.Arrow className="fill-zinc-950" />
               </Tooltip.Content>
             </Tooltip.Portal>
@@ -898,7 +923,7 @@ export const BillButtons: React.FC<BillButtonsProps> = ({
                   </div>
                 )}
                 <FileText className="h-6 w-6 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="text-sm">Facturación Electrónica</span>
+                <span className="text-sm">Facturaci├│n Electr├│nica</span>
                 <kbd className={`mt-2 text-xs px-2 py-0.5 rounded border ${canUseAfip ? "bg-violet-800 border-violet-700 text-violet-100 opacity-80" : "bg-gray-200 dark:bg-zinc-700 text-gray-400 border-gray-300 dark:border-zinc-600"}`}>F3</kbd>
               </button>
             </div>
@@ -910,7 +935,7 @@ export const BillButtons: React.FC<BillButtonsProps> = ({
                 className="bg-zinc-900 text-white border border-zinc-700 text-xs px-3 py-1.5 rounded-lg shadow-xl max-w-xs leading-relaxed z-50"
                 sideOffset={5}
               >
-                La Facturación Electrónica ARCA requiere una suscripción **Plan ENTERPRISE**.
+                La Facturaci├│n Electr├│nica ARCA requiere una suscripci├│n **Plan ENTERPRISE**.
                 <Tooltip.Arrow className="fill-zinc-950" />
               </Tooltip.Content>
             </Tooltip.Portal>

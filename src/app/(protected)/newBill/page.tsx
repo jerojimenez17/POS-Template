@@ -39,9 +39,10 @@ const NewBillPage = async () => {
   const qzTrayEnabled = "qzTray" in printSettings ? printSettings.qzTray : false;
   return (
     <Suspense fallback={<Spinner />}>
-      <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20 overflow-x-hidden">
-        <BillProvider initialBillType={initialBillType} qzTrayEnabled={qzTrayEnabled}>
+      <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
+          <BillProvider initialBillType={initialBillType} defaultPtoVenta={ptoVentas[0]} qzTrayEnabled={qzTrayEnabled}>
           <NewBillHeaderActions hasActiveSession={hasActiveSession} session={session} />
+
           {/* Products Table */}
           <div className="max-w-7xl mx-auto px-4 py-6">
             <ProductsTable session={session} ptoVentas={ptoVentas} />
@@ -51,4 +52,5 @@ const NewBillPage = async () => {
     </Suspense>
   );
 };
+
 export default NewBillPage;

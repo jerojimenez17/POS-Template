@@ -136,11 +136,12 @@ export default function AccountLedgerList({ status, search = "", initialPage }: 
         <div className="py-8 text-center text-muted-foreground">No se encontraron órdenes</div>
       ) : (
         <Table>
-          <TableHeader><TableRow><TableHead>Cliente</TableHead><TableHead>Total</TableHead><TableHead>Fecha</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Cliente</TableHead><TableHead>Total</TableHead><TableHead>Saldo de cuenta</TableHead><TableHead>Fecha</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader>
           <TableBody>{page.orders.map((order) => (
             <TableRow key={order.id}>
               <TableCell className="font-medium"><div className="flex items-center gap-2"><User className="h-4 w-4 shrink-0 text-muted-foreground" /><div className="min-w-0"><div className="flex items-center gap-1">{isOrderOverdue(order) && <OverdueIndicator />}<span className="truncate">{order.client?.name || "Sin cliente"}</span></div>{order.notes && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground" title={order.notes}>{order.notes}</p>}</div></div></TableCell>
               <TableCell><div className="flex items-center gap-1"><DollarSign className="h-4 w-4 text-muted-foreground" />${order.total.toLocaleString("es-AR")}</div></TableCell>
+              <TableCell>{order.client ? `$${order.client.balance.toLocaleString("es-AR")}` : "—"}</TableCell>
               <TableCell><div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /><LocalDate date={order.date} /></div></TableCell>
               <TableCell>{getStatusBadge(order)}</TableCell>
               <TableCell className="text-right"><div className="flex justify-end gap-2"><Button variant="outline" size="sm" asChild><Link href={`/account-ledger/${order.id}`}><Eye className="mr-1 h-4 w-4" />Ver</Link></Button><Button variant="ghost" size="sm" asChild title="Imprimir"><Link href={`/account-ledger/${order.id}`}><Printer className="h-4 w-4" /></Link></Button>{order.status === "pendiente" ? <ConfirmOrderButton orderId={order.id} /> : order.paidStatus !== "pago" ? <><Button size="sm" asChild><Link href={`/account-ledger/${order.id}?action=payment`}><CreditCard className="mr-1 h-4 w-4" />Pagar</Link></Button><Button variant="destructive" size="sm" asChild><Link href={`/account-ledger/${order.id}?action=cancel`}><XCircle className="mr-1 h-4 w-4" />Cancelar</Link></Button></> : null}</div></TableCell>

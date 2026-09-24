@@ -1,5 +1,5 @@
-import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
-import { getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
+import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "@/lib/utils/bill-type";
+import { buildReceiptClientData, getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 
 export const ESCPOS = {
@@ -90,6 +90,7 @@ export interface ThermalReceiptData {
   };
   pointOfSale?: number | string;
   invoiceNumber?: number | string;
+  originalAssociation?: { billType: string; cae: string; number: number; pointOfSale: number };
 }
 
 function sanitize(text: string): string {
@@ -98,14 +99,17 @@ function sanitize(text: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/N[°º]/g, "Nro")
+    .replace(/[<>]/g, "")
     .replace(/[^\x20-\x7E]/g, "");
 }
 
 export function generateThermalReceipt(data: ThermalReceiptData): string {
   const lines: string[] = [];
   
+  const isPresupuesto = normalizeBillType(data.billType) === "Presupuesto";
+  const isCreditNote = data.documentKind === "credit-note" || getDocumentPrintKind(data.cae?.cae, data.billType) === "credit-note";
   const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
-  const isAFIPInvoice = getDocumentPrintKind(data.cae?.cae) === "official-invoice";
+  const isAFIPInvoice = !isPresupuesto && (isCreditNote || getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice");
   
   lines.push(ESCPOS.INIT);
   lines.push(ESCPOS.ALIGN_CENTER);
@@ -116,7 +120,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   lines.push(ESCPOS.BOLD_OFF);
   lines.push(ESCPOS.LINE_FEED);
   
-  const isOfficialInvoice = getDocumentPrintKind(data.cae?.cae) === "official-invoice";
+  const isOfficialInvoice = !isPresupuesto && (isCreditNote || getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice");
   if (isOfficialInvoice && data.businessInfo?.razonSocial) {
     lines.push(sanitize(data.businessInfo.razonSocial));
   }
@@ -158,19 +162,24 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   }
   
   lines.push(formatLine("Tipo:", billTypeDisplay));
-  
-  const docType = data.documentType || "DNI";
-  if (data.client) {
-    lines.push(formatLine("Cliente:", sanitize(data.client)));
-    if (data.clientIvaCondition && 
-        data.clientIvaCondition.toLowerCase() !== "consumidor final" &&
-        data.clientIvaCondition.toLowerCase() !== "consumidor_final") {
-      lines.push(formatLine(docType + ":", data.clientDocumentNumber || ""));
-      lines.push(formatLine("Cond.IVA:", data.clientIvaCondition.replace(/_/g, " ")));
-    }
+  if (isCreditNote && data.originalAssociation) {
+    lines.push(ESCPOS.LINE_FEED);
+    lines.push("COMPROBANTE ORIGINAL ASOCIADO");
+    lines.push(formatLine("Tipo:", data.originalAssociation.billType));
+    lines.push(formatLine("Nro:", formatInvoiceNumberFull(data.originalAssociation.number, data.originalAssociation.pointOfSale)));
+    lines.push(formatLine("CAE:", data.originalAssociation.cae));
   }
   
-  lines.push(formatLine("Pago:", sanitize(data.paidMethod)));
+  const client = buildReceiptClientData({ name: data.client, ivaCondition: data.clientIvaCondition, documentType: data.documentType === "CUIT" || data.documentType === "DNI" ? data.documentType : null, documentNumber: data.clientDocumentNumber });
+  if (isAFIPInvoice && (client.name || client.ivaCondition || (client.documentType && client.documentNumber))) {
+    if (client.name) lines.push(formatLine("Cliente:", sanitize(client.name)));
+    if (isAFIPInvoice && client.documentType && client.documentNumber) lines.push(formatLine(client.documentType + ":", sanitize(client.documentNumber)));
+    if (isAFIPInvoice && client.ivaCondition) lines.push(formatLine("Cond.IVA:", sanitize(client.ivaCondition)));
+  }
+  
+  if (!isPresupuesto) {
+    lines.push(formatLine("Pago:", sanitize(data.paidMethod)));
+  }
   lines.push(formatLine("Vendedor:", sanitize(data.seller || "")));
   
   lines.push(ESCPOS.ALIGN_CENTER);
@@ -208,7 +217,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   
   if (isOfficialInvoice) {
     lines.push(ESCPOS.BOLD_ON);
-    lines.push("** COMPROBANTE AUTORIZADO **");
+    lines.push(isCreditNote ? "** NOTA DE CREDITO AUTORIZADA **" : "** COMPROBANTE AUTORIZADO **");
     lines.push(ESCPOS.BOLD_OFF);
     lines.push(ESCPOS.LINE_FEED);
     lines.push(formatLine("CAE:", data.cae?.cae ?? ""));
@@ -220,7 +229,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   
   lines.push(ESCPOS.LINE_FEED);
   lines.push(ESCPOS.BOLD_ON);
-  lines.push("* GRACIAS POR SU COMPRA *");
+  lines.push(isPresupuesto ? "* PRESUPUESTO — NO VALIDO COMO FACTURA *" : "* GRACIAS POR SU COMPRA *");
   lines.push(ESCPOS.BOLD_OFF);
   lines.push(ESCPOS.LINE_FEED);
   lines.push(ESCPOS.LINE_FEED);
@@ -230,13 +239,14 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
 
 
 
-function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | null): string {
+export function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | null): string {
   const qrHtml = qrDataUrl ? `<div class="qr-container"><img src="${qrDataUrl}" alt="QR" /></div>` : "";
   const dateStr = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(data.date);
+  const isPresupuesto = normalizeBillType(data.billType) === "Presupuesto";
   const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
-  const isAFIPInvoice = getDocumentPrintKind(data.cae?.cae) === "official-invoice";
+  const isAFIPInvoice = !isPresupuesto && (data.documentKind === "credit-note" || getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice" || getDocumentPrintKind(data.cae?.cae, data.billType) === "credit-note");
   const invoiceNum = isAFIPInvoice ? formatInvoiceNumberFull(data.invoiceNumber, data.pointOfSale ?? data.cae?.ptoVenta) : "";
-  const docType = data.documentType || "DNI";
+  const client = buildReceiptClientData({ name: data.client, ivaCondition: data.clientIvaCondition, documentType: data.documentType === "CUIT" || data.documentType === "DNI" ? data.documentType : null, documentNumber: data.clientDocumentNumber });
 
   const productsHtml = data.products.map(p => `
     <div class="product-row">
@@ -294,19 +304,19 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
         ${invoiceNum ? `<div class="info-row"><span class="info-label">Nro:</span><span>${invoiceNum}</span></div>` : ''}
         <div class="info-row"><span class="info-label">Tipo:</span><span>${billTypeDisplay}</span></div>
         
-        ${data.client ? `
-          <div class="divider"></div>
-          <div class="info-row"><span class="info-label">Cliente:</span><span>${sanitize(data.client)}</span></div>
-          ${data.clientIvaCondition && 
-            data.clientIvaCondition.toLowerCase() !== "consumidor final" &&
-            data.clientIvaCondition.toLowerCase() !== "consumidor_final" ? `
-            <div class="info-row"><span class="info-label">${docType}:</span><span>${data.clientDocumentNumber || ""}</span></div>
-            <div class="info-row"><span class="info-label">Cond.IVA:</span><span>${data.clientIvaCondition.replace(/_/g, " ")}</span></div>
+         ${isAFIPInvoice && (client.name || client.ivaCondition || (client.documentType && client.documentNumber)) ? `
+           <div class="divider"></div>
+           ${client.name ? `<div class="info-row"><span class="info-label">Cliente:</span><span>${escapeThermalHtml(client.name)}</span></div>` : ''}
+          ${isAFIPInvoice && client.documentType && client.documentNumber ? `
+            <div class="info-row"><span class="info-label">${client.documentType}:</span><span>${escapeThermalHtml(client.documentNumber)}</span></div>
+          ` : ''}
+          ${isAFIPInvoice && client.ivaCondition ? `
+            <div class="info-row"><span class="info-label">Cond.IVA:</span><span>${escapeThermalHtml(client.ivaCondition)}</span></div>
           ` : ''}
         ` : ''}
 
         <div class="divider"></div>
-        <div class="info-row"><span class="info-label">Pago:</span><span>${sanitize(data.paidMethod)}</span></div>
+        ${!isPresupuesto ? `<div class="info-row"><span class="info-label">Pago:</span><span>${sanitize(data.paidMethod)}</span></div>` : ''}
         <div class="info-row"><span class="info-label">Vendedor:</span><span>${sanitize(data.seller || "")}</span></div>
 
         <div class="divider"></div>
@@ -335,7 +345,7 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
 
         ${qrHtml}
 
-        <div class="footer">¡GRACIAS POR SU COMPRA!</div>
+        <div class="footer">${isPresupuesto ? "PRESUPUESTO — NO VÁLIDO COMO FACTURA" : "¡GRACIAS POR SU COMPRA!"}</div>
       </div>
 
       <script>
@@ -356,6 +366,10 @@ function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: string | nul
     </body>
     </html>
   `;
+}
+
+function escapeThermalHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 async function tryFallbackHTMLPrint(data: ThermalReceiptData, qrDataUrl: string | null): Promise<boolean> {
@@ -453,6 +467,10 @@ export async function printThermalReceipt(data: ThermalReceiptData, qzTrayEnable
   }
 }
 
+export const PDF_A4_PAGE_STYLE = "@page { size: A4 portrait; margin: 10mm; } @media print { @page { size: A4 portrait; margin: 10mm; } html, body { width: 210mm; } }";
+// A4 10mm
+// PDF_A4_PAGE_STYLE A4 portrait 10mm
+
 const DEFAULT_PAGE_STYLE = [
   "@page { size: auto; margin: 10mm; }",
   "@media print {",
@@ -487,7 +505,7 @@ async function tryBrowserPrint(
   options: BrowserPrintOptions = {}
 ): Promise<boolean> {
   const documentTitle = options.documentTitle || "document";
-  const pageStyle = options.pageStyle || DEFAULT_PAGE_STYLE;
+  const pageStyle = options.format === "a4" ? PDF_A4_PAGE_STYLE : (options.pageStyle || DEFAULT_PAGE_STYLE);
 
   const sanitizedTitle = documentTitle
     .replace(/&/g, "&amp;")

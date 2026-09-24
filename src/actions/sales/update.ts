@@ -5,27 +5,23 @@ import { auth } from "@/auth";
 import { pusherServer } from "@/lib/pusher-server";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { z } from "zod";
+import { Prisma } from "@prisma/client";
+import { consumeAuthorizedFiscalSnapshotGrant } from "@/lib/server/fiscal-snapshot-grant";
 import { assertWritePermission } from "@/lib/auth-gates";
-
-interface CaeData {
-  CAE: string;
-  vencimiento: string;
-  /** AFIP returns numeric fields as strings in some response shapes */
-  nroComprobante: number | string;
-  qrData: string;
-  ptoVenta?: number | string;
-}
-
 interface UpdateCaeInput {
-  CAE: CaeData;
+  CAE: {
+    CAE: string;
+    vencimiento: string;
+    nroComprobante: number | string;
+    qrData: string;
+    ptoVenta?: number | string;
+    fiscalSnapshotToken?: string;
+  };
   IVACondition: string;
-  documentNumber: number;
+  documentType?: "" | "CUIT" | "DNI";
+  documentNumber?: string | number;
   paidMethod: string;
-  /** Persisted extra fields from the invoicing form */
-  twoMethods?: boolean;
-  secondPaidMethod?: string | null;
-  totalSecondMethod?: number | null;
-  discount?: number;
   billType?: string;
 }
 
@@ -33,79 +29,79 @@ export const updateOrderCaeAction = async (
   orderId: string,
   data: UpdateCaeInput
 ) => {
+  const parsed = z.object({
+    CAE: z.object({ CAE: z.string(), vencimiento: z.string(), nroComprobante: z.union([z.string(), z.number()]), qrData: z.string(), ptoVenta: z.union([z.string(), z.number()]).optional(), fiscalSnapshotToken: z.string().length(64).optional() }).strict(),
+    IVACondition: z.string(),
+    documentType: z.enum(["", "CUIT", "DNI"]).optional(),
+    documentNumber: z.union([z.string(), z.number()]).optional(),
+    paidMethod: z.string(),
+    billType: z.string().optional(),
+  }).safeParse(data);
+  if (!parsed.success) return { error: "Datos de facturación inválidos" };
+  const normalizedDocumentNumber = parsed.data.documentNumber === undefined || String(parsed.data.documentNumber).trim() === ""
+    ? null : String(parsed.data.documentNumber);
+  const documentRequired = parsed.data.IVACondition.trim().toLowerCase() !== "consumidor final" &&
+    parsed.data.IVACondition.trim().toLowerCase() !== "consumidor_final";
+  if (documentRequired && normalizedDocumentNumber === null) {
+    return { error: "El número de documento es obligatorio para esta condición de IVA" };
+  }
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
-
   const permission = await assertWritePermission();
   if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
     await db.$transaction(async (tx) => {
-      // 1. Fetch current order to compute diffs
-      const current = await tx.order.findUniqueOrThrow({
+      let fiscalSnapshot: Prisma.InputJsonValue | undefined;
+      const existingOrder = await tx.order.findFirst({
         where: { id: orderId, businessId },
+        select: { total: true, fiscalSnapshot: true },
       });
-
-      // 2. Update the order with billing info
+      if (!existingOrder) throw new Error("Orden no encontrada");
+      if (existingOrder.fiscalSnapshot !== null) throw new Error("El comprobante fiscal autorizado no puede reemplazarse");
+      if (parsed.data.CAE.fiscalSnapshotToken) {
+        const billType = parsed.data.billType;
+        const invoiceNumber = Number(parsed.data.CAE.nroComprobante);
+        const pointOfSale = Number(parsed.data.CAE.ptoVenta);
+        if ((billType !== "Factura A" && billType !== "Factura B" && billType !== "Factura C")
+          || !Number.isSafeInteger(invoiceNumber) || invoiceNumber <= 0
+          || !Number.isSafeInteger(pointOfSale) || pointOfSale <= 0) {
+          throw new Error("Los datos de autorización fiscal no coinciden con la venta");
+        }
+        const trustedSnapshot = await consumeAuthorizedFiscalSnapshotGrant(tx, {
+          token: parsed.data.CAE.fiscalSnapshotToken,
+          businessId,
+          cae: parsed.data.CAE.CAE,
+          billType,
+          invoiceNumber,
+          pointOfSale,
+          total: existingOrder.total,
+        });
+        if (!trustedSnapshot) throw new Error("La autorización fiscal no coincide con la venta");
+        fiscalSnapshot = JSON.parse(JSON.stringify(trustedSnapshot)) as Prisma.InputJsonValue;
+      }
       await tx.order.update({
         where: { id: orderId, businessId },
         data: {
-          CAE: JSON.parse(JSON.stringify(data.CAE)),
-          clientIvaCondition: data.IVACondition,
-          clientDocumentNumber: String(data.documentNumber),
-          paymentMethod: data.paidMethod,
-          // Extra fields
-          ...(data.twoMethods !== undefined && {
-            paymentMethod2: data.twoMethods ? data.secondPaidMethod ?? null : null,
-            totalMethod2: data.twoMethods ? data.totalSecondMethod ?? 0 : 0,
-          }),
-          ...(data.discount !== undefined && {
-            discountPercentage: data.discount,
-          }),
+          CAE: {
+            CAE: parsed.data.CAE.CAE,
+            vencimiento: parsed.data.CAE.vencimiento,
+            nroComprobante: parsed.data.CAE.nroComprobante,
+            qrData: parsed.data.CAE.qrData,
+            ...(parsed.data.CAE.ptoVenta === undefined ? {} : { ptoVenta: parsed.data.CAE.ptoVenta }),
+          },
+          billType: parsed.data.billType,
+          afipVoucherType: parsed.data.billType === "Factura A" ? 1 : parsed.data.billType === "Factura B" ? 6 : parsed.data.billType === "Factura C" ? 11 : undefined,
+          invoiceNumber: Number(parsed.data.CAE.nroComprobante),
+          invoicePointOfSale: parsed.data.CAE.ptoVenta === undefined ? undefined : Number(parsed.data.CAE.ptoVenta),
+          clientIvaCondition: parsed.data.IVACondition,
+          clientDocumentType: parsed.data.documentType || null,
+          clientDocumentNumber: normalizedDocumentNumber,
+          paymentMethod: parsed.data.paidMethod,
+          ...(fiscalSnapshot ? { fiscalSnapshot } : {}),
         },
       });
-
-      // 3. Record billType in OrderUpdate history (it's not on the Order model)
-      if (data.billType) {
-        const lastUpdate = await tx.orderUpdate.findFirst({
-          where: { orderId },
-          orderBy: { version: "desc" },
-          select: { version: true },
-        });
-
-        await tx.orderUpdate.create({
-          data: {
-            orderId,
-            businessId,
-            updatedById: session!.user!.id!,
-            type: "ITEMS_UPDATED",
-            message: "Facturación AFIP/ARCA",
-            version: (lastUpdate?.version ?? 0) + 1,
-            changes: {
-              billTypeChanged: {
-                from: null,
-                to: data.billType,
-              },
-              ivaChanged: {
-                from: { condition: current.clientIvaCondition, documentNumber: current.clientDocumentNumber },
-                to: { condition: data.IVACondition, documentNumber: String(data.documentNumber) },
-              },
-              paymentChanged: {
-                from: { method: current.paymentMethod, twoMethods: !!current.paymentMethod2, secondMethod: current.paymentMethod2 },
-                to: { method: data.paidMethod, twoMethods: !!data.twoMethods, secondMethod: data.secondPaidMethod ?? null },
-              },
-              ...(data.discount !== undefined && {
-                discountChanged: {
-                  from: current.discountPercentage,
-                  to: data.discount,
-                },
-              }),
-              billTypeTo: data.billType,
-            },
-          },
-        });
-      }
     });
 
     await pusherServer.trigger(
@@ -118,6 +114,9 @@ export const updateOrderCaeAction = async (
     revalidateTag(CACHE_TAGS.ORDERS, "max");
     return { success: true };
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      return { error: "Orden no encontrada" };
+    }
     console.error("Error updating sale CAE:", error);
     return { error: "Error al actualizar CAE de la venta" };
   }
@@ -127,9 +126,6 @@ export const deleteOrderAction = async (orderId: string) => {
   const session = await auth();
   const businessId = session?.user?.businessId;
   if (!businessId) return { error: "No autorizado" };
-
-  const permission = await assertWritePermission();
-  if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
     const order = await db.order.findFirst({

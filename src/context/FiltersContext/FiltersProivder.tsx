@@ -11,7 +11,7 @@ const startOfTomorrow = new Date(today.getFullYear(), today.getMonth(), today.ge
 
 const INITIAL_STATE: FilterState = {
   Remito: {
-    active: true,
+    active: false,
     filter: "remito",
   } as FilterField,
   Seller: {
@@ -43,7 +43,7 @@ const INITIAL_STATE: FilterState = {
     filter: "transferencia",
   } as FilterField,
   Efectivo: {
-    active: true,
+    active: false,
     filter: "efectivo",
   } as FilterField,
   CuentaDNI: {

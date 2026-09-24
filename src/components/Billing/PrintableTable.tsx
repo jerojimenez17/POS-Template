@@ -1,42 +1,47 @@
-"use client";
-import React, { useRef, useState, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
+﻿"use client";
+import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { BillContext } from "@/context/BillContext";
+import { getBillRowId } from "@/utils/bill-row";
 import Product from "@/models/Product";
 import BillState from "@/models/BillState";
 import DecimalInput from "./DecimalInput";
+import InlineAmountInput from "./InlineAmountInput";
 import ProductSearchBar from "./ProductSearchBar";
 import { Session } from "next-auth";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Inter } from "next/font/google";
-import { getBusinessBillingInfoAction } from "@/actions/business"; 
+import { getBusinessBillingInfoAction } from "@/actions/business";
 import { QRCodeSVG } from "qrcode.react";
 import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES, type PrintOptions } from "@/lib/print";
-import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
-import { useFeatures } from "@/hooks/useFeatures";
-import { Trash2 } from "lucide-react";
+import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "@/lib/utils/bill-type";
 import QRCode from "qrcode";
 import CAE from "@/models/CAE";
 import { buildReceiptBusinessInfo } from "@/lib/print/receipt-data";
+import PriceEditInput from "./PriceEditInput";
 import DiscountControl from "./DiscountControl";
+import { useFeatures } from "@/hooks/useFeatures";
 import {
   AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
   AlertDialogAction,
   AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
 interface Props {
   printTrigger: number;
   className: string;
   handleClose: () => void;
   session: Session | null;
   externalState?: BillState;
+  printSnapshot?: BillState | null;
   forceCae?: CAE;
   targetWindowRef?: React.MutableRefObject<Window | null>;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 const inter = Inter({
@@ -70,12 +75,16 @@ const PrintableTable = ({
   session,
   className,
   externalState,
+  printSnapshot,
   forceCae,
   targetWindowRef,
+  searchInputRef,
 }: Props) => {
-  const { BillState, addItem, removeItem, printMode, qzTrayActive } = React.useContext(BillContext);
+  const { BillState, dispatch, addItem, removeItem, printMode, qzTrayActive, qzTrayEnabled } = React.useContext(BillContext);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
-
+  const effectiveState: BillState = (printSnapshot ?? externalState ?? BillState ?? defaultBillState) as BillState;
+  const effectiveCae: CAE | undefined = forceCae || effectiveState.CAE;
+  const [isClient, setIsClient] = useState(false);
   const [billingInfo, setBillingInfo] = useState<{
     razonSocial?: string | null;
     cuit?: string | null;
@@ -84,21 +93,17 @@ const PrintableTable = ({
     address?: string | null;
   } | null>(null);
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
-  const [editingProductId, setEditingProductId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<string>("");
-  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [qrGenerationFailed, setQrGenerationFailed] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const lastPrintTrigger = useRef(0);
 
   // Fix hydration: Only run on client
-  const isClient = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
-
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    // This state gates client-only print markup after hydration.
+    setIsClient(true);
+
     const fetchBillingInfo = async () => {
       const info = await getBusinessBillingInfoAction();
       if (info) setBillingInfo(info);
@@ -106,15 +111,13 @@ const PrintableTable = ({
     fetchBillingInfo();
   }, []);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     let active = true;
-    const activeCae = forceCae || state.CAE;
-    if (activeCae?.qrData) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    const activeCaeQr = effectiveCae;
+    if (activeCaeQr?.qrData) {
       setQrGenerationFailed(false);
       setQrSvgDataUrl(null);
-      QRCode.toString(activeCae.qrData, { type: "svg", margin: 0, width: 60 })
+      QRCode.toString(activeCaeQr.qrData, { type: "svg", margin: 0, width: 60 })
         .then((svgString) => {
           const dataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
           if (active) setQrSvgDataUrl(dataUrl);
@@ -131,66 +134,83 @@ const PrintableTable = ({
       setQrGenerationFailed(false);
     }
     return () => { active = false; };
-  }, [state.CAE, state.CAE?.qrData, forceCae]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  }, [effectiveCae, effectiveCae?.qrData, forceCae]);
 
-  const activeCae = forceCae || state.CAE;
+  const activeCae = effectiveCae;
+  const bannerCae = effectiveState.CAE;
+  const [displayBannerCae, setDisplayBannerCae] = useState<CAE | null>(null);
+  const [isBannerExiting, setIsBannerExiting] = useState(false);
+
+  useEffect(() => {
+    const hasCae = !!bannerCae?.CAE?.trim();
+    if (hasCae && bannerCae) {
+      setDisplayBannerCae(bannerCae);
+      setIsBannerExiting(false);
+    } else if (!hasCae && displayBannerCae?.CAE) {
+      setIsBannerExiting(true);
+      const t = setTimeout(() => {
+        setDisplayBannerCae(null);
+        setIsBannerExiting(false);
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [bannerCae, displayBannerCae?.CAE]);
+
   const receiptBusinessInfo = useMemo(
     () => buildReceiptBusinessInfo(
       session?.user?.businessName || "Mi Comercio",
       activeCae?.CAE,
       billingInfo ?? undefined,
+      effectiveState.billType,
     ),
-    [session?.user?.businessName, activeCae?.CAE, billingInfo],
+    [session?.user?.businessName, activeCae?.CAE, billingInfo, effectiveState.billType],
   );
   const isRemito = receiptBusinessInfo.documentKind === "remito";
-  const billTypeDisplay = getBillTypeDisplay(state.billType, activeCae?.CAE, isRemito);
+  const isPresupuesto = normalizeBillType(effectiveState.billType) === "Presupuesto" || receiptBusinessInfo.documentKind === "presupuesto";
+  const billTypeDisplay = getBillTypeDisplay(effectiveState.billType, activeCae?.CAE, isRemito);
 
   const handlePrint = useCallback(async () => {
-    const activeCae = forceCae || state.CAE;
-    const subtotal = state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0);
+    const activeCaePrint = forceCae || effectiveState.CAE;
+    const subtotal = Math.round(effectiveState.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
     const receiptData: ThermalReceiptData = {
       ...receiptBusinessInfo,
-      date: state.date || new Date(),
-      documentType: state.typeDocument || "DNI",
+      date: effectiveState.date || new Date(),
+       documentType: effectiveState.clientDocumentType || effectiveState.typeDocument,
       billType: billTypeDisplay,
-      seller: state.seller || session?.user?.email || "",
-      paidMethod: state.paidMethod || "Efectivo",
-      client: state.client,
-      clientIvaCondition: state.clientIvaCondition,
-      clientDocumentNumber: state.clientDocumentNumber,
-      products: state.products.map((p) => ({
+      seller: effectiveState.seller || session?.user?.email || "",
+      paidMethod: effectiveState.paidMethod || "Efectivo",
+      client: effectiveState.client,
+      clientIvaCondition: effectiveState.clientIvaCondition,
+      clientDocumentNumber: effectiveState.clientDocumentNumber,
+      products: effectiveState.products.map((p) => ({
         description: p.description,
         amount: p.amount,
         unitPrice: p.salePrice,
-        subtotal: p.salePrice * p.amount,
+        subtotal: Math.round(p.salePrice * p.amount),
       })),
       subtotal,
-      discount: state.discount > 0 ? state.discount : undefined,
-      discountAmount: state.discount > 0 ? subtotal * (state.discount / 100) : undefined,
-      total: Number(state.totalWithDiscount || subtotal * (1 - state.discount / 100)),
-      cae: activeCae?.CAE ? {
-        cae: activeCae.CAE,
-        vencimiento: activeCae.vencimiento,
-        qrData: activeCae.qrData,
-        ptoVenta: activeCae.ptoVenta ?? state.ptoVenta,
+      discount: effectiveState.discount > 0 ? effectiveState.discount : undefined,
+      discountAmount: effectiveState.discount > 0 ? Math.round(subtotal * (effectiveState.discount / 100)) : undefined,
+      total: Math.round(Number(effectiveState.totalWithDiscount || subtotal * (1 - effectiveState.discount / 100))),
+      cae: activeCaePrint?.CAE ? {
+        cae: activeCaePrint.CAE,
+        vencimiento: activeCaePrint.vencimiento,
+        qrData: activeCaePrint.qrData,
+        ptoVenta: activeCaePrint.ptoVenta ?? effectiveState.ptoVenta,
       } : undefined,
-      pointOfSale: state.ptoVenta ?? activeCae?.ptoVenta,
-      invoiceNumber: activeCae?.nroComprobante,
+      pointOfSale: effectiveState.ptoVenta ?? activeCaePrint?.ptoVenta,
+      invoiceNumber: activeCaePrint?.nroComprobante,
     };
 
     if (printMode === "thermal") {
-         await printThermalReceipt(receiptData, qzTrayActive);
+         await printThermalReceipt(receiptData, qzTrayEnabled ?? qzTrayActive);
     } else {
       const content = document.createElement("div");
       content.innerHTML = buildPDFHTML(receiptData, {
-        invoiceNumber: activeCae?.nroComprobante,
-        pointOfSale: state.ptoVenta ?? activeCae?.ptoVenta,
+        invoiceNumber: activeCaePrint?.nroComprobante,
+        pointOfSale: effectiveState.ptoVenta ?? activeCaePrint?.ptoVenta,
         qrSvgDataUrl: qrSvgDataUrl,
       });
-
-      // Fixed width so html2canvas always captures at the same size
-      content.style.cssText = "width:750px;margin:0 auto;background:#fff;";
 
       const styleEl = document.createElement("style");
       styleEl.textContent = PDF_STYLES;
@@ -198,13 +218,17 @@ const PrintableTable = ({
 
       document.body.appendChild(content);
       try {
-        const filename = activeCae?.CAE
-          ? `Factura_${activeCae?.nroComprobante || "000000000000"}`
-          : `Comprobante_${state.id || Date.now()}`;
+        const filename = isPresupuesto
+          ? `Presupuesto_${effectiveState.id || Date.now()}`
+          : activeCaePrint?.CAE
+            ? `Factura_${activeCaePrint?.nroComprobante || "000000000000"}`
+            : `Comprobante_${effectiveState.id || Date.now()}`;
 
         await exportToPDF(content as HTMLElement, {
           documentTitle: filename,
           format: "a4",
+          orientation: "portrait",
+          margin: 10,
           filename: filename,
           targetWindow: targetWindowRef?.current || null,
         } as PrintOptions);
@@ -212,25 +236,34 @@ const PrintableTable = ({
         document.body.removeChild(content);
       }
     }
-  }, [state, session, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef, qzTrayActive, receiptBusinessInfo]);
+  }, [effectiveState, session, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef, qzTrayEnabled, qzTrayActive, receiptBusinessInfo, isPresupuesto]);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     // Keep the externally supplied bill synchronized with the printable view.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState(externalState || BillState || defaultBillState);
   }, [externalState, BillState]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (printTrigger > lastPrintTrigger.current && isClient) {
-      const activeCae = forceCae || state.CAE;
-      if (activeCae?.qrData && !qrSvgDataUrl && !qrGenerationFailed) return;
+      const activeCaeEff = effectiveCae;
+      if (activeCaeEff?.qrData && !qrSvgDataUrl && !qrGenerationFailed) return;
 
       lastPrintTrigger.current = printTrigger;
       handlePrint();
     }
-  }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, qrGenerationFailed, forceCae, state.CAE, state.CAE?.qrData]);
+  }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, qrGenerationFailed, forceCae, effectiveCae, effectiveCae?.qrData]);
+
+  // Prevent browser defaults for F1/F2/F3 (Chrome opens help on F1)
+  useEffect(() => {
+    const preventFunctionKeys = (e: KeyboardEvent) => {
+      if (["F1", "F2", "F3"].includes(e.key)) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", preventFunctionKeys, { capture: true });
+    return () => window.removeEventListener("keydown", preventFunctionKeys, { capture: true });
+  }, []);
 
   const handleProductAdd = useCallback((product: Product) => {
     if (product.amount <= 0) {
@@ -241,28 +274,28 @@ const PrintableTable = ({
     addItem(product);
   }, [addItem]);
 
-  const updateProductAmount = (productId: string, newAmount: number) => {
-    const product = state.products.find((p) => p.id === productId);
+  const updateProductAmount = (rowId: string, newAmount: number) => {
+    const product = state.products.find((p) => getBillRowId(p) === rowId);
     if (!product) return;
 
-    const updatedProduct = { ...product, amount: newAmount };
-    removeItem(product);
-    addItem(updatedProduct);
+    dispatch({ type: "changeUnit", payload: { ...product, amount: newAmount } });
   };
 
   const sortedProducts = useMemo(
-    () => [...state.products].sort(sortByDescription),
-    [state.products]
+    () => [...effectiveState.products].sort(sortByDescription),
+    [effectiveState.products]
   );
 
   const totals = useMemo(() => {
-    const subtotal = state.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0);
-    const discountAmount = state.discount > 0 ? subtotal * (state.discount / 100) : 0;
-    const total = state.totalWithDiscount !== undefined
-      ? Number(state.totalWithDiscount)
-      : subtotal * (1 - state.discount / 100);
+    const subtotal = Math.round(effectiveState.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
+    const discountAmount = effectiveState.discount > 0 ? Math.round(subtotal * (effectiveState.discount / 100)) : 0;
+    const total = effectiveState.discount > 0
+      ? Math.round(subtotal * (1 - effectiveState.discount / 100))
+      : effectiveState.totalWithDiscount !== undefined
+        ? Math.round(Number(effectiveState.totalWithDiscount))
+        : subtotal;
     return { subtotal, discountAmount, total };
-  }, [state.products, state.discount, state.totalWithDiscount]);
+  }, [effectiveState.products, effectiveState.discount, effectiveState.totalWithDiscount]);
 
   const { hasFeature } = useFeatures();
   const hasSupplierFilter = hasFeature("hasSupplierFilter");
@@ -291,7 +324,7 @@ const PrintableTable = ({
 
           <div className="mt-2 text-sm grid grid-cols-2 gap-4 text-left">
             <div>
-              <p><span className="font-semibold">Fecha:</span> {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(state.date || new Date())}</p>
+              <p><span className="font-semibold">Fecha:</span> {new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(effectiveState.date || new Date())}</p>
                <p>
                 <span className="font-semibold">
                   {receiptBusinessInfo.documentKind === "official-invoice" ? "Factura:" : "Comprobante:"}
@@ -299,23 +332,23 @@ const PrintableTable = ({
                  {billTypeDisplay}
                </p>
                {receiptBusinessInfo.documentKind === "official-invoice" &&
-                 formatInvoiceNumberFull(activeCae?.nroComprobante, state.ptoVenta ?? activeCae?.ptoVenta) && (
-                 <p><span className="font-semibold">N°:</span> {formatInvoiceNumberFull(activeCae?.nroComprobante, state.ptoVenta ?? activeCae?.ptoVenta)}</p>
+                 formatInvoiceNumberFull(activeCae?.nroComprobante, effectiveState.ptoVenta ?? activeCae?.ptoVenta) && (
+                 <p><span className="font-semibold">N°:</span> {formatInvoiceNumberFull(activeCae?.nroComprobante, effectiveState.ptoVenta ?? activeCae?.ptoVenta)}</p>
                )}
-              <p><span className="font-semibold">Vendedor:</span> {state.seller || session?.user?.email}</p>
-              <p><span className="font-semibold">Medio de Pago:</span> {state.paidMethod}</p>
+              <p><span className="font-semibold">Vendedor:</span> {effectiveState.seller || session?.user?.email}</p>
+              {!isPresupuesto && <p><span className="font-semibold">Medio de Pago:</span> {effectiveState.paidMethod}</p>}
 
 
                 <div className="mt-3 text-xs border-t border-gray-200 pt-2">
-                  <p><span className="font-semibold">Cliente:</span> {state.client}</p>
-                  {state.clientIvaCondition && (
-                    <p><span className="font-semibold">Condición IVA:</span> {state.clientIvaCondition.replace(/_/g, " ")}</p>
+                  <p><span className="font-semibold">Cliente:</span> {effectiveState.client}</p>
+                  {effectiveState.clientIvaCondition && (
+                    <p><span className="font-semibold">Condición IVA:</span> {effectiveState.clientIvaCondition.replace(/_/g, " ")}</p>
                   )}
-                  {state.clientIvaCondition &&
-                   state.clientIvaCondition.toLowerCase() !== "consumidor final" &&
-                   state.clientIvaCondition.toLowerCase() !== "consumidor_final" &&
-                   state.clientDocumentNumber && (
-                    <p><span className="font-semibold">Documento:</span> {state.clientDocumentNumber}</p>
+                  {effectiveState.clientIvaCondition &&
+                   effectiveState.clientIvaCondition.toLowerCase() !== "consumidor final" &&
+                   effectiveState.clientIvaCondition.toLowerCase() !== "consumidor_final" &&
+                   effectiveState.clientDocumentNumber && (
+                    <p><span className="font-semibold">Documento:</span> {effectiveState.clientDocumentNumber}</p>
                   )}
                 </div>
 
@@ -337,14 +370,14 @@ const PrintableTable = ({
         onProductAdd={handleProductAdd}
         hasSupplierFilter={hasSupplierFilter}
         allowNegativeStock={allowNegativeStock}
+        searchInputRef={searchInputRef}
       />
 
       {/* Products Table */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col">
-        {/* Scrollable table area */}
         <div className="overflow-y-auto max-h-[calc(100vh-24rem)]">
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] md:min-w-0">
+          <table className="w-full">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-700/50 text-left text-sm font-medium text-gray-500 dark:text-gray-400 sticky top-0 z-10">
                 <th className="px-4 py-3">Producto</th>
@@ -357,7 +390,7 @@ const PrintableTable = ({
             <tbody>
               {sortedProducts.map((product) => (
                 <tr
-                  key={product.id}
+                  key={getBillRowId(product)}
                   className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
                 >
                   <td className="px-4 py-3">
@@ -365,59 +398,24 @@ const PrintableTable = ({
                     <div className="text-sm text-gray-500 dark:text-gray-400">{product.code}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2 print:hidden">
+                    <div className="flex items-center justify-center gap-2 print:hidden" style={{ touchAction: "manipulation" }}>
                       {["unidades", "unidad"].includes(product.unit.toLowerCase()) ? (
                         <>
                           <button
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
-                            onClick={() => updateProductAmount(product.id, product.amount - 1)}
-                            disabled={product.amount <= 1}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
+                            onClick={() => updateProductAmount(getBillRowId(product), product.amount - 1)}
                             aria-label="Disminuir cantidad"
                           >
                             −
                           </button>
-                          {editingProductId === product.id ? (
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              autoFocus
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={() => {
-                                const val = Math.max(1, Number(editValue) || 1);
-                                if (Number(editValue) < 1) {
-                                  toast.error("La cantidad mínima es 1");
-                                }
-                                if (val !== product.amount) {
-                                  updateProductAmount(product.id, val);
-                                }
-                                setEditingProductId(null);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  (e.target as HTMLInputElement).blur();
-                                } else if (e.key === "Escape") {
-                                  setEditingProductId(null);
-                                }
-                              }}
-                              className="w-16 text-center font-medium tabular-nums border rounded-md px-1 py-0.5"
-                            />
-                          ) : (
-                            <span
-                              className="w-12 text-center font-medium tabular-nums cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1 py-0.5"
-                              onClick={() => {
-                                setEditingProductId(product.id);
-                                setEditValue(String(product.amount));
-                              }}
-                              title="Click para editar cantidad"
-                            >
-                              {product.amount}
-                            </span>
-                          )}
+                          <InlineAmountInput
+                            amount={product.amount}
+                            productId={getBillRowId(product)}
+                            updateAmount={updateProductAmount}
+                          />
                           <button
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
-                            onClick={() => updateProductAmount(product.id, product.amount + 1)}
+                            onClick={() => updateProductAmount(getBillRowId(product), product.amount + 1)}
                             aria-label="Aumentar cantidad"
                           >
                             +
@@ -436,24 +434,28 @@ const PrintableTable = ({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">
-                    ${(product.salePrice).toLocaleString("es-AR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    <PriceEditInput
+                      productId={getBillRowId(product)}
+                      salePrice={product.salePrice}
+                    />
                   </td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                    ${(product.salePrice * product.amount).toLocaleString("es-AR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
+                    ${Math.round(product.salePrice * product.amount).toLocaleString("es-AR", {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
                     })}
                   </td>
-                   <td className="px-4 py-3 print:hidden text-center align-middle w-12">
+                  <td className="px-4 py-3 print:hidden">
                     <button
                       onClick={() => setDeleteTarget(product)}
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
                       aria-label={`Eliminar ${product.description}`}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18"/>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                      </svg>
                     </button>
                   </td>
                 </tr>
@@ -496,9 +498,9 @@ const PrintableTable = ({
                 <DiscountControl editable={!externalState} />
               </div>
 
-              {state.discount > 0 && (
+              {effectiveState.discount > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Descuento ({state.discount}%)</span>
+                  <span className="text-gray-500 dark:text-gray-400">Descuento ({effectiveState.discount}%)</span>
                   <span className="font-medium text-green-600 dark:text-green-400 tabular-nums">
                     -${totals.discountAmount.toLocaleString("es-AR", {
                       minimumFractionDigits: 2,
@@ -508,9 +510,9 @@ const PrintableTable = ({
                 </div>
               )}
 
-              <div className="flex justify-between text-3xl font-bold border-t border-gray-300 dark:border-gray-600 pt-2">
+              <div className="flex justify-between text-lg font-bold border-t border-gray-300 dark:border-gray-600 pt-2">
                 <span>Total</span>
-                <span className="font-mono tabular-nums tracking-tight text-primary">
+                <span className="tabular-nums">
                   ${totals.total.toLocaleString("es-AR", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -522,13 +524,18 @@ const PrintableTable = ({
         </div>
       </div>
 
-      {/* CAE Section - Print only */}
-      {isClient && receiptBusinessInfo.documentKind === "official-invoice" && activeCae?.CAE && (
-        <div className="print-visible mt-8 text-xs border-t border-gray-300 pt-4 pb-8">
+      {isClient && receiptBusinessInfo.documentKind === "official-invoice" && displayBannerCae?.CAE && (
+        <div
+          className={cn(
+            "mt-8 text-xs border-t border-gray-300 pt-4 pb-8 overflow-hidden transition-all duration-300 ease-in-out print-visible",
+            isBannerExiting ? "max-h-0 opacity-0 -translate-y-2 pt-0 pb-0 border-transparent" : "max-h-[400px] opacity-100 translate-y-0"
+          )}
+          aria-hidden={isBannerExiting}
+        >
           <div className="flex items-center justify-between gap-4">
-            {activeCae.qrData ? (
+            {displayBannerCae.qrData ? (
               <div className="shrink-0 bg-white p-1 rounded-sm">
-                <QRCodeSVG value={activeCae.qrData} size={110} level="M" includeMargin={false} />
+                <QRCodeSVG value={displayBannerCae.qrData} size={110} level="M" includeMargin={false} />
               </div>
             ) : (
               <div className="w-[110px] shrink-0"></div>
@@ -537,10 +544,10 @@ const PrintableTable = ({
             <div className="flex-1 text-center">
               <p className="font-bold text-[14px] mb-2 uppercase tracking-wide">Comprobante Autorizado</p>
               <p className="mb-1">
-                  <span className="font-bold text-gray-700">CAE:</span> <span className="text-[13px]">{activeCae.CAE}</span>
+                  <span className="font-bold text-gray-700">CAE:</span> <span className="text-[13px]">{displayBannerCae.CAE}</span>
               </p>
               <p className="mb-3">
-                <span className="font-bold text-gray-700">Vencimiento:</span> <span className="text-[13px]">{activeCae.vencimiento}</span>
+                <span className="font-bold text-gray-700">Vencimiento:</span> <span className="text-[13px]">{displayBannerCae.vencimiento}</span>
               </p>
               <div className="w-full h-px bg-gray-200 my-2 mx-auto max-w-[200px]"></div>
               <p className="text-[9px] leading-tight italic text-gray-500 max-w-[300px] mx-auto">

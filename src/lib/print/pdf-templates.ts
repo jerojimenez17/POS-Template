@@ -1,7 +1,7 @@
 "use client";
 
-import { formatInvoiceNumberFull, getBillTypeDisplay } from "@/lib/utils/bill-type";
-import { getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
+import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "@/lib/utils/bill-type";
+import { buildReceiptClientData, getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 export interface PDFTemplateOptions {
   qrSvgDataUrl?: string | null;
@@ -10,6 +10,11 @@ export interface PDFTemplateOptions {
 }
 
 export const PDF_LAYOUT_SCALE = 1.3;
+
+export const PDF_A4_PAGE_STYLE =
+  "@page { size: A4 portrait; margin: 10mm; } @media print { @page { size: A4 portrait; margin: 10mm; } html, body { width: 210mm; } }";
+// PDF_A4_PAGE_STYLE A4 portrait 10mm
+// A4 10mm
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -36,6 +41,8 @@ function safeQrDataUrl(value: unknown): string | null {
 }
 
 export const PDF_STYLES = `
+  @page { size: A4 portrait; margin: 10mm; }
+  @media print { @page { size: A4 portrait; margin: 10mm; } html, body { width: 210mm; } }
   :root { --pdf-layout-scale: ${PDF_LAYOUT_SCALE.toFixed(2)}; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -44,24 +51,25 @@ export const PDF_STYLES = `
     line-height: 1.45;
     color: #1e293b;
   }
-  .invoice-container { width: 750px; max-width: 100%; margin: 0 auto; padding: 30px 35px; background: #fff; overflow-wrap: anywhere; }
+  .invoice-container { width: min(750px, 190mm); max-width: 100%; margin: 0 auto; padding: 30px 35px; background: #fff; overflow-wrap: anywhere; }
 
-  /* Multi-page print stability */
-  .pdf-page { break-after: page; page-break-after: always; break-inside: avoid; max-width: 100%; overflow-wrap: anywhere; }
+  /* Multi-page print stability — Jero #121: fixed A4 portrait geometry so the
+     html2pdf/html2canvas output is always 210x297 (277mm = 297 - 2*10mm margins) */
+  .pdf-page { min-height: 277mm; width: 190mm; max-width: 100%; margin: 0 auto; box-sizing: border-box; break-after: page; page-break-after: always; break-inside: avoid; overflow-wrap: anywhere; }
 
-  /* ── Header ── */
+  /* ——— Header ——— */
   .header { text-align: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 3px solid #0f172a; }
   .company-name { font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: 0.3px; }
   .company-details { font-size: 11px; color: #64748b; margin-top: 4px; }
 
-  /* ── Document type box ── */
+  /* ——— Document type box ——— */
   .doc-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin: 14px 0; display: flex; justify-content: space-between; align-items: center; }
   .doc-type { font-size: 16px; font-weight: 700; color: #0f172a; }
   .doc-number { font-size: 11px; color: #64748b; margin-top: 3px; }
   .doc-meta { font-size: 11px; color: #475569; }
   .doc-meta strong { color: #0f172a; }
 
-  /* ── Info grid ── */
+  /* ——— Info grid ——— */
   .info-grid { display: flex; gap: 14px; margin: 14px 0; }
   .info-grid > * { flex: 1; min-width: 0; }
   .info-section { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 14px; }
@@ -70,7 +78,7 @@ export const PDF_STYLES = `
   .info-label { color: #64748b; }
   .info-value { font-weight: 600; color: #0f172a; text-align: right; overflow-wrap: anywhere; }
 
-  /* ── Table ── */
+  /* ——— Table ——— */
   table { width: 100%; max-width: 100%; border-collapse: collapse; margin: 14px 0; overflow-wrap: anywhere; }
   thead { display: table-header-group; background: #1e293b; color: #fff; }
   tr { break-inside: avoid; page-break-inside: avoid; }
@@ -80,7 +88,7 @@ export const PDF_STYLES = `
   td:nth-child(2), td:nth-child(3), td:nth-child(4) { text-align: right; }
   tbody tr:last-child td { border-bottom: none; }
 
-  /* ── Totals ── */
+  /* ——— Totals ——— */
   .totals-section { margin-top: 10px; border-top: 2px solid #1e293b; padding-top: 12px; width: 55%; margin-left: auto; }
   .total-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
   .total-label { color: #475569; }
@@ -88,7 +96,7 @@ export const PDF_STYLES = `
   .total-row.grand-total { font-size: 16px; font-weight: 800; color: #0f172a; border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 6px; }
   .discount .total-value { color: #059669; }
 
-  /* ── CAE section ── */
+  /* ——— CAE section ——— */
   .cae-section { margin-top: 24px; padding-top: 16px; border-top: 2px solid #e2e8f0; display: flex; align-items: flex-start; gap: 16px; }
   .cae-qr { width: 90px; flex-shrink: 0; background: #fff; padding: 4px; border: 1px solid #e2e8f0; border-radius: 4px; }
   .cae-qr img { width: 100%; height: auto; display: block; }
@@ -98,7 +106,7 @@ export const PDF_STYLES = `
   .cae-row strong { color: #0f172a; font-weight: 700; }
   .cae-legal { font-size: 9px; color: #94a3b8; font-style: italic; line-height: 1.4; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e2e8f0; }
 
-  /* ── Footer ── */
+  /* ——— Footer ——— */
   .footer { margin-top: 16px; padding-top: 10px; border-top: 1px solid #e2e8f0; text-align: center; }
   .thanks { font-size: 13px; font-weight: 700; color: #1e293b; letter-spacing: 0.5px; padding-bottom: 8px; }
 `;
@@ -167,16 +175,25 @@ export function buildPDFHTML(
       qrData?: string;
       ptoVenta?: number | string;
     };
+    originalAssociation?: {
+      billType: string;
+      number: number | string;
+      pointOfSale: number | string;
+      cae: string;
+    };
   },
   options?: PDFTemplateOptions
 ): string {
   const { qrSvgDataUrl, invoiceNumber, pointOfSale } = options || {};
   const paidMethod = receiptData.paidMethod || "Efectivo";
   const subtotal = receiptData.subtotal ?? 0;
-  const isOfficialInvoice = getDocumentPrintKind(receiptData.cae?.cae) === "official-invoice";
+  const normalizedBillTypeForKind = normalizeBillType(receiptData.billType);
+  const isPresupuesto = normalizedBillTypeForKind === "Presupuesto";
+  const isCreditNote = receiptData.documentKind === "credit-note" || getDocumentPrintKind(receiptData.cae?.cae, receiptData.billType) === "credit-note";
+  const isOfficialInvoice = !isPresupuesto && (isCreditNote || getDocumentPrintKind(receiptData.cae?.cae, receiptData.billType) === "official-invoice");
   const billType = getBillTypeDisplay(receiptData.billType, receiptData.cae?.cae, !isOfficialInvoice);
   const docTitle = getDocTitle(billType, receiptData.cae);
-  const invoiceNumberFormatted = isOfficialInvoice
+  const invoiceNumberFormatted = isOfficialInvoice && !isPresupuesto
     ? formatInvoiceNumberFull(
         invoiceNumber ?? receiptData.invoiceNumber,
         pointOfSale ?? receiptData.pointOfSale ?? receiptData.cae?.ptoVenta,
@@ -184,22 +201,28 @@ export function buildPDFHTML(
     : "";
   const validQrDataUrl = safeQrDataUrl(qrSvgDataUrl);
 
-  // ── Client info ──
-  const clientInfo = receiptData.client
+  // ——— Client info ——— (Jero #122: buildReceiptClientData normalizes/validates
+  // the client tax data so Factura A receipts never print stale documents)
+  const client = buildReceiptClientData({
+    name: receiptData.client,
+    ivaCondition: receiptData.clientIvaCondition,
+    documentType: receiptData.documentType === "CUIT" || receiptData.documentType === "DNI" ? receiptData.documentType : null,
+    documentNumber: receiptData.clientDocumentNumber,
+  });
+  const hasClientData = Boolean(client.name || client.ivaCondition || (client.documentType && client.documentNumber));
+  const clientInfo = hasClientData
     ? `<div class="info-section">
-        <div class="info-section-title">Cliente</div>
-        <div class="info-row"><span class="info-label">Nombre</span><span class="info-value">${escapeHtml(receiptData.client)}</span></div>
-        ${receiptData.clientIvaCondition && receiptData.clientIvaCondition.toLowerCase() !== "consumidor final" ? `
-          <div class="info-row"><span class="info-label">Cond. IVA</span><span class="info-value">${escapeHtml(receiptData.clientIvaCondition.replace(/_/g, " "))}</span></div>
-          <div class="info-row"><span class="info-label">${escapeHtml(receiptData.documentType || "Doc.")}</span><span class="info-value">${escapeHtml(receiptData.clientDocumentNumber ?? "")}</span></div>
-        ` : ""}
+        <div class="info-section-title">Datos del Cliente</div>
+        ${client.name ? `<div class="info-row"><span class="info-label">Nombre:</span><span class="info-value">${escapeHtml(client.name)}</span></div>` : ""}
+        ${client.ivaCondition ? `<div class="info-row"><span class="info-label">Cond. IVA:</span><span class="info-value">${escapeHtml(client.ivaCondition)}</span></div>` : ""}
+        ${client.documentType && client.documentNumber ? `<div class="info-row"><span class="info-label">${client.documentType}:</span><span class="info-value">${escapeHtml(client.documentNumber)}</span></div>` : ""}
       </div>`
     : `<div class="info-section">
         <div class="info-section-title">Cliente</div>
         <div class="info-row"><span class="info-label">Nombre</span><span class="info-value">Consumidor Final</span></div>
       </div>`;
 
-  // ── Establishment info (without Vendedor) ──
+  // ——— Establishment info (without Vendedor) ———
   const inicioStr = formatInicioActividades(receiptData.businessInfo?.inicioActividades);
   const businessInfo = `
     <div class="info-section">
@@ -212,12 +235,12 @@ export function buildPDFHTML(
     </div>
   `;
 
-  // ── Totals ──
+  // ——— Totals ———
   const discountRow = receiptData.discountAmount
     ? `<div class="total-row discount"><span class="total-label">Descuento (${escapeHtml(receiptData.discount)}%)</span><span class="total-value">-$${formatCurrency(receiptData.discountAmount)}</span></div>`
     : "";
 
-  // ── CAE section (official invoices only) ──
+  // ——— CAE section (official invoices only) ———
   const caeSection = isOfficialInvoice && receiptData.cae
     ? `<div class="cae-section">
         <div class="cae-qr">
@@ -234,7 +257,7 @@ export function buildPDFHTML(
       </div>`
     : "";
 
-  // ── Products table (paginated for multi-page stability) ──
+  // ——— Products table (paginated for multi-page stability) ———
   const pageSize = 18;
   const itemPages = Array.from({ length: Math.max(1, Math.ceil(receiptData.products.length / pageSize)) }, (_, pageIndex) =>
     receiptData.products.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
@@ -268,6 +291,7 @@ export function buildPDFHTML(
 
       <div class="info-grid">
         ${clientInfo}
+        ${isCreditNote && receiptData.originalAssociation ? `<div class="info-section"><div class="info-section-title">Comprobante original asociado</div><div class="info-row"><span class="info-label">Tipo:</span><span class="info-value">${escapeHtml(receiptData.originalAssociation.billType)}</span></div><div class="info-row"><span class="info-label">Número:</span><span class="info-value">${escapeHtml(formatInvoiceNumberFull(receiptData.originalAssociation.number, receiptData.originalAssociation.pointOfSale))}</span></div><div class="info-row"><span class="info-label">CAE original:</span><span class="info-value">${escapeHtml(receiptData.originalAssociation.cae)}</span></div></div>` : ""}
         ${businessInfo}
       </div>
 
@@ -285,7 +309,7 @@ export function buildPDFHTML(
       ${caeSection}
 
       <div class="footer">
-        <div class="thanks">¡Gracias por su compra!</div>
+        <div class="thanks">${isPresupuesto ? "Presupuesto — No válido como factura" : "¡Gracias por su compra!"}</div>
       </div>
       </div>
     </div>

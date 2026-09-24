@@ -146,13 +146,16 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
     if (layout === "cards" && BillState.IVACondition) {
       form.reset({
         paidMethod: BillState.paidMethod || PaidMethods.EFECTIVO,
-        clientCondition: BillState.IVACondition || ClientConditions.CONSUMIDOR_FINAL,
+        clientCondition: (BillState.IVACondition || ClientConditions.CONSUMIDOR_FINAL) as z.infer<typeof BillParametersSchema>["clientCondition"],
         discount: BillState.discount || 0,
         twoMethods: BillState.twoMethods || false,
         billType: BillState.billType || BillTypes.C,
         totalSecondMethod: BillState.totalSecondMethod || 0,
         secondPaidMethod: BillState.secondPaidMethod || PaidMethods.DEBITO,
         ptoVenta: BillState.ptoVenta || (ptoVentas.length > 0 ? ptoVentas[0] : undefined),
+        // BillParametersSchema and BillState use the numeric document contract.
+        // Keep the form value numeric rather than widening the schema contract
+        // just for the cards-layout reset path.
         documentNumber: BillState.documentNumber || 0,
       });
     }
@@ -333,7 +336,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
                   render={({ field }) => (
                     <FormItem className="min-w-[130px]">
                       <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        {watchClientCondition === ClientConditions.CUIT ? "CUIT" : "DNI"}
+                        {BillState.clientDocumentType === "CUIT" ? "CUIT" : "DNI"}
                       </FormLabel>
                       <Input
                         className="h-8 text-sm rounded-md"
@@ -522,7 +525,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                        {watchClientCondition === ClientConditions.CUIT ? "CUIT" : "DNI"}
+                         {BillState.clientDocumentType === "CUIT" ? "CUIT" : "DNI"}
                       </FormLabel>
                       <Input
                         className="h-9 text-sm rounded-md"

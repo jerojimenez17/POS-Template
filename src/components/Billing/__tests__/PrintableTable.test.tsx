@@ -173,7 +173,7 @@ describe("PrintableTable Component", () => {
       );
 
       expect(screen.getByText("No hay productos agregados")).toBeTruthy();
-      expect(screen.getByText("Buscá un producto para comenzar")).toBeTruthy();
+       expect(screen.getByText("Buscá un producto para comenzar")).toBeTruthy();
     });
 
     it("should render with custom className", () => {
@@ -525,7 +525,7 @@ describe("PrintableTable Component", () => {
       );
 
       expect(screen.getByText(/Cliente:/)).toBeTruthy();
-      expect(screen.getByText("Juan Pérez")).toBeTruthy();
+       expect(screen.getByText("Juan Pérez")).toBeTruthy();
     });
 
     it("should display client IVA condition when provided", () => {
@@ -545,7 +545,7 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      expect(screen.getByText(/Condición IVA:/)).toBeTruthy();
+       expect(screen.getByText(/Condición IVA:/)).toBeTruthy();
       expect(screen.getByText("Responsable Inscripto")).toBeTruthy();
     });
 
@@ -794,7 +794,7 @@ describe("PrintableTable Component", () => {
       );
 
       expect(screen.getByText(/Medio de Pago:/)).toBeTruthy();
-      expect(screen.getByText("Tarjeta de Crédito")).toBeTruthy();
+       expect(screen.getByText("Tarjeta de Crédito")).toBeTruthy();
     });
   });
 
