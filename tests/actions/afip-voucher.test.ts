@@ -143,7 +143,7 @@ describe("createAfipVoucherAction — fix-shortcut-zero-price-afip", () => {
     });
     // Default: axios.post resolves with a fake success response
     mockAxiosPost.mockResolvedValue({
-      data: { success: true, cae: "12345678901234" },
+      data: { success: true, CAE: "12345678901234" },
     });
   });
 
@@ -277,7 +277,14 @@ describe("createAfipVoucherAction — fix-shortcut-zero-price-afip", () => {
     expect(mockAxiosPost).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       success: true,
-      data: { success: true, cae: "12345678901234" },
+      data: {
+        cae: "12345678901234",
+        vencimiento: "",
+        nroComprobante: 0,
+        qrData: "",
+        ptoVenta: 1,
+        sourcePath: "data",
+      },
     });
   });
 

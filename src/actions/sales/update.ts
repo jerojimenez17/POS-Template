@@ -7,6 +7,7 @@ import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import { consumeAuthorizedFiscalSnapshotGrant } from "@/lib/server/fiscal-snapshot-grant";
 interface UpdateCaeInput {
   CAE: {
     CAE: string;
@@ -14,6 +15,7 @@ interface UpdateCaeInput {
     nroComprobante: number | string;
     qrData: string;
     ptoVenta?: number | string;
+    fiscalSnapshotToken?: string;
   };
   IVACondition: string;
   documentType?: "" | "CUIT" | "DNI";
@@ -27,7 +29,7 @@ export const updateOrderCaeAction = async (
   data: UpdateCaeInput
 ) => {
   const parsed = z.object({
-    CAE: z.object({ CAE: z.string(), vencimiento: z.string(), nroComprobante: z.union([z.string(), z.number()]), qrData: z.string(), ptoVenta: z.union([z.string(), z.number()]).optional() }),
+    CAE: z.object({ CAE: z.string(), vencimiento: z.string(), nroComprobante: z.union([z.string(), z.number()]), qrData: z.string(), ptoVenta: z.union([z.string(), z.number()]).optional(), fiscalSnapshotToken: z.string().length(64).optional() }).strict(),
     IVACondition: z.string(),
     documentType: z.enum(["", "CUIT", "DNI"]).optional(),
     documentNumber: z.union([z.string(), z.number()]).optional(),
@@ -47,15 +49,56 @@ export const updateOrderCaeAction = async (
   if (!businessId) return { error: "No autorizado" };
 
   try {
-    await db.order.update({
-      where: { id: orderId, businessId },
-      data: {
-        CAE: parsed.data.CAE,
-        clientIvaCondition: parsed.data.IVACondition,
-        clientDocumentType: parsed.data.documentType || null,
-        clientDocumentNumber: normalizedDocumentNumber,
-        paymentMethod: parsed.data.paidMethod,
-      },
+    await db.$transaction(async (tx) => {
+      let fiscalSnapshot: Prisma.InputJsonValue | undefined;
+      const existingOrder = await tx.order.findFirst({
+        where: { id: orderId, businessId },
+        select: { total: true, fiscalSnapshot: true },
+      });
+      if (!existingOrder) throw new Error("Orden no encontrada");
+      if (existingOrder.fiscalSnapshot !== null) throw new Error("El comprobante fiscal autorizado no puede reemplazarse");
+      if (parsed.data.CAE.fiscalSnapshotToken) {
+        const billType = parsed.data.billType;
+        const invoiceNumber = Number(parsed.data.CAE.nroComprobante);
+        const pointOfSale = Number(parsed.data.CAE.ptoVenta);
+        if ((billType !== "Factura A" && billType !== "Factura B" && billType !== "Factura C")
+          || !Number.isSafeInteger(invoiceNumber) || invoiceNumber <= 0
+          || !Number.isSafeInteger(pointOfSale) || pointOfSale <= 0) {
+          throw new Error("Los datos de autorización fiscal no coinciden con la venta");
+        }
+        const trustedSnapshot = await consumeAuthorizedFiscalSnapshotGrant(tx, {
+          token: parsed.data.CAE.fiscalSnapshotToken,
+          businessId,
+          cae: parsed.data.CAE.CAE,
+          billType,
+          invoiceNumber,
+          pointOfSale,
+          total: existingOrder.total,
+        });
+        if (!trustedSnapshot) throw new Error("La autorización fiscal no coincide con la venta");
+        fiscalSnapshot = JSON.parse(JSON.stringify(trustedSnapshot)) as Prisma.InputJsonValue;
+      }
+      await tx.order.update({
+        where: { id: orderId, businessId },
+        data: {
+          CAE: {
+            CAE: parsed.data.CAE.CAE,
+            vencimiento: parsed.data.CAE.vencimiento,
+            nroComprobante: parsed.data.CAE.nroComprobante,
+            qrData: parsed.data.CAE.qrData,
+            ...(parsed.data.CAE.ptoVenta === undefined ? {} : { ptoVenta: parsed.data.CAE.ptoVenta }),
+          },
+          billType: parsed.data.billType,
+          afipVoucherType: parsed.data.billType === "Factura A" ? 1 : parsed.data.billType === "Factura B" ? 6 : parsed.data.billType === "Factura C" ? 11 : undefined,
+          invoiceNumber: Number(parsed.data.CAE.nroComprobante),
+          invoicePointOfSale: parsed.data.CAE.ptoVenta === undefined ? undefined : Number(parsed.data.CAE.ptoVenta),
+          clientIvaCondition: parsed.data.IVACondition,
+          clientDocumentType: parsed.data.documentType || null,
+          clientDocumentNumber: normalizedDocumentNumber,
+          paymentMethod: parsed.data.paidMethod,
+          ...(fiscalSnapshot ? { fiscalSnapshot } : {}),
+        },
+      });
     });
 
     await pusherServer.trigger(

@@ -90,6 +90,7 @@ export interface ThermalReceiptData {
   };
   pointOfSale?: number | string;
   invoiceNumber?: number | string;
+  originalAssociation?: { billType: string; cae: string; number: number; pointOfSale: number };
 }
 
 function sanitize(text: string): string {
@@ -106,8 +107,9 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   const lines: string[] = [];
   
   const isPresupuesto = normalizeBillType(data.billType) === "Presupuesto";
+  const isCreditNote = data.documentKind === "credit-note" || getDocumentPrintKind(data.cae?.cae, data.billType) === "credit-note";
   const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
-  const isAFIPInvoice = !isPresupuesto && getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice";
+  const isAFIPInvoice = !isPresupuesto && (isCreditNote || getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice");
   
   lines.push(ESCPOS.INIT);
   lines.push(ESCPOS.ALIGN_CENTER);
@@ -118,7 +120,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   lines.push(ESCPOS.BOLD_OFF);
   lines.push(ESCPOS.LINE_FEED);
   
-  const isOfficialInvoice = !isPresupuesto && getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice";
+  const isOfficialInvoice = !isPresupuesto && (isCreditNote || getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice");
   if (isOfficialInvoice && data.businessInfo?.razonSocial) {
     lines.push(sanitize(data.businessInfo.razonSocial));
   }
@@ -160,6 +162,13 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   }
   
   lines.push(formatLine("Tipo:", billTypeDisplay));
+  if (isCreditNote && data.originalAssociation) {
+    lines.push(ESCPOS.LINE_FEED);
+    lines.push("COMPROBANTE ORIGINAL ASOCIADO");
+    lines.push(formatLine("Tipo:", data.originalAssociation.billType));
+    lines.push(formatLine("Nro:", formatInvoiceNumberFull(data.originalAssociation.number, data.originalAssociation.pointOfSale)));
+    lines.push(formatLine("CAE:", data.originalAssociation.cae));
+  }
   
   const client = buildReceiptClientData({ name: data.client, ivaCondition: data.clientIvaCondition, documentType: data.documentType === "CUIT" || data.documentType === "DNI" ? data.documentType : null, documentNumber: data.clientDocumentNumber });
   if (isAFIPInvoice && (client.name || client.ivaCondition || (client.documentType && client.documentNumber))) {
@@ -208,7 +217,7 @@ export function generateThermalReceipt(data: ThermalReceiptData): string {
   
   if (isOfficialInvoice) {
     lines.push(ESCPOS.BOLD_ON);
-    lines.push("** COMPROBANTE AUTORIZADO **");
+    lines.push(isCreditNote ? "** NOTA DE CREDITO AUTORIZADA **" : "** COMPROBANTE AUTORIZADO **");
     lines.push(ESCPOS.BOLD_OFF);
     lines.push(ESCPOS.LINE_FEED);
     lines.push(formatLine("CAE:", data.cae?.cae ?? ""));
@@ -235,7 +244,7 @@ export function buildThermalPrintHTML(data: ThermalReceiptData, qrDataUrl: strin
   const dateStr = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(data.date);
   const isPresupuesto = normalizeBillType(data.billType) === "Presupuesto";
   const billTypeDisplay = getBillTypeDisplay(data.billType, data.cae?.cae);
-  const isAFIPInvoice = !isPresupuesto && getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice";
+  const isAFIPInvoice = !isPresupuesto && (data.documentKind === "credit-note" || getDocumentPrintKind(data.cae?.cae, data.billType) === "official-invoice" || getDocumentPrintKind(data.cae?.cae, data.billType) === "credit-note");
   const invoiceNum = isAFIPInvoice ? formatInvoiceNumberFull(data.invoiceNumber, data.pointOfSale ?? data.cae?.ptoVenta) : "";
   const client = buildReceiptClientData({ name: data.client, ivaCondition: data.clientIvaCondition, documentType: data.documentType === "CUIT" || data.documentType === "DNI" ? data.documentType : null, documentNumber: data.clientDocumentNumber });
 

@@ -1,6 +1,6 @@
 import BillTypes, { type BillType } from "@/models/billType";
 
-export type AfipVoucherType = 1 | 6 | 11;
+export type AfipVoucherType = 1 | 3 | 6 | 8 | 11 | 13;
 export type AfipOperation = "getLastVoucher" | "createVoucher";
 export type AfipEnvironment = "homologacion" | "produccion" | "desconocido";
 
@@ -34,11 +34,15 @@ export function getAfipVoucherTypeCode(value: string): AfipVoucherType {
 export function validatePointSaleRequest(
   request: AfipPointSaleRequest,
   configuredPoints: readonly number[],
+  operation: "invoice" | "credit-note" = "invoice",
 ): AfipPointSaleRequest {
-  if (!Number.isInteger(request.ptoVenta) || request.ptoVenta <= 0) {
+  if (!Number.isSafeInteger(request.ptoVenta) || request.ptoVenta <= 0) {
     throw new Error("El punto de venta debe ser un entero positivo");
   }
-  if (![1, 6, 11].includes(request.tipoFactura)) {
+  if (operation === "invoice" && ![1, 6, 11].includes(request.tipoFactura)) {
+    throw new Error("El tipo de comprobante AFIP es inválido");
+  }
+  if (operation === "credit-note" && ![3, 8, 13].includes(request.tipoFactura)) {
     throw new Error("El tipo de comprobante AFIP es inválido");
   }
   if (!configuredPoints.includes(request.ptoVenta)) {

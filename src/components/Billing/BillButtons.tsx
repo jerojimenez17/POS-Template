@@ -35,7 +35,12 @@ import {
 } from "@/actions/shortcuts";
 import type { ShortcutMap, ShortcutKey } from "@/models/ShortcutConfig";
 import Product from "@/models/Product";
-import { createBillCheckoutSnapshot } from "@/utils/billing";
+import {
+  createAfipInvoiceDTO,
+  createBillCheckoutSnapshot,
+  createBillStateSnapshot,
+  type AfipInvoiceDTO,
+} from "@/utils/billing";
 import { formatAfipPointSaleErrorForUser, sanitizeAfipText } from "@/services/afip/point-sale-validation";
 import { isValidCae } from "@/services/afip/voucher-response";
 
@@ -215,7 +220,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
     return true;
   };
 
-  const handleCreateVoucher = async (checkout: typeBillState): Promise<CAE | null> => {
+  const handleCreateVoucher = async (checkout: AfipInvoiceDTO): Promise<CAE | null> => {
     if (!checkConnection()) return null;
     try {
       console.log("Calling createAfipVoucherAction");
@@ -227,18 +232,20 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         return null;
       }
 
-      const rawData = resp.data as any;
-      const rawCae = rawData?.cae ?? rawData?.CAE ?? rawData?.afip?.CAE ?? rawData?.afip?.cae;
-      const caeString = typeof rawCae === "string" ? rawCae.trim() : rawCae ? String(rawCae).trim() : "";
+      const rawData = resp.data;
+      const caeString = typeof rawData.cae === "string" ? rawData.cae.trim() : "";
 
-      if (resp.success && caeString.length > 0) {
+      if (resp.success && isValidCae(caeString)) {
         setCreateVoucherError(false);
         const newCAE: CAE = {
           CAE: caeString,
-          vencimiento: String(rawData?.vencimiento ?? rawData?.CAEFchVto ?? rawData?.afip?.CAEFchVto ?? ""),
-          nroComprobante: Number(rawData?.nroComprobante ?? rawData?.nroCbte ?? 0),
-          qrData: String(rawData?.qrData ?? ""),
-          ptoVenta: rawData?.ptoVenta ?? checkout.ptoVenta,
+          vencimiento: rawData.vencimiento,
+          nroComprobante: rawData.nroComprobante,
+          qrData: rawData.qrData,
+          ptoVenta: rawData.ptoVenta ?? checkout.ptoVenta,
+          ...(typeof rawData?.fiscalSnapshotToken === "string"
+            ? { fiscalSnapshotToken: rawData.fiscalSnapshotToken }
+            : {}),
         };
         dispatch({ type: "CAE", payload: newCAE });
         setLocalCAE(newCAE);
@@ -335,10 +342,18 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
         return;
       }
 
-      const checkout = createBillCheckoutSnapshot(BillState, billTypeRef?.current);
+      const checkout = createBillStateSnapshot(BillState, billTypeRef?.current);
       let caeData: CAE | null = null;
       if (afip && !isUpdate) {
-        caeData = await handleCreateVoucher(checkout);
+        try {
+          const afipInvoice = createAfipInvoiceDTO(checkout, billTypeRef?.current);
+          caeData = await handleCreateVoucher(afipInvoice);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Los datos de la factura no son válidos";
+          toast.error(message);
+          setBlockButton(false);
+          return undefined;
+        }
         if (!caeData?.CAE?.trim()) {
           setBlockButton(false);
           return undefined;
@@ -567,7 +582,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                   if (targetWin) {
                     targetWin.document.write("<html><head><title>Generando Presupuesto...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando presupuesto, por favor espere...</h2></body></html>");
                   }
-                   const snapshot = createBillCheckoutSnapshot(BillState, "Presupuesto");
+                    const snapshot = createBillCheckoutSnapshot(BillState, "Presupuesto");
                    handlePrint(undefined, targetWin, snapshot);
                    resetCheckout();
                 }}
@@ -634,7 +649,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                        return;
                      }
                      if (BillState.total > 0) {
-                       const snapshot = createBillCheckoutSnapshot({ ...BillState, CAE: caeResult }, billTypeRef?.current);
+                        const snapshot = createBillStateSnapshot({ ...BillState, CAE: caeResult }, billTypeRef?.current);
                        handlePrint(caeResult, targetWin, snapshot);
                        resetCheckout();
                      } else if (targetWin) {
@@ -736,7 +751,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                        return;
                      }
                      if (BillState.total > 0) {
-                       const snapshot = createBillCheckoutSnapshot(BillState, billTypeRef?.current);
+                        const snapshot = createBillStateSnapshot(BillState, billTypeRef?.current);
                        handlePrint(caeResult, targetWin, snapshot);
                        resetCheckout();
                      } else if (targetWin) {

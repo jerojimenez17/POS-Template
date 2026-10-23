@@ -7,10 +7,12 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
 import { after } from "next/server";
-import { MovementType } from "@prisma/client";
+import { MovementType, Prisma } from "@prisma/client";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
 import { processInBatches, bulkUpdateStock } from "@/lib/batch-utils";
+import { z } from "zod";
+import { consumeAuthorizedFiscalSnapshotGrant } from "@/lib/server/fiscal-snapshot-grant";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -42,6 +44,7 @@ interface ProcessSaleInput {
     nroComprobante: number | string;
     qrData: string;
     ptoVenta?: number | string;
+    fiscalSnapshotToken?: string;
   };
   billType?: string;
 }
@@ -68,6 +71,15 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
 
     const total = billState.totalWithDiscount || billState.total;
     const discountAmount = billState.total * discountPercent * 0.01;
+    const caeForPersistence = billState.CAE
+      ? {
+        CAE: billState.CAE.CAE,
+        vencimiento: billState.CAE.vencimiento,
+        nroComprobante: billState.CAE.nroComprobante,
+        qrData: billState.CAE.qrData,
+        ...(billState.CAE.ptoVenta === undefined ? {} : { ptoVenta: billState.CAE.ptoVenta }),
+      }
+      : undefined;
     
     const result = await db.$transaction(async (tx) => {
       const activeSession = await tx.cashboxSession.findFirst({
@@ -75,6 +87,30 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       });
       if (!activeSession) {
         throw new Error("No hay una sesión de caja abierta.");
+      }
+
+      let fiscalSnapshot;
+      if (billState.CAE?.fiscalSnapshotToken) {
+        const originalBillType = billState.billType;
+        const invoiceNumber = Number(billState.CAE.nroComprobante);
+        const pointOfSale = Number(billState.CAE.ptoVenta);
+        if ((originalBillType !== "Factura A" && originalBillType !== "Factura B" && originalBillType !== "Factura C")
+          || !Number.isSafeInteger(invoiceNumber) || invoiceNumber <= 0
+          || !Number.isSafeInteger(pointOfSale) || pointOfSale <= 0) {
+          throw new Error("Los datos de autorización fiscal no coinciden con la venta");
+        }
+        fiscalSnapshot = await consumeAuthorizedFiscalSnapshotGrant(tx, {
+          token: billState.CAE.fiscalSnapshotToken,
+          businessId,
+          cae: billState.CAE.CAE,
+          billType: originalBillType,
+          invoiceNumber,
+          pointOfSale,
+          total,
+        });
+      }
+      if (billState.CAE?.fiscalSnapshotToken && !fiscalSnapshot) {
+        throw new Error("La autorización fiscal de la factura expiró o no coincide con la venta");
       }
 
       const order = await tx.order.create({
@@ -93,7 +129,15 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           clientIvaCondition: billState.clientIvaCondition,
           clientDocumentNumber,
           clientDocumentType: clientDocumentType || null,
-          CAE: billState.CAE,
+          ...(caeForPersistence ? { CAE: caeForPersistence } : {}),
+          billType: billState.billType,
+          afipVoucherType: billState.CAE ? (billState.billType === "Factura A" ? 1 : billState.billType === "Factura B" ? 6 : billState.billType === "Factura C" ? 11 : null) : null,
+          invoiceNumber: billState.CAE ? Number(billState.CAE.nroComprobante) : null,
+          invoicePointOfSale: billState.CAE?.ptoVenta === undefined ? null : Number(billState.CAE.ptoVenta),
+          invoiceIssuedAt: billState.CAE ? now : null,
+          ...(fiscalSnapshot ? {
+            fiscalSnapshot: JSON.parse(JSON.stringify(fiscalSnapshot)) as Prisma.InputJsonValue,
+          } : {}),
           cashboxSessionId: activeSession.id,
           items: {
             create: billState.products.map((p) => ({
@@ -197,8 +241,9 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
 
     // ⏰ Respuesta al cliente ya!
     // El resto (ranking, pusher, cache) va en after() — no crítico para el usuario
-    after(async () => {
-      try {
+    try {
+      after(async () => {
+        try {
         // Ranking de productos (eventual consistency — analytics no crítico)
         await db.$transaction(async (tx) => {
           await processInBatches(billState.products, 15, (item) => [
@@ -237,10 +282,15 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         revalidateTag(CACHE_TAGS.CASHBOX, "max");
         revalidateTag(CACHE_TAGS.ORDERS, "max");
         revalidateTag(CACHE_TAGS.SALES, "max");
-      } catch (bgError) {
-        console.error("Background after() error (non-critical):", bgError);
-      }
-    });
+        } catch (bgError) {
+          console.error("Background after() error (non-critical):", bgError);
+        }
+      });
+    } catch (afterError: unknown) {
+      console.error("Could not schedule non-critical sale background work", {
+        errorType: afterError instanceof Error ? afterError.name : typeof afterError,
+      });
+    }
 
     return { success: true, orderId: result.order.id };
   } catch (error) {
@@ -249,14 +299,96 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
   }
 };
 
-export const processReturnAction = async (data: { orderId: string; items: { productId: string; quantity: number; refundAmount: number }[]; reason: string }) => {
+const returnInputSchema = z.object({
+  orderId: z.string().min(1),
+  items: z.array(z.object({
+    productId: z.string().min(1),
+    quantity: z.number().finite().positive(),
+    refundAmount: z.number().finite().nonnegative(),
+  }).strict()).min(1),
+  reason: z.string().trim().min(1).max(500),
+}).strict();
+
+export const processReturnAction = async (data: unknown) => {
   try {
     const session = await auth();
     const businessId = session?.user?.businessId;
-    if (!businessId) return { error: "No autorizado" };
+    const userId = session?.user?.id;
+    if (!businessId || !userId) return { error: "No autorizado" };
+    const parsed = returnInputSchema.safeParse(data);
+    if (!parsed.success) return { error: "Datos de devolución inválidos" };
+    const returnData = parsed.data;
     const result = await db.$transaction(async (tx) => {
+      // Serialize manual returns against credit-note reservations on the same
+      // tenant-scoped Order row. The lock is held through transaction commit.
+      await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Order" WHERE "id" = ${returnData.orderId} AND "businessId" = ${businessId} FOR UPDATE`;
+
+      // Re-read after acquiring the lock; the pre-lock snapshot is not a
+      // concurrency authority for return state.
+      const order = await tx.order.findFirst({
+        where: { id: returnData.orderId, businessId },
+        include: { items: true, returns: { include: { items: true } } },
+      });
+      if (!order) throw new Error("Venta no encontrada");
+      if (order.returns.some((item) => item.kind === "CREDIT_NOTE"
+        && (item.status === "PENDING" || item.status === "AUTHORIZED"))) {
+        throw new Error("La venta tiene una Nota de Crédito pendiente o autorizada");
+      }
+
+      const requestedProductIds = new Set<string>();
+      for (const item of returnData.items) {
+        if (requestedProductIds.has(item.productId)) {
+          throw new Error("No se puede repetir un producto en la devolución");
+        }
+        requestedProductIds.add(item.productId);
+      }
+
+      const orderItems = order.items.filter((item) => item.productId !== null);
+      const orderItemByProduct = new Map(orderItems.map((item) => [item.productId as string, item]));
+      const returnedByOrderItem = new Map<string, { quantity: number; refundAmount: number }>();
+      for (const previousReturn of order.returns) {
+        if (previousReturn.status === "REJECTED") continue;
+        for (const previousItem of previousReturn.items) {
+          const current = returnedByOrderItem.get(previousItem.orderItemId) ?? { quantity: 0, refundAmount: 0 };
+          current.quantity += previousItem.quantity;
+          current.refundAmount += previousItem.refundAmount;
+          returnedByOrderItem.set(previousItem.orderItemId, current);
+        }
+      }
+
+      let totalRefund = 0;
+      for (const item of returnData.items) {
+        const orderItem = orderItemByProduct.get(item.productId);
+        if (!orderItem) throw new Error("El producto no pertenece a la venta");
+        const previous = returnedByOrderItem.get(orderItem.id) ?? { quantity: 0, refundAmount: 0 };
+        const availableQuantity = orderItem.quantity - previous.quantity;
+        const originalRefund = orderItem.subTotal > 0 ? orderItem.subTotal : orderItem.price * orderItem.quantity;
+        const availableRefund = originalRefund - previous.refundAmount;
+        const refundForRequestedQuantity = orderItem.quantity > 0
+          ? (originalRefund / orderItem.quantity) * item.quantity
+          : 0;
+        if (item.quantity > availableQuantity + Number.EPSILON) {
+          throw new Error("La cantidad supera la cantidad disponible para devolver");
+        }
+        if (item.refundAmount > Math.min(availableRefund, refundForRequestedQuantity) + Number.EPSILON) {
+          throw new Error("El reintegro supera el importe disponible para devolver");
+        }
+        totalRefund += item.refundAmount;
+      }
+      if (totalRefund <= 0) throw new Error("El importe de devolución debe ser mayor a 0");
+
+      const authorizedCreditNote = order.returns.some((item) => item.kind === "CREDIT_NOTE" && item.status === "AUTHORIZED");
+      const isFullOrderReturn = orderItems.length > 0 && orderItems.every((orderItem) => {
+        const requested = returnData.items.find((item) => item.productId === orderItem.productId);
+        const previous = returnedByOrderItem.get(orderItem.id) ?? { quantity: 0, refundAmount: 0 };
+        return requested !== undefined && requested.quantity + previous.quantity >= orderItem.quantity - Number.EPSILON;
+      });
+      if (authorizedCreditNote && isFullOrderReturn) {
+        throw new Error("La venta ya tiene una Nota de Crédito autorizada");
+      }
+
       const activeSession = await tx.cashboxSession.findFirst({
-        where: { userId: session.user!.id, status: "OPEN" },
+        where: { userId, businessId, status: "OPEN" },
       });
       if (!activeSession) {
         throw new Error("No hay una sesión de caja abierta.");
@@ -264,17 +396,12 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
 
       const returnRecord = await tx.saleReturn.create({
         data: {
-          orderId: data.orderId,
+          orderId: returnData.orderId,
           businessId,
-          reason: data.reason,
-          total: data.items.reduce((acc, item) => acc + item.refundAmount, 0),
+          reason: returnData.reason,
+          kind: "MANUAL_RETURN",
+          total: totalRefund,
         },
-      });
-
-      // Buscar todos los orderItems de una sola vez
-      const orderItems = await tx.orderItem.findMany({
-        where: { orderId: data.orderId },
-        select: { id: true, productId: true },
       });
       const orderItemMap = new Map(orderItems.map((oi) => [oi.productId, oi.id]));
 
@@ -285,7 +412,7 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
         const stockMovements: { type: MovementType; quantity: number; productId: string; businessId: string; reason: string }[] = [];
         const returnItems: { returnId: string; orderItemId: string; productId: string; quantity: number; refundAmount: number }[] = [];
 
-        for (const item of data.items) {
+        for (const item of returnData.items) {
           const orderItemId = orderItemMap.get(item.productId);
           if (!orderItemId) throw new Error(`OrderItem not found for product ${item.productId}`);
 
@@ -294,7 +421,7 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
             quantity: item.quantity,
             productId: item.productId,
             businessId,
-            reason: `Devolución #${returnRecord.id} (Ref: Venta #${data.orderId})`,
+            reason: `Devolución #${returnRecord.id} (Ref: Venta #${returnData.orderId})`,
           });
           returnItems.push({
             returnId: returnRecord.id,
@@ -305,12 +432,11 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
           });
         }
 
-        await bulkUpdateStock(tx, data.items.map(i => ({ id: i.productId, change: i.quantity })));
+        await bulkUpdateStock(tx, returnData.items.map(i => ({ id: i.productId, change: i.quantity })));
         await tx.stockMovement.createMany({ data: stockMovements });
         await tx.saleReturnItem.createMany({ data: returnItems });
       }
 
-      const totalRefund = data.items.reduce((acc, item) => acc + item.refundAmount, 0);
       await tx.cashBox.update({
         where: { id: activeSession.cashboxId },
         data: { total: { decrement: totalRefund } },

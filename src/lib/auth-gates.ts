@@ -1,22 +1,30 @@
 import { auth } from "@/lib/auth";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 
-export const assertWritePermission = async (): Promise<ActionResult<{ id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null }>> => {
-  const session = await auth();
-  if (!session || !session.user) {
+export interface AuthenticatedUserContext {
+  id: string;
+  businessId: string | null;
+  role: string | null;
+  business: { accountStatus: string; features: Record<string, unknown> } | null;
+}
+
+export const assertWritePermission = async (actor?: AuthenticatedUserContext): Promise<ActionResult<AuthenticatedUserContext>> => {
+  const session = actor ? null : await auth();
+  const user = actor ?? (session?.user as AuthenticatedUserContext | undefined);
+  if (!user) {
     return fail("Debes iniciar sesión para realizar esta acción.", "UNAUTHENTICATED");
   }
 
-  const business = session.user.business;
+  const business = user.business;
   if (business && business.accountStatus === "MOROSO") {
     return fail("Acción bloqueada. Tu cuenta posee facturas vencidas impagas.", "DELINQUENT");
   }
 
-  return ok(session.user as { id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null });
+  return ok(user);
 };
 
-export const requireFeature = async (featureName: string): Promise<ActionResult<{ id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null }>> => {
-  const userResult = await assertWritePermission();
+export const requireFeature = async (featureName: string, actor?: AuthenticatedUserContext): Promise<ActionResult<AuthenticatedUserContext>> => {
+  const userResult = await assertWritePermission(actor);
   if (!userResult.success) return userResult;
 
   const user = userResult.data!;
@@ -35,7 +43,7 @@ export const requireFeature = async (featureName: string): Promise<ActionResult<
   return ok(user);
 };
 
-export const assertLimit = async (limitName: string, value: number): Promise<ActionResult<{ id: string; businessId: string | null; role: string | null; business: { accountStatus: string; features: Record<string, unknown> } | null }>> => {
+export const assertLimit = async (limitName: string, value: number): Promise<ActionResult<AuthenticatedUserContext>> => {
   const userResult = await assertWritePermission();
   if (!userResult.success) return userResult;
 

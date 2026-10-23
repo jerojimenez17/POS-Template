@@ -11,6 +11,7 @@ import { Session } from "next-auth";
 import { formatLocalDate } from "@/utils/date";
 import { toast } from "sonner";
 import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
+import { hasValidSalesPresentationCae } from "@/services/sales-document-classification";
 
 interface props {
   sale: BillState;
@@ -46,9 +47,9 @@ const SaleAccordion = ({ sale, session, qzTrayEnabled }: props) => {
 
         {/* Invoice / CAE */}
         <div>
-          {sale.CAE?.CAE?.trim() ? (
+          {hasValidSalesPresentationCae(sale.CAE) ? (
             <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">
-              {formatInvoiceNumberFull(sale.CAE.nroComprobante, sale.ptoVenta ?? sale.CAE.ptoVenta)}
+              {formatInvoiceNumberFull(sale.CAE?.nroComprobante, sale.ptoVenta ?? sale.CAE?.ptoVenta)}
             </span>
           ) : (
             <button

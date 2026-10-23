@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSaleHistoryAction, OrderUpdateWithUser } from "@/actions/sales";
+import { getSaleHistoryAction, type OrderUpdateWithUser } from "@/actions/sales/get-sale-history";
 import { format } from "date-fns";
 import { History, User as UserIcon, Calendar, Package, Plus, Minus, RefreshCw, Tag, UserPlus, Info } from "lucide-react";
 import Spinner from "@/components/ui/Spinner";
@@ -14,14 +14,34 @@ interface Props {
 const SaleHistory = ({ saleId }: Props) => {
   const [history, setHistory] = useState<OrderUpdateWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+
     const fetchHistory = async () => {
-      const data = await getSaleHistoryAction(saleId);
-      setHistory(data);
-      setLoading(false);
+      if (active) {
+        setLoading(true);
+        setError(null);
+      }
+
+      try {
+        const data = await getSaleHistoryAction(saleId);
+        if (active) setHistory(data);
+      } catch (caught: unknown) {
+        if (active) {
+          setError(caught instanceof Error ? caught.message : "Error al cargar el historial de la venta");
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
     };
+
     fetchHistory();
+
+    return () => {
+      active = false;
+    };
   }, [saleId]);
 
   const renderChanges = (update: OrderUpdateWithUser) => {
@@ -216,6 +236,14 @@ const SaleHistory = ({ saleId }: Props) => {
   };
 
   if (loading) return <Spinner />;
+
+  if (error) {
+    return (
+      <div className="text-center py-8 text-red-500" role="alert">
+        {error}
+      </div>
+    );
+  }
 
   if (history.length === 0) {
     return (
