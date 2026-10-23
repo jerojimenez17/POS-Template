@@ -1,8 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const {
+  orderFindFirstMock,
+  orderUpdateMock,
+  grantFindFirstMock,
+  grantUpdateManyMock,
+  transactionMock,
+} = vi.hoisted(() => ({
+  orderFindFirstMock: vi.fn(),
+  orderUpdateMock: vi.fn(),
+  grantFindFirstMock: vi.fn(),
+  grantUpdateManyMock: vi.fn(),
+  transactionMock: vi.fn(),
+}));
+
 vi.mock("@/lib/db", () => ({
   db: {
-    order: { update: vi.fn(), findUnique: vi.fn() },
+    $transaction: transactionMock,
+    order: { update: orderUpdateMock, findUnique: vi.fn() },
   },
 }));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
@@ -21,6 +36,19 @@ describe("Factura A durable client snapshot", () => {
     vi.clearAllMocks();
     vi.mocked(auth).mockResolvedValue({ user: { id: "user-1", businessId: "business-1" } } as never);
     vi.mocked(db.order.update).mockResolvedValue({} as never);
+    orderFindFirstMock.mockResolvedValue({ total: 10, fiscalSnapshot: null });
+    grantFindFirstMock.mockResolvedValue(null);
+    grantUpdateManyMock.mockResolvedValue({ count: 0 });
+    vi.mocked(db.$transaction).mockImplementation(async (callback) => callback({
+      order: {
+        findFirst: orderFindFirstMock,
+        update: orderUpdateMock,
+      },
+      authorizedFiscalSnapshotGrant: {
+        findFirst: grantFindFirstMock,
+        updateMany: grantUpdateManyMock,
+      },
+    } as never) as never);
   });
 
   it.each([

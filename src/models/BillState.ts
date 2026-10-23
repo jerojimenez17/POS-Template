@@ -1,5 +1,8 @@
 import CAE from "./CAE";
 import Product from "./Product";
+import type { CreditNoteMetadata, CreditNotePrintContext, OriginalVoucherMetadata } from "./CreditNote";
+import type { SaleFiscalContext, SaleFiscalDiagnostic, SaleFiscalRecovery } from "@/services/afip/credit-note";
+import type { AuthorizedFiscalSnapshotV1, FiscalBreakdownV1 } from "@/services/afip/credit-note";
 
 export default interface BillState {
   id: string;
@@ -27,4 +30,15 @@ export default interface BillState {
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
   ptoVenta?: number;
+  originalVoucher?: OriginalVoucherMetadata;
+  creditNote?: CreditNoteMetadata;
+  creditNotePrintContext?: CreditNotePrintContext;
+  ptoVentaAsociado?: number;
+  caeAsociado?: string;
+  CbtesAsoc?: Array<Record<string, unknown>>;
+  fiscalSnapshot?: AuthorizedFiscalSnapshotV1;
+  fiscalBreakdown?: FiscalBreakdownV1;
+  fiscalContext?: SaleFiscalContext;
+  fiscalDiagnostic?: SaleFiscalDiagnostic;
+  creditNoteRecovery?: SaleFiscalRecovery;
 }

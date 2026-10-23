@@ -131,6 +131,7 @@ export function buildPDFHTML(
       qrData?: string;
       ptoVenta?: number | string;
     };
+    originalAssociation?: { billType: string; cae: string; number: number; pointOfSale: number };
   },
   options?: PDFTemplateOptions
 ): string {
@@ -140,7 +141,8 @@ export function buildPDFHTML(
   const subtotal = receiptData.subtotal ?? 0;
   const normalizedBillTypeForKind = normalizeBillType(receiptData.billType);
   const isPresupuesto = normalizedBillTypeForKind === "Presupuesto";
-  const isOfficialInvoice = !isPresupuesto && getDocumentPrintKind(receiptData.cae?.cae, receiptData.billType) === "official-invoice";
+  const isCreditNote = receiptData.documentKind === "credit-note" || getDocumentPrintKind(receiptData.cae?.cae, receiptData.billType) === "credit-note";
+  const isOfficialInvoice = !isPresupuesto && (isCreditNote || getDocumentPrintKind(receiptData.cae?.cae, receiptData.billType) === "official-invoice");
   const billType = getBillTypeDisplay(receiptData.billType, receiptData.cae?.cae, !isOfficialInvoice);
   const officialCae = receiptData.cae;
   const validQrDataUrl = typeof qrSvgDataUrl === "string" && /^data:image\/(?:svg\+xml|png|jpeg|webp);base64,/i.test(qrSvgDataUrl.trim())
@@ -245,7 +247,8 @@ export function buildPDFHTML(
       </div>
 
       <div class="info-grid">
-        ${clientInfo}
+       ${clientInfo}
+       ${isCreditNote && receiptData.originalAssociation ? `<div class="info-section"><div class="info-section-title">Comprobante original asociado</div><div class="info-row"><span class="info-label">Tipo:</span><span class="info-value">${escapeHtml(receiptData.originalAssociation.billType)}</span></div><div class="info-row"><span class="info-label">Número:</span><span class="info-value">${escapeHtml(formatInvoiceNumberFull(receiptData.originalAssociation.number, receiptData.originalAssociation.pointOfSale))}</span></div><div class="info-row"><span class="info-label">CAE original:</span><span class="info-value">${escapeHtml(receiptData.originalAssociation.cae)}</span></div></div>` : ""}
         ${businessInfo}
       </div>
 

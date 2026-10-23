@@ -1,0 +1,427 @@
+
+> pos-template@0.1.0 test
+> vitest run --reporter=dot
+
+
+ RUN  v4.1.6 D:/Documents/Jero/POS-Template/pos-template
+
+··x··········x·x·····xxxxxx··xx··stdout | ai/features/initial-bill-type-sync/initial-bill-type-sync.test.tsx > initial bill type synchronization (CA-01, CA-02, CA-07) > does not perform a second client business lookup to decide the form default
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+
+x·····stdout | ai/features/initial-bill-type-sync/initial-bill-type-sync.test.tsx > initial voucher lookup mapping (CA-08) > uses AFIP code Factura A → 1 for the first lookup
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 7,
+  tipoFactura: 1
+}
+
+stdout | ai/features/initial-bill-type-sync/initial-bill-type-sync.test.tsx > initial voucher lookup mapping (CA-08) > uses AFIP code Factura B → 6 for the first lookup
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 7,
+  tipoFactura: 6
+}
+
+··stdout | ai/features/initial-bill-type-sync/initial-bill-type-sync.test.tsx > initial voucher lookup mapping (CA-08) > uses AFIP code Factura C → 11 for the first lookup
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 7,
+  tipoFactura: 11
+}
+
+··xxx·x·xxx······stdout | ai/features/invoice-number-display/new-sale-defaults.test.tsx > BillParametersForm new-sale defaults and reset > renders Factura B by default and queries the next voucher as ARCA type 6
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+
+·······stdout | ai/features/invoice-number-display/new-sale-defaults.test.tsx > BillParametersForm new-sale defaults and reset > resets the form to Factura B instead of a historical/non-default type
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+
+·x···xx·x·x···x······xx··xx·xxx·xxx··x·x·xxstdout | ai/features/nota-de-credito/credit-note-history.test.ts > sale history credit-note mapping > keeps original invoice CAE/type/number and exposes return metadata separately
+{
+  event: 'credit_note_eligibility_diagnostic',
+  orderId: 'order-1',
+  businessId: 'unknown',
+  status: 'INVALID_OR_INCOMPLETE',
+  reason: 'CAE_INVALID',
+  source: 'mixed',
+  hasCaeSignal: true,
+  hasValidCae: false,
+  hasInvoiceNumber: true,
+  hasPointOfSale: true,
+  hasBillType: true,
+  hasVoucherType: true
+}
+
+x·stdout | ai/features/afip-point-sale-validation/bill-parameters-sync.test.tsx > BillParametersForm point-sale snapshot > updates the emission snapshot immediately when point changes, without saving
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 2,
+  tipoFactura: 6
+}
+
+xstdout | ai/features/afip-point-sale-validation/bill-parameters-sync.test.tsx > BillParametersForm point-sale snapshot > keeps Factura A aligned in context and numbering query
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 1
+}
+
+xstdout | ai/features/afip-point-sale-validation/bill-parameters-sync.test.tsx > BillParametersForm point-sale snapshot > keeps Factura B aligned in context and numbering query
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+
+·stdout | ai/features/afip-point-sale-validation/bill-parameters-sync.test.tsx > BillParametersForm point-sale snapshot > keeps Factura C aligned in context and numbering query
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 11
+}
+
+·x····xxstdout | ai/features/afip-point-sale-validation/bill-parameters-sync.test.tsx > BillParametersForm point-sale snapshot > ignores an out-of-order response from a previous point/type pair
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 2,
+  tipoFactura: 6
+}
+
+·stdout | ai/features/afip-point-sale-validation/bill-parameters-sync.test.tsx > BillParametersForm point-sale snapshot > ignores an out-of-order response from a previous point/type pair
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+
+··stdout | ai/features/afip-point-sale-validation/bill-parameters-sync.test.tsx > BillParametersForm point-sale snapshot > reset restores the first point and the initial invoice type
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 2,
+  tipoFactura: 6
+}
+
+stdout | ai/features/afip-point-sale-validation/bill-parameters-sync.test.tsx > BillParametersForm point-sale snapshot > reset restores the first point and the initial invoice type
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+
+···x·x·x·xxx····x···x····x···xxxxxxxxx···xx···x···xxx·xxxxxxx·xxx·····x·x······x·xx·x···xxx·xxx····xxx·········x·······················xxxxx·xxxx····xxxxxxxxx·xxstdout | src/__tests__/actions/catalog.test.ts > getBusinessBySlug > should return business when slug exists
+slug test-business
+
+stdout | src/__tests__/actions/catalog.test.ts > getBusinessBySlug > should return null when slug does not exist
+slug non-existent-slug
+
+stdout | src/__tests__/actions/catalog.test.ts > getBusinessBySlug > should search case-insensitively
+slug MY-STORE
+
+stdout | src/__tests__/actions/catalog.test.ts > getBusinessBySlug > should return null when database throws an error
+slug test
+
+····x····xx·x····xxxxx····xx···········x·xxxx·xx······················stdout | ai/features/afip-billstate-reset/confirmation-reentrancy.contract.test.tsx > BillButtons confirmation idempotency contract > Factura: synchronous double confirmation performs one AFIP call and one persistence
+Calling createAfipVoucherAction
+
+··········stdout | ai/features/afip-billstate-reset/confirmation-reentrancy.contract.test.tsx > BillButtons confirmation idempotency contract > releases the lock after an AFIP failure, preserves the sale, and permits an explicit retry
+Calling createAfipVoucherAction
+
+···stdout | ai/features/afip-billstate-reset/confirmation-reentrancy.contract.test.tsx > BillButtons confirmation idempotency contract > releases the lock after an AFIP failure, preserves the sale, and permits an explicit retry
+Calling createAfipVoucherAction
+
+················stdout | tests/components/BillButtons.shortcuts.test.tsx > BillButtonsDefault - Keyboard Shortcut Remapping > Remapped keys (AC1-AC9) > should preserve the AFIP route when confirming F9 (AC8)
+Calling createAfipVoucherAction
+
+···············································stdout | ai/features/afip-no-cae-response/consumers-no-cae.test.tsx > AFIP consumers share canonical CAE contract > BillButtons does not save, print, or reset after an unauthorized AFIP result
+Calling createAfipVoucherAction
+
+··stdout | ai/features/afip-no-cae-response/consumers-no-cae.test.tsx > AFIP consumers share canonical CAE contract > BillButtons persists once and prints only after canonical CAE success
+Calling createAfipVoucherAction
+
+····················································································································································································································································································stdout | src/__tests__/components/BillParametersForm-default-type.test.tsx > BillParametersForm - default bill type by IVA condition > uses getDefaultBillType with RESPONSABLE_INSCRIPTO to set initial default
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+
+stdout | src/__tests__/components/BillParametersForm-default-type.test.tsx > BillParametersForm - default bill type by IVA condition > uses getDefaultBillType with MONOTRIBUTO to set initial default
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 11
+}
+
+stdout | src/__tests__/components/BillParametersForm-default-type.test.tsx > BillParametersForm - default bill type by IVA condition > uses getDefaultBillType with null when business data unavailable
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 11
+}
+
+stdout | src/__tests__/components/BillParametersForm-default-type.test.tsx > BillParametersForm - default bill type by IVA condition > renders with the default bill type from getDefaultBillType, not hardcoded Factura C
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 1,
+  tipoFactura: 6
+}
+
+···············stdout | ai/features/afip-billstate-reset/form-reset.contract.test.tsx > BillParametersForm reset callback > resets only form/UI references and never dispatches a stale setState snapshot
+[getLastVoucher] result {
+  success: true,
+  errorType: 'undefined',
+  errorCode: undefined,
+  operation: undefined,
+  ptoVenta: 12,
+  tipoFactura: 6
+}
+
+·····························································································································································stdout | ai/features/improve-pdf/improve-pdf.test.ts > improve-pdf: billType persistence and historical mapping > maps persisted billType for both sales list and single-sale history
+{
+  event: 'credit_note_eligibility_diagnostic',
+  orderId: 'order-1',
+  businessId: 'unknown',
+  status: 'INVALID_OR_INCOMPLETE',
+  reason: 'CAE_INVALID',
+  source: 'mixed',
+  hasCaeSignal: true,
+  hasValidCae: false,
+  hasInvoiceNumber: true,
+  hasPointOfSale: true,
+  hasBillType: true,
+  hasVoucherType: false
+}
+
+stdout | ai/features/improve-pdf/improve-pdf.test.ts > improve-pdf: billType persistence and historical mapping > maps persisted billType for both sales list and single-sale history
+{
+  event: 'credit_note_eligibility_diagnostic',
+  orderId: 'order-1',
+  businessId: 'unknown',
+  status: 'INVALID_OR_INCOMPLETE',
+  reason: 'CAE_INVALID',
+  source: 'mixed',
+  hasCaeSignal: true,
+  hasValidCae: false,
+  hasInvoiceNumber: true,
+  hasPointOfSale: true,
+  hasBillType: true,
+  hasVoucherType: false
+}
+
+···································································································stdout | src/__tests__/actions/processSaleAction.test.ts > Billing Fields - getSalesAction > should return orders with billing fields populated from database
+{
+  event: 'credit_note_eligibility_diagnostic',
+  orderId: 'order-1',
+  businessId: 'unknown',
+  status: 'INVALID_OR_INCOMPLETE',
+  reason: 'CAE_INVALID',
+  source: 'historical_json',
+  hasCaeSignal: true,
+  hasValidCae: false,
+  hasInvoiceNumber: true,
+  hasPointOfSale: false,
+  hasBillType: false,
+  hasVoucherType: false
+}
+
+stdout | src/__tests__/actions/processSaleAction.test.ts > Billing Fields - getSaleByIdAction > should return order with billing fields when found
+{
+  event: 'credit_note_eligibility_diagnostic',
+  orderId: 'order-billing-test',
+  businessId: 'unknown',
+  status: 'INVALID_OR_INCOMPLETE',
+  reason: 'CAE_INVALID',
+  source: 'historical_json',
+  hasCaeSignal: true,
+  hasValidCae: false,
+  hasInvoiceNumber: true,
+  hasPointOfSale: false,
+  hasBillType: false,
+  hasVoucherType: false
+}
+
+·····················································································stdout | ai/features/factura-a-receipt-client-data/persistence-and-history.test.ts > Factura A durable client snapshot > maps persisted type independently from IVA and preserves string identifiers in history
+{
+  event: 'credit_note_eligibility_diagnostic',
+  orderId: 'order-1',
+  businessId: 'business-1',
+  status: 'INVALID_OR_INCOMPLETE',
+  reason: 'CAE_INVALID',
+  source: 'historical_json',
+  hasCaeSignal: true,
+  hasValidCae: false,
+  hasInvoiceNumber: true,
+  hasPointOfSale: false,
+  hasBillType: false,
+  hasVoucherType: false
+}
+
+·················································································································································stdout | ai/features/credit-note-eligibility-diagnostics/mapper-diagnostic.test.ts > sale history fiscal diagnostic mapping > exposes a serializable diagnostic for CAE_INVALID and no actionable context
+{
+  event: 'credit_note_eligibility_diagnostic',
+  orderId: 'order-diagnostic',
+  businessId: 'unknown',
+  status: 'INVALID_OR_INCOMPLETE',
+  reason: 'CAE_INVALID',
+  source: 'mixed',
+  hasCaeSignal: true,
+  hasValidCae: false,
+  hasInvoiceNumber: true,
+  hasPointOfSale: true,
+  hasBillType: true,
+  hasVoucherType: true
+}
+
+stdout | ai/features/credit-note-eligibility-diagnostics/mapper-diagnostic.test.ts > sale history fiscal diagnostic mapping > exposes a serializable diagnostic for FISCAL_FIELDS_INCOMPLETE and no actionable context
+{
+  event: 'credit_note_eligibility_diagnostic',
+  orderId: 'order-diagnostic',
+  businessId: 'unknown',
+  status: 'INVALID_OR_INCOMPLETE',
+  reason: 'FISCAL_FIELDS_INCOMPLETE',
+  source: 'mixed',
+  hasCaeSignal: true,
+  hasValidCae: false,
+  hasInvoiceNumber: false,
+  hasPointOfSale: true,
+  hasBillType: true,
+  hasVoucherType: true
+}
+
+stdout | ai/features/credit-note-eligibility-diagnostics/mapper-diagnostic.test.ts > sale history fiscal diagnostic mapping > exposes a serializable diagnostic for FISCAL_TYPE_UNSUPPORTED and no actionable context
+{
+  event: 'credit_note_eligibility_diagnostic',
+  orderId: 'order-diagnostic',
+  businessId: 'unknown',
+  status: 'INVALID_OR_INCOMPLETE',
+  reason: 'FISCAL_TYPE_UNSUPPORTED',
+  source: 'mixed',
+  hasCaeSignal: true,
+  hasValidCae: false,
+  hasInvoiceNumber: true,
+  hasPointOfSale: true,
+  hasBillType: false,
+  hasVoucherType: true
+}
+
+····························································---------
+
+ Test Files  38 failed | 107 passed | 1 skipped (146)
+      Tests  133 failed | 1137 passed | 9 todo (1279)
+     Errors  11 errors
+   Start at  16:36:32
+   Duration  204.03s (transform 33.58s, setup 155.27s, import 202.85s, tests 114.17s, environment 802.32s)
+

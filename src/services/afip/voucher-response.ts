@@ -4,6 +4,7 @@ import type {
   AfipVoucherType,
 } from "./point-sale-validation";
 import { parseAfipPointSaleError } from "./point-sale-validation";
+import { normalizeAuthorizedFiscalSnapshot, type AuthorizedFiscalSnapshotV1 } from "./credit-note";
 
 export type AfipResponsePath = "direct" | "afip" | "data" | "data.afip";
 
@@ -13,6 +14,8 @@ export interface AfipVoucherSuccessData {
   nroComprobante: number | string;
   qrData: string;
   ptoVenta?: number | string;
+  fiscalSnapshot?: AuthorizedFiscalSnapshotV1;
+  fiscalSnapshotToken?: string;
   sourcePath: AfipResponsePath;
 }
 
@@ -26,11 +29,13 @@ export interface AfipResponseShape {
 
 export interface AfipResponseDiagnostic extends AfipResponseShape {
   reason: "missing-cae" | "afip-error";
+  /** True only when the payload itself identifies a structured AFIP rejection. */
+  authoritativeRejection?: boolean;
 }
 
 export type AfipVoucherParsed =
   | { kind: "success"; data: AfipVoucherSuccessData }
-  | { kind: "afip-error"; message: string; code?: string; responseShape: AfipResponseShape; error: AfipPointSaleError }
+  | { kind: "afip-error"; message: string; code?: string; responseShape: AfipResponseShape; error: AfipPointSaleError; authoritativeRejection: boolean }
   | { kind: "missing-cae"; message: string; responseShape: AfipResponseShape };
 
 interface ParseContext {
@@ -81,6 +86,19 @@ const validCae = (value: unknown): value is string =>
 
 const first = (...values: unknown[]): unknown => values.find((value) => value !== undefined);
 
+const isStructuredError = (value: unknown): boolean =>
+  isRecord(value) || Array.isArray(value);
+
+const hasAfipErrorEnvelope = (root: RecordValue, wrapper: RecordValue): boolean =>
+  (isRecord(wrapper.afip) && (wrapper.afip.error !== undefined || wrapper.afip.errors !== undefined))
+  || (isRecord(wrapper.data) && isRecord(wrapper.data.afip)
+    && (wrapper.data.afip.error !== undefined || wrapper.data.afip.errors !== undefined))
+  || root.error !== undefined
+  || root.Errors !== undefined;
+
+const hasExplicitRejectionLanguage = (text: string): boolean =>
+  /(?:rechaz(?:ó|aron|ad[oa]s?)|rejected|deneg(?:ó|aron|ad[oa]s?))/i.test(text);
+
 /** Parses only the AFIP response paths documented by the createVoucher contract. */
 export function parseAfipVoucherResponse(payload: unknown, context: ParseContext): AfipVoucherParsed {
   const root = isRecord(payload) ? payload : {};
@@ -111,6 +129,9 @@ export function parseAfipVoucherResponse(payload: unknown, context: ParseContext
     if (validCae(caeCandidate)) {
       const value = candidate.value;
       if (!value) return { kind: "missing-cae", message: "La Cloud Function respondió sin un CAE válido. Revise la configuración y los logs del servidor.", responseShape };
+      const fiscalSnapshot = normalizeAuthorizedFiscalSnapshot(value.fiscalSnapshot, {
+        afipVoucherType: context.tipoFactura,
+      });
       return {
         kind: "success",
         data: {
@@ -119,6 +140,7 @@ export function parseAfipVoucherResponse(payload: unknown, context: ParseContext
           nroComprobante: (first(value.nroCbte, value.nroComprobante, wrapper.nroCbte, root.nroCbte) ?? 0) as number | string,
           qrData: String(first(value.qrData, wrapper.qrData, root.qrData) ?? ""),
           ptoVenta: first(value.ptoVenta, wrapper.ptoVenta, root.ptoVenta, context.ptoVenta) as number | string,
+          ...(fiscalSnapshot ? { fiscalSnapshot } : {}),
           sourcePath: candidate.path,
         },
       };
@@ -138,7 +160,19 @@ export function parseAfipVoucherResponse(payload: unknown, context: ParseContext
     const error = parseAfipPointSaleError(errorText || "AFIP rechazó la operación", {
       operation: "createVoucher", ptoVenta: context.ptoVenta, tipoFactura: context.tipoFactura, environment: context.environment,
     });
-    return { kind: "afip-error", message: error.message, code: error.code, responseShape, error };
+    // An HTTP failure or a generic `error` property is not evidence that AFIP
+    // definitively declined to issue the voucher. Require either the existing
+    // AFIP-specific point-of-sale rejection code, or an explicit rejection in
+    // a structured AFIP error envelope. This distinction is used to decide
+    // whether a credit-note reservation may safely be retried.
+    const isUpstreamFailure = typeof context.status === "number" && context.status >= 500;
+    const authoritativeRejection = !isUpstreamFailure && (
+      (error.code === "11002" && isStructuredError(errorPayload))
+      || (hasAfipErrorEnvelope(root, wrapper)
+        && isStructuredError(errorPayload)
+        && hasExplicitRejectionLanguage(errorText))
+    );
+    return { kind: "afip-error", message: error.message, code: error.code, responseShape, error, authoritativeRejection };
   }
   return { kind: "missing-cae", message: "La Cloud Function respondió sin un CAE válido. Revise la configuración y los logs del servidor.", responseShape };
 }

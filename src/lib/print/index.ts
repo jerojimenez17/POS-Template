@@ -29,4 +29,4 @@ export {
   type PDFTemplateOptions,
 } from "./pdf-templates";
 
-export { getDocumentPrintKind, buildReceiptBusinessInfo, type DocumentPrintKind, type ReceiptBusinessInfo } from "./receipt-data";
+export { getDocumentPrintKind, buildReceiptBusinessInfo, buildCreditNotePrintContext, isCreditNotePrintContext, type DocumentPrintKind, type ReceiptBusinessInfo } from "./receipt-data";

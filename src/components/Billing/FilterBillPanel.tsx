@@ -6,7 +6,7 @@ import DatePicker from "react-datetime";
 import "react-datetime/css/react-datetime.css";
 import CalendarIcon from "./CalendarIcon";
 import Select from "./Select";
-import { getUniqueSellersAction } from "@/actions/sales";
+import { getUniqueSellersAction } from "@/actions/sales/unique-sellers";
 
 const FilterBillPanel = () => {
   const {

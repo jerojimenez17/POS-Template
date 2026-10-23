@@ -7,6 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Package, User, CreditCard, Calendar, ArrowLeft, Edit2 } from "lucide-react";
 import Link from "next/link";
+import CreditNoteButton from "@/components/Billing/CreditNoteButton";
+import { createCreditNoteAction } from "@/actions/sales/credit-note";
+import CreditNoteEligibilityNotice from "@/components/Billing/CreditNoteEligibilityNotice";
+import CreditNoteStatusCard from "@/components/Billing/CreditNoteStatusCard";
+import { buildCreditNotePrintContext } from "@/lib/print/receipt-data";
 
 export default async function SaleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,6 +30,20 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
   }
 
   const isAdmin = session?.user?.role === "ADMIN";
+  const creditNotePrintContext = sale.creditNote
+    ? buildCreditNotePrintContext({
+        order: {
+          total: sale.totalWithDiscount ?? sale.total,
+          products: sale.products.map((product) => ({
+            description: product.description ?? "",
+            amount: product.amount,
+            unitPrice: product.salePrice ?? 0,
+            subtotal: (product.salePrice ?? 0) * product.amount,
+          })),
+        },
+        creditNote: sale.creditNote,
+      })
+    : undefined;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-8 pb-20">
@@ -201,6 +220,10 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <Separator />
+
+        {sale.fiscalDiagnostic && <CreditNoteEligibilityNotice diagnostic={sale.fiscalDiagnostic} recovery={sale.creditNoteRecovery ? { missingFields: sale.creditNoteRecovery.missingFields, canCompleteFromUser: true } : undefined} />}
+        {isAdmin && (sale.fiscalContext || sale.creditNoteRecovery) && <CreditNoteButton sale={sale.fiscalContext ?? sale.creditNoteRecovery!} createCreditNote={createCreditNoteAction} />}
+        {sale.creditNote && <CreditNoteStatusCard creditNote={sale.creditNote} printContext={creditNotePrintContext} businessName="Comercio" />}
 
       {/* History Section */}
       <SaleHistory saleId={sale.id} />

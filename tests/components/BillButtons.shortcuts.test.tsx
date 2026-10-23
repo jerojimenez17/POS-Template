@@ -671,29 +671,78 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       });
 
      it("should preserve the AFIP route when confirming F9 (AC8)", async () => {
-       const billContext = { ...defaultBillContextMock, BillState: { ...defaultBillContextMock.BillState, total: 10, products: [{ ...mockProduct, salePrice: 10 }] } };
+       const billContext = { ...defaultBillContextMock, BillState: { ...defaultBillContextMock.BillState, total: 10, products: [{ ...mockProduct, salePrice: 10 }], internalUiOnly: { selected: true } } };
+       const handlePrint = vi.fn();
        vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({ success: true, data: [] });
-        vi.mocked(afipActions.createAfipVoucherAction).mockResolvedValue({
+         vi.mocked(afipActions.createAfipVoucherAction).mockResolvedValue({
           success: true,
           data: {
-            afip: { CAE: "123", CAEFchVto: "20300101" },
-            nroCbte: 1,
-            qrData: "",
+            cae: "12345678901234",
+            vencimiento: "20300101",
+            nroComprobante: 1,
+            qrData: "https://arca.test/qr/12345678901234",
+            sourcePath: "data",
           },
         });
         vi.mocked(salesActions.processSaleAction).mockResolvedValue({
           success: true,
           orderId: "order-1",
         });
-       render(<BillButtonsDefault session={sessionMock} handlePrint={vi.fn()} isEditing={false} />, { billContextMock: billContext, sessionMock });
+       render(<BillButtonsDefault session={sessionMock} handlePrint={handlePrint} isEditing={false} />, { billContextMock: billContext, sessionMock });
        await waitFor(() => expect(shortcutsActions.getShortcutConfigsAction).toHaveBeenCalled());
        fireEvent.keyDown(window, { key: "F9" });
        await screen.findByText("Confirmar creación de Factura");
        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
-        await waitFor(() => expect(afipActions.createAfipVoucherAction).toHaveBeenCalled());
-        expect(salesActions.processSaleAction).toHaveBeenCalled();
-        expect(afipActions.createAfipVoucherAction).toHaveBeenCalledWith(billContext.BillState);
-      });
+         await waitFor(() => expect(afipActions.createAfipVoucherAction).toHaveBeenCalled());
+         expect(afipActions.createAfipVoucherAction).toHaveBeenCalledWith({
+           id: "",
+           seller: "",
+           typeDocument: "",
+           IVACondition: "Consumidor Final",
+           twoMethods: false,
+           secondPaidMethod: "Debito",
+           totalSecondMethod: 0,
+           billType: "Factura C",
+           paidMethod: "Efectivo",
+           discount: 0,
+           documentNumber: 0,
+           total: 10,
+           totalWithDiscount: 0,
+           date: defaultBillContextMock.BillState.date.toISOString(),
+           products: [{
+             id: "shortcut-prod-1",
+             code: "VAR001",
+             description: "Producto Precio Variable",
+             price: 0,
+             salePrice: 10,
+             amount: 1,
+           }],
+         });
+         const afipDTO = vi.mocked(afipActions.createAfipVoucherAction).mock.calls[0]?.[0] as Record<string, unknown>;
+         expect(afipDTO).not.toHaveProperty("internalUiOnly");
+         expect(afipDTO).not.toHaveProperty("CAE");
+         expect(afipDTO).not.toHaveProperty("nroAsociado");
+         expect(afipDTO).not.toHaveProperty("fiscalSnapshot");
+         expect(afipDTO).not.toHaveProperty("fiscalBreakdown");
+         const [afipProduct] = afipDTO.products as Array<Record<string, unknown>>;
+         expect(Object.keys(afipProduct).sort()).toEqual([
+           "amount",
+           "code",
+           "description",
+           "id",
+           "price",
+           "salePrice",
+         ]);
+         expect(afipProduct).not.toHaveProperty("suplier");
+         expect(salesActions.processSaleAction).toHaveBeenCalledWith(expect.objectContaining({
+           CAE: expect.objectContaining({ CAE: "12345678901234" }),
+         }));
+         expect(handlePrint).toHaveBeenCalledWith(
+           expect.objectContaining({ CAE: "12345678901234" }),
+           null,
+           expect.objectContaining({ products: expect.any(Array) }),
+         );
+       });
 
       it.each(["F7", "F9"])("should cancel %s without saving, printing, or resetting", async (key) => {
         const handlePrint = vi.fn();

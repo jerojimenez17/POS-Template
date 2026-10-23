@@ -58,6 +58,7 @@ model Business {
   orders          Order[]
   cashMovements   CashMovement[]
   saleReturns     SaleReturn[]
+  fiscalSnapshotGrants AuthorizedFiscalSnapshotGrant[]
   stockMovements  StockMovement[]
 
   createdAt DateTime @default(now())
@@ -157,6 +158,7 @@ model User {
   businessId   String
   business     Business      @relation("BusinessUsers", fields: [businessId], references: [id])
   orderUpdates OrderUpdate[]
+  requestedSaleReturns SaleReturn[] @relation("SaleReturnRequester")
 
   cashboxId String?
   cashbox   CashBox?         @relation(fields: [cashboxId], references: [id])
@@ -371,6 +373,12 @@ model Order {
   clientDocumentType   String?
   clientDocumentNumber String?
   CAE                  Json?
+  billType             String?
+  afipVoucherType      Int?
+  invoiceNumber        Int?
+  invoicePointOfSale   Int?
+  invoiceIssuedAt      DateTime?
+  fiscalSnapshot      Json?
 
   cashboxSessionId String?
   cashboxSession   CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
@@ -480,6 +488,23 @@ model SaleReturn {
   date   DateTime @default(now())
   total  Float    @default(0)
   reason String?
+  // Legacy/manual returns must remain manual unless explicitly created as a credit note.
+  kind SaleReturnKind @default(MANUAL_RETURN)
+  status SaleReturnStatus @default(PENDING)
+  idempotencyKey String @default(cuid())
+  authorizedAt DateTime?
+  requestedById String?
+  requestedBy User? @relation("SaleReturnRequester", fields: [requestedById], references: [id])
+  creditNoteBillType String?
+  creditNoteAfipType Int?
+  creditNoteCAE String?
+  creditNoteNumber Int?
+  creditNotePointOfSale Int?
+  originalCAE String?
+  originalVoucherType Int?
+  originalNumber Int?
+  originalPointOfSale Int?
+  refundMethod String?
 
   orderId String
   order   Order  @relation(fields: [orderId], references: [id])
@@ -490,6 +515,9 @@ model SaleReturn {
   items SaleReturnItem[]
 
   @@index([businessId, date])
+  // Credit-note uniqueness is enforced by a partial PostgreSQL index so that
+  // an order can retain multiple ordinary/manual returns.
+  @@unique([businessId, idempotencyKey])
 }
 
 model SaleReturnItem {
@@ -522,6 +550,35 @@ model CashMovement {
 
   cashboxSessionId String?
   cashboxSession   CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
+}
+
+model AuthorizedFiscalSnapshotGrant {
+  id            String   @id @default(cuid())
+  tokenHash     String   @unique
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  cae           String
+  billType      String
+  invoiceNumber Int
+  pointOfSale   Int
+  snapshot      Json
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+  consumedAt    DateTime?
+
+  @@index([businessId, cae, consumedAt])
+  @@index([expiresAt])
+}
+
+enum SaleReturnStatus {
+  PENDING
+  AUTHORIZED
+  REJECTED
+}
+
+enum SaleReturnKind {
+  CREDIT_NOTE
+  MANUAL_RETURN
 }
 
 model VerificationToken {

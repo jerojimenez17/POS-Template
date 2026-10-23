@@ -1,228 +1,171 @@
 "use server";
 
-import axios from "axios";
-import { requireFeature } from "@/lib/auth-gates";
-import BillState from "@/models/BillState";
-import { getArcaCredentialsForBilling } from "./arca";
-import { getVoucherNumberAction } from "./voucher";
+import { auth } from "@/auth";
+import { UserRole } from "@prisma/client";
+import type { AuthenticatedUserContext } from "@/lib/auth-gates";
 import {
-  formatAfipPointSaleErrorForUser,
-  getAfipVoucherTypeCode,
-  parseAfipPointSaleError,
-  validatePointSaleRequest,
-  type AfipPointSaleError,
-} from "@/services/afip/point-sale-validation";
+  issuePreparedAfipVoucher,
+  prepareAfipVoucherForActor,
+  type AfipVoucherOperationResult,
+  type PrepareAfipVoucherResult,
+} from "@/lib/server/afip-voucher";
+import { createAuthorizedFiscalSnapshotGrant } from "@/lib/server/fiscal-snapshot-grant";
 import {
-  parseAfipVoucherResponse,
-  type AfipResponseDiagnostic,
-  type AfipVoucherSuccessData,
-} from "@/services/afip/voucher-response";
+  getEffectiveAfipInvoiceTotal,
+  normalizeAfipInvoiceDTO,
+  projectAfipInvoiceInput,
+  type AfipInvoiceDTO,
+} from "@/utils/billing";
 
-export type CreateAfipVoucherResult =
-  | { success: true; data: AfipVoucherSuccessData }
-  | { error: string | AfipPointSaleError; diagnostic?: AfipResponseDiagnostic };
+export type CreateAfipVoucherResult = AfipVoucherOperationResult;
 
-/**
- * Returns the effective unit price for a bill line.
- * Uses salePrice as the primary source of truth (handles shortcut products where
- * the cashier typed a price after the product was added with salePrice=0),
- * and falls back to the catalog price when salePrice is 0.
- * Returns 0 only when both are 0 (which is an invalid bill state).
- */
-const getEffectiveUnitPrice = (p: { price: number; salePrice: number }): number => {
-  if (p.salePrice > 0) return p.salePrice;
-  if (p.price > 0) return p.price;
-  return 0;
-};
+const CREDIT_NOTE_FIELDS = ["nroAsociado", "ptoVentaAsociado", "caeAsociado", "CbtesAsoc"] as const;
+const TRUSTED_FISCAL_FIELDS = ["fiscalSnapshot", "fiscalBreakdown"] as const;
 
-/**
- * Server Action to create an AFIP voucher by calling the Firebase Cloud Function.
- * This action validates the user session and uses a shared secret for authentication.
- */
-export const createAfipVoucherAction = async (billState: BillState): Promise<CreateAfipVoucherResult> => {
-  const featureResult = await requireFeature("hasAfipBilling");
-  if (!featureResult.success) {
-    return { error: featureResult.error };
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function readOwnValue(record: Record<string, unknown>, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(record, key);
+  if (!descriptor) return undefined;
+  if (!("value" in descriptor)) throw new Error("Los datos de la factura no son válidos");
+  return descriptor.value;
+}
+
+function isSerializableExtra(value: unknown, visited = new Set<object>(), depth = 0): boolean {
+  if (value === null || value === undefined || typeof value === "string"
+    || typeof value === "boolean" || typeof value === "number") return true;
+  if (typeof value !== "object" || depth > 12) return false;
+  if (value instanceof Date) return Number.isFinite(value.getTime());
+  if (visited.has(value)) return false;
+  visited.add(value);
+  if (Array.isArray(value)) return value.every((item) => isSerializableExtra(item, visited, depth + 1));
+  if (!isPlainObject(value)) return false;
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string") return false;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !("value" in descriptor)
+      || !isSerializableExtra(descriptor.value, visited, depth + 1)) return false;
   }
+  return true;
+}
 
-  // 1. Get encrypted business credentials
-  const credentials = await getArcaCredentialsForBilling();
-  if (credentials.error || !credentials.success) {
-    return { error: credentials.error || "No se pudieron obtener las credenciales de ARCA" };
+function validateUnknownProperties(value: Record<string, unknown>): void {
+  const knownFields = new Set([
+    "id", "seller", "typeDocument", "IVACondition", "twoMethods", "secondPaidMethod",
+    "totalSecondMethod", "entrega", "pago", "billType", "paidMethod", "clientId", "client",
+    "clientIvaCondition", "clientDocumentNumber", "discount", "documentNumber", "total",
+    "totalWithDiscount", "date", "ptoVenta", "products", ...CREDIT_NOTE_FIELDS, ...TRUSTED_FISCAL_FIELDS,
+  ]);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string") throw new Error("Los datos de la factura no son válidos");
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !("value" in descriptor)) throw new Error("Los datos de la factura no son válidos");
+    if (!knownFields.has(key) && !isSerializableExtra(descriptor.value)) {
+      throw new Error("La factura contiene datos que no se pueden procesar de forma segura");
+    }
   }
+}
 
-  const { cuit, cert, key } = credentials.success;
-  const ptoVenta = Number(billState.ptoVenta);
-  let tipoFactura: 1 | 6 | 11;
+function plainPreIssueError(message: string): CreateAfipVoucherResult {
+  return { error: message, issuanceNotStarted: true };
+}
+
+/** Public Server Action. All caller identity is derived from the auth session. */
+export const createAfipVoucherAction = async (
+  billState: unknown,
+): Promise<CreateAfipVoucherResult> => {
+  let sessionUser: { id?: string | null; businessId?: string | null; role?: string | null } | undefined;
   try {
-    tipoFactura = getAfipVoucherTypeCode(billState.billType ?? "");
-    validatePointSaleRequest({ ptoVenta, tipoFactura }, credentials.success.ptoVentas ?? [ptoVenta]);
+    const session = await auth();
+    sessionUser = session?.user;
   } catch (error: unknown) {
-    return { error: error instanceof Error ? error.message : "Punto de venta inválido" };
-  }
-
-  const preflight = await getVoucherNumberAction(ptoVenta, tipoFactura);
-  // getVoucherNumberAction's success is only the last-number lookup. Do not
-  // confuse that numeric result with createVoucher's CAE response.
-  const preflightFailed = "error" in preflight && Boolean(preflight.error);
-  const hasPreflightNumber = typeof preflight.success === "number";
-  if (preflightFailed || !hasPreflightNumber) {
-    const pointError = preflight.errorDetails ?? parseAfipPointSaleError(preflight.error ?? "No se obtuvo numeración", {
-      operation: "getLastVoucher", ptoVenta, tipoFactura,
-      environment: process.env.AFIP_ENVIRONMENT === "produccion" ? "produccion" : process.env.AFIP_ENVIRONMENT === "homologacion" ? "homologacion" : "desconocido",
+    console.error("[createAfipVoucher] authentication failed", {
+      errorType: error instanceof Error ? error.name : typeof error,
     });
-    return { error: pointError.code === "11002" ? pointError : formatAfipPointSaleErrorForUser(pointError) };
+    return plainPreIssueError("No se pudo validar la sesión antes de iniciar la emisión");
   }
-  const functionUrl = process.env.NEXT_PUBLIC_AFIP_FUNCTION_URL || "http://localhost:5001/stockia-e90c6/us-central1/createAFIPVoucher";
-  const internalKey = process.env.INTERNAL_AFIP_API_KEY;
+  if (!sessionUser?.id || !sessionUser.businessId || !sessionUser.role
+    || (sessionUser.role !== UserRole.ADMIN && sessionUser.role !== UserRole.SUPER_ADMIN)) {
+    return { error: "No autorizado", issuanceNotStarted: true };
+  }
 
-  if (!internalKey) {
-    console.error("Missing INTERNAL_AFIP_API_KEY in environment variables");
-    return { error: "Error de configuración de seguridad interna" };
+  if (!isPlainObject(billState)) return plainPreIssueError("Los datos de la factura no son válidos");
+  let safeInvoiceInput: Partial<AfipInvoiceDTO>;
+  try {
+    validateUnknownProperties(billState);
+    const isCreditNoteRequest = (typeof readOwnValue(billState, "nroAsociado") === "number"
+        && readOwnValue(billState, "nroAsociado") !== 0)
+      || readOwnValue(billState, "ptoVentaAsociado") !== undefined
+      || readOwnValue(billState, "caeAsociado") !== undefined
+      || (Array.isArray(readOwnValue(billState, "CbtesAsoc"))
+        && (readOwnValue(billState, "CbtesAsoc") as unknown[]).length > 0);
+    if (isCreditNoteRequest || TRUSTED_FISCAL_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(billState, field))) {
+      return plainPreIssueError("Las Notas de Crédito y los importes fiscales solo se procesan desde datos autorizados del servidor");
+    }
+    safeInvoiceInput = projectAfipInvoiceInput(billState);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Los datos de la factura no son válidos";
+    return plainPreIssueError(message);
   }
+
+  let preparation: PrepareAfipVoucherResult;
+  try {
+    preparation = await prepareAfipVoucherForActor(
+      safeInvoiceInput,
+      sessionUser as AuthenticatedUserContext,
+    );
+  } catch (error: unknown) {
+    console.error("[createAfipVoucher] preparation failed", {
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    return plainPreIssueError("No se pudo preparar la factura antes de iniciar la emisión");
+  }
+  if (!("prepared" in preparation)) return preparation;
+  let invoice: AfipInvoiceDTO;
+  try {
+    invoice = normalizeAfipInvoiceDTO(safeInvoiceInput);
+  } catch {
+    return plainPreIssueError("Los datos de la factura no son válidos");
+  }
+  let issued: AfipVoucherOperationResult;
+  try {
+    issued = await issuePreparedAfipVoucher(preparation.prepared);
+  } catch (error: unknown) {
+    console.error("[createAfipVoucher] issuance setup failed", {
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    return plainPreIssueError("No se pudo iniciar la emisión de la factura");
+  }
+  if (!("success" in issued) || !issued.data.fiscalSnapshot) return issued;
+
+  const billType = invoice.billType;
+  const invoiceNumber = Number(issued.data.nroComprobante);
+  const pointOfSale = Number(issued.data.ptoVenta);
+  if ((billType !== "Factura A" && billType !== "Factura B" && billType !== "Factura C")
+    || issued.data.fiscalSnapshot.billType !== billType
+    || !Number.isSafeInteger(invoiceNumber) || invoiceNumber <= 0
+    || !Number.isSafeInteger(pointOfSale) || pointOfSale <= 0
+    || Math.abs(issued.data.fiscalSnapshot.total - getEffectiveAfipInvoiceTotal(invoice)) > 0.0100001) return issued;
 
   try {
-    const accessToken = process.env.AFIP_SDK_ACCESS_TOKEN;
-
-    if (!accessToken) {
-      console.error("AFIP_SDK_ACCESS_TOKEN no configurado");
-      return { error: "Error de configuración de acceso" };
-    }
-
-    // 2. Call the Cloud Function from the server
-     const billStateWithoutPtoVenta = { ...billState };
-     delete billStateWithoutPtoVenta.ptoVenta;
-
-    // Strip product data to only essential fields for the external API
-    const discount = Number(billStateWithoutPtoVenta.discount) || 0;
-    const rawTotal = Number(billStateWithoutPtoVenta.total) || 0;
-    const totalWithDiscountProp = Number(billStateWithoutPtoVenta.totalWithDiscount) || 0;
-
-    // Calculate effective total with discount if discount > 0 and totalWithDiscountProp is not set
-    const effectiveTotalWithDiscount = totalWithDiscountProp > 0
-      ? totalWithDiscountProp
-      : (discount > 0 ? Math.round(rawTotal * (1 - discount / 100)) : rawTotal);
-
-    // If there is a discount applied or totalWithDiscount is present, use effectiveTotalWithDiscount as the total sent to AFIP
-    const finalTotal = (discount > 0 || totalWithDiscountProp > 0)
-      ? effectiveTotalWithDiscount
-      : rawTotal;
-
-    // Explicit allow-list: never forward the complete client BillState (in
-    // particular CAE/client metadata) to the external function.
-    const minimalBillState = {
-      id: billStateWithoutPtoVenta.id,
-      seller: billStateWithoutPtoVenta.seller,
-      typeDocument: billStateWithoutPtoVenta.typeDocument,
-      IVACondition: billStateWithoutPtoVenta.IVACondition,
-      twoMethods: billStateWithoutPtoVenta.twoMethods,
-      secondPaidMethod: billStateWithoutPtoVenta.secondPaidMethod,
-      totalSecondMethod: billStateWithoutPtoVenta.totalSecondMethod,
-      entrega: billStateWithoutPtoVenta.entrega,
-      pago: billStateWithoutPtoVenta.pago,
-      billType: billStateWithoutPtoVenta.billType,
-      nroAsociado: billStateWithoutPtoVenta.nroAsociado,
-      paidMethod: billStateWithoutPtoVenta.paidMethod,
-      clientId: billStateWithoutPtoVenta.clientId,
-      client: billStateWithoutPtoVenta.client,
-      clientIvaCondition: billStateWithoutPtoVenta.clientIvaCondition,
-      clientDocumentNumber: billStateWithoutPtoVenta.clientDocumentNumber,
-      products: billStateWithoutPtoVenta.products.map((p) => ({
-        id: p.id,
-        code: p.code,
-        description: p.description,
-        price: getEffectiveUnitPrice(p),
-        salePrice: p.salePrice ?? 0,
-        amount: p.amount,
-      })),
-      // Ensure numeric fields are actually numbers for the cloud function
-      discount: discount,
-      documentNumber: Number(billStateWithoutPtoVenta.documentNumber) || 0,
-      total: finalTotal,
-      totalWithDiscount: effectiveTotalWithDiscount,
-      // Convert Date to ISO string for JSON serialization
-      date: billStateWithoutPtoVenta.date instanceof Date
-        ? billStateWithoutPtoVenta.date.toISOString()
-        : String(billStateWithoutPtoVenta.date),
-    };
-
-    // Validate effective total before calling AFIP — AFIP rejects 0-amount invoices
-    // with "alicuota de iva debe ser distinto de cero". This catches the common
-    // case where shortcut products (salePrice=0, price=0) were never priced, and
-    // also handles a discount that wipes the total to zero.
-    const effectiveTotal = Number(
-      billStateWithoutPtoVenta.totalWithDiscount ?? billStateWithoutPtoVenta.total
-    ) || 0;
-
-    if (effectiveTotal <= 0) {
-      return {
-        error: "No se puede generar la factura: el monto total debe ser mayor a 0",
-      };
-    }
-
-    const response = await axios.post(
-      functionUrl,
-      // Server-to-server exception required by the canonical Cloud Function
-      // contract: credentials are sent only in this request, never returned,
-      // logged, or included in diagnostics/client results.
-      {
-        action: "createVoucher",
-        encryptedCert: cert,
-        encryptedKey: key,
-        arca: {
-          accessToken,
-          cuit,
-           puntoVenta: ptoVenta,
-           tipoFactura,
-        },
-        billState: minimalBillState,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "x-internal-key": internalKey,
-        },
-      }
+    const fiscalSnapshotToken = await createAuthorizedFiscalSnapshotGrant(
+      sessionUser.businessId,
+      issued.data.cae,
+      issued.data.fiscalSnapshot,
+      { billType, invoiceNumber, pointOfSale },
     );
-
-      const parsed = parseAfipVoucherResponse(response.data, {
-        status: response.status,
-        ptoVenta,
-        tipoFactura,
-        environment: process.env.AFIP_ENVIRONMENT === "produccion" ? "produccion" : process.env.AFIP_ENVIRONMENT === "homologacion" ? "homologacion" : "desconocido",
-      });
-      if (parsed.kind === "success") return { success: true, data: parsed.data };
-      console.warn("[createVoucher] AFIP response shape", parsed.responseShape);
-      if (parsed.kind === "afip-error") return { error: parsed.error, diagnostic: { ...parsed.responseShape, reason: "afip-error" } };
-      return { error: parsed.message, diagnostic: { ...parsed.responseShape, reason: "missing-cae" } };
-   } catch (error: unknown) {
-     let errorMsg: string | AfipPointSaleError = "Error al comunicarse con el servicio de AFIP";
-    
-     if (axios.isAxiosError(error)) {
-        const parsedResponse = parseAfipVoucherResponse(error.response?.data ?? error.message, {
-          status: error.response?.status,
-          ptoVenta,
-          tipoFactura,
-          environment: "desconocido",
-        });
-        if (parsedResponse.kind === "afip-error") {
-          console.warn("[createVoucher] AFIP error shape", parsedResponse.responseShape);
-          return { error: parsedResponse.error, diagnostic: { ...parsedResponse.responseShape, reason: "afip-error" } };
-        }
-        const parsed = parseAfipPointSaleError(error.response?.data ?? error.message, {
-         operation: "createVoucher", ptoVenta, tipoFactura, environment: "desconocido",
-       });
-       errorMsg = parsed.code === "11002" ? parsed : parsed.message;
-      } else if (error instanceof Error) {
-        const parsed = parseAfipPointSaleError(error, {
-          operation: "createVoucher", ptoVenta, tipoFactura, environment: "desconocido",
-        });
-        console.error("[createVoucher] AFIP client failure", {
-          code: parsed.code, operation: parsed.operation, ptoVenta: parsed.ptoVenta, tipoFactura: parsed.tipoFactura,
-        });
-        errorMsg = parsed.code === "11002" ? parsed : parsed.message;
-    }
-    
-     return { error: errorMsg };
+    return { ...issued, data: { ...issued.data, fiscalSnapshotToken } };
+  } catch (error: unknown) {
+    console.error("Could not persist trusted authorized fiscal snapshot grant", {
+      businessId: sessionUser.businessId,
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    // The CAE remains authorized, but without the server-side grant it is not
+    // eligible for a credit note. Never fall back to browser-provided amounts.
+    return issued;
   }
 };
