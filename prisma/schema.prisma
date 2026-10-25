@@ -187,6 +187,7 @@ model Supplier {
   iva           Float    @default(0)
   gain          Float    @default(0)
   creation_date DateTime @default(now())
+  excelColumnMapping Json? @db.JsonB
 
   // Make optional for migration
   businessId String
