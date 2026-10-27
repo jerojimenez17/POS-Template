@@ -1,11 +1,18 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { BulkProductInput, previewProductsBulk, PreviewProductsBulkResult, processBulkProductBatch, finalizeBulkImport } from "@/actions/stock";
+import { BulkProductInput, previewProductsBulk, PreviewProductsBulkResult, processBulkProductBatch, finalizeBulkImport, getSupplierExcelColumnMapping, saveSupplierExcelColumnMapping } from "@/actions/stock";
+import {
+  DEFAULT_SUPPLIER_EXCEL_COLUMN_MAPPING,
+  isExcelColumnLetter,
+  supplierExcelColumnMappingSchema,
+  toEditableSupplierExcelColumnMapping,
+  type EditableSupplierExcelColumnMapping,
+} from "@/lib/supplier-excel-column-mapping";
 import { parseExcelIva } from "@/utils/iva-parser";
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
@@ -15,6 +22,78 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { getSuppliers } from "@/actions/stock";
 import type { Supplier } from "@prisma/client";
 import CreateAttributeModal from "./create-attribute-modal";
+
+const HEADER_KEYWORDS: Record<keyof EditableSupplierExcelColumnMapping, string[]> = {
+  code: ["código", "codigo", "cod", "code", "artículo", "articulo", "art", "sku"],
+  description: ["descripción", "descripcion", "desc", "producto", "detalle", "nombre", "name"],
+  price: ["precio", "price", "costo", "cost", "valor", "lista", "neto"],
+  amount: ["cantidad", "cant", "stock", "qty", "unidades"],
+  brand: ["marca", "brand"],
+  category: ["categoría", "categoria", "cat", "rubro"],
+  subCategory: ["subcategoría", "subcategoria", "sub", "subrubro"],
+  codebar: ["codebar", "ean", "barcode", "upc", "código de barras", "cod barras"],
+  iva: ["iva", "alícuota", "alicuota", "tasa"],
+};
+
+type MappingProvenance = "fallback" | "detected" | "saved" | "manual";
+type SupplierMappingLoadStatus = "loading" | "loaded" | "error";
+
+interface SupplierMappingLoadState {
+  supplierId: string;
+  status: SupplierMappingLoadStatus;
+}
+
+const DEFAULT_MAPPING = { ...DEFAULT_SUPPLIER_EXCEL_COLUMN_MAPPING };
+
+const detectColumns = (headerRow: unknown[]): Record<keyof EditableSupplierExcelColumnMapping, number> => {
+  const detected: Record<keyof EditableSupplierExcelColumnMapping, number> = {
+    code: -1,
+    description: -1,
+    price: -1,
+    amount: -1,
+    brand: -1,
+    category: -1,
+    subCategory: -1,
+    codebar: -1,
+    iva: -1,
+  };
+
+  for (let col = 0; col < headerRow.length; col++) {
+    const cell = String(headerRow[col] ?? "").trim().toLowerCase();
+    if (!cell) continue;
+    for (const [field, keywords] of Object.entries(HEADER_KEYWORDS) as Array<[
+      keyof EditableSupplierExcelColumnMapping,
+      string[],
+    ]>) {
+      if (detected[field] === -1 && keywords.some((keyword) => cell.includes(keyword))) {
+        detected[field] = col;
+        break;
+      }
+    }
+  }
+
+  return detected;
+};
+
+const hasRequiredDetectedColumns = (columns: Record<keyof EditableSupplierExcelColumnMapping, number>) =>
+  columns.code >= 0 && columns.description >= 0 && columns.price >= 0;
+
+const getExcelColumnLetter = (index: number): string => {
+  let number = index + 1;
+  let letter = "";
+  while (number > 0) {
+    const remainder = (number - 1) % 26;
+    letter = String.fromCharCode(65 + remainder) + letter;
+    number = Math.floor((number - 1) / 26);
+  }
+  return letter;
+};
+
+const mappingFromDetectedColumns = (
+  columns: Record<keyof EditableSupplierExcelColumnMapping, number>,
+): EditableSupplierExcelColumnMapping => Object.fromEntries(
+  Object.entries(columns).map(([field, index]) => [field, index >= 0 ? getExcelColumnLetter(index) : ""]),
+) as EditableSupplierExcelColumnMapping;
 
 interface Props {
   open: boolean;
@@ -40,6 +119,57 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   const [updateOnly, setUpdateOnly] = useState(false);
   const [metadataOnly, setMetadataOnly] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
+  const [columnMapping, setColumnMapping] = useState<EditableSupplierExcelColumnMapping>(DEFAULT_MAPPING);
+  const [supplierMappingLoadState, setSupplierMappingLoadState] = useState<SupplierMappingLoadState | null>(null);
+  const mappingProvenanceRef = useRef<MappingProvenance>("fallback");
+  const lastNonEmptyMappingRef = useRef<EditableSupplierExcelColumnMapping>(DEFAULT_MAPPING);
+  const selectedSupplierIdRef = useRef("");
+  const supplierRequestIdRef = useRef(0);
+  const fileRequestIdRef = useRef(0);
+  const detectedMappingRef = useRef<EditableSupplierExcelColumnMapping | null>(null);
+  const supplierMappingLoadStateRef = useRef<SupplierMappingLoadState | null>(null);
+
+  const updateSupplierMappingLoadState = (state: SupplierMappingLoadState | null) => {
+    supplierMappingLoadStateRef.current = state;
+    setSupplierMappingLoadState(state);
+  };
+
+  const isSupplierMappingReady = (supplierId: string) => {
+    if (!supplierId) return true;
+    const state = supplierMappingLoadStateRef.current;
+    return state?.supplierId === supplierId && state.status === "loaded";
+  };
+
+  const applyMapping = useCallback((mapping: EditableSupplierExcelColumnMapping, provenance: MappingProvenance) => {
+    mappingProvenanceRef.current = provenance;
+    lastNonEmptyMappingRef.current = mapping;
+    setColumnMapping(mapping);
+  }, []);
+
+  const loadSupplierMapping = async (supplierId: string, requestId: number) => {
+    try {
+      const result = await getSupplierExcelColumnMapping(supplierId);
+      if (requestId !== supplierRequestIdRef.current || selectedSupplierIdRef.current !== supplierId) return;
+
+      if (result.error) {
+        updateSupplierMappingLoadState({ supplierId, status: "error" });
+        setErrorMsg("No se pudo cargar la configuración de columnas del proveedor. Vuelva a seleccionarlo para reintentar.");
+        return;
+      }
+
+      if (result.mapping) {
+        applyMapping(toEditableSupplierExcelColumnMapping(result.mapping), "saved");
+      } else if (detectedMappingRef.current) {
+        applyMapping(detectedMappingRef.current, "detected");
+      }
+      updateSupplierMappingLoadState({ supplierId, status: "loaded" });
+    } catch (error) {
+      if (requestId !== supplierRequestIdRef.current || selectedSupplierIdRef.current !== supplierId) return;
+      console.error("Error al cargar el mapeo Excel del proveedor:", error);
+      updateSupplierMappingLoadState({ supplierId, status: "error" });
+      setErrorMsg("No se pudo cargar la configuración de columnas del proveedor. Vuelva a seleccionarlo para reintentar.");
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -48,17 +178,23 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
   }, [open]);
 
   const handleSupplierSelect = (supplierId: string) => {
+    selectedSupplierIdRef.current = supplierId;
     setSelectedSupplierId(supplierId);
+    const requestId = ++supplierRequestIdRef.current;
+    updateSupplierMappingLoadState(supplierId ? { supplierId, status: "loading" } : null);
+    setErrorMsg(null);
+    applyMapping(detectedMappingRef.current ?? DEFAULT_MAPPING, detectedMappingRef.current ? "detected" : "fallback");
     const supplier = suppliers.find(s => s.id === supplierId);
     if (supplier) {
       setAdjustmentDiscount(supplier.discount ?? 0);
       setAdjustmentIva(String(supplier.iva ?? 0));
       setAdjustmentGain(supplier.gain ?? 0);
     }
+    if (supplierId) void loadSupplierMapping(supplierId, requestId);
   };
 
   const handleSupplierCreated = (item: { id: string; name: string }) => {
-    setSelectedSupplierId(item.id);
+    handleSupplierSelect(item.id);
     getSuppliers().then(suppliers => {
       setSuppliers(suppliers);
       const supplier = suppliers.find(s => s.id === item.id);
@@ -70,27 +206,66 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
     });
   };
 
-  // Column Mappings
-  const [colCode, setColCode] = useState("A");
-  const [colDescription, setColDescription] = useState("B");
-  const [colPrice, setColPrice] = useState("C");
-  const [colAmount, setColAmount] = useState("");
-  const [colBrand, setColBrand] = useState("");
-  const [colCategory, setColCategory] = useState("");
-  const [colSubCategory, setColSubCategory] = useState("");
-  const [colCodebar, setColCodebar] = useState("");
-  const [colIva, setColIva] = useState("");
+  const editMappingField = (field: keyof EditableSupplierExcelColumnMapping, value: string) => {
+    mappingProvenanceRef.current = "manual";
+    const next = { ...columnMapping, [field]: value };
+    const requiredFields = ["code", "description", "price"] as const;
+    const normalizedValue = value.trim().toUpperCase();
+    if (requiredFields.includes(field as (typeof requiredFields)[number]) && normalizedValue) {
+      const duplicateField = requiredFields.find(
+        (requiredField) => requiredField !== field && columnMapping[requiredField].trim().toUpperCase() === normalizedValue,
+      );
+      if (duplicateField) {
+        next[duplicateField] = lastNonEmptyMappingRef.current[field];
+      }
+    }
+    if (value.trim()) lastNonEmptyMappingRef.current = { ...lastNonEmptyMappingRef.current, [field]: value };
+    setColumnMapping(next);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setFile(e.target.files[0]);
+      setPreviewData(null);
+      setParsedProductsState([]);
+      setErrorMsg(null);
     }
   };
 
+  useEffect(() => {
+    if (!file) return;
+    const requestId = ++fileRequestIdRef.current;
+    detectedMappingRef.current = null;
+    if (mappingProvenanceRef.current === "detected" || mappingProvenanceRef.current === "fallback") {
+      applyMapping(DEFAULT_MAPPING, "fallback");
+    }
+
+    const detectFileHeaders = async () => {
+      try {
+        const workbook = XLSX.read(await file.arrayBuffer());
+        const firstSheetName = workbook.SheetNames[0];
+        if (!firstSheetName) return;
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { header: 1 }) as unknown[][];
+        const columns = detectColumns(rows[0] ?? []);
+        if (!hasRequiredDetectedColumns(columns) || requestId !== fileRequestIdRef.current) return;
+
+        const detectedMapping = mappingFromDetectedColumns(columns);
+        detectedMappingRef.current = detectedMapping;
+        if (mappingProvenanceRef.current === "fallback" || mappingProvenanceRef.current === "detected") {
+          applyMapping(detectedMapping, "detected");
+        }
+      } catch (error) {
+        console.error("Error al detectar encabezados del archivo Excel:", error);
+      }
+    };
+
+    void detectFileHeaders();
+  }, [file, applyMapping]);
+
   const getColIndex = (letter: string) => {
-    if (!letter) return -1;
+    const cleanLetter = letter.trim().toUpperCase();
+    if (!isExcelColumnLetter(cleanLetter)) return -1;
     let index = 0;
-    const cleanLetter = letter.toUpperCase().trim();
     for (let i = 0; i < cleanLetter.length; i++) {
         index = index * 26 + cleanLetter.charCodeAt(i) - 64;
     }
@@ -104,62 +279,80 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
       return;
     }
 
-    if (!colCode || !colDescription || !colPrice) {
-      setErrorMsg("Debe especificar las columnas obligatorias: Código, Descripción y Precio.");
+    const supplierIdForPreview = selectedSupplierIdRef.current;
+    const supplierRequestForPreview = supplierRequestIdRef.current;
+    if (!isSupplierMappingReady(supplierIdForPreview)) {
+      const loadState = supplierMappingLoadStateRef.current;
+      setErrorMsg(loadState?.supplierId === supplierIdForPreview && loadState.status === "error"
+        ? "No se pudo cargar la configuración de columnas del proveedor. Vuelva a seleccionarlo para reintentar."
+        : "Espere a que termine de cargar la configuración de columnas del proveedor antes de continuar.");
       return;
     }
 
+    const effectiveMapping: EditableSupplierExcelColumnMapping = {
+      code: columnMapping.code.trim().toUpperCase(),
+      description: columnMapping.description.trim().toUpperCase(),
+      price: columnMapping.price.trim().toUpperCase(),
+      amount: columnMapping.amount.trim().toUpperCase(),
+      brand: columnMapping.brand.trim().toUpperCase(),
+      category: columnMapping.category.trim().toUpperCase(),
+      subCategory: columnMapping.subCategory.trim().toUpperCase(),
+      codebar: columnMapping.codebar.trim().toUpperCase(),
+      iva: columnMapping.iva.trim().toUpperCase(),
+    };
+    const validatedMapping = supplierExcelColumnMappingSchema.safeParse(effectiveMapping);
+    if (!validatedMapping.success) {
+      const field = validatedMapping.error.issues[0]?.path[0];
+      const fieldLabels: Record<keyof EditableSupplierExcelColumnMapping, string> = {
+        code: "Código",
+        description: "Descripción",
+        price: "Precio",
+        amount: "Cantidad",
+        brand: "Marca",
+        category: "Categoría",
+        subCategory: "Subcategoría",
+        codebar: "Código de Barras",
+        iva: "IVA",
+      };
+      const fieldLabel = field && field in fieldLabels
+        ? fieldLabels[field as keyof EditableSupplierExcelColumnMapping]
+        : "Configuración";
+      const isOptionalField = field === "amount" || field === "brand" || field === "category" ||
+        field === "subCategory" || field === "codebar" || field === "iva";
+      setErrorMsg(isOptionalField
+        ? `La columna ${fieldLabel} no es válida. Use una letra de columna de Excel (por ejemplo, E) o deje el campo vacío.`
+        : `La columna ${fieldLabel} no es válida. Ingrese una letra de columna de Excel.`);
+      return;
+    }
+
+    const provenanceForPreview = mappingProvenanceRef.current;
     setLoading(true);
     console.log("Iniciando procesamiento de archivo:", file.name);
 
     try {
       const data = await file.arrayBuffer();
+      if (
+        selectedSupplierIdRef.current !== supplierIdForPreview ||
+        supplierRequestIdRef.current !== supplierRequestForPreview ||
+        !isSupplierMappingReady(supplierIdForPreview)
+      ) {
+        setErrorMsg("La selección del proveedor cambió. Verifique la configuración de columnas antes de continuar.");
+        return;
+      }
       const workbook = XLSX.read(data);
       
       console.log("Hojas encontradas:", workbook.SheetNames.join(", "));
 
-      // Auto-detect column index from header text
-      const headerKeywords: Record<string, string[]> = {
-        code: ["código", "codigo", "cod", "code", "artículo", "articulo", "art", "sku"],
-        description: ["descripción", "descripcion", "desc", "producto", "detalle", "nombre", "name"],
-        price: ["precio", "price", "costo", "cost", "valor", "lista", "neto"],
-        amount: ["cantidad", "cant", "stock", "qty", "unidades"],
-        brand: ["marca", "brand"],
-        category: ["categoría", "categoria", "cat", "rubro"],
-        subCategory: ["subcategoría", "subcategoria", "sub", "subrubro"],
-        codebar: ["codebar", "ean", "barcode", "upc", "código de barras", "cod barras"],
-        iva: ["iva", "alícuota", "alicuota", "tasa"],
-      };
-
-      const detectColumns = (headerRow: unknown[]) => {
-        const detected: Record<string, number> = {
-          code: -1, description: -1, price: -1,
-          amount: -1, brand: -1, category: -1, subCategory: -1, codebar: -1, iva: -1,
-        };
-        for (let col = 0; col < headerRow.length; col++) {
-          const cell = String(headerRow[col] ?? "").trim().toLowerCase();
-          if (!cell) continue;
-          for (const [field, keywords] of Object.entries(headerKeywords)) {
-            if (detected[field] === -1 && keywords.some(kw => cell.includes(kw))) {
-              detected[field] = col;
-              break;
-            }
-          }
-        }
-        return detected;
-      };
-
-      // Fallback: user-configured column indices
       const fallbackIndices = {
-        code: getColIndex(colCode),
-        description: getColIndex(colDescription),
-        price: getColIndex(colPrice),
-        amount: getColIndex(colAmount),
-        brand: getColIndex(colBrand),
-        category: getColIndex(colCategory),
-        subCategory: getColIndex(colSubCategory),
-        codebar: getColIndex(colCodebar),
-        iva: getColIndex(colIva),
+        code: getColIndex(effectiveMapping.code),
+        description: getColIndex(effectiveMapping.description),
+        price: getColIndex(effectiveMapping.price),
+        amount: getColIndex(effectiveMapping.amount),
+        brand: getColIndex(effectiveMapping.brand),
+        category: getColIndex(effectiveMapping.category),
+        subCategory: getColIndex(effectiveMapping.subCategory),
+        codebar: getColIndex(effectiveMapping.codebar),
+        iva: getColIndex(effectiveMapping.iva),
       };
 
       const parsedProducts: BulkProductInput[] = [];
@@ -175,20 +368,8 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
 
         // Try auto-detecting columns from the first row of this sheet
         const headerRow = sheetRows[0] || [];
-        const detected = detectColumns(headerRow);
-        const hasAutoDetect = detected.code !== -1 && detected.description !== -1 && detected.price !== -1;
-
-        // When auto-detect succeeds, use detected columns but let manual overrides take precedence
-        const indices = hasAutoDetect ? { ...detected } : { ...fallbackIndices };
-        if (hasAutoDetect) {
-          // Override auto-detected columns with manually specified ones
-          if (colAmount && fallbackIndices.amount >= 0) indices.amount = fallbackIndices.amount;
-          if (colBrand && fallbackIndices.brand >= 0) indices.brand = fallbackIndices.brand;
-          if (colCategory && fallbackIndices.category >= 0) indices.category = fallbackIndices.category;
-          if (colSubCategory && fallbackIndices.subCategory >= 0) indices.subCategory = fallbackIndices.subCategory;
-          if (colCodebar && fallbackIndices.codebar >= 0) indices.codebar = fallbackIndices.codebar;
-          if (colIva && fallbackIndices.iva >= 0) indices.iva = fallbackIndices.iva;
-        }
+        const hasAutoDetect = hasRequiredDetectedColumns(detectColumns(headerRow));
+        const indices = fallbackIndices;
         const dataStartRow = hasAutoDetect ? 1 : Math.max(0, startRow - 1);
 
         console.log(`Hoja "${sheetName}": ${sheetRows.length} filas, ` +
@@ -241,6 +422,15 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         return;
       }
 
+      if (
+        selectedSupplierIdRef.current !== supplierIdForPreview ||
+        supplierRequestIdRef.current !== supplierRequestForPreview ||
+        !isSupplierMappingReady(supplierIdForPreview)
+      ) {
+        setErrorMsg("La selección del proveedor cambió. Verifique la configuración de columnas antes de continuar.");
+        return;
+      }
+
       toast.loading(`Generando vista previa de ${parsedProducts.length} productos...`, { id: "bulk-import" });
       
       const result = await previewProductsBulk(
@@ -250,9 +440,19 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         adjustmentDiscount, 
         parseFloat(adjustmentIva), 
         adjustmentGain, 
-        selectedSupplierId || undefined,
+        supplierIdForPreview || undefined,
         metadataOnly
       );
+
+      if (
+        selectedSupplierIdRef.current !== supplierIdForPreview ||
+        supplierRequestIdRef.current !== supplierRequestForPreview ||
+        !isSupplierMappingReady(supplierIdForPreview)
+      ) {
+        toast.dismiss("bulk-import");
+        setErrorMsg("La selección del proveedor cambió durante la vista previa. Revise el mapeo antes de continuar.");
+        return;
+      }
       
       if (result.error) {
         setErrorMsg(result.error);
@@ -262,6 +462,25 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
         setParsedProductsState(parsedProducts);
         setPreviewData(result.preview);
         setStep("preview");
+        if (
+          supplierIdForPreview &&
+          selectedSupplierIdRef.current === supplierIdForPreview &&
+          supplierRequestIdRef.current === supplierRequestForPreview &&
+          isSupplierMappingReady(supplierIdForPreview) &&
+          provenanceForPreview !== "fallback" &&
+          parsedProducts.length > 0 &&
+          result.preview.totalItems > 0 &&
+          validatedMapping.success
+        ) {
+          void saveSupplierExcelColumnMapping(supplierIdForPreview, validatedMapping.data)
+            .then((saved) => {
+              if (!saved.success) toast.error(saved.error ?? "No se pudo guardar el mapeo de columnas.");
+            })
+            .catch((error: unknown) => {
+              console.error("Error al guardar el mapeo Excel del proveedor:", error);
+              toast.error("No se pudo guardar el mapeo de columnas.");
+            });
+        }
       }
     } catch (error) {
       console.error("Error detallado en procesamiento de Excel:", error);
@@ -271,6 +490,17 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
       setLoading(false);
     }
   };
+
+  const isCurrentSupplierMappingPending = Boolean(
+    selectedSupplierId &&
+    supplierMappingLoadState?.supplierId === selectedSupplierId &&
+    supplierMappingLoadState.status === "loading",
+  );
+  const isCurrentSupplierMappingInError = Boolean(
+    selectedSupplierId &&
+    supplierMappingLoadState?.supplierId === selectedSupplierId &&
+    supplierMappingLoadState.status === "error",
+  );
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -427,15 +657,15 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
             <div className="p-4 grid grid-cols-3 gap-4">
                <div className="grid gap-2">
                  <Label>Código <span className="text-red-500">*</span></Label>
-                 <Input value={colCode} onChange={e => setColCode(e.target.value)} placeholder="Ej: A" />
+                 <Input value={columnMapping.code} onChange={e => editMappingField("code", e.target.value)} placeholder="Ej: A" />
                </div>
                <div className="grid gap-2">
                  <Label>Descripción <span className="text-red-500">*</span></Label>
-                 <Input value={colDescription} onChange={e => setColDescription(e.target.value)} placeholder="Ej: B" />
+                 <Input value={columnMapping.description} onChange={e => editMappingField("description", e.target.value)} placeholder="Ej: B" />
                </div>
                <div className="grid gap-2">
                  <Label>Precio <span className="text-red-500">*</span></Label>
-                 <Input value={colPrice} onChange={e => setColPrice(e.target.value)} placeholder="Ej: C" />
+                 <Input value={columnMapping.price} onChange={e => editMappingField("price", e.target.value)} placeholder="Ej: C" />
                </div>
             </div>
           </div>
@@ -447,27 +677,27 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
              <div className="p-4 grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Cantidad (Stock)</Label>
-                  <Input value={colAmount} onChange={e => setColAmount(e.target.value)} placeholder="Ej: D" />
+                   <Input value={columnMapping.amount} onChange={e => editMappingField("amount", e.target.value)} placeholder="Ej: D" />
                 </div>
                 <div className="grid gap-2">
                   <Label>Marca</Label>
-                  <Input value={colBrand} onChange={e => setColBrand(e.target.value)} placeholder="Ej: E" />
+                   <Input value={columnMapping.brand} onChange={e => editMappingField("brand", e.target.value)} placeholder="Ej: E" />
                 </div>
                 <div className="grid gap-2">
                   <Label>Categoría</Label>
-                  <Input value={colCategory} onChange={e => setColCategory(e.target.value)} placeholder="Ej: F" />
+                   <Input value={columnMapping.category} onChange={e => editMappingField("category", e.target.value)} placeholder="Ej: F" />
                 </div>
                 <div className="grid gap-2">
                   <Label>Subcategoría</Label>
-                  <Input value={colSubCategory} onChange={e => setColSubCategory(e.target.value)} placeholder="Ej: G" />
+                   <Input value={columnMapping.subCategory} onChange={e => editMappingField("subCategory", e.target.value)} placeholder="Ej: G" />
                 </div>
                 <div className="grid gap-2">
                   <Label>Código de Barras (EAN/UPC)</Label>
-                  <Input value={colCodebar} onChange={e => setColCodebar(e.target.value)} placeholder="Ej: H" />
+                   <Input value={columnMapping.codebar} onChange={e => editMappingField("codebar", e.target.value)} placeholder="Ej: H" />
                 </div>
                 <div className="grid gap-2">
                   <Label>IVA (Letra o Porcentaje)</Label>
-                  <Input value={colIva} onChange={e => setColIva(e.target.value)} placeholder="Ej: I" />
+                   <Input value={columnMapping.iva} onChange={e => editMappingField("iva", e.target.value)} placeholder="Ej: I" />
                 </div>
              </div>
            </div>
@@ -478,9 +708,9 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
              </div>
              <div className="p-4">
                <div className="flex gap-2 items-end">
-                 <div className="flex-1 space-y-2">
-                   <Label htmlFor="supplier">Seleccionar proveedor</Label>
-                   <select
+                  <div className="flex-1 space-y-2">
+                    <Label htmlFor="supplier">Seleccionar proveedor</Label>
+                    <select
                      id="supplier"
                      value={selectedSupplierId}
                      onChange={(e) => handleSupplierSelect(e.target.value)}
@@ -489,9 +719,19 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                      <option value="">Sin proveedor</option>
                      {suppliers.map((s) => (
                        <option key={s.id} value={s.id}>{s.name}</option>
-                     ))}
-                   </select>
-                 </div>
+                      ))}
+                    </select>
+                    {isCurrentSupplierMappingPending && (
+                      <p role="status" className="text-xs text-muted-foreground">
+                        Cargando la configuración de columnas del proveedor…
+                      </p>
+                    )}
+                    {isCurrentSupplierMappingInError && (
+                      <p role="alert" className="text-xs text-red-600">
+                        No se pudo cargar el mapeo. Vuelva a seleccionar el proveedor para reintentar.
+                      </p>
+                    )}
+                  </div>
                  <CreateAttributeModal
                    type="supplier"
                    onSuccess={handleSupplierCreated}
@@ -659,7 +899,11 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
                 Cancelar
               </Button>
-              <Button onClick={handlePreview} disabled={loading || !file} className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Button
+                onClick={handlePreview}
+                disabled={loading || !file || isCurrentSupplierMappingPending || isCurrentSupplierMappingInError}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
                 {loading ? "Calculando..." : "Siguiente"}
                 {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>

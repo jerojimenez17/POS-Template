@@ -8,6 +8,10 @@ import { Product, Prisma } from "@prisma/client";
 import { PAGINATION } from "@/lib/pagination";
 import { parseExcelIva } from "@/utils/iva-parser";
 import { roundToNearest10 } from "@/utils/round-to-nearest-10";
+import {
+  supplierExcelColumnMappingSchema,
+  type SupplierExcelColumnMapping,
+} from "@/lib/supplier-excel-column-mapping";
 
 
 // Supplier Actions
@@ -56,6 +60,67 @@ export const getSuppliers = async () => {
   } catch (error) {
     console.error(error);
     return [];
+  }
+};
+
+export const getSupplierExcelColumnMapping = async (
+  supplierId: string,
+): Promise<{ mapping?: SupplierExcelColumnMapping | null; error?: string }> => {
+  try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    if (!businessId) return { error: "No autorizado" };
+    if (typeof supplierId !== "string" || supplierId.trim() === "") {
+      return { error: "Proveedor no encontrado o no autorizado" };
+    }
+
+    const supplier = await db.supplier.findFirst({
+      where: { id: supplierId.trim(), businessId },
+      select: { excelColumnMapping: true },
+    });
+    if (!supplier) return { error: "Proveedor no encontrado o no autorizado" };
+    if (supplier.excelColumnMapping === null) return { mapping: null };
+
+    const parsed = supplierExcelColumnMappingSchema.safeParse(supplier.excelColumnMapping);
+    if (!parsed.success) return { error: "La configuración de columnas del proveedor no es válida" };
+
+    return { mapping: parsed.data };
+  } catch (error) {
+    console.error("Error al obtener el mapeo Excel del proveedor:", error);
+    return { error: "Error al obtener la configuración de columnas del proveedor" };
+  }
+};
+
+export const saveSupplierExcelColumnMapping = async (
+  supplierId: string,
+  mapping: SupplierExcelColumnMapping,
+): Promise<{ success?: boolean; error?: string }> => {
+  try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    if (!businessId) return { error: "No autorizado" };
+    if (typeof supplierId !== "string" || supplierId.trim() === "") {
+      return { error: "Proveedor no encontrado o no autorizado" };
+    }
+
+    const parsed = supplierExcelColumnMappingSchema.safeParse(mapping);
+    if (!parsed.success) return { error: "La configuración de columnas no es válida" };
+
+    const supplier = await db.supplier.findFirst({
+      where: { id: supplierId.trim(), businessId },
+      select: { id: true },
+    });
+    if (!supplier) return { error: "Proveedor no encontrado o no autorizado" };
+
+    await db.supplier.update({
+      where: { id: supplierId.trim(), businessId },
+      data: { excelColumnMapping: parsed.data },
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error al guardar el mapeo Excel del proveedor:", error);
+    return { error: "Error al guardar la configuración de columnas del proveedor" };
   }
 };
 
