@@ -89,7 +89,9 @@ export const createAfipVoucherAction = async (
     return plainPreIssueError("No se pudo validar la sesión antes de iniciar la emisión");
   }
   if (!sessionUser?.id || !sessionUser.businessId || !sessionUser.role
-    || (sessionUser.role !== UserRole.ADMIN && sessionUser.role !== UserRole.SUPER_ADMIN)) {
+    || (sessionUser.role !== UserRole.USER
+      && sessionUser.role !== UserRole.ADMIN
+      && sessionUser.role !== UserRole.SUPER_ADMIN)) {
     return { error: "No autorizado", issuanceNotStarted: true };
   }
 

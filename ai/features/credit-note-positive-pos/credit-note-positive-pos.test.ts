@@ -100,7 +100,11 @@ function setupDatabase() {
     creditNotePointOfSale: null,
   });
   order.returns = [];
-  businessFindUniqueMock.mockResolvedValue(business);
+  businessFindUniqueMock.mockImplementation((args: { select?: { cuit?: unknown; features?: unknown } }) =>
+    args.select?.features && !("cuit" in args.select)
+      ? Promise.resolve({ id: actor.businessId, features: { hasAfipBilling: true } })
+      : Promise.resolve(business),
+  );
   dbMock.business.findUnique.mockImplementation(businessFindUniqueMock);
   orderFindFirstMock.mockResolvedValue(order);
   dbMock.order.findFirst.mockImplementation(orderFindFirstMock);

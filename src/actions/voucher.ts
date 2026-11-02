@@ -11,9 +11,10 @@ export const getVoucherNumberAction = async (
 ): Promise<VoucherNumberResult> => {
   const session = await auth();
   const role = session?.user?.role;
-  if (!role || (role !== UserRole.SUPER_ADMIN && role !== UserRole.ADMIN)) {
+  if (!role || (role !== UserRole.USER && role !== UserRole.SUPER_ADMIN && role !== UserRole.ADMIN)) {
     return { error: "No autorizado" };
   }
+  if (role === UserRole.USER && !session?.user?.id) return { error: "No autorizado" };
   const businessId = session.user.businessId;
   if (!businessId) return { error: "Usuario sin negocio asignado" };
   return getVoucherNumberForActor(puntoVenta, tipoFactura, "invoice", { businessId, role });

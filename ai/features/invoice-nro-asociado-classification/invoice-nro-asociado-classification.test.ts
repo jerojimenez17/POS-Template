@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireFeatureMock, credentialsMock, voucherNumberMock, axiosPostMock } = vi.hoisted(() => ({
+const { requireFeatureMock, credentialsMock, voucherNumberMock, axiosPostMock, persistedBusinessFindUniqueMock } = vi.hoisted(() => ({
   requireFeatureMock: vi.fn(),
   credentialsMock: vi.fn(),
   voucherNumberMock: vi.fn(),
   axiosPostMock: vi.fn(),
+  persistedBusinessFindUniqueMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-gates", () => ({ requireFeature: requireFeatureMock }));
+vi.mock("@/lib/db", () => ({ db: { business: { findUnique: persistedBusinessFindUniqueMock } } }));
 vi.mock("@/lib/server/arca-billing", () => ({
   getArcaCredentialsForBilling: credentialsMock,
   getVoucherNumberForActor: voucherNumberMock,
@@ -71,6 +73,10 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_AFIP_FUNCTION_URL", "https://example.test/create-voucher");
 
   requireFeatureMock.mockResolvedValue({ success: true, data: actor });
+  persistedBusinessFindUniqueMock.mockResolvedValue({
+    id: actor.businessId,
+    features: { hasAfipBilling: true },
+  });
   credentialsMock.mockResolvedValue({
     success: {
       cuit: "20123456789",

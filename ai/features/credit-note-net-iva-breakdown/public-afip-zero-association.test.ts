@@ -7,6 +7,7 @@ const {
   credentialsMock,
   voucherNumberMock,
   grantCreateMock,
+  persistedBusinessFindUniqueMock,
 } = vi.hoisted(() => ({
   authMock: vi.fn(),
   axiosPostMock: vi.fn(),
@@ -14,6 +15,7 @@ const {
   credentialsMock: vi.fn(),
   voucherNumberMock: vi.fn(),
   grantCreateMock: vi.fn(),
+  persistedBusinessFindUniqueMock: vi.fn(),
 }));
 
 vi.mock("@/auth", () => ({ auth: authMock }));
@@ -26,7 +28,10 @@ vi.mock("@/lib/server/arca-billing", () => ({
   getVoucherNumberForActor: voucherNumberMock,
 }));
 vi.mock("@/lib/db", () => ({
-  db: { authorizedFiscalSnapshotGrant: { create: grantCreateMock } },
+  db: {
+    business: { findUnique: persistedBusinessFindUniqueMock },
+    authorizedFiscalSnapshotGrant: { create: grantCreateMock },
+  },
 }));
 
 import { createAfipVoucherAction } from "@/actions/afip";
@@ -99,6 +104,10 @@ describe("public AFIP action with provider's zero association sentinel", () => {
     vi.stubEnv("NEXT_PUBLIC_AFIP_FUNCTION_URL", "https://local.test/create-voucher");
     authMock.mockResolvedValue({ user: actor });
     requireFeatureMock.mockResolvedValue({ success: true, data: actor });
+    persistedBusinessFindUniqueMock.mockResolvedValue({
+      id: "tenant-1",
+      features: { hasAfipBilling: true },
+    });
     credentialsMock.mockResolvedValue({
       success: { cuit: "20123456789", cert: "encrypted-cert", key: "encrypted-key", ptoVentas: [3] },
     });

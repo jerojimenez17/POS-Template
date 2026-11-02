@@ -22,7 +22,6 @@ import BillTypes from "@/models/billType";
 import { getVoucherNumberAction } from "@/actions/voucher";
 import { getDefaultBillType } from "@/utils/billing";
 import { getBusinessBillingInfoAction } from "@/actions/business";
-import { formatAfipPointSaleErrorForUser, type AfipPointSaleError } from "@/services/afip/point-sale-validation";
 
 const getVoucherTypeCode = (billType: string): 1 | 6 | 11 => {
   if (billType === BillTypes.A) return 1;
@@ -39,7 +38,7 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
   const [editParamters, setEditParameters] = useState(false);
   const [lastVoucherNum, setLastVoucherNum] = useState<number | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(true);
-  const [voucherError, setVoucherError] = useState<AfipPointSaleError | string | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const context = useContext(BillContext);
   const dispatch = context?.dispatch;
@@ -107,33 +106,53 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
 
   useEffect(() => {
     const requestId = ++requestSequence.current;
-    const fetchVoucher = async () => {
-      if (!watchPtoVenta) return;
-      setLoadingVoucher(true);
-      
-       const tipoFactura = getVoucherTypeCode(watchBillType);
+    const isConfiguredPoint = Number.isSafeInteger(watchPtoVenta)
+      && watchPtoVenta !== undefined
+      && watchPtoVenta > 0
+      && ptoVentas.includes(watchPtoVenta);
 
-       const res = await getVoucherNumberAction(watchPtoVenta, tipoFactura);
-       console.log("[getLastVoucher] result", {
-         success: typeof res.success === "number",
-         errorType: typeof res.error,
-         errorCode: res.errorDetails?.code,
-         operation: res.errorDetails?.operation,
-         ptoVenta: watchPtoVenta,
-         tipoFactura,
-       });
-      if (requestId !== requestSequence.current) return;
-       if (res.success !== undefined) {
-         setLastVoucherNum(res.success);
-         setVoucherError(null);
-       } else {
-         setLastVoucherNum(null);
-         setVoucherError(res.errorDetails ?? res.error ?? "No se pudo obtener la numeración");
-       }
+    setLastVoucherNum(null);
+    setVoucherError(null);
+
+    if (!isConfiguredPoint) {
       setLoadingVoucher(false);
+      setVoucherError(
+        ptoVentas.length === 0
+          ? "No hay un punto de venta configurado para consultar la numeración. Revise la configuración del negocio."
+          : "Seleccione un punto de venta configurado para consultar la numeración.",
+      );
+      return () => {
+        if (requestSequence.current === requestId) requestSequence.current += 1;
+      };
+    }
+
+    setLoadingVoucher(true);
+    const tipoFactura = getVoucherTypeCode(watchBillType);
+
+    const fetchVoucher = async () => {
+      try {
+        const res = await getVoucherNumberAction(watchPtoVenta, tipoFactura);
+        if (requestId !== requestSequence.current) return;
+
+        if (typeof res?.success === "number" && Number.isSafeInteger(res.success) && res.success >= 0) {
+          setLastVoucherNum(res.success);
+          setVoucherError(null);
+        } else {
+          setVoucherError("No se pudo consultar la numeración del comprobante. Verifique el punto de venta y el tipo.");
+        }
+      } catch {
+        if (requestId !== requestSequence.current) return;
+        setVoucherError("No se pudo consultar la numeración del comprobante. Verifique el punto de venta y el tipo.");
+      } finally {
+        if (requestId === requestSequence.current) setLoadingVoucher(false);
+      }
     };
 
-    fetchVoucher();
+    void fetchVoucher();
+
+    return () => {
+      if (requestSequence.current === requestId) requestSequence.current += 1;
+    };
   }, [ptoVentas, watchBillType, watchPtoVenta]);
 
   useEffect(() => {
@@ -159,12 +178,14 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
 
   const currentDate = useMemo(() => new Date(), []);
 
-  const voucherErrorMessage = typeof voucherError === "string"
-    ? voucherError
-    : voucherError
-      ? formatAfipPointSaleErrorForUser(voucherError)
-      : null;
-  const structuredVoucherError = voucherError && typeof voucherError !== "string" ? voucherError : null;
+  const voucherErrorMessage = voucherError;
+  const voucherPreviewError = voucherErrorMessage && (
+    <div role="alert" className="w-full rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+      <p className="font-semibold">No se pudo consultar la numeración del comprobante.</p>
+      <p className="mt-1">{voucherErrorMessage}</p>
+      <p className="mt-1">Revise los parámetros o consulte con soporte si el problema persiste. La numeración se validará nuevamente al emitir.</p>
+    </div>
+  );
 
   const onSubmit = (data: z.infer<typeof BillParametersSchema>) => {
     const documentNumber = data.documentNumber ?? "";
@@ -198,6 +219,7 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
   return editParamters ? (
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {voucherPreviewError}
         {/* Grid de 3 columnas */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
@@ -471,28 +493,20 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType }: BillParametersF
               ) : lastVoucherNum !== null ? (
                 <span>{String(lastVoucherNum + 1).padStart(4, '0')}</span>
                ) : (
-                 <span className="text-red-400" title={voucherErrorMessage ?? undefined}>Error</span>
+                 <span className="text-red-400" aria-label="Numeración no disponible">—</span>
                )}
             </span>
           )}
         </div>
       </div>
 
-      {voucherErrorMessage && (
-        <div role="alert" className="w-full rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
-          <p className="font-semibold">No se generó CAE: rechazo de AFIP/ARCA</p>
-          <p className="mt-1">{voucherErrorMessage}</p>
-          {structuredVoucherError?.code === "11002" && (
-            <ol className="mt-2 list-decimal space-y-1 pl-4">
-              <li>Verifique que el punto esté habilitado para WSFE/WSFEv1 en ARCA.</li>
-              <li>Confirme el CUIT y el ambiente del certificado.</li>
-              <li>Seleccione un punto habilitado o revise la configuración y vuelva a editar los parámetros.</li>
-            </ol>
-          )}
+      {voucherPreviewError && (
+        <>
+          {voucherPreviewError}
           <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setEditParameters(true)}>
             Editar parámetros
           </Button>
-        </div>
+        </>
       )}
 
       {/* Condición IVA */}
