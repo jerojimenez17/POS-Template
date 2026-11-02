@@ -1,16 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { axiosPostMock, requireFeatureMock, credentialsMock, voucherNumberMock } = vi.hoisted(() => ({
+const { axiosPostMock, requireFeatureMock, credentialsMock, voucherNumberMock, persistedBusinessFindUniqueMock } = vi.hoisted(() => ({
   axiosPostMock: vi.fn(),
   requireFeatureMock: vi.fn(),
   credentialsMock: vi.fn(),
   voucherNumberMock: vi.fn(),
+  persistedBusinessFindUniqueMock: vi.fn(),
 }));
 
 vi.mock("axios", () => ({
   default: { post: axiosPostMock, isAxiosError: () => false },
 }));
 vi.mock("@/lib/auth-gates", () => ({ requireFeature: requireFeatureMock }));
+vi.mock("@/lib/db", () => ({ db: { business: { findUnique: persistedBusinessFindUniqueMock } } }));
 vi.mock("@/lib/server/arca-billing", () => ({
   getArcaCredentialsForBilling: credentialsMock,
   getVoucherNumberForActor: voucherNumberMock,
@@ -69,6 +71,10 @@ describe("AFIP create-voucher transport URL selection", () => {
     vi.stubEnv("NEXT_PUBLIC_AFIP_FUNCTION_URL", undefined);
     vi.stubEnv("AFIP_SDK_ACCESS_TOKEN", "test-token");
     vi.stubEnv("INTERNAL_AFIP_API_KEY", "test-internal-key");
+    persistedBusinessFindUniqueMock.mockResolvedValue({
+      id: "tenant-1",
+      features: { hasAfipBilling: true },
+    });
     requireFeatureMock.mockResolvedValue({
       success: true,
       data: { ...actor, businessId: "tenant-1", role: "ADMIN" },

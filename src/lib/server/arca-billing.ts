@@ -161,7 +161,9 @@ export async function getVoucherNumberForActor(
   operation: VoucherOperation,
   actor: BillingActor,
 ): Promise<VoucherNumberResult> {
-  if (actor.role !== "SUPER_ADMIN" && actor.role !== "ADMIN") {
+  const isAdministrator = actor.role === "SUPER_ADMIN" || actor.role === "ADMIN";
+  const isUserInvoiceLookup = actor.role === "USER" && operation === "invoice";
+  if (!isAdministrator && !isUserInvoiceLookup) {
     return { error: "No autorizado" };
   }
 
@@ -174,10 +176,19 @@ export async function getVoucherNumberForActor(
   try {
     const business = await db.business.findUnique({
       where: { id: businessId },
-      select: { cuit: true, cert: true, key: true, ptoVenta: true },
+      select: {
+        cuit: true,
+        cert: true,
+        key: true,
+        ptoVenta: true,
+        features: { select: { hasAfipBilling: true } },
+      },
     });
 
     if (!business || !business.cuit) return { error: "Negocio no encontrado o sin CUIT configurado" };
+    if (isUserInvoiceLookup && business.features?.hasAfipBilling !== true) {
+      return { error: "La facturación AFIP/ARCA no está habilitada para este negocio" };
+    }
 
     // Undefined is accepted only for older fixture adapters; a configured empty
     // list is authoritative and rejects all points of sale.

@@ -10,6 +10,7 @@ const {
   credentialsMock,
   voucherNumberMock,
   createGrantMock,
+  persistedBusinessFindUniqueMock,
   prepareVoucherMock,
   issueVoucherMock,
 } = vi.hoisted(() => ({
@@ -19,6 +20,7 @@ const {
   credentialsMock: vi.fn(),
   voucherNumberMock: vi.fn(),
   createGrantMock: vi.fn(),
+  persistedBusinessFindUniqueMock: vi.fn(),
   prepareVoucherMock: vi.fn(),
   issueVoucherMock: vi.fn(),
 }));
@@ -28,6 +30,7 @@ vi.mock("axios", () => ({
   default: { post: axiosPostMock, isAxiosError: () => false },
 }));
 vi.mock("@/lib/auth-gates", () => ({ requireFeature: requireFeatureMock }));
+vi.mock("@/lib/db", () => ({ db: { business: { findUnique: persistedBusinessFindUniqueMock } } }));
 vi.mock("@/lib/server/arca-billing", () => ({
   getArcaCredentialsForBilling: credentialsMock,
   getVoucherNumberForActor: voucherNumberMock,
@@ -106,6 +109,10 @@ function buildProduct(): Product {
 function setValidActionDependencies() {
   authMock.mockResolvedValue({ user: actor });
   requireFeatureMock.mockResolvedValue({ success: true, data: actor });
+  persistedBusinessFindUniqueMock.mockResolvedValue({
+    id: "business-1",
+    features: { hasAfipBilling: true },
+  });
   credentialsMock.mockResolvedValue({
     success: {
       cuit: "20123456789",

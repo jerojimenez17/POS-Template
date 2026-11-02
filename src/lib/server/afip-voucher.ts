@@ -1,6 +1,7 @@
 import axios from "axios";
 import { UserRole } from "@prisma/client";
 import { requireFeature, type AuthenticatedUserContext } from "@/lib/auth-gates";
+import { db } from "@/lib/db";
 import {
   getArcaCredentialsForBilling,
   getVoucherNumberForActor,
@@ -79,6 +80,13 @@ function isCreditNoteState(billState: BillState | Partial<AfipInvoiceDTO>): bool
     || billState.ptoVentaAsociado !== undefined
     || billState.caeAsociado !== undefined
     || (Array.isArray(billState.CbtesAsoc) && billState.CbtesAsoc.length > 0);
+}
+
+function hasCreditNoteAssociationFields(billState: BillState | Partial<AfipInvoiceDTO>): boolean {
+  return billState.nroAsociado !== undefined
+    || billState.ptoVentaAsociado !== undefined
+    || billState.caeAsociado !== undefined
+    || billState.CbtesAsoc !== undefined;
 }
 
 function snapshotCreditNoteBillState(billState: BillState | AfipInvoiceDTO): AfipInvoiceDTO {
@@ -175,8 +183,22 @@ export async function prepareAfipVoucherForActor(
   sessionActor: AuthenticatedUserContext,
 ): Promise<PrepareAfipVoucherResult> {
   if (!sessionActor.id
-    || (sessionActor.role !== UserRole.ADMIN && sessionActor.role !== UserRole.SUPER_ADMIN)
+    || (sessionActor.role !== UserRole.USER
+      && sessionActor.role !== UserRole.ADMIN
+      && sessionActor.role !== UserRole.SUPER_ADMIN)
     || !sessionActor.businessId) {
+    return { error: "No autorizado", issuanceNotStarted: true };
+  }
+
+  if (sessionActor.role === UserRole.USER
+    && (hasCreditNoteAssociationFields(billState)
+      || ("fiscalSnapshot" in billState && billState.fiscalSnapshot !== undefined)
+      || billState.fiscalBreakdown !== undefined
+      || ("creditNote" in billState && billState.creditNote !== undefined)
+      || ("originalVoucher" in billState && billState.originalVoucher !== undefined)
+      || (billState.billType !== "Factura A"
+        && billState.billType !== "Factura B"
+        && billState.billType !== "Factura C"))) {
     return { error: "No autorizado", issuanceNotStarted: true };
   }
 
@@ -186,7 +208,8 @@ export async function prepareAfipVoucherForActor(
   }
   const actor = featureResult.data;
   const businessId = actor.businessId;
-  if (!businessId || businessId !== sessionActor.businessId || actor.role !== sessionActor.role) {
+  if (!businessId || businessId !== sessionActor.businessId
+    || actor.id !== sessionActor.id || actor.role !== sessionActor.role) {
     return { error: "No autorizado", issuanceNotStarted: true };
   }
 
@@ -324,14 +347,11 @@ export async function issuePreparedAfipVoucher(
     tipoFactura,
     lastVoucherNumber,
   } = payload;
+  if (actor.role === UserRole.USER && payload.isCreditNote) {
+    return { error: "No autorizado", issuanceNotStarted: true };
+  }
   if (actor.businessId !== businessId || !Number.isSafeInteger(lastVoucherNumber) || lastVoucherNumber < 0) {
     return { error: "La prevalidación de ARCA no es válida", issuanceNotStarted: true };
-  }
-
-  // Recheck persisted feature authorization immediately before the irreversible call.
-  const featureResult = await requireFeature("hasAfipBilling", actor);
-  if (!featureResult.success || featureResult.data.businessId !== businessId) {
-    return { error: featureResult.success ? "No autorizado" : featureResult.error, issuanceNotStarted: true };
   }
 
   if (payload.isCreditNote) {
@@ -399,6 +419,36 @@ export async function issuePreparedAfipVoucher(
       error: "No se puede generar la factura: el monto total debe ser mayor a 0",
       issuanceNotStarted: true,
     };
+  }
+
+  // Recheck authorization and persisted eligibility at the irreversible boundary.
+  const featureResult = await requireFeature("hasAfipBilling", actor);
+  if (!featureResult.success) {
+    return { error: featureResult.error, issuanceNotStarted: true };
+  }
+  if (featureResult.data.id !== actor.id
+    || featureResult.data.role !== actor.role
+    || featureResult.data.businessId !== businessId) {
+    return { error: "No autorizado", issuanceNotStarted: true };
+  }
+
+  let isPersistedBusinessEligible = false;
+  try {
+    const persistedBusiness = await db.business.findUnique({
+      where: { id: businessId },
+      select: {
+        id: true,
+        features: { select: { hasAfipBilling: true } },
+      },
+    });
+    isPersistedBusinessEligible = persistedBusiness?.id === businessId
+      && persistedBusiness.features?.hasAfipBilling === true;
+  } catch {
+    console.error("Failed to verify persisted AFIP billing eligibility before voucher issuance");
+    return { error: "No se pudo validar la habilitación de AFIP/ARCA", issuanceNotStarted: true };
+  }
+  if (!isPersistedBusinessEligible) {
+    return { error: "La facturación AFIP/ARCA no está habilitada para este negocio", issuanceNotStarted: true };
   }
 
   let issuanceStarted = false;

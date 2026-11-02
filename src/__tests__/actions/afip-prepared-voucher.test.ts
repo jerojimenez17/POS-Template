@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { axiosPostMock, requireFeatureMock, credentialsMock, voucherNumberMock } = vi.hoisted(() => ({
+const {
+  axiosPostMock,
+  requireFeatureMock,
+  credentialsMock,
+  voucherNumberMock,
+  persistedBusinessFindUniqueMock,
+} = vi.hoisted(() => ({
   axiosPostMock: vi.fn(),
   requireFeatureMock: vi.fn(),
   credentialsMock: vi.fn(),
   voucherNumberMock: vi.fn(),
+  persistedBusinessFindUniqueMock: vi.fn(),
 }));
 
 vi.mock("axios", () => ({
@@ -14,6 +21,9 @@ vi.mock("axios", () => ({
   },
 }));
 vi.mock("@/lib/auth-gates", () => ({ requireFeature: requireFeatureMock }));
+vi.mock("@/lib/db", () => ({
+  db: { business: { findUnique: persistedBusinessFindUniqueMock } },
+}));
 vi.mock("@/lib/server/arca-billing", () => ({
   getArcaCredentialsForBilling: credentialsMock,
   getVoucherNumberForActor: voucherNumberMock,
@@ -76,6 +86,10 @@ describe("trusted AFIP prepared voucher capability", () => {
     vi.stubEnv("AFIP_SDK_ACCESS_TOKEN", "test-access-token");
     vi.stubEnv("INTERNAL_AFIP_API_KEY", "test-internal-api-key");
     requireFeatureMock.mockResolvedValue({ success: true, data: actor });
+    persistedBusinessFindUniqueMock.mockResolvedValue({
+      id: "business-1",
+      features: { hasAfipBilling: true },
+    });
     credentialsMock.mockResolvedValue({
       success: { cuit: "20123456789", cert: "encrypted-cert", key: "encrypted-key", ptoVentas: [9, 12] },
     });
@@ -156,6 +170,56 @@ describe("trusted AFIP prepared voucher capability", () => {
       error: expect.stringMatching(/configuración.*cambió/i),
       issuanceNotStarted: true,
     });
+    expect(axiosPostMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects issuance when persisted AFIP eligibility is revoked after preparation despite the actor snapshot", async () => {
+    const actorWithEligibleSnapshot = {
+      ...actor,
+      business: { accountStatus: "ACTIVE", features: { hasAfipBilling: true } },
+    };
+    let persistedHasAfipBilling = true;
+    const persistedFeatureReads: boolean[] = [];
+    persistedBusinessFindUniqueMock.mockImplementation(async () => {
+      persistedFeatureReads.push(persistedHasAfipBilling);
+      return {
+        id: "business-1",
+        features: { hasAfipBilling: persistedHasAfipBilling },
+      };
+    });
+    // Keep the feature gate's result fixed: eligibility must come from a fresh
+    // persisted-business read, not a call-count-dependent gate mock.
+    requireFeatureMock.mockResolvedValue({ success: true, data: actorWithEligibleSnapshot });
+
+    const invoice = {
+      id: "invoice-1",
+      seller: "Seller",
+      typeDocument: "Factura",
+      IVACondition: "Responsable Inscripto",
+      twoMethods: false,
+      billType: "Factura B",
+      discount: 0,
+      documentNumber: 1,
+      total: 100,
+      totalWithDiscount: 100,
+      date: new Date("2026-09-30T12:00:00.000Z"),
+      ptoVenta: 9,
+      products: [{ id: "product-1", code: "P1", description: "Product", price: 100, salePrice: 100, amount: 1 }],
+    } as unknown as BillState;
+    const preparedResult = await prepareAfipVoucherForActor(invoice, actorWithEligibleSnapshot);
+
+    expect(preparedResult).toHaveProperty("success", true);
+    if (!("prepared" in preparedResult)) throw new Error("Expected trusted preflight to return a prepared capability");
+
+    persistedHasAfipBilling = false;
+    const issued = await issuePreparedAfipVoucher(preparedResult.prepared);
+
+    expect(issued).toMatchObject({
+      error: expect.stringMatching(/no está habilitada|no autorizado|habilitada/i),
+      issuanceNotStarted: true,
+    });
+    expect(persistedBusinessFindUniqueMock).toHaveBeenCalled();
+    expect(persistedFeatureReads).toEqual([false]);
     expect(axiosPostMock).not.toHaveBeenCalled();
   });
 });
