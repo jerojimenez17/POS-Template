@@ -24,6 +24,19 @@ interface SaleProduct {
   amount: number;
 }
 
+interface StockChange {
+  id: string;
+  change: number;
+}
+
+function aggregateStockChanges(changes: StockChange[]): StockChange[] {
+  const totals = new Map<string, number>();
+  for (const { id, change } of changes) {
+    totals.set(id, (totals.get(id) ?? 0) + change);
+  }
+  return Array.from(totals, ([id, change]) => ({ id, change }));
+}
+
 interface ProcessSaleInput {
   total: number;
   totalWithDiscount?: number;
@@ -145,9 +158,9 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
               code: p.code,
               description: p.description,
               costPrice: p.price || 0,
-              price: p.salePrice || p.price || 0,
+              price: p.salePrice ?? p.price ?? 0,
               quantity: p.amount,
-              subTotal: (p.salePrice || p.price || 0) * p.amount,
+              subTotal: (p.salePrice ?? p.price ?? 0) * p.amount,
             })),
           },
         },
@@ -175,7 +188,9 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         });
       }
 
-      await bulkUpdateStock(tx, billState.products.map(p => ({ id: p.id, change: -p.amount })));
+      await bulkUpdateStock(tx, aggregateStockChanges(
+        billState.products.map((p) => ({ id: p.id, change: -p.amount })),
+      ));
       await tx.stockMovement.createMany({ data: stockMovements });
 
       let cashToIncrement = 0;
@@ -258,7 +273,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
               },
               update: {
                 totalSold: { increment: item.amount },
-                totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
+                 totalIncome: { increment: item.amount * (item.salePrice ?? item.price ?? 0) },
               },
               create: {
                 productId: item.id,
@@ -266,7 +281,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
                 year,
                 businessId,
                 totalSold: item.amount,
-                totalIncome: item.amount * (item.salePrice || item.price || 0),
+                 totalIncome: item.amount * (item.salePrice ?? item.price ?? 0),
               },
             }),
           ]);
@@ -492,7 +507,7 @@ export const updateOrderAction = async (
     const result = await db.$transaction(async (tx) => {
       const existingOrder = await tx.order.findFirst({
         where: { id: orderId, businessId },
-        include: { items: true },
+        include: { items: { orderBy: [{ addedAt: "asc" }, { id: "asc" }] } },
       });
 
       if (!existingOrder) throw new Error("Orden no encontrada");
@@ -506,6 +521,20 @@ export const updateOrderAction = async (
       const version = (lastUpdate?.version ?? 0) + 1;
 
       // 🔹 calcular cambios
+      const oldQuantitiesByProduct = new Map<string, number[]>();
+      for (const item of existingOrder.items) {
+        if (item.productId === null) continue;
+        const quantities = oldQuantitiesByProduct.get(item.productId) ?? [];
+        quantities.push(item.quantity);
+        oldQuantitiesByProduct.set(item.productId, quantities);
+      }
+      const matchedLineCountByProduct = new Map<string, number>();
+      const getNextOldQuantity = (productId: string): number => {
+        const matchedLineIndex = matchedLineCountByProduct.get(productId) ?? 0;
+        matchedLineCountByProduct.set(productId, matchedLineIndex + 1);
+        return oldQuantitiesByProduct.get(productId)?.[matchedLineIndex] ?? 0;
+      };
+
       const changes: OrderUpdateChanges = {
         type: "ITEMS_UPDATED",
         items: updatedData.products.map((p) => ({
@@ -513,9 +542,7 @@ export const updateOrderAction = async (
           description: p.description,
           code: p.code,
           quantity: {
-            from:
-              existingOrder.items.find((i) => i.productId === p.id)?.quantity ??
-              0,
+            from: getNextOldQuantity(p.id),
             to: p.amount,
           },
         })),
@@ -571,7 +598,9 @@ export const updateOrderAction = async (
             reason: `Reversión por edición de Venta #${orderId}`,
           });
         }
-        await bulkUpdateStock(tx, revertItems.map(i => ({ id: i.productId!, change: i.quantity })));
+        await bulkUpdateStock(tx, aggregateStockChanges(
+          revertItems.map((i) => ({ id: i.productId!, change: i.quantity })),
+        ));
         await tx.stockMovement.createMany({ data: stockMovementsRevert });
       }
 
@@ -601,9 +630,9 @@ export const updateOrderAction = async (
               code: p.code,
               description: p.description,
               costPrice: p.price || 0,
-              price: p.salePrice || p.price || 0,
+              price: p.salePrice ?? p.price ?? 0,
               quantity: p.amount,
-              subTotal: (p.salePrice || p.price || 0) * p.amount,
+              subTotal: (p.salePrice ?? p.price ?? 0) * p.amount,
             })),
           },
         },
@@ -622,7 +651,9 @@ export const updateOrderAction = async (
             reason: `Actualización por edición de Venta #${orderId}`,
           });
         }
-        await bulkUpdateStock(tx, updatedData.products.map(p => ({ id: p.id, change: -p.amount })));
+        await bulkUpdateStock(tx, aggregateStockChanges(
+          updatedData.products.map((p) => ({ id: p.id, change: -p.amount })),
+        ));
         await tx.stockMovement.createMany({ data: stockMovementsApply });
       }
 

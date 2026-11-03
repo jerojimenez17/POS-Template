@@ -66,7 +66,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
   const [openEditModal, setOpenEditModal] = useState(false);
   const [openAcuentaModal, setOpenAcuentaModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
-  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addItem, initialBillType, billTypeRef, defaultPtoVenta } =
+  const { BillState, dispatch, onOrderResetRef, printMode, setFocusPriceProductId, addIndependentItem, initialBillType, billTypeRef, defaultPtoVenta } =
     useContext(BillContext);
   const [saveError, setSaveError] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
@@ -147,14 +147,16 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
         // Fetch product and add to bill
         getProductByShortcutAction(shortcutKey, businessId).then((result) => {
           if ("success" in result && result.success && result.data) {
+            const cartRowId = crypto.randomUUID();
             const productToAdd = {
               ...result.data,
+              cartRowId,
               salePrice: 0,
               amount: 1,
             } as Product;
-            addItem(productToAdd);
+            addIndependentItem?.(productToAdd);
             if (setFocusPriceProductId) {
-              setFocusPriceProductId(productToAdd.id);
+              setFocusPriceProductId(cartRowId);
             }
             toast.success("Producto agregado — ingrese el precio");
           } else if ("success" in result && result.success && !result.data) {
@@ -211,7 +213,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [session, dispatch, BillState.products?.length, isEditing, addItem, setFocusPriceProductId, checkSession, businessId]);
+  }, [session, dispatch, BillState.products?.length, isEditing, addIndependentItem, setFocusPriceProductId, checkSession, businessId]);
 
   // Función para verificar conexión y mostrar error
   const checkConnection = () => {

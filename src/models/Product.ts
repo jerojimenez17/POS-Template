@@ -2,6 +2,8 @@ import { Suplier } from "./Suplier";
 
 export default class Product {
   id = "";
+  /** Client-only identity for a distinct row in the current bill. */
+  declare cartRowId?: string;
   code = "";
   codebar = "";
   description = "";
