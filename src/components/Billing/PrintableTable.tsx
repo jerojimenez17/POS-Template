@@ -29,6 +29,7 @@ interface Props {
   printSnapshot?: BillState | null;
   forceCae?: CAE;
   targetWindowRef?: React.MutableRefObject<Window | null>;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 const inter = Inter({
@@ -65,6 +66,7 @@ const PrintableTable = ({
   printSnapshot,
   forceCae,
   targetWindowRef,
+  searchInputRef,
 }: Props) => {
   const { BillState, addItem, removeItem, printMode, qzTrayEnabled } = React.useContext(BillContext);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
@@ -352,6 +354,7 @@ const PrintableTable = ({
         onProductAdd={handleProductAdd}
         hasSupplierFilter={hasSupplierFilter}
         allowNegativeStock={allowNegativeStock}
+        searchInputRef={searchInputRef}
       />
 
       {/* Products Table */}
