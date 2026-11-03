@@ -1,8 +1,9 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import PrintableTable from "@/components/Billing/PrintableTable";
 import { BillContext } from "@/context/BillContext";
+import { BillReducer } from "@/context/BillReducer";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import CAE from "@/models/CAE";
@@ -891,7 +892,7 @@ describe("PrintableTable Component", () => {
       expect(input.value).toBe("7");
     });
 
-    it("− and + buttons still work for increment/decrement in display mode [AC-09]", () => {
+    it("− and + buttons still work for increment/decrement in display mode [AC-09]", async () => {
       const addItem = vi.fn();
       const removeItem = vi.fn();
 
@@ -900,32 +901,38 @@ describe("PrintableTable Component", () => {
       ];
       const billState = createMockBillState({ products });
 
-      renderWithContext(
-        <PrintableTable
-          printTrigger={0}
-          className=""
-          handleClose={vi.fn()}
-          session={mockSession as never}
-          externalState={billState}
-        />,
-        { ...mockContextValue, addItem, removeItem, BillState: billState },
-      );
+      const StatefulBillTable = () => {
+        const [BillState, reducerDispatch] = React.useReducer(BillReducer, billState);
+        const dispatch = vi.fn(reducerDispatch);
+
+        return (
+          <BillContext.Provider value={{ ...mockContextValue, BillState, dispatch, addItem, removeItem }}>
+            <PrintableTable
+              printTrigger={0}
+              className=""
+              handleClose={vi.fn()}
+              session={mockSession as never}
+            />
+          </BillContext.Provider>
+        );
+      };
+
+      render(<StatefulBillTable />);
 
       // Click the increase button (+)
       const increaseButton = screen.getByLabelText("Aumentar cantidad");
-      fireEvent.click(increaseButton);
+      await act(async () => fireEvent.click(increaseButton));
 
-      // removeItem should have been called with the old product (amount=5)
-      expect(removeItem).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "1", amount: 5 }),
-      );
+      // The row-targeted quantity update is applied to the visible amount.
+      expect(screen.getByText("6", { selector: "span.w-12" })).toBeTruthy();
 
       // Click the decrease button (−)
       const decreaseButton = screen.getByLabelText("Disminuir cantidad");
-      fireEvent.click(decreaseButton);
+      await act(async () => fireEvent.click(decreaseButton));
 
-      // addItem should have been called for both operations
-      expect(addItem).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("5", { selector: "span.w-12" })).toBeTruthy();
+      expect(addItem).not.toHaveBeenCalled();
+      expect(removeItem).not.toHaveBeenCalled();
     });
 
     it("InlineAmountInput renders the amount for 'unidades'/'unidad' products", () => {

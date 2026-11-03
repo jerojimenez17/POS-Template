@@ -8,6 +8,7 @@ import { PrintMode } from "./BillContext";
 import type { BillAction } from "./billActions";
 import { normalizeBillType } from "@/utils/billing";
 import BillTypes from "@/models/billType";
+import { getBillRowId } from "@/utils/bill-row";
 
 const INITIAL_STATE: BillState = {
   twoMethods: false,
@@ -77,14 +78,19 @@ const BillProvider = ({ children, initialBillType, defaultPtoVenta, qzTrayEnable
     dispatch({ type: "addItem", payload: product });
   };
 
+  const addIndependentItem = (product: Product) => {
+    dispatch({ type: "addIndependentItem", payload: product });
+  };
+
   const removeItem = (product: Product) => {
-    dispatch({ type: "removeItem", payload: { id: product.id } });
+    dispatch({ type: "removeItem", payload: { id: getBillRowId(product) } });
   };
 
   const values = {
     BillState: BillState,
     dispatch: dispatch,
     addItem: addItem,
+    addIndependentItem: addIndependentItem,
     removeItem: removeItem,
     onOrderResetRef: onOrderResetRef,
     initialBillType: effectiveInitialBillType,

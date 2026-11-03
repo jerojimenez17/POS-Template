@@ -2,6 +2,7 @@
 
 import Product from "@/models/Product";
 import React, { useEffect, useState } from "react";
+import { getBillRowId } from "@/utils/bill-row";
 interface Props {
   initial: number;
   product: Product;
@@ -20,7 +21,7 @@ const DecimalInput = ({ initial, product, updateAmount }: Props) => {
   const handleBlur = () => {
     const parsed = parseFloat(value.replace(",", "."));
     if (!isNaN(parsed) && parsed > 0) {
-      updateAmount(product.id, parsed);
+      updateAmount(getBillRowId(product), parsed);
       setError("");
     } else {
       setError("Cantidad inválida");

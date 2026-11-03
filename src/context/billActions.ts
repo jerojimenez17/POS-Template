@@ -4,6 +4,7 @@ import CAE from "@/models/CAE";
 
 export type BillAction =
   | { type: "addItem"; payload: Product }
+  | { type: "addIndependentItem"; payload: Product }
   | { type: "addUnit"; payload: Product }
   | { type: "removeUnit"; payload: { id: string } }
   | { type: "removeAll"; payload: null; defaultBillType?: string; defaultPtoVenta?: number }

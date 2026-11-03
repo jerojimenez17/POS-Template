@@ -130,6 +130,7 @@ const defaultBillContextMock = {
   },
   dispatch: vi.fn(),
   addItem: vi.fn(),
+  addIndependentItem: vi.fn(),
   addUnit: vi.fn(),
   removeUnit: vi.fn(),
   removeAll: vi.fn(),
@@ -248,7 +249,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
   });
 
   describe("F1/F2/F3 with shortcut configured (AC18)", () => {
-    it("should fetch product and dispatch addItem with salePrice=0 when F1 is pressed and configured", async () => {
+    it("should fetch product and dispatch an independent row with salePrice=0 when F1 is pressed and configured", async () => {
       vi.mocked(shortcutsActions.getShortcutConfigsAction).mockResolvedValue({
         success: true,
         data: [
@@ -290,13 +291,15 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       await waitFor(() => {
         expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F1", "business-123");
-        expect(defaultBillContextMock.addItem).toHaveBeenCalledWith(
+        expect(defaultBillContextMock.addIndependentItem).toHaveBeenCalledWith(
           expect.objectContaining({
             id: "shortcut-prod-1",
             salePrice: 0,
             amount: 1,
+            cartRowId: expect.any(String),
           })
         );
+        expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
       });
     });
 
@@ -339,9 +342,9 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       fireEvent.keyDown(window, { key: "F1" });
 
       await waitFor(() => {
-        expect(defaultBillContextMock.setFocusPriceProductId).toHaveBeenCalledWith(
-          "shortcut-prod-1"
-        );
+        const addedRow = vi.mocked(defaultBillContextMock.addIndependentItem).mock.calls[0]?.[0];
+        expect(addedRow?.cartRowId).toEqual(expect.any(String));
+        expect(defaultBillContextMock.setFocusPriceProductId).toHaveBeenCalledWith(addedRow?.cartRowId);
       });
     });
 
@@ -387,12 +390,15 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       await waitFor(() => {
         expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F2", "business-123");
-        expect(defaultBillContextMock.addItem).toHaveBeenCalledWith(
+        expect(defaultBillContextMock.addIndependentItem).toHaveBeenCalledWith(
           expect.objectContaining({
             id: "shortcut-prod-2",
             salePrice: 0,
+            amount: 1,
+            cartRowId: expect.any(String),
           })
         );
+        expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
       });
     });
 
@@ -438,12 +444,15 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       await waitFor(() => {
         expect(shortcutsActions.getProductByShortcutAction).toHaveBeenCalledWith("F3", "business-123");
-        expect(defaultBillContextMock.addItem).toHaveBeenCalledWith(
+        expect(defaultBillContextMock.addIndependentItem).toHaveBeenCalledWith(
           expect.objectContaining({
             id: "shortcut-prod-3",
             salePrice: 0,
+            amount: 1,
+            cartRowId: expect.any(String),
           })
         );
+        expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
       });
     });
   });
@@ -473,6 +482,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
       // Should NOT fetch product or add item
       expect(shortcutsActions.getProductByShortcutAction).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
     });
 
     it("should do nothing when F2 is pressed and no shortcut is configured", async () => {
@@ -498,6 +508,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       expect(shortcutsActions.getProductByShortcutAction).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
     });
 
     it("should do nothing when F3 is pressed and no shortcut is configured", async () => {
@@ -523,6 +534,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       expect(shortcutsActions.getProductByShortcutAction).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
     });
   });
 
@@ -934,6 +946,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
 
       expect(shortcutsActions.getProductByShortcutAction).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
 
       // Press F4 (should also be ignored)
       fireEvent.keyDown(window, { key: "F4" });
@@ -1073,6 +1086,7 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
         shortcutsActions.getProductByShortcutAction
       ).not.toHaveBeenCalled();
       expect(defaultBillContextMock.addItem).not.toHaveBeenCalled();
+      expect(defaultBillContextMock.addIndependentItem).not.toHaveBeenCalled();
 
        // Remapped keys should still work normally (F7 → remito)
        fireEvent.keyDown(window, { key: "F7" });

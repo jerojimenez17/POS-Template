@@ -1,6 +1,7 @@
 "use client";
 import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { BillContext } from "@/context/BillContext";
+import { getBillRowId } from "@/utils/bill-row";
 import Product from "@/models/Product";
 import BillState from "@/models/BillState";
 import DecimalInput from "./DecimalInput";
@@ -68,7 +69,7 @@ const PrintableTable = ({
   targetWindowRef,
   searchInputRef,
 }: Props) => {
-  const { BillState, addItem, removeItem, printMode, qzTrayEnabled } = React.useContext(BillContext);
+  const { BillState, dispatch, addItem, removeItem, printMode, qzTrayEnabled } = React.useContext(BillContext);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
   const effectiveState: BillState = (printSnapshot ?? externalState ?? BillState ?? defaultBillState) as BillState;
   const effectiveCae: CAE | undefined = forceCae || effectiveState.CAE;
@@ -257,13 +258,11 @@ const PrintableTable = ({
     addItem(product);
   }, [addItem]);
 
-  const updateProductAmount = (productId: string, newAmount: number) => {
-    const product = state.products.find((p) => p.id === productId);
+  const updateProductAmount = (rowId: string, newAmount: number) => {
+    const product = state.products.find((p) => getBillRowId(p) === rowId);
     if (!product) return;
 
-    const updatedProduct = { ...product, amount: newAmount };
-    removeItem(product);
-    addItem(updatedProduct);
+    dispatch({ type: "changeUnit", payload: { ...product, amount: newAmount } });
   };
 
   const sortedProducts = useMemo(
@@ -373,7 +372,7 @@ const PrintableTable = ({
             <tbody>
               {sortedProducts.map((product) => (
                 <tr
-                  key={product.id}
+                  key={getBillRowId(product)}
                   className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
                 >
                   <td className="px-4 py-3">
@@ -386,19 +385,19 @@ const PrintableTable = ({
                         <>
                           <button
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
-                            onClick={() => updateProductAmount(product.id, product.amount - 1)}
+                            onClick={() => updateProductAmount(getBillRowId(product), product.amount - 1)}
                             aria-label="Disminuir cantidad"
                           >
                             −
                           </button>
                           <InlineAmountInput
                             amount={product.amount}
-                            productId={product.id}
+                            productId={getBillRowId(product)}
                             updateAmount={updateProductAmount}
                           />
                           <button
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
-                            onClick={() => updateProductAmount(product.id, product.amount + 1)}
+                            onClick={() => updateProductAmount(getBillRowId(product), product.amount + 1)}
                             aria-label="Aumentar cantidad"
                           >
                             +
@@ -418,7 +417,7 @@ const PrintableTable = ({
                   </td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">
                     <PriceEditInput
-                      productId={product.id}
+                      productId={getBillRowId(product)}
                       salePrice={product.salePrice}
                     />
                   </td>

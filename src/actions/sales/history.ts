@@ -99,6 +99,7 @@ export function mapOrderToBillState(order: OrderWithItems & Record<string, unkno
     id: order.id,
     products: order.items.map((item) => ({
       id: item.productId || item.id,
+      cartRowId: crypto.randomUUID(),
       code: item.code || "",
       codebar: "",
       description: item.description || "",

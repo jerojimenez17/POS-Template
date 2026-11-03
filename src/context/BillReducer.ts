@@ -2,6 +2,7 @@ import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import type { BillAction } from "./billActions";
 import BillTypes from "@/models/billType";
+import { getBillRowId } from "@/utils/bill-row";
 
 export const BillReducer = (
   state: BillState,
@@ -10,12 +11,12 @@ export const BillReducer = (
   switch (action.type) {
     case "addItem": {
       const isPresent = state.products.find(
-        (product) => product.id === action.payload.id
+        (product) => product.id === action.payload.id && !product.cartRowId
       );
       let updatedProducts;
       if (isPresent) {
         updatedProducts = state.products.map((product) => {
-          if (product.id === action.payload.id) {
+          if (product.id === action.payload.id && !product.cartRowId) {
             return { ...product, amount: product.amount + action.payload.amount };
           }
           return product;
@@ -37,9 +38,25 @@ export const BillReducer = (
         totalWithDiscount: newTotalWithDiscount,
       };
     }
+    case "addIndependentItem": {
+      const updatedProducts = state.products.concat({ ...action.payload });
+      const rawTotal = updatedProducts.reduce(
+        (acc, cur) => acc + cur.salePrice * cur.amount, 0
+      );
+      const newTotal = Math.round(rawTotal);
+      const newTotalWithDiscount = state.discount > 0
+        ? Math.round(rawTotal * (1 - state.discount / 100))
+        : newTotal;
+      return {
+        ...state,
+        products: updatedProducts,
+        total: newTotal,
+        totalWithDiscount: newTotalWithDiscount,
+      };
+    }
     case "addUnit": {
       const updatedProducts = state.products.map((product) => {
-        if (product.id === action.payload.id) {
+        if (getBillRowId(product) === getBillRowId(action.payload)) {
           return { ...product, amount: product.amount + 1 };
         }
         return product;
@@ -60,7 +77,7 @@ export const BillReducer = (
     }
     case "removeUnit": {
       const updatedProducts = state.products.map((product) => {
-        if (product.id === action.payload.id && product.amount > 1) {
+        if (getBillRowId(product) === action.payload.id && product.amount > 1) {
           return { ...product, amount: product.amount - 1 };
         }
         return product;
@@ -81,7 +98,7 @@ export const BillReducer = (
     }
     case "removeItem": {
       const updatedProducts = state.products.filter(
-        (product) => product.id !== action.payload.id
+        (product) => getBillRowId(product) !== action.payload.id
       );
       const rawTotal = updatedProducts.reduce(
         (acc, cur) => acc + cur.salePrice * cur.amount, 0
@@ -123,7 +140,7 @@ export const BillReducer = (
       return {
         ...state,
         products: state.products.map(({ ...product }) => {
-          if (product.id === action.payload.id) {
+          if (getBillRowId(product) === getBillRowId(action.payload)) {
             product.price = action.payload.price;
           }
 
@@ -132,7 +149,7 @@ export const BillReducer = (
       };
     case "changeUnit": {
       const updatedProducts = state.products.map((product) => {
-        if (product.id === action.payload.id) {
+        if (getBillRowId(product) === getBillRowId(action.payload)) {
           return { ...product, amount: action.payload.amount };
         }
         return product;
@@ -247,14 +264,14 @@ export const BillReducer = (
     }
     case "updateSalePrice": {
       const productExists = state.products.some(
-        (product) => product.id === action.payload.id
+        (product) => getBillRowId(product) === action.payload.id
       );
       if (!productExists) {
         return state;
       }
 
       const updatedProducts = state.products.map((product) => {
-        if (product.id === action.payload.id) {
+        if (getBillRowId(product) === action.payload.id) {
           return { ...product, salePrice: action.payload.salePrice };
         }
         return product;

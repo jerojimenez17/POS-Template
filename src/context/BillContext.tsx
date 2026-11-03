@@ -9,6 +9,7 @@ export default interface BillContextProps {
   BillState: BillState;
   dispatch: Dispatch<BillAction>;
   addItem: (product: Product) => void;
+  addIndependentItem?: (product: Product) => void;
   removeItem: (product: Product) => void;
   onOrderResetRef: React.MutableRefObject<(() => void) | null>;
   initialBillType?: string;
