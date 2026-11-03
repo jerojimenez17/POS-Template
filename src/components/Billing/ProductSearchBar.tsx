@@ -15,9 +15,10 @@ interface ProductSearchBarProps {
   onProductAdd: (product: Product) => void;
   hasSupplierFilter: boolean;
   allowNegativeStock?: boolean;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock }: ProductSearchBarProps) => {
+const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock, searchInputRef }: ProductSearchBarProps) => {
   const [searchCode, setSearchCode] = useState("");
   const searchCodeRef = useRef("");
   const [suggestions, setSuggestions] = useState<Product[]>([]);
@@ -252,6 +253,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock 
           </div>
           <input
             id="product-search-input"
+            ref={searchInputRef}
             name="productSearch"
             className={cn(
               "flex w-full rounded-lg border border-input bg-white dark:bg-gray-800 px-3 py-3 pl-10 text-base shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm text-gray-900 dark:text-gray-100",

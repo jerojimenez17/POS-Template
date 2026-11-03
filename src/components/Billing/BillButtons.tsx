@@ -49,8 +49,10 @@ interface props {
   handlePrint: (cae?: CAE, win?: Window | null, snapshot?: typeBillState) => void;
   isEditing?: boolean;
   orderId?: string;
+  onSaleCreated?: () => void;
+  onSaleFocusCancelled?: () => void;
 }
-const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props) => {
+const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCreated, onSaleFocusCancelled }: props) => {
   const canUseBudget = session?.user?.business?.features?.hasBudget ?? false;
   const router = useRouter();
   const [createVoucherError, setCreateVoucherError] = useState(false);
@@ -585,7 +587,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                     const snapshot = createBillCheckoutSnapshot(BillState, "Presupuesto");
                    handlePrint(undefined, targetWin, snapshot);
                    resetCheckout();
-                }}
+                   onSaleCreated?.();
+                 }}
               />
             </>
           )}
@@ -612,6 +615,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
             businessId={session?.user?.businessId || ""}
             onSuccess={() => {
                resetCheckout();
+               onSaleCreated?.();
             }}
           />
         </>
@@ -628,7 +632,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           </DialogDescription>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" className="rounded-lg">
+              <Button variant="outline" className="rounded-lg" onClick={onSaleFocusCancelled}>
                 Cancelar
               </Button>
             </DialogClose>
@@ -650,11 +654,13 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                      }
                      if (BillState.total > 0) {
                         const snapshot = createBillStateSnapshot({ ...BillState, CAE: caeResult }, billTypeRef?.current);
-                       handlePrint(caeResult, targetWin, snapshot);
-                       resetCheckout();
-                     } else if (targetWin) {
+                        handlePrint(caeResult, targetWin, snapshot);
+                        resetCheckout();
+                        setOpenFacturaModal(false);
+                        onSaleCreated?.();
+                      } else if (targetWin) {
                         targetWin.close();
-                     }
+                      }
                      setOpenFacturaModal(false);
                    } catch (err) {
                      if (targetWin) targetWin.close();
@@ -684,7 +690,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           </DialogDescription>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" className="rounded-lg">
+              <Button variant="outline" className="rounded-lg" onClick={onSaleFocusCancelled}>
                 Cancelar
               </Button>
             </DialogClose>
@@ -730,7 +736,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
           </DialogDescription>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" className="rounded-lg">
+              <Button variant="outline" className="rounded-lg" onClick={onSaleFocusCancelled}>
                 Cancelar
               </Button>
             </DialogClose>
@@ -752,9 +758,11 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId }: props)
                      }
                      if (BillState.total > 0) {
                         const snapshot = createBillStateSnapshot(BillState, billTypeRef?.current);
-                       handlePrint(caeResult, targetWin, snapshot);
-                       resetCheckout();
-                     } else if (targetWin) {
+                        handlePrint(caeResult, targetWin, snapshot);
+                        resetCheckout();
+                        setOpenRemitoModal(false);
+                        onSaleCreated?.();
+                      } else if (targetWin) {
                         targetWin.close();
                      }
                      setOpenRemitoModal(false);
