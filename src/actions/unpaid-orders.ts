@@ -76,7 +76,7 @@ export interface AccountLedgerOrder {
   status: string;
   paidStatus: string;
   clientId: string | null;
-  client: { id: string; name: string | null } | null;
+  client: { id: string; name: string | null; balance: number } | null;
   notes: string | null;
 }
 
@@ -624,7 +624,7 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
           paidStatus: true,
           clientId: true,
           notes: true,
-          client: { select: { id: true, name: true } },
+          client: { select: { id: true, name: true, balance: true } },
         },
         orderBy: [
           { client: { name: "asc" } },

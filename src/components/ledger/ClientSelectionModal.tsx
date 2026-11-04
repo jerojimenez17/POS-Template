@@ -21,10 +21,63 @@ import { getClientUnpaidOrders, addItemsToOrder } from "@/actions/unpaid-orders"
 interface Client {
   id: string;
   name: string;
+  balance: number;
   cellPhone?: string;
   address?: string;
   cuit?: string;
   ivaCondition?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeClientsResponse(payload: unknown): Client[] {
+  const candidate = Array.isArray(payload)
+    ? payload
+    : isRecord(payload)
+      ? payload.clients
+      : undefined;
+
+  if (!Array.isArray(candidate)) {
+    console.error("Invalid clients response from /api/clients", payload);
+    return [];
+  }
+
+  return candidate.flatMap((value): Client[] => {
+    if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
+      console.error("Invalid client record from /api/clients", value);
+      return [];
+    }
+
+    const rawBalance = value.balance;
+    const hasValidBalance = typeof rawBalance === "number" && Number.isFinite(rawBalance);
+    if (!hasValidBalance) {
+      console.error("Invalid client balance from /api/clients", {
+        clientId: value.id,
+        clientName: value.name,
+        balance: rawBalance === undefined ? "[missing]" : rawBalance,
+      });
+    }
+
+    return [{
+      id: value.id,
+      name: value.name,
+      balance: hasValidBalance ? rawBalance : Number.NaN,
+      cellPhone: typeof value.cellPhone === "string" ? value.cellPhone : undefined,
+      address: typeof value.address === "string" ? value.address : undefined,
+      cuit: typeof value.cuit === "string" ? value.cuit : undefined,
+      ivaCondition: typeof value.ivaCondition === "string" ? value.ivaCondition : undefined,
+    }];
+  });
+}
+
+function formatClientBalance(balance: number): string {
+  if (!Number.isFinite(balance)) {
+    return "—";
+  }
+
+  return `$${balance.toLocaleString("es-AR")}`;
 }
 
 interface UnpaidOrderItem {
@@ -139,9 +192,10 @@ export default function ClientSelectionModal({
     setIsFetchingClients(true);
     try {
       const response = await fetch("/api/clients");
-      const data = await response.json();
-      setClients(data.clients || data);
-      setFilteredClients(data.clients || data);
+      const payload: unknown = await response.json();
+      const normalizedClients = normalizeClientsResponse(payload);
+      setClients(normalizedClients);
+      setFilteredClients(normalizedClients);
     } catch (error) {
       console.error("Error fetching clients:", error);
     } finally {
@@ -396,6 +450,8 @@ export default function ClientSelectionModal({
     }
   };
 
+  const selectedClient = clients.find((client) => client.id === selectedClientId);
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -462,6 +518,9 @@ export default function ClientSelectionModal({
                     <User className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">{client.name}</span>
                   </div>
+                  <p className="ml-6 text-sm text-muted-foreground">
+                    Saldo: {formatClientBalance(client.balance)}
+                  </p>
                   {client.cellPhone && (
                     <p className="text-sm text-muted-foreground ml-6">
                       {client.cellPhone}
@@ -635,7 +694,7 @@ export default function ClientSelectionModal({
 
     {/* Existing Order Dialog (R3: Smart Client Selection) */}
     <Dialog open={showExistingOrderDialog} onOpenChange={setShowExistingOrderDialog}>
-      <DialogContent className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-hidden overflow-x-hidden flex flex-col sm:max-w-md">
+      <DialogContent className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-hidden overflow-x-hidden flex flex-col sm:max-w-md md:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {existingOrders.length > 1
@@ -650,6 +709,13 @@ export default function ClientSelectionModal({
         </DialogHeader>
 
         <div className="min-h-0 overflow-y-auto overflow-x-hidden py-2 space-y-3 max-h-[260px]">
+          <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/50 px-3 py-2">
+            <span className="text-sm text-muted-foreground">Saldo actual del cliente</span>
+            <span className="text-sm font-semibold">
+              {selectedClient ? formatClientBalance(selectedClient.balance) : "—"}
+            </span>
+          </div>
+
           {existingOrders.map((order) => {
             const isSelected = selectedExistingOrderId === order.id;
 
