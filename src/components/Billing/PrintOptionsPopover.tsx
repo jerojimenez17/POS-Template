@@ -58,7 +58,7 @@ export default function PrintOptionsPopover({
   const getPrintData = (info: ReceiptBusinessInfo | null): ThermalReceiptData => ({
     ...buildReceiptBusinessInfo(session?.user?.businessName || "Mi Comercio", sale.CAE?.CAE, info ?? undefined),
     date: sale.date || new Date(),
-    documentType: sale.typeDocument || "DNI",
+    documentType: sale.clientDocumentType || sale.typeDocument,
     billType: billTypeDisplay,
     seller: sale.seller || session?.user?.email || "",
     paidMethod: sale.paidMethod || "Efectivo",
@@ -131,6 +131,8 @@ export default function PrintOptionsPopover({
       await exportToPDF(content as HTMLElement, {
         documentTitle: filename,
         format: "a4",
+        orientation: "portrait",
+        margin: 10,
         filename: filename,
         targetWindow: targetWin,
       });

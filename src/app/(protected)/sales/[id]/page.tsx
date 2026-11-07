@@ -240,7 +240,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
       <Separator />
 
       {sale.fiscalDiagnostic && <CreditNoteEligibilityNotice diagnostic={sale.fiscalDiagnostic} recovery={sale.creditNoteRecovery ? { missingFields: sale.creditNoteRecovery.missingFields, canCompleteFromUser: true } : undefined} />}
-        {isAdmin && (sale.fiscalContext || sale.creditNoteRecovery) && <CreditNoteButton sale={sale.fiscalContext ?? sale.creditNoteRecovery!} createCreditNote={createCreditNoteAction} />}
+      {isAdmin && (sale.fiscalContext || sale.creditNoteRecovery) && <CreditNoteButton sale={sale.fiscalContext ?? sale.creditNoteRecovery!} createCreditNote={createCreditNoteAction} />}
       {sale.creditNote && <CreditNoteStatusCard creditNote={sale.creditNote} printContext={creditNotePrintContext} businessName="Comercio" />}
 
       {/* History Section */}

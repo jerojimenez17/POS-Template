@@ -35,11 +35,31 @@ vi.mock("@/lib/auth-gates", () => ({
   requireFeature: (...args: unknown[]) => mockRequireFeature(...args),
 }));
 
+const mockAuth = vi.fn();
+vi.mock("@/auth", () => ({ auth: (...args: unknown[]) => mockAuth(...args) }));
+
 // Mock getArcaCredentialsForBilling
 const mockGetArcaCredentialsForBilling = vi.fn();
-vi.mock("@/actions/arca", () => ({
+const mockGetVoucherNumberForActor = vi.fn();
+vi.mock("@/lib/server/arca-billing", () => ({
   getArcaCredentialsForBilling: (...args: unknown[]) =>
     mockGetArcaCredentialsForBilling(...args),
+  getVoucherNumberForActor: (...args: unknown[]) =>
+    mockGetVoucherNumberForActor(...args),
+}));
+
+vi.mock("@/lib/server/fiscal-snapshot-grant", () => ({
+  createAuthorizedFiscalSnapshotGrant: vi.fn().mockResolvedValue("snapshot-token"),
+}));
+
+vi.mock("@/lib/db", () => ({
+  db: {
+    business: { findUnique: vi.fn().mockResolvedValue({ id: "business-1" }) },
+  },
+}));
+
+vi.mock("@/lib/plan-resolver", () => ({
+  getEffectivePlan: vi.fn().mockResolvedValue({ hasAfipBilling: true }),
 }));
 
 // Merged action (report-E §1.1) runs a voucher-number preflight (getLastVoucher)
@@ -143,8 +163,12 @@ describe("createAfipVoucherAction — fix-shortcut-zero-price-afip", () => {
     process.env.AFIP_SDK_ACCESS_TOKEN = "test-access-token";
     process.env.INTERNAL_AFIP_API_KEY = "test-internal-key";
 
-    // Default mocks: auth gate passes + credentials returned + preflight OK
-    mockRequireFeature.mockResolvedValue({ success: true, data: {} });
+    const actor = { id: "user-1", businessId: "business-1", role: "USER" };
+    mockAuth.mockResolvedValue({ user: actor });
+    // Default mocks: actor feature gate passes + credentials returned + preflight OK.
+    // Keep the actor identity in the fixture: the action rechecks it at the
+    // irreversible boundary before sending the prepared voucher.
+    mockRequireFeature.mockResolvedValue({ success: true, data: actor });
     mockGetArcaCredentialsForBilling.mockResolvedValue({
       success: {
         cuit: "20123456789",
@@ -152,6 +176,7 @@ describe("createAfipVoucherAction — fix-shortcut-zero-price-afip", () => {
         key: "encrypted-key",
       },
     });
+    mockGetVoucherNumberForActor.mockResolvedValue({ success: 124 });
     mockGetVoucherNumberAction.mockResolvedValue({ success: 124 });
     // Default: axios.post resolves with a canonical Cloud Function success
     // (parseAfipVoucherResponse accepts any candidate holding a valid 14-digit CAE).
@@ -278,6 +303,7 @@ describe("createAfipVoucherAction — fix-shortcut-zero-price-afip", () => {
     // Assert
     expect(result).toEqual({
       error: "No se puede generar la factura: el monto total debe ser mayor a 0",
+      issuanceNotStarted: true,
     });
     expect(mockAxiosPost).not.toHaveBeenCalled();
   });
@@ -379,6 +405,7 @@ describe("createAfipVoucherAction — fix-shortcut-zero-price-afip", () => {
     // Assert
     expect(result).toEqual({
       error: "No se puede generar la factura: el monto total debe ser mayor a 0",
+      issuanceNotStarted: true,
     });
     expect(mockAxiosPost).not.toHaveBeenCalled();
   });

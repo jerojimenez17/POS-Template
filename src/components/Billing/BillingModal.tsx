@@ -107,9 +107,12 @@ const BillingModal = ({
              CAE: resp.data.cae,
              vencimiento: resp.data.vencimiento,
              nroComprobante: resp.data.nroComprobante,
-             qrData: resp.data.qrData,
-             ptoVenta: resp.data.ptoVenta ?? sale.ptoVenta,
-          },
+              qrData: resp.data.qrData,
+              ptoVenta: resp.data.ptoVenta ?? sale.ptoVenta,
+              ...(resp.data.fiscalSnapshotToken
+                ? { fiscalSnapshotToken: resp.data.fiscalSnapshotToken }
+                : {}),
+           },
           IVACondition: ivaCondition,
           documentType: docType as "CUIT" | "DNI" | "",
           documentNumber,

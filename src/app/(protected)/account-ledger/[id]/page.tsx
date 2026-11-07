@@ -43,6 +43,9 @@ interface OrderWithRelations {
   discountAmount: number;
   seller: string | null;
   paidMethod: string | null;
+  clientIvaCondition: string | null;
+  clientDocumentType: string | null;
+  clientDocumentNumber: string | null;
   status: string;
   paidStatus: string;
   clientId: string | null;

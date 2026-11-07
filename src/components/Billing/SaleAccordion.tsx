@@ -69,7 +69,7 @@ const SaleAccordion = ({ sale, session, qzTrayEnabled }: props) => {
         </div>
 
         {/* Invoice / CAE */}
-        <div onClick={(e) => e.stopPropagation()}>
+        <div>
           {hasValidSalesPresentationCae(sale.CAE) ? (
             <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">
               {formatInvoiceNumberFull(sale.CAE?.nroComprobante, sale.ptoVenta ?? sale.CAE?.ptoVenta)}

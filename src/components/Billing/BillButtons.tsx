@@ -255,6 +255,9 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
           nroComprobante: resp.data.nroComprobante,
           qrData: resp.data.qrData,
           ptoVenta: resp.data.ptoVenta ?? checkout.ptoVenta,
+          ...(typeof resp.data.fiscalSnapshotToken === "string"
+            ? { fiscalSnapshotToken: resp.data.fiscalSnapshotToken }
+            : {}),
         };
         dispatch({ type: "CAE", payload: newCAE });
         setLocalCAE(newCAE);

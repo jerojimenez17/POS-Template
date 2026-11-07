@@ -34,27 +34,29 @@ const getVoucherTypeCode = (billType: string): 1 | 6 | 11 => {
 
 interface BillParametersFormProps {
   ptoVentas?: number[];
+  initialBillType?: string;
   layout?: "compact" | "cards";
 }
 
-const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParametersFormProps) => {
+const BillParametersForm = ({ ptoVentas = [], initialBillType, layout = "compact" }: BillParametersFormProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [lastVoucherNum, setLastVoucherNum] = useState<number | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(false);
   const [voucherError, setVoucherError] = useState<AfipPointSaleError | string | null>(null);
   const requestSequence = useRef(0);
-  const { dispatch, BillState, onOrderResetRef, billTypeRef, initialBillType } = useContext(BillContext);
+  const { dispatch, BillState, onOrderResetRef, billTypeRef, initialBillType: contextBillType } = useContext(BillContext);
 
   // Jero (5cefac7): default comprobante type derives from the business IVA
   // condition (Factura B for Responsable Inscripto) provided via context;
   // getDefaultBillType() falls back to Factura C.
-  const defaultBillType = initialBillType ?? getDefaultBillType();
+  const defaultBillType = initialBillType ?? contextBillType ?? getDefaultBillType();
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
     resolver: zodResolver(BillParametersSchema),
     defaultValues: {
       paidMethod: PaidMethods.EFECTIVO,
       clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+      clientDocumentType: "",
       discount: 0,
       twoMethods: false,
       billType: defaultBillType,
@@ -74,7 +76,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
   // server-side/context, resolve the business IVA condition in the browser and
   // correct the comprobante type once.
   useEffect(() => {
-    if (initialBillType !== undefined) return;
+    if (initialBillType !== undefined || contextBillType !== undefined) return;
 
     let cancelled = false;
     void Promise.resolve(getBusinessBillingInfoAction())
@@ -92,7 +94,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
     return () => {
       cancelled = true;
     };
-  }, [initialBillType, form, dispatch, billTypeRef]);
+  }, [initialBillType, contextBillType, form, dispatch, billTypeRef]);
 
   // Keep billTypeRef (consumed by the checkout snapshot sent to AFIP) always
   // mirroring the authoritative form value.
@@ -126,6 +128,7 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
       form.reset({
         paidMethod: PaidMethods.EFECTIVO,
         clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+        clientDocumentType: "",
         discount: 0,
         twoMethods: false,
         // Jero fix: reset to the business default comprobante type, not a
@@ -330,26 +333,44 @@ const BillParametersForm = ({ ptoVentas = [], layout = "compact" }: BillParamete
                 )}
               />
               {showDocInput && (
-                <FormField
-                  control={form.control}
-                  name="documentNumber"
-                  render={({ field }) => (
-                    <FormItem className="min-w-[130px]">
-                      <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        {BillState.clientDocumentType === "CUIT" ? "CUIT" : "DNI"}
-                      </FormLabel>
-                      <Input
-                        className="h-8 text-sm rounded-md"
-                        type="number"
-                        name={field.name}
-                        value={field.value || ""}
-                        onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                        onBlur={field.onBlur}
-                        ref={field.ref}
-                      />
-                    </FormItem>
-                  )}
-                />
+                <>
+                  <FormField
+                    control={form.control}
+                    name="clientDocumentType"
+                    render={({ field }) => (
+                      <FormItem className="min-w-[100px]">
+                        <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo doc.</FormLabel>
+                        <Select value={field.value || undefined} onValueChange={field.onChange}>
+                          <SelectTrigger className="h-8 text-sm rounded-md"><SelectValue placeholder="DNI" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DNI">DNI</SelectItem>
+                            <SelectItem value="CUIT">CUIT</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="documentNumber"
+                    render={({ field }) => (
+                      <FormItem className="min-w-[130px]">
+                        <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                          {form.watch("clientDocumentType") === "CUIT" ? "CUIT" : "DNI"}
+                        </FormLabel>
+                        <Input
+                          className="h-8 text-sm rounded-md"
+                          type="number"
+                          name={field.name}
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                          onBlur={field.onBlur}
+                          ref={field.ref}
+                        />
+                      </FormItem>
+                    )}
+                  />
+                </>
               )}
             </div>
           </div>

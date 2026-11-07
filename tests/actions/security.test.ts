@@ -31,6 +31,12 @@ vi.mock("@/auth", () => ({
   auth: mockAuth,
 }));
 
+// `after()` requires a Next request scope; this action test verifies the
+// transaction contract, so keep the framework lifecycle hook inert.
+vi.mock("next/server", () => ({
+  after: vi.fn(),
+}));
+
 const BASIC_PLAN = {
   plan: "BASIC",
   hasAfipBilling: false,
@@ -98,6 +104,8 @@ describe("Server-Side Action Security Gates Test Suite", () => {
   it("should fail validation with DELINQUENT if business status is MOROSO", async () => {
     vi.mocked(auth).mockResolvedValue({
       user: {
+        id: "user_1",
+        role: "ADMIN",
         businessId: "business_123",
         business: {
           accountStatus: "MOROSO",
@@ -116,6 +124,8 @@ describe("Server-Side Action Security Gates Test Suite", () => {
   it("should fail module gate with FORBIDDEN if specific feature toggle is disabled", async () => {
     vi.mocked(auth).mockResolvedValue({
       user: {
+        id: "user_1",
+        role: "ADMIN",
         businessId: "business_123",
         business: {
           accountStatus: "ACTIVO",
@@ -138,6 +148,8 @@ describe("Server-Side Action Security Gates Test Suite", () => {
   it("should pass module gate if specific feature toggle is enabled", async () => {
     vi.mocked(auth).mockResolvedValue({
       user: {
+        id: "user_1",
+        role: "ADMIN",
         businessId: "business_123",
         business: {
           accountStatus: "ACTIVO",
@@ -158,6 +170,8 @@ describe("Server-Side Action Security Gates Test Suite", () => {
   it("should block user limit checks if threshold is exceeded", async () => {
     vi.mocked(auth).mockResolvedValue({
       user: {
+        id: "user_1",
+        role: "ADMIN",
         businessId: "business_123",
         business: {
           accountStatus: "ACTIVO",
@@ -182,6 +196,8 @@ describe("Server-Side Action Security Gates Test Suite", () => {
       it("should reject voucher generation if hasAfipBilling is false", async () => {
         vi.mocked(auth).mockResolvedValue({
           user: {
+            id: "user_1",
+            role: "ADMIN",
             businessId: "business_123",
             business: {
               accountStatus: "ACTIVO",
@@ -202,6 +218,8 @@ describe("Server-Side Action Security Gates Test Suite", () => {
       it("should reject creating order with paidStatus: inpago if hasClientLedger is false", async () => {
         vi.mocked(auth).mockResolvedValue({
           user: {
+            id: "user_1",
+            role: "USER",
             businessId: "business_123",
             business: {
               accountStatus: "ACTIVO",
@@ -227,6 +245,8 @@ describe("Server-Side Action Security Gates Test Suite", () => {
       it("should allow creating order with paidStatus: inpago if hasClientLedger is true", async () => {
         vi.mocked(auth).mockResolvedValue({
           user: {
+            id: "user_1",
+            role: "USER",
             businessId: "business_123",
             business: {
               accountStatus: "ACTIVO",
@@ -239,6 +259,7 @@ describe("Server-Side Action Security Gates Test Suite", () => {
 
         // Mock database calls for createOrder to avoid empty array issues
         vi.spyOn(db, "$transaction").mockImplementation(async (cb: any) => cb(db));
+        vi.spyOn(db.product, "findMany").mockResolvedValue([]);
         vi.spyOn(db.client, "update").mockResolvedValue({} as any);
         vi.spyOn(db.order, "create").mockResolvedValue({ id: "order_123" } as any);
 

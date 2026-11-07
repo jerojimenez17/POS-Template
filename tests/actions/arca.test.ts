@@ -60,7 +60,7 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
-vi.mock('../../../auth', () => ({
+vi.mock('../../auth', () => ({
   auth: vi.fn(),
 }));
 

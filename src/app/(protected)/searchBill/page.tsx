@@ -14,10 +14,7 @@ const SearchBillContent = async ({
 }: {
   searchParams: Promise<{ from?: string; to?: string; showAll?: string }>;
 }) => {
-  const [session, params] = await Promise.all([
-    auth(),
-    searchParams,
-  ]);
+  const [session, params] = await Promise.all([auth(), searchParams]);
   const [{ sales, nextCursor }, printSettings] = await Promise.all([
     getSalesAction(),
     getBusinessPrintSettingsAction(),

@@ -132,6 +132,11 @@ const mockSession = {
 describe("PrintableTable Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("ResizeObserver", class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
     vi.mocked(useFeatures).mockReturnValue({
       plan: "PRO",
       hasFeature: () => false,
@@ -590,8 +595,10 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      expect(screen.getByText("$200,00")).toBeTruthy();
-      expect(screen.getByText("$150,00")).toBeTruthy();
+      // Row subtotals intentionally use whole pesos; the totals footer keeps
+      // the two-decimal currency formatting.
+      expect(screen.getByText("$200")).toBeTruthy();
+      expect(screen.getByText("$150")).toBeTruthy();
     });
 
     it("should calculate total with discount", () => {
@@ -929,9 +936,7 @@ describe("PrintableTable Component", () => {
       expect(screen.getAllByText("5").length).toBeGreaterThan(0);
 
       // Verify a span contains the amount (not an input) in display mode
-      const amountSpan = container.querySelector(
-        'span[title="Click para editar cantidad"]',
-      );
+      const amountSpan = container.querySelector("span.cursor-pointer");
       expect(amountSpan).toBeTruthy();
       expect(amountSpan?.textContent).toBe("5");
 
@@ -958,18 +963,18 @@ describe("PrintableTable Component", () => {
         />,
       );
 
-      // Merged editor lives INLINE in PrintableTable: a span opens on SINGLE click
-      // (title="Click para editar cantidad") and swaps for <input type="number">.
-      const amountElement = container.querySelector('span[title="Click para editar cantidad"]') as HTMLElement | null;
+      // The shared inline editor opens on double click and uses a text input
+      // with numeric input mode for locale-friendly quantity entry.
+      const amountElement = container.querySelector("span.cursor-pointer") as HTMLElement | null;
       expect(amountElement).toBeTruthy();
       expect(amountElement?.textContent).toBe("7");
 
       // Capture the quantity cell BEFORE clicking: editing replaces the span node.
       const quantityCell = amountElement!.closest("td");
 
-      fireEvent.click(amountElement);
+      fireEvent.doubleClick(amountElement);
 
-      const input = quantityCell?.querySelector("input[type='number']") as HTMLInputElement;
+      const input = quantityCell?.querySelector("input[aria-label='Editar cantidad']") as HTMLInputElement;
       expect(input).toBeTruthy();
       expect(input.value).toBe("7");
     });
@@ -998,17 +1003,24 @@ describe("PrintableTable Component", () => {
       const increaseButton = screen.getByLabelText("Aumentar cantidad");
       fireEvent.click(increaseButton);
 
-      // removeItem should have been called with the old product (amount=5)
-      expect(removeItem).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "1", amount: 5 }),
+      // Quantity controls update the existing row through the context reducer.
+      expect(mockContextValue.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "changeUnit",
+          payload: expect.objectContaining({ id: "1", amount: 6 }),
+        }),
       );
 
       // Click the decrease button (−)
       const decreaseButton = screen.getByLabelText("Disminuir cantidad");
       fireEvent.click(decreaseButton);
 
-      // addItem should have been called for both operations
-      expect(addItem).toHaveBeenCalledTimes(2);
+      expect(mockContextValue.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "changeUnit",
+          payload: expect.objectContaining({ id: "1", amount: 4 }),
+        }),
+      );
     });
 
     it("InlineAmountInput renders the amount for 'unidades'/'unidad' products", () => {
