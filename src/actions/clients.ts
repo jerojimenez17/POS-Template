@@ -14,6 +14,18 @@ export interface ClientListItem {
   balance: number; date: Date; last_update: Date;
 }
 
+export interface PaymentVoucherClientEditData {
+  id: string;
+  name: string;
+  address: string | null;
+  cellPhone: string | null;
+  cuit: string | null;
+  ivaCondition: string | null;
+  email: string | null;
+  fiscalDocumentType: "CUIT" | "DNI" | null;
+  fiscalDocumentNumber: string | null;
+}
+
 export interface ClientActionResult<T = undefined> {
   success: boolean; data?: T; client?: ClientListItem; error?: string;
   code?: "UNAUTHORIZED" | "FORBIDDEN" | "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "DATABASE";
@@ -134,17 +146,48 @@ export async function updateClient(input: unknown): Promise<ClientActionResult<C
   if (!parsed.success) return validationError(parsed.error) as unknown as ClientActionResult<ClientListItem>;
   const { id: clientId, ...data } = parsed.data;
   try {
-    const owned = await db.client.findFirst({ where: { id: clientId, businessId: id }, select: { id: true } });
+    const owned = await db.client.findFirst({
+      where: { id: clientId, businessId: id },
+      select: { id: true, cuit: true, fiscalDocumentType: true, fiscalDocumentNumber: true },
+    });
     if (!owned) return { success: false, error: "Cliente no encontrado", code: "NOT_FOUND" };
+    const identityWasSubmitted = data.fiscalDocumentType !== undefined || data.fiscalDocumentNumber !== undefined;
+    let synchronizedIdentity: Pick<typeof data, "fiscalDocumentType" | "fiscalDocumentNumber"> & { cuit?: string | null } = {};
+    if (identityWasSubmitted) {
+      const previousType = owned.fiscalDocumentType === "CUIT" || owned.fiscalDocumentType === "DNI"
+        ? owned.fiscalDocumentType
+        : owned.cuit?.trim() ? "CUIT" : null;
+      const previousNumber = owned.fiscalDocumentType
+        ? owned.fiscalDocumentNumber?.trim() || null
+        : owned.cuit?.trim() || null;
+      const requestedType = data.fiscalDocumentType ?? null;
+      const requestedNumber = data.fiscalDocumentNumber ?? null;
+      if (requestedType !== previousType && requestedType !== null && requestedNumber === previousNumber) {
+        return {
+          success: false,
+          error: "Ingrese un nuevo número para el tipo de documento seleccionado",
+          code: "VALIDATION",
+        };
+      }
+      synchronizedIdentity = {
+        fiscalDocumentType: requestedType,
+        fiscalDocumentNumber: requestedNumber,
+        cuit: requestedType === "CUIT" ? requestedNumber : null,
+      };
+    }
     const client = await db.client.update({
       where: { id: clientId },
-      data: { ...data, last_update: new Date() }, select: clientSelect,
+      data: { ...data, ...synchronizedIdentity, last_update: new Date() }, select: clientSelect,
     });
     refreshClients();
     return { success: true, data: client, client };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return { success: false, error: "Cliente no encontrado", code: "NOT_FOUND" };
-    console.error("Error updating client", error); return databaseError() as unknown as ClientActionResult<ClientListItem>;
+    console.error("Error updating client", {
+      code: "CLIENT_UPDATE_FAILED",
+      errorType: error instanceof Error ? "Error" : "NonError",
+    });
+    return databaseError() as unknown as ClientActionResult<ClientListItem>;
   }
 }
 

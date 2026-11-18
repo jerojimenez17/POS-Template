@@ -132,7 +132,23 @@ export const clientFormSchema = z.object({
   ),
 }).strict();
 
-export const updateClientSchema = clientFormSchema.extend({ id: z.string().trim().min(1, "El cliente es obligatorio") }).strict();
+const clientFiscalIdentitySchema = z.object({
+  fiscalDocumentType: z.preprocess((value) => value === "" ? null : value, z.enum(["CUIT", "DNI"]).nullable()).optional(),
+  // Keep document identifiers as text so leading zeroes are preserved.
+  fiscalDocumentNumber: z.preprocess((value) => typeof value === "string" && value.trim() === "" ? null : value, z.string().trim().max(30).nullable()).optional(),
+}).strict();
+
+export const updateClientSchema = clientFormSchema
+  .merge(clientFiscalIdentitySchema)
+  .extend({ id: z.string().trim().min(1, "El cliente es obligatorio") })
+  .strict()
+  .superRefine((identity, context) => {
+  const hasType = identity.fiscalDocumentType !== undefined && identity.fiscalDocumentType !== null;
+  const hasNumber = identity.fiscalDocumentNumber !== undefined && identity.fiscalDocumentNumber !== null && identity.fiscalDocumentNumber !== "";
+  if (hasType !== hasNumber) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "El tipo y número de documento deben informarse juntos", path: [hasType ? "fiscalDocumentNumber" : "fiscalDocumentType"] });
+  }
+});
 export const deleteClientSchema = z.object({ id: z.string().trim().min(1, "El cliente es obligatorio") }).strict();
 
 export const BillParametersSchema = z.object({

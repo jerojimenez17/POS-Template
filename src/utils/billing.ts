@@ -75,6 +75,7 @@ export interface AfipInvoiceDTO {
   clientId?: string;
   client?: string;
   clientIvaCondition?: string;
+  clientDocumentType?: "CUIT" | "DNI";
   clientDocumentNumber?: string;
   discount: number;
   documentNumber: number;
@@ -216,6 +217,11 @@ export function normalizeAfipInvoiceDTO(value: unknown): AfipInvoiceDTO {
   if (rawPtoVenta !== undefined && (typeof rawPtoVenta !== "number" || !Number.isFinite(rawPtoVenta))) {
     throw new Error("El punto de venta no es válido");
   }
+  const rawClientDocumentType = ownValue(value, "clientDocumentType");
+  if (rawClientDocumentType !== undefined && rawClientDocumentType !== null
+    && rawClientDocumentType !== "CUIT" && rawClientDocumentType !== "DNI") {
+    throw new Error("El tipo de documento del cliente no es válido");
+  }
   const rawTwoMethods = ownValue(value, "twoMethods");
   if (typeof rawTwoMethods !== "boolean") throw new Error("La forma de pago no es válida");
   const rawTotalSecondMethod = ownValue(value, "totalSecondMethod");
@@ -247,6 +253,8 @@ export function normalizeAfipInvoiceDTO(value: unknown): AfipInvoiceDTO {
     ...(optionalString(value, "client") !== undefined ? { client: optionalString(value, "client") } : {}),
     ...(optionalString(value, "clientIvaCondition") !== undefined
       ? { clientIvaCondition: optionalString(value, "clientIvaCondition") } : {}),
+    ...(rawClientDocumentType === "CUIT" || rawClientDocumentType === "DNI"
+      ? { clientDocumentType: rawClientDocumentType } : {}),
     ...(optionalString(value, "clientDocumentNumber") !== undefined
       ? { clientDocumentNumber: optionalString(value, "clientDocumentNumber") } : {}),
     discount,
@@ -266,7 +274,7 @@ export function createAfipInvoiceDTO(state: unknown, selectedBillType?: string):
   for (const key of [
     "id", "seller", "typeDocument", "IVACondition", "twoMethods", "secondPaidMethod",
     "totalSecondMethod", "entrega", "pago", "billType", "paidMethod", "clientId", "client",
-    "clientIvaCondition", "clientDocumentNumber", "discount", "documentNumber", "total",
+    "clientIvaCondition", "clientDocumentType", "clientDocumentNumber", "discount", "documentNumber", "total",
     "totalWithDiscount", "date", "ptoVenta", "products",
   ]) {
     const descriptor = Object.getOwnPropertyDescriptor(state, key);
@@ -285,7 +293,7 @@ export function projectAfipInvoiceInput(value: unknown): Partial<AfipInvoiceDTO>
   for (const key of [
     "id", "seller", "typeDocument", "IVACondition", "twoMethods", "secondPaidMethod",
     "totalSecondMethod", "entrega", "pago", "billType", "paidMethod", "clientId", "client",
-    "clientIvaCondition", "clientDocumentNumber", "discount", "documentNumber", "total",
+    "clientIvaCondition", "clientDocumentType", "clientDocumentNumber", "discount", "documentNumber", "total",
     "totalWithDiscount", "date", "ptoVenta", "products",
   ]) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);

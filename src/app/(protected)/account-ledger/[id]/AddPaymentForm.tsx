@@ -14,11 +14,15 @@ import {
 } from "@/components/ui/select";
 import { CreditCard, Loader2 } from "lucide-react";
 import { registerPayment } from "@/actions/unpaid-orders";
+import { PointOfSaleSelector } from "@/components/account-ledger/PointOfSaleSelector";
+import { InvoiceTypeSelector } from "@/components/account-ledger/InvoiceTypeSelector";
+import { toPositiveWholePesos, toWholePesos } from "@/lib/money";
 
 interface AddPaymentFormProps {
   orderId: string;
   remainingBalance: number;
   businessId: string;
+  configuredPtoVentas?: number[];
   showForm?: boolean;
 }
 
@@ -26,12 +30,15 @@ export default function AddPaymentForm({
   orderId,
   remainingBalance,
   businessId,
+  configuredPtoVentas = [],
   showForm = false,
 }: AddPaymentFormProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(showForm);
-  const [amount, setAmount] = useState(Math.round(remainingBalance).toString());
+  const [amount, setAmount] = useState(String(remainingBalance));
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
+  const [billType, setBillType] = useState("");
+  const [ptoVenta, setPtoVenta] = useState(configuredPtoVentas[0]?.toString() ?? "");
   const [isPending, setIsPending] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,8 +46,9 @@ export default function AddPaymentForm({
     setIsPending(true);
 
     try {
-      const amountNum = parseFloat(amount);
-      if (isNaN(amountNum) || amountNum <= 0) {
+      const proposedAmount = Number(amount);
+      const amountNum = toPositiveWholePesos(proposedAmount);
+      if (amount.trim() === "" || amountNum === null) {
         toast.error("Ingrese un monto válido");
         return;
       }
@@ -49,25 +57,43 @@ export default function AddPaymentForm({
         toast.error("El monto no puede exceder el saldo pendiente");
         return;
       }
+      if (!["Factura A", "Factura B", "Factura C"].includes(billType)) {
+        toast.error("Seleccione Factura A, Factura B o Factura C");
+        return;
+      }
+      const selectedPtoVenta = Number(ptoVenta);
+      if (!Number.isSafeInteger(selectedPtoVenta) || selectedPtoVenta <= 0 || !configuredPtoVentas.includes(selectedPtoVenta)) {
+        toast.error("Seleccione un punto de venta configurado");
+        return;
+      }
 
       const result = await registerPayment({
         orderId,
         amount: amountNum,
         paymentMethod,
         businessId,
+        billType: billType as "Factura A" | "Factura B" | "Factura C",
+        ptoVenta: selectedPtoVenta,
       });
 
       if (result.success) {
-        toast.success("Pago registrado correctamente");
+        const outcome = typeof result.data === "object" && result.data !== null
+          ? result.data as { voucherStatus?: string }
+          : {};
+        if (outcome.voucherStatus === "AUTHORIZED") {
+          toast.success("Pago registrado y factura autorizada");
+        } else if (outcome.voucherStatus === "UNKNOWN") {
+          toast.warning("Pago registrado; verifique la emisión de la factura antes de reintentar");
+        } else {
+          toast.warning("Pago registrado; la factura no se emitió. Puede recuperarla desde el historial de pagos.");
+        }
         router.refresh();
         setIsOpen(false);
-        setAmount(remainingBalance.toString());
+        setAmount(String(remainingBalance));
       } else {
-        const errorMsg = 'error' in result ? result.error : "Error al registrar el pago";
-        toast.error(errorMsg || "Error al registrar el pago");
+        toast.error("No se pudo registrar el pago. Intente nuevamente.");
       }
-      } catch (error) {
-        console.error("Error registering payment:", error);
+      } catch {
         toast.error("Error al registrar el pago");
       } finally {
       setIsPending(false);
@@ -95,11 +121,15 @@ export default function AddPaymentForm({
           <label className="text-sm text-muted-foreground">Monto</label>
           <Input
             type="number"
-            step="0.01"
-            min="0"
-            max={Math.round(remainingBalance)}
+            step="any"
+            min="1"
+            max={String(remainingBalance)}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+            onBlur={() => {
+              const rounded = toWholePesos(Number(amount));
+              if (amount.trim() !== "" && rounded !== null) setAmount(String(rounded));
+            }}
             placeholder="Monto del pago"
             className="mt-1"
           />
@@ -121,6 +151,26 @@ export default function AddPaymentForm({
             </SelectContent>
           </Select>
         </div>
+
+        <div>
+          <label className="text-sm text-muted-foreground">Tipo de factura</label>
+          <InvoiceTypeSelector value={billType} onChange={setBillType} />
+        </div>
+
+        <div>
+          <label className="text-sm text-muted-foreground" htmlFor="payment-pto-venta">Punto de venta</label>
+          <PointOfSaleSelector id="payment-pto-venta" values={configuredPtoVentas} value={ptoVenta} onChange={setPtoVenta} disabled={configuredPtoVentas.length === 0} />
+          {configuredPtoVentas.length === 0 && <p className="mt-1 text-sm text-destructive">No hay puntos de venta configurados.</p>}
+        </div>
+
+        <p className="rounded-md bg-muted p-3 text-sm" aria-live="polite">
+          Se registrará ${(() => {
+            const rounded = toWholePesos(Number(amount));
+            return rounded === null ? "—" : rounded.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+          })()}
+          {billType ? ` como ${billType}` : "; seleccione el tipo de factura"}
+          {ptoVenta ? ` en el punto de venta ${ptoVenta}` : "; seleccione un punto de venta"}.
+        </p>
       </div>
 
       <div className="flex gap-2">
@@ -133,7 +183,7 @@ export default function AddPaymentForm({
         >
           Cancelar
         </Button>
-        <Button type="submit" className="flex-1" disabled={isPending}>
+        <Button type="submit" className="flex-1" disabled={isPending || configuredPtoVentas.length === 0}>
           {isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
