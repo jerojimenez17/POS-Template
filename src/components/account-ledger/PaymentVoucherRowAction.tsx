@@ -5,7 +5,7 @@ import { Loader2, Printer, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PointOfSaleSelector } from "@/components/account-ledger/PointOfSaleSelector";
 
-type VoucherStatus = "MISSING" | "FAILED" | "PENDING" | "ISSUING" | "AUTHORIZED" | "UNKNOWN";
+type VoucherStatus = "NOT_REQUIRED" | "MISSING" | "FAILED" | "PENDING" | "ISSUING" | "AUTHORIZED" | "UNKNOWN";
 
 interface PaymentVoucherRowActionProps {
   cashMovementId: string;
@@ -89,6 +89,10 @@ export function PaymentVoucherRowAction({
         {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
       </div>
     );
+  }
+
+  if (status === "NOT_REQUIRED") {
+    return <p className="text-right text-xs text-muted-foreground">Sin emisión AFIP (Remito)</p>;
   }
 
   if (status === "UNKNOWN") {

@@ -169,6 +169,34 @@ describe("payment-voucher transport-boundary classification", () => {
   beforeEach(configureAfipMocks);
   afterEach(() => vi.unstubAllEnvs());
 
+  it("preserves authorized PtoVta and CbteDesde instead of substituting the sequence preview", async () => {
+    credentialsMock.mockResolvedValue({
+      success: { cuit: "20123456789", cert: "encrypted-cert", key: "encrypted-key", ptoVentas: [7] },
+    });
+    voucherNumberMock.mockResolvedValue({ success: 1 });
+    axiosPostMock.mockResolvedValue({
+      status: 200,
+      data: { success: true, data: { CAE: "98765432101234", nroCbte: 42, ptoVenta: 7 } },
+    });
+
+    const prepared = await prepareAfipVoucherForActor(invoice({ ptoVenta: 7 }), actor as never);
+    expect(prepared).toHaveProperty("success", true);
+    if (!("prepared" in prepared)) throw new Error("Expected a valid prepared AFIP request");
+
+    const authorization = await (issuePreparedAfipVoucher as unknown as (
+      preparedRequest: unknown,
+    ) => Promise<Record<string, unknown>>)(prepared.prepared);
+    const authorizationData = authorization.data as Record<string, unknown>;
+
+    expect(authorizationData).toMatchObject({ nroComprobante: 42, ptoVenta: 7 });
+    expect(authorizationData).not.toMatchObject({ nroComprobante: 1, ptoVenta: 1 });
+    expect(axiosPostMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ arca: expect.objectContaining({ puntoVenta: 7 }) }),
+      expect.any(Object),
+    );
+  });
+
   it("classifies a deterministic adapter failure before axios.post as FAILED without a dispatch marker", async () => {
     const { service, repository, state } = makeHarness();
     // Preparation succeeds; the final adapter's deterministic eligibility check throws before transport.

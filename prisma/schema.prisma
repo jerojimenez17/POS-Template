@@ -558,6 +558,7 @@ model CashMovement {
 }
 
 enum PaymentVoucherStatus {
+  NOT_REQUIRED
   PENDING
   ISSUING
   AUTHORIZED

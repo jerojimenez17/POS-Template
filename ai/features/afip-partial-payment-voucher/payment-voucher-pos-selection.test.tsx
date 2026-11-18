@@ -107,4 +107,37 @@ describe("initial account-ledger payment POS selection", () => {
     expect(toast.error).toHaveBeenCalledWith("El monto no puede exceder el saldo pendiente");
     expect(registerPayment).not.toHaveBeenCalled();
   });
+
+  it("offers Remito sin POS, previews no AFIP issuance, and submits the normalized amount without ptoVenta", async () => {
+    const user = userEvent.setup();
+    const AddPaymentForm = await loadAddPaymentForm();
+    render(createElement(AddPaymentForm, {
+      orderId: "order-remito-ui",
+      remainingBalance: 20,
+      businessId: "business-1",
+      configuredPtoVentas: [3, 8],
+      showForm: true,
+    }));
+
+    const amountInput = screen.getByRole("spinbutton");
+    await user.clear(amountInput);
+    await user.type(amountInput, "10.5");
+    await user.click(screen.getByRole("combobox", { name: /tipo de factura/i }));
+    await user.click(await screen.findByRole("option", { name: /remito/i }));
+
+    expect(screen.queryByRole("combobox", { name: /punto de venta/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/sin emisión AFIP/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$11/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /confirmar/i }));
+
+    await waitFor(() => expect(registerPayment).toHaveBeenCalledWith({
+      orderId: "order-remito-ui",
+      amount: 11,
+      paymentMethod: "Efectivo",
+      businessId: "business-1",
+      billType: "Remito",
+    }));
+    expect(registerPayment).not.toHaveBeenCalledWith(expect.objectContaining({ ptoVenta: expect.anything() }));
+  });
 });

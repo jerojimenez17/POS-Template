@@ -2,7 +2,12 @@
 
 import { useId, useState } from "react";
 
-const INVOICE_TYPES = ["Factura A", "Factura B", "Factura C"] as const;
+const PAYMENT_DOCUMENT_TYPES = [
+  { value: "Factura A", label: "Factura A" },
+  { value: "Factura B", label: "Factura B" },
+  { value: "Factura C", label: "Factura C" },
+  { value: "Remito", label: "Remito (sin emisión AFIP)" },
+] as const;
 
 interface Props {
   value: string;
@@ -36,8 +41,8 @@ export function InvoiceTypeSelector({ value, onChange }: Props) {
       </button>
       {open && (
         <div id={listboxId} role="listbox" aria-label="Tipos de factura" className="absolute z-50 mt-1 w-full rounded-md border bg-popover p-1 shadow-md">
-          {INVOICE_TYPES.map((type) => (
-            <button key={type} type="button" role="option" aria-selected={value === type} onClick={() => { onChange(type); setOpen(false); }} className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none">{type}</button>
+          {PAYMENT_DOCUMENT_TYPES.map(({ value: type, label }) => (
+            <button key={type} type="button" role="option" aria-selected={value === type} onClick={() => { onChange(type); setOpen(false); }} className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none">{label}</button>
           ))}
         </div>
       )}

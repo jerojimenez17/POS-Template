@@ -121,7 +121,7 @@ const BILL_TYPE_CODES: Readonly<Record<string, number>> = {
 };
 
 type SupportedBillType = "Factura A" | "Factura B" | "Factura C";
-type PaymentVoucherStatus = "PENDING" | "ISSUING" | "AUTHORIZED" | "FAILED" | "UNKNOWN";
+type PaymentVoucherStatus = "NOT_REQUIRED" | "PENDING" | "ISSUING" | "AUTHORIZED" | "FAILED" | "UNKNOWN";
 
 export interface PaymentVoucherStatusDTO extends Record<string, unknown> {
   status: PaymentVoucherStatus | "MISSING";
@@ -199,7 +199,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function safeResultStatus(status: string): PaymentVoucherStatus {
-  return ["PENDING", "ISSUING", "AUTHORIZED", "FAILED", "UNKNOWN"].includes(status)
+  return ["NOT_REQUIRED", "PENDING", "ISSUING", "AUTHORIZED", "FAILED", "UNKNOWN"].includes(status)
     ? status as PaymentVoucherStatus
     : "UNKNOWN";
 }
@@ -322,6 +322,7 @@ function validateAuthorizedPrintRecord(
     ...(typeof value.caeVencimiento === "string" ? { caeVencimiento: value.caeVencimiento } : {}),
     ...(typeof value.qrData === "string" ? { qrData: value.qrData } : {}),
     invoiceNumber,
+    invoicePointOfSale: pointOfSale,
     pointOfSale,
     issuedAt,
     fiscalSnapshot,
@@ -467,6 +468,7 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
       throw new Error("Pago no encontrado");
     }
     const existing = await dependencies.repository.getVoucher(cashMovementId, actorBusinessId);
+    if (existing?.status === "NOT_REQUIRED") return { paymentRecorded: true, voucherStatus: "NOT_REQUIRED" };
     if (existing?.status === "AUTHORIZED") return { paymentRecorded: true, voucherStatus: "AUTHORIZED" };
     if (existing?.status === "UNKNOWN") return { paymentRecorded: true, voucherStatus: "UNKNOWN", reconciliationRequired: true };
     if ((existing?.status === "FAILED" || existing?.status === "PENDING" || existing?.status === "ISSUING") && !retry) {
@@ -603,6 +605,7 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
       caeVencimiento: remoteResult.caeVencimiento,
       qrData: remoteResult.qrData,
       invoiceNumber: remoteResult.invoiceNumber,
+      invoicePointOfSale: remoteResult.pointOfSale,
       pointOfSale: remoteResult.pointOfSale,
       issuedAt: remoteResult.issuedAt,
       fiscalSnapshot: safeFiscalSnapshot(invoice),
@@ -903,7 +906,7 @@ const databaseDependencies: PaymentVoucherDependencies = {
           afipVoucherType: Number(input.afipVoucherType),
           amount: new Prisma.Decimal(Number(input.amount)),
           invoiceNumber: Number(input.invoiceNumber),
-          invoicePointOfSale: Number(input.pointOfSale),
+          invoicePointOfSale: Number(input.invoicePointOfSale ?? input.pointOfSale),
           cae: String(input.cae),
           caeVencimiento: typeof input.caeVencimiento === "string" ? input.caeVencimiento : null,
           qrData: typeof input.qrData === "string" ? input.qrData : null,

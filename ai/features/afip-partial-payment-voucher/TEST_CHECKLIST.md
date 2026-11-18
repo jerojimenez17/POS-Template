@@ -281,6 +281,37 @@ The transport callback is located at the final adapter boundary after invoice/re
 
 **Focused Step 4 result: PASS.** The requested transport and payment/ledger regression tests and scoped quality checks passed; no source or test defect was demonstrated, so none was changed.
 
+## Step 2 — Remito / intentional no-AFIP criteria — 2026-11-18
+
+### Acceptance checks (test-first; verified in Step 4 below)
+
+- [x] **Remito registration without POS:** `registerPayment` accepts `billType: "Remito"` with no `ptoVenta` and without requiring AFIP configuration or credentials.
+- [x] **Atomic no-AFIP persistence:** within the same payment transaction, exactly one `CashMovement` and one unique payment-voucher association are created. Both store the same whole-peso-normalized amount (`10.5 → 11`); the voucher has `status: NOT_REQUIRED`, `billType: Remito`, zero attempts and null AFIP-only fields (including CAE, invoice number/POS, issue timestamp and fiscal snapshot). A voucher-write/transaction failure leaves neither payment nor no-AFIP state committed.
+- [x] **No issuance side effects for Remito:** the Remito branch never calls `issuePaymentVoucherForSession`, AFIP preparation/adapter or outbound HTTP issuer; it does not create a second movement. Existing payment notifications/cache behavior remains independent of this no-AFIP decision.
+- [x] **Factura A/B/C regression:** each invoice type still requires a currently configured POS, persists the normalized payment once, and invokes payment-voucher issuance with the selected type/POS after payment commit. Missing/unconfigured POS rejects before payment persistence.
+- [x] **Initial form selection and preview:** selector includes `Remito (sin emisión AFIP)`. When selected, POS is hidden or disabled, preview clearly states “sin emisión AFIP,” and the form submits no `ptoVenta`; amount normalization continues to use positive whole-peso `Math.round` semantics.
+- [x] **Payment history state:** a `NOT_REQUIRED` row visibly says Remito/no AFIP and exposes no create, retry, reconcile, print, or order-Remito action. Existing MISSING/FAILED/PENDING/ISSUING/UNKNOWN/AUTHORIZED behavior is unchanged.
+- [x] **Schema and migration:** persisted payment-voucher status supports `NOT_REQUIRED`, while attempt statuses do not represent a fabricated AFIP attempt. Migration must not backfill fabricated voucher/attempt/CAE data; AFIP-only fields remain null for the intentional no-AFIP state. **Deployment prerequisite:** apply the additive migration to the target database before enabling Remito registration there.
+- [x] **Safety:** all new action/persistence/AFIP boundaries are mocked. No migration was applied, no database was changed, and no live AFIP/ARCA call was made in this test run.
+
+### Test files
+
+- `src/__tests__/unpaid-orders/register-payment.test.ts` — Remito no-POS, amount normalization, one movement, same-transaction `NOT_REQUIRED`, rollback, no issuer invocation, and A/B/C configured-POS regression.
+- `ai/features/afip-partial-payment-voucher/payment-voucher-pos-selection.test.tsx` — Remito selector, hidden POS, no-AFIP preview and no-POS normalized submission.
+- `ai/features/afip-partial-payment-voucher/payment-voucher-row-action.test.tsx` — passive `NOT_REQUIRED` label with no invoice actions; existing status tests retained.
+- `ai/features/afip-partial-payment-voucher/remito-schema-migration.test.ts` — enum/migration availability and no fabricated voucher/attempt/CAE migration data.
+
+The test-first failures recorded below are historical and were resolved by the implementation iteration verified in the Step 4 entry at the end of this checklist. The tests simulate transactions and inspect schema/migration files; they do not use a live database or AFIP adapter.
+
+### Focused red run
+
+- `npm run test -- --pool=threads --maxWorkers=1 --testTimeout=30000 --reporter=dot src/__tests__/unpaid-orders/register-payment.test.ts` — **1 file, 29 passed, 2 failed**. The expected failures show Remito rejected before entering its transaction; the three A/B/C configured-POS/issuance cases and all three missing-POS cases pass.
+- `npm run test -- --pool=threads --maxWorkers=1 --testTimeout=30000 --reporter=dot ai/features/afip-partial-payment-voucher/payment-voucher-pos-selection.test.tsx ai/features/afip-partial-payment-voucher/payment-voucher-row-action.test.tsx ai/features/afip-partial-payment-voucher/remito-schema-migration.test.ts` — **3 files, 12 passed, 3 failed**. The expected failures show the form omits Remito, row status `NOT_REQUIRED` falls through to “Crear factura,” and the Prisma status enum lacks `NOT_REQUIRED`. The migration check confirming no fabricated voucher/attempt/CAE data passes; the migration still needs an enum extension.
+- **Total across these two focused runs: 4 files, 41 passed, 5 failed.** No failing assertion is a test harness/transform failure. `npx eslint` on all four edited test files passed. `git diff --check` passed with line-ending conversion notices only.
+- Database, Pusher, cache and payment-voucher orchestration boundaries are mocked. Since the Remito payment test asserts `issuePaymentVoucherForSession` is never invoked, no AFIP adapter/remote issuer path is entered. No live AFIP/ARCA call, database write, or migration application occurred.
+
+**G2 status: NOT PASSED.** The Remito acceptance tests and checklist are added as failing test-first coverage. No production code was modified. The implementation follow-up must make the focused cases green while preserving the passing Factura A/B/C and existing status behavior. No live AFIP/ARCA call, database write, or migration application is authorized for this step.
+
 ## Historical Step 4 independent QA — prior fractional-ARS policy — 2026-11-16
 
 Only the three obsolete whole-unit-rounding cases in `src/__tests__/unpaid-orders/register-payment.test.ts` and this checklist were changed in this QA pass. No production code was modified. Persistence, Pusher, cache and voucher boundaries in the registration tests are mocked; no database or live AFIP/ARCA endpoint was contacted.
@@ -555,3 +586,84 @@ No source or test files were edited during this QA pass; only this checklist was
 - The service parser accepts exact whole-peso decimal forms and rejects fractional trusted totals without rounding. Observed evidence is bounded by the implementation parser (maximum 32 characters, at most two fractional digits, and the configured peso ceiling); the tests exercise the safe `123.4` observation.
 - The reconciliation tests inject an authoritative result into the service boundary. The production adapter still returns `unresolved` because no authoritative per-payment gateway lookup is available. Thus the exact comparison behavior is verified, but production reconciliation availability remains blocked.
 - **AC-36 behavior: PASS in the exercised mocked contracts. Focused TypeScript gate: NOT PASSED** due to the one diagnostic in the new reconciliation test mock. The combined focused test suites pass. Fiscal gateway contract confirmation, production authoritative reconciliation, and database-backed migration/concurrency checks remain separate open gates. No live AFIP/ARCA or database writes were used.
+
+## Step 4 independent verification — Remito payment choice — 2026-11-18
+
+The focused run uses mocked Prisma transactions, Pusher/cache and AFIP/payment-voucher boundaries; schema validation is read-only. **No live AFIP/ARCA request, database write, or migration application was performed.**
+
+### Executed verification
+
+- **PASS — Remito, A/B/C, payment-voucher, form/history, account-level Client/modal/row, and ledger reliability suites:**
+  `npm run test -- --pool=threads --maxWorkers=1 --testTimeout=30000 --reporter=dot ai/features/afip-partial-payment-voucher src/__tests__/unpaid-orders/register-payment.test.ts src/components/account-ledger/PaymentVoucherRowActionClient.test.tsx ai/features/account-ledger-detail-reliability`
+  Result: **19 files passed, 176 tests passed, 0 failed** (105.49s), using one stable thread worker.
+- **PASS — Remito payment persistence and no-AFIP boundary:** `registerPayment` accepts Remito without POS and normalizes `10.5` to 11. The test observes exactly one CashMovement and one `NOT_REQUIRED` voucher association in the same transaction, with matching amount, `billType: Remito`, `currentAttempt: 0`, and null AFIP-only fields. It asserts the voucher issuer is never invoked and there is no second movement.
+- **PASS — Prisma SQL NULL assertion:** the action supplies `Prisma.DbNull` for the JSON fiscal snapshot; the test now expects that sentinel rather than JavaScript `null`. This preserves the implementation and correctly represents SQL NULL semantics; no behavior was weakened.
+- **PASS — transaction rollback:** when the Remito association write fails, the transaction mock commits neither the staged CashMovement nor the `NOT_REQUIRED` record; the action reports failure and does not invoke voucher issuance.
+- **PASS — independent post-commit side effects:** the Remito test simulates Pusher rejection and cache invalidation exceptions after commit. Registration still returns success with `paymentRecorded: true`/`NOT_REQUIRED`; all three cache tags are attempted. The existing A/B/C regression independently confirms Pusher failure does not suppress revalidation or the automatic voucher attempt.
+- **PASS — A/B/C regression:** Factura A, B, and C each require a configured POS, normalize 10.5 to 11, persist the movement, and pass the explicitly selected type/POS to voucher issuance. Missing POS rejects before transaction/issuance. Existing voucher contract/action/service/transport tests in the feature directory also pass.
+- **PASS — payment form and history:** Remito is selectable with a normalized preview and “sin emisión AFIP” messaging; POS is absent and no POS is submitted. A `NOT_REQUIRED` history row is passive and exposes no create, retry, print, or invoice control. Client fiscal identity action/modal/placement and payment-row client tests passed in the same run.
+- **PASS — Prisma validation:** `npx prisma validate` reports the schema is valid. This did not apply a migration or connect to a database.
+- **PASS — scoped ESLint:** ESLint across the AFIP partial-payment feature tests, account-ledger reliability tests, registration test, payment/client actions, ledger page/form/components, and voucher service completed with no diagnostics.
+- **PASS — focused TypeScript:** compiler-API check reports 67 project diagnostics overall and **0 diagnostics in the payment/ledger implementation and focused test scope**. This is not a repository-wide TypeScript pass.
+- **PASS — `git diff --check`:** no whitespace errors; Git emitted only LF-to-CRLF conversion notices for existing modified tracked files.
+
+### Scope and result
+
+- No modified path is an ordinary sale checkout (`BillButtons`) or `/searchBill`; those behaviors were not changed by this Remito verification.
+- Tests and source inspection establish the no-AFIP branch and the stated A/B/C regression behavior under mocks. They do not establish PostgreSQL migration/concurrency behavior or external fiscal correctness. The existing IVA/exact-authorized-total gateway confirmation and production authoritative `UNKNOWN` reconciliation remain separate release blockers.
+
+**Step 4 Remito result: PASS for the exercised acceptance contracts.** The only change to an assertion was the QA-owned `null` → `Prisma.DbNull` expectation for SQL NULL; production behavior was not altered. Repository-wide TypeScript/test health, migration application, external fiscal sign-off, and live reconciliation remain unverified/out of scope.
+
+## Step 2 — updated SPEC regressions: migration safety and authorized invoice numbering — 2026-11-18
+
+This pass adds/checks only tests and this checklist; it does not edit production source or migration SQL. Database transactions and AFIP/ARCA transport remain mocked. **No live AFIP/ARCA request, database write, or migration application was performed.**
+
+### Acceptance checks
+
+- [x] **Published migration immutability:** `prisma/migrations/20261104000000_add_payment_vouchers/migration.sql` matches its committed contents at payment-voucher base commit `7756eb0`; do not amend/replay that migration to upgrade an existing database.
+- [x] **Safe additive enum migration:** a later, separate migration extends `PaymentVoucherStatus` with `ALTER TYPE "PaymentVoucherStatus" ADD VALUE IF NOT EXISTS 'NOT_REQUIRED'`; attempt-status enum remains unchanged and no migration fabricates Remito voucher/attempt/CAE rows.
+- [x] **Generated Prisma enum check:** runtime import of the current generated `@prisma/client` must expose `PaymentVoucherStatus.NOT_REQUIRED`; the test reads the actual generated export, not a test-local enum. Current generated client exposes it.
+- [x] **Remito registration transaction boundary:** no-POS Remito registration records one normalized CashMovement and one same-transaction `NOT_REQUIRED` voucher, updates the client balance and order paid status once, and invokes no payment-voucher issuer. The mocked issuer is the action's AFIP/CAE dispatch seam; this test makes no outbound AFIP call.
+- [x] **Authorized-response data preservation:** raw adapter response `PtoVta=7`, `nroCbte=42` is parsed as authorized POS 7 / `CbteDesde` 42 even when the read-only sequence preview is 1. The voucher contract separately verifies persisted authorized number/POS and print DTO values remain 42/7 rather than movement id, current attempt, or preview values.
+- [x] **A/B/C printed number formatting:** payment-voucher printing uses the same `formatInvoiceNumberFull` behavior as `/newBill`; for authorized POS 7 and number 42, print exactly `007-0042` (not wider manual padding or raw/default `1`). Existing authorized response fields and immutable recipient snapshot remain the source.
+
+### Test locations
+
+- `ai/features/afip-partial-payment-voucher/remito-schema-migration.test.ts` — pinned base migration comparison, separate idempotent additive enum migration, generated Prisma enum runtime check, and no fabricated migration records.
+- `src/__tests__/unpaid-orders/register-payment.test.ts` — strengthened Remito runtime assertions for client balance, order paid status, a single movement, atomic `NOT_REQUIRED`, and zero issuer calls.
+- `ai/features/afip-partial-payment-voucher/payment-voucher-transport-boundary.test.ts` — raw authorization response and sequence-preview distinction.
+- `ai/features/afip-partial-payment-voucher/payment-voucher.contract.test.ts` — persistence and authorized print DTO preserve the accepted number/POS.
+- `ai/features/afip-partial-payment-voucher/payment-voucher-print-ui.test.tsx` — print HTML follows shared formatting and verifies the exact `007-0042` output.
+
+### Focused verification
+
+- Ran `npm run test -- --pool=threads --maxWorkers=1 --testTimeout=30000 ai/features/afip-partial-payment-voucher/remito-schema-migration.test.ts ai/features/afip-partial-payment-voucher/payment-voucher.contract.test.ts ai/features/afip-partial-payment-voucher/payment-voucher-print-ui.test.tsx ai/features/afip-partial-payment-voucher/payment-voucher-transport-boundary.test.ts src/__tests__/unpaid-orders/register-payment.test.ts` — **5 files, 105 passed, 4 failed (109 total)**.
+- The **four expected failing regressions** are: base migration differs from the pinned prior commit because `NOT_REQUIRED` was added directly to it; no later `IF NOT EXISTS` enum migration exists; and both print UI cases produce 5/8- and 5/8-digit manually padded values (for the requested case current output is `00007-00000042`, not `007-0042`).
+- The **105 passing tests** include the Remito transaction/balance/no-issuer coverage, current generated Prisma enum runtime check, A/B/C authorized response number/POS parsing, persisted values/print DTO contract, and surrounding existing payment behavior. No infrastructure/harness failure was reported.
+- `npx eslint` on the five modified test files passed with no diagnostics.
+
+**Historical G2 status: NOT PASSED at test-first time.** The failures recorded above were resolved by the implementation iteration verified below. The current generated Prisma client already exposes `NOT_REQUIRED`; this was verified, not assumed. No live AFIP/ARCA call, database write, or migration application occurred.
+
+## Step 4 independent verification — latest migration and print-number fixes — 2026-11-18
+
+Only this checklist was edited during this QA verification. Source and test files were left unchanged. Tests use transaction/AFIP mocks. **No database was changed, no migration was applied, and no live AFIP/ARCA call was made.**
+
+### Verification results
+
+- **PASS — focused tests:** `npm run test -- --pool=threads --maxWorkers=1 --testTimeout=60000 --reporter=dot ai/features/afip-partial-payment-voucher src/__tests__/unpaid-orders/register-payment.test.ts src/components/account-ledger/PaymentVoucherRowActionClient.test.tsx` — **14 files passed, 163 tests passed, 0 failed** (65.25s). This includes migration immutability/additive enum tests, the generated Prisma enum, Remito registration and history, payment-voucher/action/history, and print UI/transport contracts.
+- **PASS — published migration content/checksum:** `20261104000000_add_payment_vouchers/migration.sql` matches the committed content at `7756eb0` after line-ending normalization. Current and committed Git blob hashes both equal `74200af561c26ce6ab2ef7c05a20b4494581bc73`; no diff to the published SQL was found.
+- **PASS — additive migration and enum:** `20261118000000_add_not_required_payment_voucher_status/migration.sql` contains only `ALTER TYPE "PaymentVoucherStatus" ADD VALUE IF NOT EXISTS 'NOT_REQUIRED';`. The runtime generated-client check confirms the enum member exists, and the attempt-status enum does not contain it. **Deployment prerequisite:** this additive migration must be applied to the target database before Remito is enabled there; this verification did not establish that any database is upgraded.
+- **PASS — Remito registration and no AFIP:** `registerPayment` writes one movement and its `NOT_REQUIRED` voucher in the same transaction with matching normalized amount, `billType: Remito`, zero attempts and null AFIP-only fields. The action returns after commit without voucher issuance. Transaction-mock coverage verifies no POS/AFIP requirement, no second movement, no issuer invocation, and rollback if association persistence fails. The row is passive, with no create/retry/print action.
+- **PASS — authorized invoice print number:** the print test asserts `formatInvoiceNumberFull(42, 7)` is exactly `007-0042` and the printed heading contains `Factura 007-0042`; it rejects `00007-00000042` and preview `00001-00000001`. Service/transport tests verify authorized `PtoVta=7` and `CbteDesde=42` are persisted and returned for printing from the voucher, rather than deriving them from the payment row id or sequence preview.
+- **PASS — scoped ESLint:** `npx eslint` over the feature directory and relevant payment/action/history/print UI paths completed with no diagnostics.
+- **PASS — scoped TypeScript:** compiler-API check rooted in 22 selected files, including the NextAuth augmentation and relevant payment-voucher/Remito/print/action/history files, completed with **0 diagnostics in selected files**. This is not a full repository typecheck.
+- **PASS — Prisma schema:** `npx prisma validate` succeeded without applying a migration or changing the database.
+- **PASS — diff check:** `git diff --check` exited 0; only line-ending conversion notices were emitted.
+
+### Gate and limits
+
+- The generated Prisma client/schema do not substitute for applying the additive migration: existing target databases must be upgraded before Remito registration is enabled. No database migration or write was run in this QA pass.
+- This focused result does not resolve the existing A/B/C external IVA/exact-authorized-total contract or the production authoritative UNKNOWN reconciliation blocker. No live fiscal endpoint was contacted.
+- Repository-wide tests/lint/typecheck were not run; only the scoped checks above are reported.
+
+**Step 4 result: PASS for the requested latest fixes.** The published migration remains byte-identical at the Git-object level, the new enum migration and generated client are verified, Remito is represented as a transactional no-AFIP choice, and printing uses authorized persisted POS/number values formatted as `007-0042`. No defect was demonstrated, so source/tests were not modified. **Remito requires deployment of the new database migration before use.**

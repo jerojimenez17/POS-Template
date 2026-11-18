@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { registerPayment } from "@/actions/unpaid-orders";
 import { issuePaymentVoucherForSession } from "@/lib/server/payment-voucher";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { Prisma } from "@prisma/client";
 import type { PaidStatus } from "@prisma/client";
 
 const CONFIGURED_PTO_VENTA = 3;
@@ -44,7 +45,7 @@ describe("registerPayment", () => {
 
   it.each([
     ["missing", undefined],
-    ["unsupported", "Remito"],
+    ["unsupported", "Presupuesto"],
   ])("rechaza un billType %s antes de persistir el pago", async (_label, billType) => {
     const { db } = await import("@/lib/db");
     const input = {
@@ -793,4 +794,250 @@ describe("registerPayment", () => {
     });
     expect(JSON.stringify(result)).not.toMatch(/DB_SECRET|customer_table|PrismaClientKnownRequestError|PRIVATE_STACK_TRACE/);
   });
+
+  it("registra Remito sin POS con movimiento redondeado y estado NOT_REQUIRED en la misma transacción, sin emisión ni doble movimiento", async () => {
+    const { db } = await import("@/lib/db");
+    const { pusherServer } = await import("@/lib/pusher-server");
+    const { revalidateTag } = await import("next/cache");
+    const movementWrites: unknown[] = [];
+    const voucherWrites: unknown[] = [];
+    const transactionTrace: string[] = [];
+    const orderUpdates: unknown[] = [];
+    const clientUpdates: unknown[] = [];
+    let transactionId = 0;
+    let transactionCommitted = false;
+    let pusherObservedCommittedTransaction = false;
+
+    vi.mocked(db.$transaction).mockImplementation(async (callback) => {
+      transactionId += 1;
+      const currentTransactionId = transactionId;
+      const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        order: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "order-remito",
+            total: 20,
+            clientId: "client-remito",
+            businessId: "business-123",
+            paidStatus: "inpago",
+            cashMovements: [],
+          }),
+          update: vi.fn(async (input: unknown) => {
+            orderUpdates.push(input);
+            return { id: "order-remito" };
+          }),
+        },
+        cashMovement: {
+          create: vi.fn(async (input: unknown) => {
+            transactionTrace.push(`movement:${currentTransactionId}`);
+            movementWrites.push(input);
+            return { id: "cash-remito", total: 11 };
+          }),
+        },
+        paymentVoucher: {
+          create: vi.fn(async (input: unknown) => {
+            transactionTrace.push(`voucher:${currentTransactionId}`);
+            voucherWrites.push(input);
+            return { id: "voucher-remito", status: "NOT_REQUIRED" };
+          }),
+        },
+          client: {
+            update: vi.fn(async (input: unknown) => {
+              clientUpdates.push(input);
+              return { id: "client-remito" };
+            }),
+          },
+      };
+      const result = await callback(tx as never);
+      transactionCommitted = true;
+      return result;
+    });
+    vi.mocked(pusherServer.trigger).mockImplementationOnce(async () => {
+      pusherObservedCommittedTransaction = transactionCommitted;
+      throw new Error("Pusher unavailable after payment commit");
+    });
+    vi.mocked(revalidateTag).mockImplementation(() => {
+      throw new Error("Cache invalidation unavailable");
+    });
+
+    const result = await registerPayment({
+      orderId: "order-remito",
+      amount: 10.5,
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      billType: "Remito",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: { paymentRecorded: true, voucherStatus: "NOT_REQUIRED" },
+    });
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(movementWrites).toEqual([
+      expect.objectContaining({ data: expect.objectContaining({ total: 11, orderId: "order-remito" }) }),
+    ]);
+    expect(voucherWrites).toEqual([
+      expect.objectContaining({
+        data: expect.objectContaining({
+          cashMovementId: "cash-remito",
+          status: "NOT_REQUIRED",
+          billType: "Remito",
+          amount: 11,
+          afipVoucherType: null,
+          invoiceNumber: null,
+          invoicePointOfSale: null,
+          cae: null,
+          issuedAt: null,
+          fiscalSnapshot: Prisma.DbNull,
+          currentAttempt: 0,
+        }),
+      }),
+    ]);
+    expect(transactionTrace).toEqual(["movement:1", "voucher:1"]);
+    expect(movementWrites).toHaveLength(1);
+    expect(clientUpdates).toEqual([
+      expect.objectContaining({
+        where: { id: "client-remito" },
+        data: { balance: { decrement: 11 } },
+      }),
+    ]);
+    expect(orderUpdates).toEqual([
+      expect.objectContaining({
+        where: { id: "order-remito" },
+        data: { paidStatus: "inpago" },
+      }),
+    ]);
+    // registerPayment's only voucher/AFIP dispatch seam is intentionally bypassed for Remito.
+    expect(issuePaymentVoucherForSession).not.toHaveBeenCalled();
+    expect(pusherServer.trigger).toHaveBeenCalledTimes(1);
+    expect(pusherObservedCommittedTransaction).toBe(true);
+    expect(revalidateTag).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(revalidateTag).mock.calls.map(([tag]) => tag)).toEqual([
+      CACHE_TAGS.ORDERS,
+      CACHE_TAGS.CLIENTS,
+      CACHE_TAGS.CASHBOX,
+    ]);
+    vi.mocked(revalidateTag).mockReset();
+  });
+
+  it("no conserva ni el pago ni NOT_REQUIRED si falla la transacción Remito", async () => {
+    const { db } = await import("@/lib/db");
+    const stagedPayments: unknown[] = [];
+    const stagedVouchers: unknown[] = [];
+    const committedPayments: unknown[] = [];
+    const committedVouchers: unknown[] = [];
+    const movementCreate = vi.fn(async (input: unknown) => {
+      stagedPayments.push(input);
+      return { id: "cash-remito-rollback", total: 11 };
+    });
+    const voucherCreate = vi.fn(async (input: unknown) => {
+      stagedVouchers.push(input);
+      throw new Error("simulated transaction failure");
+    });
+
+    vi.mocked(db.$transaction).mockImplementation(async (callback) => {
+      const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        order: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "order-remito-rollback",
+            total: 20,
+            clientId: "client-1",
+            businessId: "business-123",
+            paidStatus: "inpago",
+            cashMovements: [],
+          }),
+          update: vi.fn().mockResolvedValue({ id: "order-remito-rollback" }),
+        },
+        cashMovement: { create: movementCreate },
+        paymentVoucher: { create: voucherCreate },
+        client: { update: vi.fn().mockResolvedValue({ id: "client-1" }) },
+      };
+      try {
+        const value = await callback(tx as never);
+        committedPayments.push(...stagedPayments);
+        committedVouchers.push(...stagedVouchers);
+        return value;
+      } catch (error) {
+        throw error;
+      }
+    });
+
+    const result = await registerPayment({
+      orderId: "order-remito-rollback",
+      amount: 10.5,
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      billType: "Remito",
+    });
+
+    expect(movementCreate).toHaveBeenCalledTimes(1);
+    expect(voucherCreate).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(false);
+    expect(committedPayments).toEqual([]);
+    expect(committedVouchers).toEqual([]);
+    expect(issuePaymentVoucherForSession).not.toHaveBeenCalled();
+  });
+
+  it.each(["Factura A", "Factura B", "Factura C"] as const)(
+    "mantiene POS obligatorio e intenta emitir una factura %s",
+    async (billType) => {
+      const { db } = await import("@/lib/db");
+      const cashMovementCreate = vi.fn().mockResolvedValue({ id: `cash-${billType}` });
+      vi.mocked(db.$transaction).mockImplementation(async (callback) => callback({
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        order: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "order-factura",
+            total: 20,
+            clientId: "client-1",
+            businessId: "business-123",
+            paidStatus: "inpago",
+            cashMovements: [],
+          }),
+          update: vi.fn().mockResolvedValue({ id: "order-factura" }),
+        },
+        cashMovement: { create: cashMovementCreate },
+        client: { update: vi.fn().mockResolvedValue({ id: "client-1" }) },
+      } as never));
+
+      const result = await registerPayment({
+        orderId: "order-factura",
+        amount: 10.5,
+        paymentMethod: "Efectivo",
+        businessId: "business-123",
+        billType,
+        ptoVenta: CONFIGURED_PTO_VENTA,
+      });
+
+      expect(result.success).toBe(true);
+      expect(cashMovementCreate).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ total: 11 }),
+      }));
+      expect(issuePaymentVoucherForSession).toHaveBeenCalledWith({
+        cashMovementId: `cash-${billType}`,
+        billType,
+        ptoVenta: CONFIGURED_PTO_VENTA,
+      });
+    },
+  );
+
+  it.each(["Factura A", "Factura B", "Factura C"] as const)(
+    "rechaza %s antes de persistir cuando no se propone POS",
+    async (billType) => {
+      const { db } = await import("@/lib/db");
+
+      const result = await registerPayment({
+        orderId: "order-factura-no-pos",
+        amount: 10,
+        paymentMethod: "Efectivo",
+        businessId: "business-123",
+        billType,
+      });
+
+      expect(result.success).toBe(false);
+      expect(db.$transaction).not.toHaveBeenCalled();
+      expect(issuePaymentVoucherForSession).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -5,8 +5,7 @@ import { auth } from "@/auth";
 import { after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
-import { MovementType, PaidStatus } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { MovementType, PaidStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
 import { requireFeature } from "@/lib/auth-gates";
@@ -340,20 +339,24 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
       amount: z.number().finite().positive(),
       paymentMethod: z.string().min(1),
       businessId: z.string().min(1),
-      billType: z.enum(["Factura A", "Factura B", "Factura C"]),
-      ptoVenta: z.number().int().positive(),
+      billType: z.enum(["Factura A", "Factura B", "Factura C", "Remito"]),
+      ptoVenta: z.number().int().positive().optional(),
     }).strict().safeParse(input);
     if (!parsedInput.success) {
       const billTypeInvalid = parsedInput.error.issues.some((issue) => issue.path[0] === "billType");
-      const pointOfSaleInvalid = parsedInput.error.issues.some((issue) => issue.path[0] === "ptoVenta");
       const error = billTypeInvalid
         ? "Seleccione Factura A, Factura B o Factura C"
-        : pointOfSaleInvalid
-          ? "Seleccione un punto de venta configurado"
-          : "Los datos del pago no son válidos";
+        : "Los datos del pago no son válidos";
       return { success: false, error };
     }
     const paymentInput = parsedInput.data;
+    const isRemito = paymentInput.billType === "Remito";
+    if (isRemito && paymentInput.ptoVenta !== undefined) {
+      return { success: false, error: "Los datos del pago no son válidos" };
+    }
+    if (!isRemito && (!Number.isSafeInteger(paymentInput.ptoVenta) || (paymentInput.ptoVenta ?? 0) <= 0)) {
+      return { success: false, error: "Seleccione un punto de venta configurado" };
+    }
     const paymentPesos = toPositiveWholePesos(paymentInput.amount);
     if (paymentPesos === null) {
       return { success: false, error: "Los datos del pago no son válidos" };
@@ -364,19 +367,21 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
     const businessId = await getAuthorizedBusinessId(paymentInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
-    // A POS proposal is required before the payment transaction begins. Read
-    // the authenticated business's current configuration rather than trusting
-    // the UI's potentially stale list.
-    const business = await db.business.findUnique({
-      where: { id: businessId },
-      select: { ptoVenta: true },
-    });
-    const configuredPtoVentas = business?.ptoVenta;
-    if (!Array.isArray(configuredPtoVentas)
-      || configuredPtoVentas.length === 0
-      || configuredPtoVentas.some((value) => !Number.isSafeInteger(value) || value <= 0)
-      || !configuredPtoVentas.includes(paymentInput.ptoVenta)) {
-      return { success: false, error: "Seleccione un punto de venta configurado" };
+    if (!isRemito) {
+      // A POS proposal is required for invoices before the payment transaction
+      // begins. Read the authenticated business's current configuration rather
+      // than trusting the UI's potentially stale list.
+      const business = await db.business.findUnique({
+        where: { id: businessId },
+        select: { ptoVenta: true },
+      });
+      const configuredPtoVentas = business?.ptoVenta;
+      if (!Array.isArray(configuredPtoVentas)
+        || configuredPtoVentas.length === 0
+        || configuredPtoVentas.some((value) => !Number.isSafeInteger(value) || value <= 0)
+        || !configuredPtoVentas.includes(paymentInput.ptoVenta as number)) {
+        return { success: false, error: "Seleccione un punto de venta configurado" };
+      }
     }
 
     const movement = await db.$transaction(async (tx) => {
@@ -439,6 +444,27 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
       };
       const newMovement = await tx.cashMovement.create({ data: cashMovementData });
 
+      if (isRemito) {
+        await tx.paymentVoucher.create({
+          data: {
+            cashMovementId: newMovement.id,
+            businessId,
+            status: "NOT_REQUIRED",
+            amount: paymentPesos,
+            billType: "Remito",
+            afipVoucherType: null,
+            invoiceNumber: null,
+            invoicePointOfSale: null,
+            cae: null,
+            caeVencimiento: null,
+            qrData: null,
+            issuedAt: null,
+            fiscalSnapshot: Prisma.DbNull,
+            currentAttempt: 0,
+          },
+        });
+      }
+
       if (order.clientId) {
         await tx.client.update({
           where: { id: order.clientId },
@@ -470,11 +496,15 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
       }
     }
 
+    if (isRemito) {
+      return { success: true, data: { paymentRecorded: true, voucherStatus: "NOT_REQUIRED" } };
+    }
+
     try {
       const voucherResult = await issuePaymentVoucherForSession({
         cashMovementId: movement.id,
         billType: paymentInput.billType,
-        ptoVenta: paymentInput.ptoVenta,
+        ptoVenta: paymentInput.ptoVenta as number,
       });
       return { success: true, data: { ...voucherResult, paymentRecorded: true } };
     } catch (voucherError: unknown) {

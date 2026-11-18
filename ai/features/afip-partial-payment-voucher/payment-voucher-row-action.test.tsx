@@ -12,7 +12,7 @@ declare global {
 interface PaymentVoucherRowActionProps {
   cashMovementId: string;
   amount: number;
-  status: "MISSING" | "FAILED" | "PENDING" | "ISSUING" | "AUTHORIZED" | "UNKNOWN";
+  status: "NOT_REQUIRED" | "MISSING" | "FAILED" | "PENDING" | "ISSUING" | "AUTHORIZED" | "UNKNOWN";
   configuredPtoVentas?: number[];
   proposedBillType?: string;
   onCreateOrRetry?: (input: { cashMovementId: string; billType: string; ptoVenta: number }) => Promise<void>;
@@ -166,5 +166,24 @@ describe("individual payment-row voucher actions", () => {
     fireEvent.click(screen.getByRole("button", { name: /print.*invoice|print.*voucher|imprimir/i }));
 
     expect(onPrint).toHaveBeenCalledWith({ cashMovementId: "movement-5" });
+  });
+
+  it("labels NOT_REQUIRED as Remito/no AFIP and renders no create, retry, or print action", async () => {
+    const PaymentVoucherRowAction = await loadRowAction();
+    const onCreateOrRetry = vi.fn().mockResolvedValue(undefined);
+    const onPrint = vi.fn();
+
+    render(createElement(PaymentVoucherRowAction, {
+      cashMovementId: "movement-remito",
+      amount: 11,
+      status: "NOT_REQUIRED",
+      onCreateOrRetry,
+      onPrint,
+    }));
+
+    expect(screen.getByText(/sin emisión AFIP.*remito|remito.*sin emisión AFIP/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create|retry|print|invoice|factura|imprimir/i })).not.toBeInTheDocument();
+    expect(onCreateOrRetry).not.toHaveBeenCalled();
+    expect(onPrint).not.toHaveBeenCalled();
   });
 });

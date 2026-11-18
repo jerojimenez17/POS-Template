@@ -8,9 +8,10 @@ import {
   getPaymentVoucherStatusAction,
   printPaymentVoucherAction,
 } from "@/actions/payment-voucher";
+import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
 import { PaymentVoucherRowAction } from "./PaymentVoucherRowAction";
 
-type VoucherStatus = "MISSING" | "FAILED" | "PENDING" | "ISSUING" | "AUTHORIZED" | "UNKNOWN";
+type VoucherStatus = "NOT_REQUIRED" | "MISSING" | "FAILED" | "PENDING" | "ISSUING" | "AUTHORIZED" | "UNKNOWN";
 
 interface Props {
   cashMovementId: string;
@@ -54,7 +55,7 @@ export function PaymentVoucherRowActionClient({ cashMovementId, amount, status, 
     let active = true;
     void getPaymentVoucherStatusAction({ cashMovementId }).then((voucher) => {
       if (!active) return;
-      if (!voucher || typeof voucher.status !== "string" || !["MISSING", "FAILED", "PENDING", "ISSUING", "AUTHORIZED", "UNKNOWN"].includes(voucher.status)) {
+      if (!voucher || typeof voucher.status !== "string" || !["NOT_REQUIRED", "MISSING", "FAILED", "PENDING", "ISSUING", "AUTHORIZED", "UNKNOWN"].includes(voucher.status)) {
         setStatusErrorKey(currentStatusKey);
         return;
       }
@@ -120,12 +121,14 @@ export function PaymentVoucherRowActionClient({ cashMovementId, amount, status, 
     const total = typeof voucher.total === "number" ? voucher.total : amount;
     const pointOfSale = Number(voucher.pointOfSale);
     const invoiceNumber = Number(voucher.invoiceNumber);
+    const formattedInvoiceNumber = formatInvoiceNumberFull(invoiceNumber, pointOfSale);
+    if (!formattedInvoiceNumber) throw new Error("payment_voucher_print_unavailable");
     const dateValue = voucher.issuedAt;
     const issuedDate = dateValue instanceof Date ? dateValue : typeof dateValue === "string" ? new Date(dateValue) : null;
     const issuedAt = issuedDate && !Number.isNaN(issuedDate.getTime()) ? issuedDate.toLocaleString("es-AR") : "";
     const documentType = typeof recipient.documentType === "string" ? recipient.documentType : "";
     const documentNumber = typeof recipient.documentNumber === "string" ? recipient.documentNumber : "";
-    popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Factura ${escapeHtml(voucher.billType)}</title><style>body{font:14px Arial,sans-serif;max-width:720px;margin:32px auto;color:#111}header,footer{border-bottom:1px solid #bbb;padding:12px 0}footer{border:0;border-top:1px solid #bbb}table{width:100%;border-collapse:collapse;margin:24px 0}th,td{text-align:left;padding:10px;border-bottom:1px solid #ddd}.amount{text-align:right}.qr{width:110px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px}.total{font-weight:bold;font-size:18px;text-align:right}</style></head><body><header><h1>${escapeHtml(voucher.billType)}</h1><p>Factura ${String(pointOfSale).padStart(5, "0")}-${String(invoiceNumber).padStart(8, "0")}</p><p>Fecha: ${escapeHtml(issuedAt)}</p></header><section class="meta"><p>Cliente: ${escapeHtml(recipient.name)}</p><p>Condición IVA: ${escapeHtml(recipient.ivaCondition)}</p>${documentType && documentNumber ? `<p>Documento: ${escapeHtml(documentType)} ${escapeHtml(documentNumber)}</p>` : ""}<p>CAE: ${escapeHtml(voucher.cae)}</p><p>Vencimiento CAE: ${escapeHtml(voucher.caeVencimiento)}</p></section><table><thead><tr><th>Descripción</th><th>Cantidad</th><th class="amount">Importe</th></tr></thead><tbody><tr><td>Pago parcial</td><td>1</td><td class="amount">$${formatAmount(total)}</td></tr></tbody></table><p class="total">Total: $${formatAmount(total)}</p><footer>${qrImage ? `<img class="qr" alt="Código QR del comprobante" src="${qrImage}">` : ""}</footer><script>window.onload=()=>window.print()</script></body></html>`);
+    popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Factura ${escapeHtml(voucher.billType)}</title><style>body{font:14px Arial,sans-serif;max-width:720px;margin:32px auto;color:#111}header,footer{border-bottom:1px solid #bbb;padding:12px 0}footer{border:0;border-top:1px solid #bbb}table{width:100%;border-collapse:collapse;margin:24px 0}th,td{text-align:left;padding:10px;border-bottom:1px solid #ddd}.amount{text-align:right}.qr{width:110px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px}.total{font-weight:bold;font-size:18px;text-align:right}</style></head><body><header><h1>${escapeHtml(voucher.billType)}</h1><p>Factura ${escapeHtml(formattedInvoiceNumber)}</p><p>Fecha: ${escapeHtml(issuedAt)}</p></header><section class="meta"><p>Cliente: ${escapeHtml(recipient.name)}</p><p>Condición IVA: ${escapeHtml(recipient.ivaCondition)}</p>${documentType && documentNumber ? `<p>Documento: ${escapeHtml(documentType)} ${escapeHtml(documentNumber)}</p>` : ""}<p>CAE: ${escapeHtml(voucher.cae)}</p><p>Vencimiento CAE: ${escapeHtml(voucher.caeVencimiento)}</p></section><table><thead><tr><th>Descripción</th><th>Cantidad</th><th class="amount">Importe</th></tr></thead><tbody><tr><td>Pago parcial</td><td>1</td><td class="amount">$${formatAmount(total)}</td></tr></tbody></table><p class="total">Total: $${formatAmount(total)}</p><footer>${qrImage ? `<img class="qr" alt="Código QR del comprobante" src="${qrImage}">` : ""}</footer><script>window.onload=()=>window.print()</script></body></html>`);
     popup.document.close();
     } catch {
       popup.close();

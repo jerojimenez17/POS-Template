@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { printPaymentVoucherAction } from "@/actions/payment-voucher";
+import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
 
 declare global {
   interface ImportMeta {
@@ -78,7 +79,7 @@ describe("payment voucher recipient printing", () => {
     expect(printedHtml).toContain("Responsable Inscripto");
     expect(printedHtml).toContain("DNI");
     expect(printedHtml).toContain("00123456");
-    expect(printedHtml).toContain("00008-00000077");
+    expect(printedHtml).toContain(formatInvoiceNumberFull(77, 8));
     expect(printPaymentVoucherAction).toHaveBeenCalledWith({ cashMovementId: "movement-1" });
     expect(close).toHaveBeenCalledTimes(1);
   });
@@ -112,5 +113,43 @@ describe("payment voucher recipient printing", () => {
 
     await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
     expect(String(write.mock.calls[0]?.[0])).toContain("Condición IVA: Consumidor Final");
+  });
+
+  it("prints the authorized PtoVta/CbteDesde using the /newBill invoice-number format", async () => {
+    const PaymentVoucherRowActionClient = await loadPaymentVoucherRowClient();
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    vi.mocked(printPaymentVoucherAction).mockResolvedValue({
+      status: "AUTHORIZED",
+      billType: "Factura C",
+      afipVoucherType: 11,
+      total: 123,
+      cae: "12345678901234",
+      pointOfSale: 7, // PtoVta returned with the authorization
+      invoiceNumber: 42, // CbteDesde returned with the authorization
+      issuedAt: new Date("2026-11-18T12:00:00.000Z"),
+      sequencePreview: 1,
+      recipient: {
+        name: "Authorized recipient",
+        ivaCondition: "Consumidor Final",
+        documentType: null,
+        documentNumber: null,
+      },
+    } as never);
+    render(createElement(PaymentVoucherRowActionClient, {
+      cashMovementId: "movement-row-id-1",
+      amount: 123,
+      status: "AUTHORIZED",
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: /print.*invoice|print.*voucher|imprimir/i }));
+
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+    const printedHtml = String(write.mock.calls[0]?.[0]);
+    const formattedAuthorizedNumber = formatInvoiceNumberFull(42, 7);
+    expect(formattedAuthorizedNumber).toBe("007-0042");
+    expect(printedHtml).toContain(`Factura ${formattedAuthorizedNumber}`);
+    expect(printedHtml).not.toContain("00007-00000042");
+    expect(printedHtml).not.toContain("00001-00000001");
+    expect(printPaymentVoucherAction).toHaveBeenCalledWith({ cashMovementId: "movement-row-id-1" });
   });
 });

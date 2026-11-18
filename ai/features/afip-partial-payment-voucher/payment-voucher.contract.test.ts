@@ -240,6 +240,56 @@ describe("payment voucher amount, mapping, and DTO contract", () => {
     expect(mocks.claim).toHaveBeenCalledWith(expect.objectContaining({ amount: 10 }));
     expect(mocks.persistAuthorized).toHaveBeenCalledWith(expect.objectContaining({ amount: 10, total: 10 }));
   });
+
+  it("stores and returns the authorized POS and CbteDesde number without substituting a row or sequence preview", async () => {
+    const authorizedAt = new Date("2026-11-18T12:00:00.000Z");
+    const { deps, mocks } = dependencies();
+    const movement = payment({ id: "movement-row-id-1" });
+    const persistedAuthorization: Record<string, unknown> = {};
+    mocks.findPayment.mockResolvedValue({ ...movement, business: { ptoVenta: [7] } });
+    mocks.issue.mockResolvedValue({
+      kind: "authorized",
+      total: 123,
+      cae: "12345678901234",
+      invoiceNumber: 42, // authorized response CbteDesde
+      pointOfSale: 7, // authorized response PtoVta
+      issuedAt: authorizedAt,
+    });
+    mocks.persistAuthorized.mockImplementation(async (input: Record<string, unknown>) => {
+      Object.assign(persistedAuthorization, input);
+    });
+    const service = await createService(deps);
+
+    await service.issue({ cashMovementId: movement.id, billType: "Factura C", ptoVenta: 7 });
+
+    expect(persistedAuthorization).toEqual(expect.objectContaining({ invoiceNumber: 42, pointOfSale: 7 }));
+    mocks.getVoucher.mockResolvedValue({
+      status: "AUTHORIZED",
+      billType: "Factura C",
+      afipVoucherType: 11,
+      amount: 123,
+      total: 123,
+      cae: "12345678901234",
+      invoiceNumber: persistedAuthorization?.invoiceNumber,
+      pointOfSale: persistedAuthorization?.pointOfSale,
+      issuedAt: authorizedAt,
+      fiscalSnapshot: {
+        recipient: {
+          name: "Recipient at authorization",
+          ivaCondition: "Consumidor Final",
+          documentType: null,
+          documentNumber: null,
+        },
+      },
+      currentAttempt: 1,
+      sequencePreview: 1,
+    });
+
+    const printDto = await service.print({ cashMovementId: movement.id });
+
+    expect(printDto).toMatchObject({ invoiceNumber: 42, pointOfSale: 7 });
+    expect(printDto).not.toMatchObject({ invoiceNumber: 1, pointOfSale: 1 });
+  });
 });
 
 describe("payment-scoped issuance and safety contract", () => {
