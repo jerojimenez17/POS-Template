@@ -5,12 +5,16 @@ import { auth } from "@/auth";
 import { after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
-import { MovementType, PaidStatus } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { MovementType, PaidStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
 import { requireFeature } from "@/lib/auth-gates";
 import { processInBatches, bulkUpdateStock } from "@/lib/batch-utils";
+import {
+  issuePaymentVoucherForSession,
+} from "@/lib/server/payment-voucher";
+import { paymentVoucherIssueFailureOutcome } from "@/lib/server/payment-voucher-outcome";
+import { MAX_WHOLE_PESO_AMOUNT, toPositiveWholePesos, toWholePesos } from "@/lib/money";
 
 interface ActionResult<T = unknown> {
   success: boolean;
@@ -38,13 +42,6 @@ interface CreateUnpaidOrderInput {
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
   notes?: string;
-}
-
-interface RegisterPaymentInput {
-  orderId: string;
-  amount: number;
-  paymentMethod: string;
-  businessId: string;
 }
 
 interface CancelUnpaidOrderInput {
@@ -97,6 +94,31 @@ export interface GetUnpaidOrdersInput {
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
+
+const logPaymentSideEffectFailure = (code: string, error: unknown): void => {
+  console.error("[registerPayment] post-commit side effect failed", {
+    code,
+    errorType: error instanceof Error ? "Error" : "NonError",
+  });
+};
+
+type PaymentRegistrationErrorCode =
+  | "ORDER_NOT_FOUND"
+  | "INVALID_BALANCE"
+  | "OVERPAYMENT";
+
+const PAYMENT_REGISTRATION_ERROR_MESSAGES: Record<PaymentRegistrationErrorCode, string> = {
+  ORDER_NOT_FOUND: "Orden no encontrada",
+  INVALID_BALANCE: "El saldo de la orden no es válido",
+  OVERPAYMENT: "El pago no puede exceder el saldo pendiente",
+};
+
+class PaymentRegistrationError extends Error {
+  constructor(readonly code: PaymentRegistrationErrorCode) {
+    super(PAYMENT_REGISTRATION_ERROR_MESSAGES[code]);
+    this.name = "PaymentRegistrationError";
+  }
+}
 
 interface LedgerCursor {
   // PostgreSQL sorts NULL after every value for ASC. Keep NULL distinct from
@@ -310,73 +332,199 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
   }
 };
 
-export const registerPayment = async (input: RegisterPaymentInput): Promise<ActionResult> => {
+export const registerPayment = async (input: unknown): Promise<ActionResult> => {
   try {
-    const businessId = await getAuthorizedBusinessId(input.businessId);
+    const parsedInput = z.object({
+      orderId: z.string().min(1),
+      amount: z.number().finite().positive(),
+      paymentMethod: z.string().min(1),
+      businessId: z.string().min(1),
+      billType: z.enum(["Factura A", "Factura B", "Factura C", "Remito"]),
+      ptoVenta: z.number().int().positive().optional(),
+    }).strict().safeParse(input);
+    if (!parsedInput.success) {
+      const billTypeInvalid = parsedInput.error.issues.some((issue) => issue.path[0] === "billType");
+      const error = billTypeInvalid
+        ? "Seleccione Factura A, Factura B o Factura C"
+        : "Los datos del pago no son válidos";
+      return { success: false, error };
+    }
+    const paymentInput = parsedInput.data;
+    const isRemito = paymentInput.billType === "Remito";
+    if (isRemito && paymentInput.ptoVenta !== undefined) {
+      return { success: false, error: "Los datos del pago no son válidos" };
+    }
+    if (!isRemito && (!Number.isSafeInteger(paymentInput.ptoVenta) || (paymentInput.ptoVenta ?? 0) <= 0)) {
+      return { success: false, error: "Seleccione un punto de venta configurado" };
+    }
+    const paymentPesos = toPositiveWholePesos(paymentInput.amount);
+    if (paymentPesos === null) {
+      return { success: false, error: "Los datos del pago no son válidos" };
+    }
+    if (paymentPesos > MAX_WHOLE_PESO_AMOUNT) {
+      return { success: false, error: "El importe del pago supera el máximo permitido" };
+    }
+    const businessId = await getAuthorizedBusinessId(paymentInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
+    if (!isRemito) {
+      // A POS proposal is required for invoices before the payment transaction
+      // begins. Read the authenticated business's current configuration rather
+      // than trusting the UI's potentially stale list.
+      const business = await db.business.findUnique({
+        where: { id: businessId },
+        select: { ptoVenta: true },
+      });
+      const configuredPtoVentas = business?.ptoVenta;
+      if (!Array.isArray(configuredPtoVentas)
+        || configuredPtoVentas.length === 0
+        || configuredPtoVentas.some((value) => !Number.isSafeInteger(value) || value <= 0)
+        || !configuredPtoVentas.includes(paymentInput.ptoVenta as number)) {
+        return { success: false, error: "Seleccione un punto de venta configurado" };
+      }
+    }
+
     const movement = await db.$transaction(async (tx) => {
+      // Serialize payment registrations per tenant/order before reading its
+      // balance. Interpolated values are parameterized by Prisma's SQL tag.
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "Order"
+        WHERE "id" = ${paymentInput.orderId}
+          AND "businessId" = ${businessId}
+        FOR UPDATE
+      `;
+
       const order = await tx.order.findUnique({
-        where: { id: input.orderId },
+        where: { id: paymentInput.orderId },
         include: { client: true, cashMovements: true },
       });
-      if (!order) throw new Error("Orden no encontrada");
-      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
-
-      const totalPaidBefore = order.cashMovements.reduce(
-        (sum, cm) => sum + cm.total,
-        0
-      );
-
-      // Round to integers to handle legacy decimal totals that prevent payment completion
-      const roundedTotal = Math.round(order.total);
-      const roundedPaidBefore = Math.round(totalPaidBefore);
-      const roundedInput = Math.round(input.amount);
-
-      if (roundedInput > roundedTotal - roundedPaidBefore) {
-        throw new Error("El pago no puede exceder el saldo pendiente");
+      if (!order || (order.businessId && order.businessId !== businessId)) {
+        throw new PaymentRegistrationError("ORDER_NOT_FOUND");
       }
 
-      const remainingBalance = roundedTotal - (roundedPaidBefore + roundedInput);
+      const orderTotalPesos = toWholePesos(order.total);
+      if (orderTotalPesos === null) {
+        throw new PaymentRegistrationError("INVALID_BALANCE");
+      }
+
+      const movementPesos = order.cashMovements.map((cashMovement) => toWholePesos(cashMovement.total));
+      if (movementPesos.some((pesos) => pesos === null)) {
+        throw new PaymentRegistrationError("INVALID_BALANCE");
+      }
+
+      let totalPaidBeforePesos = 0;
+      for (const pesos of movementPesos) {
+        if (pesos === null) {
+          throw new PaymentRegistrationError("INVALID_BALANCE");
+        }
+        const nextTotalPaidPesos = totalPaidBeforePesos + pesos;
+        if (!Number.isSafeInteger(nextTotalPaidPesos)) {
+          throw new PaymentRegistrationError("INVALID_BALANCE");
+        }
+        totalPaidBeforePesos = nextTotalPaidPesos;
+      }
+
+      const remainingBeforePesos = orderTotalPesos - totalPaidBeforePesos;
+      if (!Number.isSafeInteger(remainingBeforePesos) || remainingBeforePesos < 0) {
+        throw new PaymentRegistrationError("INVALID_BALANCE");
+      }
+      if (paymentPesos > remainingBeforePesos) {
+        throw new PaymentRegistrationError("OVERPAYMENT");
+      }
+
+      const remainingBalancePesos = remainingBeforePesos - paymentPesos;
 
       const cashMovementData = {
-        total: input.amount,
-        paidMethod: input.paymentMethod,
+        total: paymentPesos,
+        paidMethod: paymentInput.paymentMethod,
         businessId,
         date: new Date(),
-        orderId: input.orderId,
+        orderId: paymentInput.orderId,
       };
-      const newMovement = await tx.cashMovement.create({ data: cashMovementData } as never);
+      const newMovement = await tx.cashMovement.create({ data: cashMovementData });
+
+      if (isRemito) {
+        await tx.paymentVoucher.create({
+          data: {
+            cashMovementId: newMovement.id,
+            businessId,
+            status: "NOT_REQUIRED",
+            amount: paymentPesos,
+            billType: "Remito",
+            afipVoucherType: null,
+            invoiceNumber: null,
+            invoicePointOfSale: null,
+            cae: null,
+            caeVencimiento: null,
+            qrData: null,
+            issuedAt: null,
+            fiscalSnapshot: Prisma.DbNull,
+            currentAttempt: 0,
+          },
+        });
+      }
 
       if (order.clientId) {
         await tx.client.update({
           where: { id: order.clientId },
-          data: { balance: { decrement: input.amount } },
+          data: { balance: { decrement: paymentPesos } },
         });
       }
 
       const newPaidStatus: PaidStatus =
-        remainingBalance <= 0 ? "pago" : "inpago";
+        remainingBalancePesos === 0 ? "pago" : "inpago";
       await tx.order.update({
-        where: { id: input.orderId },
+        where: { id: paymentInput.orderId },
         data: { paidStatus: newPaidStatus },
       });
 
       return newMovement;
     });
 
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.CLIENTS, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+    try {
+      await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+    } catch (notificationError: unknown) {
+      logPaymentSideEffectFailure("PAYMENT_PUSHER_NOTIFICATION_FAILED", notificationError);
+    }
 
-    return { success: true };
+    for (const tag of [CACHE_TAGS.ORDERS, CACHE_TAGS.CLIENTS, CACHE_TAGS.CASHBOX]) {
+      try {
+        revalidateTag(tag, "max");
+      } catch (cacheError: unknown) {
+        logPaymentSideEffectFailure("PAYMENT_CACHE_INVALIDATION_FAILED", cacheError);
+      }
+    }
+
+    if (isRemito) {
+      return { success: true, data: { paymentRecorded: true, voucherStatus: "NOT_REQUIRED" } };
+    }
+
+    try {
+      const voucherResult = await issuePaymentVoucherForSession({
+        cashMovementId: movement.id,
+        billType: paymentInput.billType,
+        ptoVenta: paymentInput.ptoVenta as number,
+      });
+      return { success: true, data: { ...voucherResult, paymentRecorded: true } };
+    } catch (voucherError: unknown) {
+      const outcome = paymentVoucherIssueFailureOutcome(voucherError);
+      logPaymentSideEffectFailure(`PAYMENT_VOUCHER_OUTCOME_${outcome.voucherStatus}`, voucherError);
+      return {
+        success: true,
+        data: outcome,
+      };
+    }
   } catch (error) {
-    console.error("Error registering payment:", error);
+    console.error("Error registering payment", {
+      code: "PAYMENT_REGISTRATION_FAILED",
+      errorType: error instanceof PaymentRegistrationError ? error.code : error instanceof Error ? "Error" : "NonError",
+    });
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al registrar el pago",
+      error: error instanceof PaymentRegistrationError
+        ? PAYMENT_REGISTRATION_ERROR_MESSAGES[error.code]
+        : "No se pudo registrar el pago. Intente nuevamente.",
     };
   }
 };

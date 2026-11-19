@@ -57,7 +57,7 @@ function validateUnknownProperties(value: Record<string, unknown>): void {
   const knownFields = new Set([
     "id", "seller", "typeDocument", "IVACondition", "twoMethods", "secondPaidMethod",
     "totalSecondMethod", "entrega", "pago", "billType", "paidMethod", "clientId", "client",
-    "clientIvaCondition", "clientDocumentNumber", "discount", "documentNumber", "total",
+    "clientIvaCondition", "clientDocumentType", "clientDocumentNumber", "discount", "documentNumber", "total",
     "totalWithDiscount", "date", "ptoVenta", "products", ...CREDIT_NOTE_FIELDS, ...TRUSTED_FISCAL_FIELDS,
   ]);
   for (const key of Reflect.ownKeys(value)) {
