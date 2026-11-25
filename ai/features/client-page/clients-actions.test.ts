@@ -77,7 +77,7 @@ describe("client server actions", () => {
      await actionsModule.updateClient({ id: "client-a", name: "Ana actualizada" });
      expect(clientDb.findFirst).toHaveBeenCalledWith({
        where: { id: "client-a", businessId: "business-a" },
-       select: { id: true },
+       select: { id: true, cuit: true, fiscalDocumentType: true, fiscalDocumentNumber: true },
      });
      expect(clientDb.update).toHaveBeenCalledWith(expect.objectContaining({
        where: { id: "client-a" },

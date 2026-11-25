@@ -25,6 +25,10 @@ vi.mock('../src/lib/auth-gates', () => ({
   assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
 }));
 
+vi.mock('../src/lib/server/payment-voucher', () => ({
+  issuePaymentVoucherForSession: vi.fn().mockResolvedValue({ voucherStatus: 'ISSUED' }),
+}));
+
 const { db } = { db: mockDb };
 
 describe('Cuenta Corriente - Unpaid Orders', () => {
@@ -64,6 +68,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
     vi.mocked(db.stockMovement.deleteMany).mockResolvedValue({ count: 1 } as any);
     vi.mocked(db.cashMovement.deleteMany).mockResolvedValue({ count: 0 } as any);
     vi.mocked(db.order.delete).mockResolvedValue({ id: 'order-1' } as any);
+    vi.mocked(db.business.findUnique).mockResolvedValue({ ptoVenta: [3] } as any);
   });
 
   describe('createUnpaidOrder', () => {
@@ -133,19 +138,16 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
 
       await createUnpaidOrder(input);
 
-      expect(db.stockMovement.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
+      expect(db.stockMovement.createMany).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({
             type: 'SALE',
             quantity: -2,
             productId: 'product-1',
           }),
-        })
-      );
-      expect(db.product.update).toHaveBeenCalledWith({
-        where: { id: 'product-1' },
-        data: { amount: { decrement: 2 } },
+        ]),
       });
+      expect(db.$executeRaw).toHaveBeenCalled();
     });
 
     it('AC1: Does NOT create CashMovement', async () => {
@@ -219,6 +221,8 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
       amount: 150,
       paymentMethod: 'TRANSFER',
       businessId: 'business-123',
+      billType: 'Factura B',
+      ptoVenta: 3,
     };
 
     const mockOrder = {
@@ -407,10 +411,8 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
 
       await cancelUnpaidOrder(cancelInput);
 
-      expect(db.product.update).toHaveBeenCalledWith({
-        where: { id: 'product-1' },
-        data: { amount: { increment: 2 } },
-      });
+      expect(db.$executeRaw).toHaveBeenCalled();
+      expect(db.order.delete).toHaveBeenCalledWith({ where: { id: 'order-1' } });
     });
 
     it('AC8: Decreases Client.balance by order total', async () => {

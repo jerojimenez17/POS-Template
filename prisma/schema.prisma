@@ -60,6 +60,7 @@ model Business {
   cashMovements   CashMovement[]
   saleReturns     SaleReturn[]
   fiscalSnapshotGrants AuthorizedFiscalSnapshotGrant[]
+  paymentVouchers PaymentVoucher[]
   stockMovements  StockMovement[]
   dailyUsage      DailyUsage[]
   shortcutConfigs ShortcutConfig[]
@@ -331,6 +332,8 @@ model Client {
   cellPhone String? // Storing as string for flexibility
   cuit         String?
   ivaCondition String?
+  fiscalDocumentType   String?
+  fiscalDocumentNumber String?
   email     String?
   balance   Float   @default(0)
 
@@ -555,6 +558,75 @@ model CashMovement {
 
   cashboxSessionId String?
   cashboxSession   CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
+  paymentVoucher   PaymentVoucher?
+}
+
+enum PaymentVoucherStatus {
+  NOT_REQUIRED
+  PENDING
+  ISSUING
+  AUTHORIZED
+  FAILED
+  UNKNOWN
+}
+
+enum PaymentVoucherAttemptStatus {
+  PREPARING
+  ISSUING
+  AUTHORIZED
+  FAILED
+  UNKNOWN
+}
+
+model PaymentVoucher {
+  id                 String              @id @default(cuid())
+  cashMovementId     String              @unique
+  cashMovement       CashMovement        @relation(fields: [cashMovementId], references: [id], onDelete: Restrict)
+  businessId         String
+  business           Business            @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  status             PaymentVoucherStatus @default(PENDING)
+  amount             Decimal             @db.Decimal(12, 2)
+  billType           String
+  afipVoucherType    Int?
+  invoiceNumber      Int?
+  invoicePointOfSale Int?
+  cae                String?
+  caeVencimiento     String?
+  qrData             String?             @db.Text
+  issuedAt           DateTime?
+  fiscalSnapshot     Json?
+  observedTotal      Decimal?            @db.Decimal(12, 2)
+  observedCae        String?
+  observedInvoiceNumber Int?
+  observedInvoicePointOfSale Int?
+  observedIssuedAt   DateTime?
+  currentAttempt     Int                 @default(0)
+  lastErrorCode      String?
+  attempts           PaymentVoucherAttempt[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([businessId])
+  @@index([cashMovementId])
+  @@index([status, updatedAt])
+}
+
+model PaymentVoucherAttempt {
+  id                String                       @id @default(cuid())
+  paymentVoucherId  String
+  paymentVoucher    PaymentVoucher               @relation(fields: [paymentVoucherId], references: [id], onDelete: Restrict)
+  attemptNumber     Int
+  status            PaymentVoucherAttemptStatus
+  billType          String
+  amount            Decimal                      @db.Decimal(12, 2)
+  invoicePointOfSale Int
+  recipientSnapshot Json
+  startedAt         DateTime                     @default(now())
+  finishedAt        DateTime?
+  safeErrorCode     String?
+
+  @@unique([paymentVoucherId, attemptNumber])
+  @@index([paymentVoucherId, startedAt])
 }
 
 model AuthorizedFiscalSnapshotGrant {

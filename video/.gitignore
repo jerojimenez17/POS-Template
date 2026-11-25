@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+.DS_Store
+.env
+studio.log
+
+# Keep the requested deliverable while ignoring temporary rendered frames.
+out/*
+!out/stock-ia-showcase.mp4

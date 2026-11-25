@@ -46,19 +46,19 @@ describe("R1: addItemsToOrder - adds items with addedAt timestamp", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(0),
           order: {
             findUnique: vi.fn().mockResolvedValue(existingOrder),
             update: vi.fn().mockResolvedValue({ ...existingOrder, total: 250 }),
           },
           product: {
-             findFirst: vi.fn().mockResolvedValue({ id: "product-1", amount: 10 }),
-            update: vi.fn().mockResolvedValue({ id: "product-1" }),
+            findMany: vi.fn().mockResolvedValue([{ id: "product-2", amount: 10 }]),
           },
           orderItem: {
-            create: vi.fn().mockResolvedValue({ id: "item-2", addedAt: new Date() }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
           stockMovement: {
-            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
           productRanking: {
             upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
@@ -163,6 +163,7 @@ describe("R2: updateOrderItem - edit quantity and price", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(0),
           orderItem: {
             findUnique: vi.fn().mockResolvedValue(orderItem),
             update: vi.fn().mockResolvedValue({
@@ -330,6 +331,7 @@ describe("R2: removeOrderItem - remove items from unpaid orders", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(0),
           orderItem: {
             findUnique: vi.fn().mockResolvedValue(orderItem),
             delete: vi.fn().mockResolvedValue({ id: "item-1" }),
@@ -479,6 +481,7 @@ describe("Order total updates automatically", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(0),
           order: {
             findUnique: vi.fn().mockResolvedValue(existingOrder),
             update: vi.fn().mockImplementation(({ data }) => {
@@ -489,14 +492,13 @@ describe("Order total updates automatically", () => {
             }),
           },
           product: {
-             findFirst: vi.fn().mockResolvedValue({ id: "product-1", amount: 10 }),
-            update: vi.fn().mockResolvedValue({ id: "product-1" }),
+            findMany: vi.fn().mockResolvedValue([{ id: "product-2", amount: 10 }]),
           },
           orderItem: {
-            create: vi.fn().mockResolvedValue({ id: "item-2" }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
           stockMovement: {
-            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
           productRanking: {
             upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),

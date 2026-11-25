@@ -2,13 +2,19 @@
 
 import { db } from "@/lib/db";
 import { auth } from "@/auth";
+import { after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
-import { PaidStatus } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { MovementType, PaidStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { pusherServer } from "@/lib/pusher-server";
 import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
+import { processInBatches, bulkUpdateStock } from "@/lib/batch-utils";
+import {
+  issuePaymentVoucherForSession,
+} from "@/lib/server/payment-voucher";
+import { paymentVoucherIssueFailureOutcome } from "@/lib/server/payment-voucher-outcome";
+import { MAX_WHOLE_PESO_AMOUNT, toPositiveWholePesos, toWholePesos } from "@/lib/money";
 
 interface ActionResult<T = unknown> {
   success: boolean;
@@ -37,13 +43,6 @@ interface CreateUnpaidOrderInput {
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
   notes?: string;
-}
-
-interface RegisterPaymentInput {
-  orderId: string;
-  amount: number;
-  paymentMethod: string;
-  businessId: string;
 }
 
 interface CancelUnpaidOrderInput {
@@ -97,6 +96,31 @@ export interface GetUnpaidOrdersInput {
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
 
+const logPaymentSideEffectFailure = (code: string, error: unknown): void => {
+  console.error("[registerPayment] post-commit side effect failed", {
+    code,
+    errorType: error instanceof Error ? "Error" : "NonError",
+  });
+};
+
+type PaymentRegistrationErrorCode =
+  | "ORDER_NOT_FOUND"
+  | "INVALID_BALANCE"
+  | "OVERPAYMENT";
+
+const PAYMENT_REGISTRATION_ERROR_MESSAGES: Record<PaymentRegistrationErrorCode, string> = {
+  ORDER_NOT_FOUND: "Orden no encontrada",
+  INVALID_BALANCE: "El saldo de la orden no es válido",
+  OVERPAYMENT: "El pago no puede exceder el saldo pendiente",
+};
+
+class PaymentRegistrationError extends Error {
+  constructor(readonly code: PaymentRegistrationErrorCode) {
+    super(PAYMENT_REGISTRATION_ERROR_MESSAGES[code]);
+    this.name = "PaymentRegistrationError";
+  }
+}
+
 interface LedgerCursor {
   // PostgreSQL sorts NULL after every value for ASC. Keep NULL distinct from
   // the empty string: they are adjacent in the display, but not the same key.
@@ -116,11 +140,11 @@ const decodeCursor = (value: string | null | undefined, status: string, search: 
     const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
     if (typeof parsed !== "object" || parsed === null) return null;
     const candidate = parsed as Partial<LedgerCursor>;
-    if (candidate.status !== status || candidate.search !== search ||
-        (candidate.clientName !== null && typeof candidate.clientName !== "string") ||
+     if (candidate.status !== status || candidate.search !== search ||
+         (candidate.clientName !== null && typeof candidate.clientName !== "string") ||
         typeof candidate.date !== "string" || Number.isNaN(Date.parse(candidate.date)) ||
         typeof candidate.id !== "string" || candidate.id.length === 0) return null;
-    return candidate as LedgerCursor;
+     return candidate as LedgerCursor;
   } catch {
     return null;
   }
@@ -174,6 +198,10 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
     const businessId = session?.user?.businessId;
     if (input.businessId && input.businessId !== businessId) return { success: false, error: "No autorizado" };
     if (!businessId) return { success: false, error: "No autorizado" };
+    const allowNegativeStock = (session?.user?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
+
+    // Hoist ranking data so after() can access it
+    const rankingItems: { productId: string; quantity: number; price: number }[] = [];
 
     const result = await db.$transaction(async (tx) => {
       const client = await tx.client.findUnique({
@@ -194,7 +222,7 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
         if (!product) {
           throw new Error(`Producto ${item.description || item.productId} no encontrado`);
         }
-        if (product.amount < item.quantity) {
+        if (!allowNegativeStock && product.amount < item.quantity) {
           throw new Error(`Stock insuficiente para ${item.description || item.productId}`);
         }
       }
@@ -226,52 +254,24 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
             })),
           },
         },
-        include: { items: true },
       });
 
-      const now = new Date();
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
-
+      // 🚀 FASE 1+2: Bulk UPDATE (raw SQL) + stockMovement.createMany
+      // Ranking upsert → after() (analítica, eventual consistency)
+      const stockMovements: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string }[] = [];
       for (const item of input.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { amount: { decrement: item.quantity } },
+        stockMovements.push({
+          type: "SALE",
+          quantity: -item.quantity,
+          productId: item.productId,
+          orderId: order.id,
+          businessId,
         });
-
-        await tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.quantity,
-            productId: item.productId,
-            orderId: order.id,
-            businessId,
-          },
-        });
-
-        await tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
-              productId: item.productId,
-              month,
-              year,
-              businessId,
-            },
-          },
-          update: { 
-            totalSold: { increment: item.quantity },
-            totalIncome: { increment: item.quantity * item.price }
-          },
-          create: {
-            productId: item.productId,
-            month,
-            year,
-            businessId,
-            totalSold: item.quantity,
-            totalIncome: item.quantity * item.price,
-          },
-        });
+        rankingItems.push({ productId: item.productId, quantity: item.quantity, price: item.price });
       }
+
+      await bulkUpdateStock(tx, input.items.map(i => ({ id: i.productId, change: -i.quantity })));
+      await tx.stockMovement.createMany({ data: stockMovements });
 
       await tx.client.update({
         where: { id: input.clientId },
@@ -279,12 +279,49 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
       });
 
       return { success: true, data: order };
+    }, {
+      maxWait: 10000,
+      timeout: 60000,
     });
 
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CLIENTS, "max");
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+    // ⏰ Respuesta inmediata — ranking + cache en background
+    after(async () => {
+      try {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+
+        await db.$transaction(async (tx) => {
+          await processInBatches(rankingItems, 15, (item: { productId: string; quantity: number; price: number }) => [
+            tx.productRanking.upsert({
+              where: {
+                productId_month_year_businessId: {
+                  productId: item.productId,
+                  month, year, businessId,
+                },
+              },
+              update: {
+                totalSold: { increment: item.quantity },
+                totalIncome: { increment: item.quantity * item.price },
+              },
+              create: {
+                productId: item.productId,
+                month, year, businessId,
+                totalSold: item.quantity,
+                totalIncome: item.quantity * item.price,
+              },
+            }),
+          ]);
+        });
+
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CLIENTS, "max");
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
+    });
 
     return result;
   } catch (error) {
@@ -296,73 +333,202 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
   }
 };
 
-export const registerPayment = async (input: RegisterPaymentInput): Promise<ActionResult> => {
+export const registerPayment = async (input: unknown): Promise<ActionResult> => {
   try {
-    const businessId = await getAuthorizedBusinessId(input.businessId);
+    const parsedInput = z.object({
+      orderId: z.string().min(1),
+      amount: z.number().finite().positive(),
+      paymentMethod: z.string().min(1),
+      businessId: z.string().min(1),
+      billType: z.enum(["Factura A", "Factura B", "Factura C", "Remito"]),
+      ptoVenta: z.number().int().positive().optional(),
+    }).strict().safeParse(input);
+    if (!parsedInput.success) {
+      const billTypeInvalid = parsedInput.error.issues.some((issue) => issue.path[0] === "billType");
+      const error = billTypeInvalid
+        ? "Seleccione Factura A, Factura B o Factura C"
+        : "Los datos del pago no son válidos";
+      return { success: false, error };
+    }
+    const paymentInput = parsedInput.data;
+    const isRemito = paymentInput.billType === "Remito";
+    if (isRemito && paymentInput.ptoVenta !== undefined) {
+      return { success: false, error: "Los datos del pago no son válidos" };
+    }
+    if (!isRemito && (!Number.isSafeInteger(paymentInput.ptoVenta) || (paymentInput.ptoVenta ?? 0) <= 0)) {
+      return { success: false, error: "Seleccione un punto de venta configurado" };
+    }
+    const paymentPesos = toPositiveWholePesos(paymentInput.amount);
+    if (paymentPesos === null) {
+      return { success: false, error: "Los datos del pago no son válidos" };
+    }
+    if (paymentPesos > MAX_WHOLE_PESO_AMOUNT) {
+      return { success: false, error: "El importe del pago supera el máximo permitido" };
+    }
+    const businessId = await getAuthorizedBusinessId(paymentInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
 
     const permission = await assertWritePermission();
     if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
+    if (!isRemito) {
+      // A POS proposal is required for invoices before the payment transaction
+      // begins. Read the authenticated business's current configuration rather
+      // than trusting the UI's potentially stale list.
+      const business = await db.business.findUnique({
+        where: { id: businessId },
+        select: { ptoVenta: true },
+      });
+      const configuredPtoVentas = business?.ptoVenta;
+      if (!Array.isArray(configuredPtoVentas)
+        || configuredPtoVentas.length === 0
+        || configuredPtoVentas.some((value) => !Number.isSafeInteger(value) || value <= 0)
+        || !configuredPtoVentas.includes(paymentInput.ptoVenta as number)) {
+        return { success: false, error: "Seleccione un punto de venta configurado" };
+      }
+    }
+
     const movement = await db.$transaction(async (tx) => {
+      // Serialize payment registrations per tenant/order before reading its
+      // balance. Interpolated values are parameterized by Prisma's SQL tag.
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "Order"
+        WHERE "id" = ${paymentInput.orderId}
+          AND "businessId" = ${businessId}
+        FOR UPDATE
+      `;
+
       const order = await tx.order.findUnique({
-        where: { id: input.orderId },
+        where: { id: paymentInput.orderId },
         include: { client: true, cashMovements: true },
       });
-      if (!order) throw new Error("Orden no encontrada");
-      if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
-
-      const totalPaidBefore = order.cashMovements.reduce(
-        (sum, cm) => sum + cm.total,
-        0
-      );
-
-      // Round to integers to handle legacy decimal totals that prevent payment completion
-      const roundedTotal = Math.round(order.total);
-      const roundedPaidBefore = Math.round(totalPaidBefore);
-      const roundedInput = Math.round(input.amount);
-      if (roundedInput > roundedTotal - roundedPaidBefore) {
-        throw new Error("El pago no puede exceder el saldo remaining");
+      if (!order || (order.businessId && order.businessId !== businessId)) {
+        throw new PaymentRegistrationError("ORDER_NOT_FOUND");
       }
-      const remainingBalance = roundedTotal - (roundedPaidBefore + roundedInput);
+
+      const orderTotalPesos = toWholePesos(order.total);
+      if (orderTotalPesos === null) {
+        throw new PaymentRegistrationError("INVALID_BALANCE");
+      }
+
+      const movementPesos = order.cashMovements.map((cashMovement) => toWholePesos(cashMovement.total));
+      if (movementPesos.some((pesos) => pesos === null)) {
+        throw new PaymentRegistrationError("INVALID_BALANCE");
+      }
+
+      let totalPaidBeforePesos = 0;
+      for (const pesos of movementPesos) {
+        if (pesos === null) {
+          throw new PaymentRegistrationError("INVALID_BALANCE");
+        }
+        const nextTotalPaidPesos = totalPaidBeforePesos + pesos;
+        if (!Number.isSafeInteger(nextTotalPaidPesos)) {
+          throw new PaymentRegistrationError("INVALID_BALANCE");
+        }
+        totalPaidBeforePesos = nextTotalPaidPesos;
+      }
+
+      const remainingBeforePesos = orderTotalPesos - totalPaidBeforePesos;
+      if (!Number.isSafeInteger(remainingBeforePesos) || remainingBeforePesos < 0) {
+        throw new PaymentRegistrationError("INVALID_BALANCE");
+      }
+      if (paymentPesos > remainingBeforePesos) {
+        throw new PaymentRegistrationError("OVERPAYMENT");
+      }
+
+      const remainingBalancePesos = remainingBeforePesos - paymentPesos;
 
       const cashMovementData = {
-        total: input.amount,
-        paidMethod: input.paymentMethod,
+        total: paymentPesos,
+        paidMethod: paymentInput.paymentMethod,
         businessId,
         date: new Date(),
-        orderId: input.orderId,
+        orderId: paymentInput.orderId,
       };
-      const newMovement = await tx.cashMovement.create({ data: cashMovementData } as never);
+      const newMovement = await tx.cashMovement.create({ data: cashMovementData });
+
+      if (isRemito) {
+        await tx.paymentVoucher.create({
+          data: {
+            cashMovementId: newMovement.id,
+            businessId,
+            status: "NOT_REQUIRED",
+            amount: paymentPesos,
+            billType: "Remito",
+            afipVoucherType: null,
+            invoiceNumber: null,
+            invoicePointOfSale: null,
+            cae: null,
+            caeVencimiento: null,
+            qrData: null,
+            issuedAt: null,
+            fiscalSnapshot: Prisma.DbNull,
+            currentAttempt: 0,
+          },
+        });
+      }
 
       if (order.clientId) {
         await tx.client.update({
           where: { id: order.clientId },
-          data: { balance: { decrement: input.amount } },
+          data: { balance: { decrement: paymentPesos } },
         });
       }
 
       const newPaidStatus: PaidStatus =
-        remainingBalance <= 0 ? "pago" : "inpago";
+        remainingBalancePesos === 0 ? "pago" : "inpago";
       await tx.order.update({
-        where: { id: input.orderId },
+        where: { id: paymentInput.orderId },
         data: { paidStatus: newPaidStatus },
       });
 
       return newMovement;
     });
 
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.CLIENTS, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+    try {
+      await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+    } catch (notificationError: unknown) {
+      logPaymentSideEffectFailure("PAYMENT_PUSHER_NOTIFICATION_FAILED", notificationError);
+    }
 
-    return { success: true };
+    for (const tag of [CACHE_TAGS.ORDERS, CACHE_TAGS.CLIENTS, CACHE_TAGS.CASHBOX]) {
+      try {
+        revalidateTag(tag, "max");
+      } catch (cacheError: unknown) {
+        logPaymentSideEffectFailure("PAYMENT_CACHE_INVALIDATION_FAILED", cacheError);
+      }
+    }
+
+    if (isRemito) {
+      return { success: true, data: { paymentRecorded: true, voucherStatus: "NOT_REQUIRED" } };
+    }
+
+    try {
+      const voucherResult = await issuePaymentVoucherForSession({
+        cashMovementId: movement.id,
+        billType: paymentInput.billType,
+        ptoVenta: paymentInput.ptoVenta as number,
+      });
+      return { success: true, data: { ...voucherResult, paymentRecorded: true } };
+    } catch (voucherError: unknown) {
+      const outcome = paymentVoucherIssueFailureOutcome(voucherError);
+      logPaymentSideEffectFailure(`PAYMENT_VOUCHER_OUTCOME_${outcome.voucherStatus}`, voucherError);
+      return {
+        success: true,
+        data: outcome,
+      };
+    }
   } catch (error) {
-    console.error("Error registering payment:", error);
+    console.error("Error registering payment", {
+      code: "PAYMENT_REGISTRATION_FAILED",
+      errorType: error instanceof PaymentRegistrationError ? error.code : error instanceof Error ? "Error" : "NonError",
+    });
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al registrar el pago",
+      error: error instanceof PaymentRegistrationError
+        ? PAYMENT_REGISTRATION_ERROR_MESSAGES[error.code]
+        : "No se pudo registrar el pago. Intente nuevamente.",
     };
   }
 };
@@ -374,6 +540,9 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
 
     const permission = await assertWritePermission();
     if (!permission.success) return { success: false, error: permission.error, code: permission.code };
+
+    // Hoist ranking data for after()
+    const rankingItems: { productId: string; quantity: number; price: number }[] = [];
 
     const result = await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
@@ -394,41 +563,15 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
       });
       if (ownedProducts.length !== productIds.length) throw new Error("Producto no encontrado");
 
+      // 🚀 FASE 2: Bulk UPDATE en vez de for...of con updates individuales
+      const stockChanges: { id: string; change: number }[] = [];
       for (const item of order.items) {
         if (item.productId) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { amount: { increment: item.quantity } },
-          });
-
-          const now = new Date();
-          const month = now.getMonth() + 1;
-          const year = now.getFullYear();
-
-          await tx.productRanking.upsert({
-            where: {
-              productId_month_year_businessId: {
-                productId: item.productId,
-                month,
-                year,
-                businessId,
-              },
-            },
-            update: { 
-              totalSold: { decrement: item.quantity },
-              totalIncome: { decrement: item.quantity * item.price }
-            },
-            create: {
-              productId: item.productId,
-              month,
-              year,
-              businessId,
-              totalSold: 0,
-              totalIncome: 0,
-            },
-          });
+          stockChanges.push({ id: item.productId, change: item.quantity });
+          rankingItems.push({ productId: item.productId, quantity: -item.quantity, price: item.price });
         }
       }
+      await bulkUpdateStock(tx, stockChanges);
 
       if (order.clientId) {
         await tx.client.update({
@@ -447,10 +590,44 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
       return { success: true };
     });
 
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CLIENTS, "max");
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+    // ⏰ Respuesta inmediata — ranking + cache en background
+    after(async () => {
+      try {
+        if (rankingItems.length > 0) {
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const year = now.getFullYear();
+
+          await db.$transaction(async (tx) => {
+            await processInBatches(rankingItems, 15, (item: { productId: string; quantity: number; price: number }) => [
+              tx.productRanking.upsert({
+                where: {
+                  productId_month_year_businessId: {
+                    productId: item.productId, month, year, businessId,
+                  },
+                },
+                update: {
+                  totalSold: { increment: item.quantity },
+                  totalIncome: { increment: item.quantity * item.price },
+                },
+                create: {
+                  productId: item.productId, month, year, businessId,
+                  totalSold: 0,
+                  totalIncome: 0,
+                },
+              }),
+            ]);
+          });
+        }
+
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CLIENTS, "max");
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
+    });
 
     return result;
   } catch (error) {
@@ -468,6 +645,9 @@ export const updateOrderDiscount = async (input: UpdateOrderDiscountInput): Prom
     const validatedInput = updateOrderDiscountSchema.parse(input);
     const businessId = await getAuthorizedBusinessId(validatedInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
+
+    const permission = await assertWritePermission();
+    if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
     const result = await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
@@ -619,9 +799,9 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
       const last = orders[orders.length - 1];
       const nextCursor = hasMore && last
         ? encodeCursor({
-            clientName: last.client ? last.client.name : null,
-            date: last.date.toISOString(), id: last.id, status, search,
-          })
+             clientName: last.client ? last.client.name : null,
+             date: last.date.toISOString(), id: last.id, status, search,
+           })
         : null;
       if (legacyArrayResponse) return { success: true, data: orders };
       return { success: true, data: { orders, nextCursor, hasMore } };
@@ -706,11 +886,15 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
     const validatedInput = addItemsToOrderSchema.parse(input);
     const businessId = await getAuthorizedBusinessId(validatedInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
-
     const permission = await assertWritePermission();
     if (!permission.success) return { success: false, error: permission.error, code: permission.code };
+    const session = await auth();
+    const allowNegativeStock = (session?.user?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
 
-    return await db.$transaction(async (tx) => {
+    // Hoist ranking data for after()
+    const rankingItems: { productId: string; quantity: number; price: number }[] = [];
+
+    const result = await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: validatedInput.orderId },
         include: { client: true, items: true },
@@ -720,75 +904,51 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
       if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
 
+      const products = await tx.product.findMany({
+        where: { id: { in: validatedInput.items.map(i => i.productId) }, businessId },
+      });
+      const productMap = new Map(products.map(p => [p.id, p]));
+
       for (const item of validatedInput.items) {
-        const product = await tx.product.findFirst({
-          where: { id: item.productId, businessId },
-        });
+        const product = productMap.get(item.productId);
         if (!product) {
           throw new Error(`Producto ${item.description || item.productId} no encontrado`);
         }
-        if (product.amount < item.quantity) {
+        if (!allowNegativeStock && product.amount < item.quantity) {
           throw new Error(`Stock insuficiente para ${item.description || item.productId}`);
         }
       }
 
-      const currentTimestamp = new Date();
-      const month = currentTimestamp.getMonth() + 1;
-      const year = currentTimestamp.getFullYear();
-
+      // 🚀 FASE 1+2: Bulk UPDATE + createMany (orderItems + stockMovements)
+      // Ranking → after()
+      const stockMovements: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string }[] = [];
       for (const item of validatedInput.items) {
-        await tx.orderItem.create({
-          data: {
-            orderId: validatedInput.orderId,
-            productId: item.productId,
-            code: item.code,
-            description: item.description,
-            costPrice: item.costPrice || 0,
-            price: item.price,
-            quantity: item.quantity,
-            subTotal: item.subTotal,
-            addedAt: currentTimestamp,
-          },
+        stockMovements.push({
+          type: "SALE",
+          quantity: -item.quantity,
+          productId: item.productId,
+          orderId: validatedInput.orderId,
+          businessId,
         });
-
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { amount: { decrement: item.quantity } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.quantity,
-            productId: item.productId,
-            orderId: order.id,
-            businessId,
-          },
-        });
-
-        await tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
-              productId: item.productId,
-              month,
-              year,
-              businessId,
-            },
-          },
-          update: { 
-            totalSold: { increment: item.quantity },
-            totalIncome: { increment: item.quantity * item.price }
-          },
-          create: {
-            productId: item.productId,
-            month,
-            year,
-            businessId,
-            totalSold: item.quantity,
-            totalIncome: item.quantity * item.price,
-          },
-        });
+        rankingItems.push({ productId: item.productId, quantity: item.quantity, price: item.price });
       }
+
+      await bulkUpdateStock(tx, validatedInput.items.map(i => ({ id: i.productId, change: -i.quantity })));
+      await tx.stockMovement.createMany({ data: stockMovements });
+
+      // ✅ Crear los OrderItem para que aparezcan en el detalle de la orden
+      await tx.orderItem.createMany({
+        data: validatedInput.items.map((item) => ({
+          orderId: validatedInput.orderId,
+          productId: item.productId,
+          code: item.code || null,
+          description: item.description || null,
+          costPrice: item.costPrice || 0,
+          price: item.price,
+          quantity: item.quantity,
+          subTotal: item.subTotal,
+        })),
+      });
 
       const itemsTotal = validatedInput.items.reduce((sum, item) => sum + item.subTotal, 0);
       const newTotal = order.total + itemsTotal;
@@ -805,13 +965,47 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
         });
       }
 
-      revalidateTag(CACHE_TAGS.ORDERS, "max");
-      revalidateTag(CACHE_TAGS.STOCK, "max");
-      revalidateTag(CACHE_TAGS.CLIENTS, "max");
-      await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-
       return { success: true };
+    }, { maxWait: 10000, timeout: 60000 });
+
+    // ⏰ Respuesta inmediata — ranking + cache en background
+    after(async () => {
+      try {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+
+        await db.$transaction(async (tx) => {
+          await processInBatches(rankingItems, 15, (item: { productId: string; quantity: number; price: number }) => [
+            tx.productRanking.upsert({
+              where: {
+                productId_month_year_businessId: {
+                  productId: item.productId, month, year, businessId,
+                },
+              },
+              update: {
+                totalSold: { increment: item.quantity },
+                totalIncome: { increment: item.quantity * item.price },
+              },
+              create: {
+                productId: item.productId, month, year, businessId,
+                totalSold: item.quantity,
+                totalIncome: item.quantity * item.price,
+              },
+            }),
+          ]);
+        });
+
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CLIENTS, "max");
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
     });
+
+    return result;
   } catch (error) {
     console.error("Error adding items to order:", error);
     return {
@@ -827,11 +1021,14 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
     const session = await auth();
     const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
-
     const permission = await assertWritePermission();
     if (!permission.success) return { success: false, error: permission.error, code: permission.code };
+    const allowNegativeStock = (session?.user?.business?.features as Record<string, unknown>)?.hasNegativeStock === true;
 
-    return await db.$transaction(async (tx) => {
+    // Hoist ranking data for after()
+    let rankingData: { productId: string; quantity: number; price: number } | null = null;
+
+    const result = await db.$transaction(async (tx) => {
       const orderItem = await tx.orderItem.findUnique({
         where: { id: validatedInput.itemId },
       });
@@ -856,7 +1053,10 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
         const product = await tx.product.findFirst({
           where: { id: orderItem.productId, businessId },
         });
-        if (!product || product.amount < quantityDiff) {
+        if (!product) {
+          throw new Error("Producto no encontrado");
+        }
+        if (!allowNegativeStock && product.amount < quantityDiff) {
           throw new Error("Stock insuficiente");
         }
       }
@@ -875,10 +1075,8 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
       });
 
       if (quantityDiff !== 0 && orderItem.productId) {
-        await tx.product.update({
-          where: { id: orderItem.productId },
-          data: { amount: { decrement: quantityDiff } },
-        });
+        // 🚀 FASE 2: bulkUpdateStock (aunque sea 1 item, consistente)
+        await bulkUpdateStock(tx, [{ id: orderItem.productId, change: -quantityDiff }]);
 
         await tx.stockMovement.create({
           data: {
@@ -890,32 +1088,11 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
           },
         });
 
-        const now = new Date();
-        const month = now.getMonth() + 1;
-        const year = now.getFullYear();
-
-        await tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
-              productId: orderItem.productId,
-              month,
-              year,
-              businessId,
-            },
-          },
-          update: { 
-            totalSold: { increment: quantityDiff },
-            totalIncome: { increment: quantityDiff * orderItem.price }
-          },
-          create: {
-            productId: orderItem.productId,
-            month,
-            year,
-            businessId,
-            totalSold: quantityDiff > 0 ? quantityDiff : 0,
-            totalIncome: quantityDiff > 0 ? quantityDiff * orderItem.price : 0,
-          },
-        });
+        rankingData = {
+          productId: orderItem.productId,
+          quantity: quantityDiff,
+          price: orderItem.price,
+        };
       }
 
       const itemsTotal = order.items.reduce((sum, item) => {
@@ -939,13 +1116,49 @@ export const updateOrderItem = async (input: z.infer<typeof updateOrderItemSchem
         });
       }
 
-      revalidateTag(CACHE_TAGS.ORDERS, "max");
-      revalidateTag(CACHE_TAGS.STOCK, "max");
-      revalidateTag(CACHE_TAGS.CLIENTS, "max");
-      await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-
       return { success: true };
     });
+
+    // ⏰ Respuesta inmediata — ranking + cache en background
+    after(async () => {
+      try {
+        if (rankingData) {
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const year = now.getFullYear();
+
+          await db.$transaction(async (tx) => {
+            await tx.productRanking.upsert({
+              where: {
+                productId_month_year_businessId: {
+                  productId: rankingData!.productId,
+                  month, year, businessId,
+                },
+              },
+              update: {
+                totalSold: { increment: rankingData!.quantity },
+                totalIncome: { increment: rankingData!.quantity * rankingData!.price },
+              },
+              create: {
+                productId: rankingData!.productId,
+                month, year, businessId,
+                totalSold: rankingData!.quantity > 0 ? rankingData!.quantity : 0,
+                totalIncome: rankingData!.quantity > 0 ? rankingData!.quantity * rankingData!.price : 0,
+              },
+            });
+          });
+        }
+
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CLIENTS, "max");
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
+    });
+
+    return result;
   } catch (error) {
     console.error("Error updating order item:", error);
     return {
@@ -965,7 +1178,10 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
     const permission = await assertWritePermission();
     if (!permission.success) return { success: false, error: permission.error, code: permission.code };
 
-    return await db.$transaction(async (tx) => {
+    // Hoist ranking data for after()
+    let rankingData: { productId: string; quantity: number; price: number } | null = null;
+
+    const result = await db.$transaction(async (tx) => {
       const orderItem = await tx.orderItem.findUnique({
         where: { id: validatedInput.itemId },
       });
@@ -987,10 +1203,8 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
       });
 
       if (orderItem.productId) {
-        await tx.product.update({
-          where: { id: orderItem.productId },
-          data: { amount: { increment: orderItem.quantity } },
-        });
+        // 🚀 FASE 2: bulkUpdateStock (increment stock — change positivo)
+        await bulkUpdateStock(tx, [{ id: orderItem.productId, change: orderItem.quantity }]);
 
         await tx.stockMovement.create({
           data: {
@@ -1002,32 +1216,11 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
           },
         });
 
-        const now = new Date();
-        const month = now.getMonth() + 1;
-        const year = now.getFullYear();
-
-        await tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
-              productId: orderItem.productId,
-              month,
-              year,
-              businessId,
-            },
-          },
-          update: { 
-            totalSold: { decrement: orderItem.quantity },
-            totalIncome: { decrement: orderItem.quantity * orderItem.price }
-          },
-          create: {
-            productId: orderItem.productId,
-            month,
-            year,
-            businessId,
-            totalSold: 0,
-            totalIncome: 0,
-          },
-        });
+        rankingData = {
+          productId: orderItem.productId,
+          quantity: -orderItem.quantity,
+          price: orderItem.price,
+        };
       }
 
       const newTotal = order.total - orderItem.subTotal;
@@ -1044,13 +1237,49 @@ export const removeOrderItem = async (input: z.infer<typeof removeOrderItemSchem
         });
       }
 
-      revalidateTag(CACHE_TAGS.ORDERS, "max");
-      revalidateTag(CACHE_TAGS.STOCK, "max");
-      revalidateTag(CACHE_TAGS.CLIENTS, "max");
-      await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-
       return { success: true };
     });
+
+    // ⏰ Respuesta inmediata — ranking + cache en background
+    after(async () => {
+      try {
+        if (rankingData) {
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const year = now.getFullYear();
+
+          await db.$transaction(async (tx) => {
+            await tx.productRanking.upsert({
+              where: {
+                productId_month_year_businessId: {
+                  productId: rankingData!.productId,
+                  month, year, businessId,
+                },
+              },
+              update: {
+                totalSold: { increment: rankingData!.quantity },
+                totalIncome: { increment: rankingData!.quantity * rankingData!.price },
+              },
+              create: {
+                productId: rankingData!.productId,
+                month, year, businessId,
+                totalSold: 0,
+                totalIncome: 0,
+              },
+            });
+          });
+        }
+
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CLIENTS, "max");
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
+    });
+
+    return result;
   } catch (error) {
     console.error("Error removing order item:", error);
     return {

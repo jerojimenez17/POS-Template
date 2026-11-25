@@ -129,6 +129,8 @@ function snapshotCreditNoteBillState(billState: BillState | AfipInvoiceDTO): Afi
     ...(typeof billState.clientId === "string" ? { clientId: billState.clientId } : {}),
     ...(typeof billState.client === "string" ? { client: billState.client } : {}),
     ...(typeof billState.clientIvaCondition === "string" ? { clientIvaCondition: billState.clientIvaCondition } : {}),
+    ...(billState.clientDocumentType === "CUIT" || billState.clientDocumentType === "DNI"
+      ? { clientDocumentType: billState.clientDocumentType } : {}),
     ...(typeof billState.clientDocumentNumber === "string" ? { clientDocumentNumber: billState.clientDocumentNumber } : {}),
     discount: typeof billState.discount === "number" && Number.isFinite(billState.discount) ? billState.discount : 0,
     documentNumber: Number.isSafeInteger(billState.documentNumber) && billState.documentNumber >= 0
@@ -334,6 +336,7 @@ export async function prepareAfipVoucherForActor(
 /** Issues only a voucher that was prepared in this server process. */
 export async function issuePreparedAfipVoucher(
   prepared: PreparedAfipVoucher,
+  onDispatch?: () => Promise<void>,
 ): Promise<AfipVoucherOperationResult> {
   const payload = preparedPayloads.get(prepared);
   if (!payload) return { error: "La prevalidación de ARCA ya no está disponible", issuanceNotStarted: true };
@@ -399,6 +402,7 @@ export async function issuePreparedAfipVoucher(
     clientId: billStateWithoutPtoVenta.clientId,
     client: billStateWithoutPtoVenta.client,
     clientIvaCondition: billStateWithoutPtoVenta.clientIvaCondition,
+    clientDocumentType: billStateWithoutPtoVenta.clientDocumentType,
     clientDocumentNumber: billStateWithoutPtoVenta.clientDocumentNumber,
     products: billStateWithoutPtoVenta.products.map((product) => ({
       id: product.id,
@@ -452,30 +456,35 @@ export async function issuePreparedAfipVoucher(
     return { error: "La facturación AFIP/ARCA no está habilitada para este negocio", issuanceNotStarted: true };
   }
 
-  let issuanceStarted = false;
+  const requestBody = {
+    action: "createVoucher",
+    encryptedCert: payload.cert,
+    encryptedKey: payload.key,
+    arca: {
+      accessToken: payload.accessToken,
+      cuit: payload.cuit,
+      puntoVenta: ptoVenta,
+      tipoFactura,
+    },
+    billState: minimalBillState,
+  };
+  const requestConfig = {
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-key": payload.internalKey,
+    },
+  };
+
+  // This is the last deterministic transition before the irreversible POST.
+  // If durable dispatch marking fails, do not contact the remote gateway.
   try {
-    issuanceStarted = true;
-    const response = await axios.post(
-      functionUrl,
-      {
-        action: "createVoucher",
-        encryptedCert: payload.cert,
-        encryptedKey: payload.key,
-        arca: {
-          accessToken: payload.accessToken,
-          cuit: payload.cuit,
-          puntoVenta: ptoVenta,
-          tipoFactura,
-        },
-        billState: minimalBillState,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "x-internal-key": payload.internalKey,
-        },
-      },
-    );
+    await onDispatch?.();
+  } catch {
+    return { error: "No se pudo confirmar la preparación de la factura", issuanceNotStarted: true };
+  }
+
+  try {
+    const response = await axios.post(functionUrl, requestBody, requestConfig);
 
     const parsed = parseAfipVoucherResponse(response.data, {
       status: response.status,
@@ -532,6 +541,6 @@ export async function issuePreparedAfipVoucher(
       });
       errorMsg = parsed.code === "11002" ? parsed : parsed.message;
     }
-    return issuanceStarted ? { error: errorMsg } : { error: errorMsg, issuanceNotStarted: true };
+    return { error: errorMsg };
   }
 }

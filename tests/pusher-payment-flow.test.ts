@@ -6,6 +6,7 @@ vi.mock('../src/lib/db', () => {
     $transaction: vi.fn().mockImplementation(async (callback) => {
       return callback(mockDb);
     }),
+    $queryRaw: vi.fn().mockResolvedValue([]),
     order: {
       findUnique: vi.fn().mockResolvedValue({
         id: 'order-1',
@@ -22,6 +23,9 @@ vi.mock('../src/lib/db', () => {
     },
     client: {
       update: vi.fn().mockResolvedValue({ id: 'client-1' }),
+    },
+    business: {
+      findUnique: vi.fn().mockResolvedValue({ ptoVenta: [3] }),
     },
   };
   return { db: mockDb };
@@ -48,6 +52,10 @@ vi.mock('../src/lib/pusher-server', () => ({
   },
 }));
 
+vi.mock('../src/lib/server/payment-voucher', () => ({
+  issuePaymentVoucherForSession: vi.fn().mockResolvedValue({ voucherStatus: 'ISSUED' }),
+}));
+
 describe('Pusher Integration - Payment Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,6 +69,8 @@ describe('Pusher Integration - Payment Flow', () => {
         orderId: 'order-1',
         amount: 150,
         paymentMethod: 'TRANSFER',
+        billType: 'Factura B',
+        ptoVenta: 3,
         businessId: 'business-123',
       });
 
@@ -82,6 +92,8 @@ describe('Pusher Integration - Payment Flow', () => {
         orderId: 'order-1',
         amount: 150,
         paymentMethod: 'TRANSFER',
+        billType: 'Factura B',
+        ptoVenta: 3,
         businessId: 'business-123',
       });
 
@@ -107,6 +119,8 @@ describe('Pusher Integration - Payment Flow', () => {
         orderId: 'order-1',
         amount: 200,
         paymentMethod: 'Efectivo',
+        billType: 'Factura B',
+        ptoVenta: 3,
         businessId: 'business-123',
       });
 
@@ -130,6 +144,8 @@ describe('Pusher Integration - Payment Flow', () => {
         orderId: 'order-1',
         amount: 150,
         paymentMethod: 'TRANSFER',
+        billType: 'Factura B',
+        ptoVenta: 3,
         businessId: 'business-123',
       });
 
@@ -147,6 +163,8 @@ describe('Pusher Integration - Payment Flow', () => {
         orderId: 'order-1',
         amount: 150,
         paymentMethod: 'TRANSFER',
+        billType: 'Factura B',
+        ptoVenta: 3,
         businessId: 'business-123',
       });
 
@@ -166,6 +184,8 @@ describe('Pusher Integration - Payment Flow', () => {
         orderId: 'order-1',
         amount: 150,
         paymentMethod: 'TRANSFER',
+        billType: 'Factura B',
+        ptoVenta: 3,
         businessId: 'business-123',
       });
 
@@ -189,6 +209,8 @@ describe('Pusher Integration - Payment Flow', () => {
         orderId: 'order-1',
         amount: 300,
         paymentMethod: 'TRANSFER',
+        billType: 'Factura B',
+        ptoVenta: 3,
         businessId: 'business-123',
       });
 
@@ -226,6 +248,8 @@ describe('Pusher Integration - Payment Flow', () => {
           orderId: 'order-1',
           amount: 100,
           paymentMethod: method,
+          billType: 'Factura B',
+          ptoVenta: 3,
           businessId: 'business-123',
         });
         
