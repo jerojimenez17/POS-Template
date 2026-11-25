@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { authMock, afipMock, dbMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   afipMock: vi.fn(),
-  dbMock: { order: { findFirst: vi.fn() }, saleReturn: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() }, product: { findMany: vi.fn() }, cashboxSession: { findFirst: vi.fn() }, $transaction: vi.fn() },
+  dbMock: { order: { findFirst: vi.fn() }, business: { findUnique: vi.fn().mockResolvedValue({ id: "business-1", cuit: "20123456789", cert: "cert", key: "key", ptoVenta: [3], planDefinition: { name: "BASIC", features: { hasAfipBilling: true }, limits: {} } }) }, saleReturn: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() }, product: { findMany: vi.fn() }, cashboxSession: { findFirst: vi.fn() }, $queryRaw: vi.fn().mockResolvedValue([{ id: "order-sensitive" }]), $transaction: vi.fn() },
 }));
 
 vi.mock("@/auth", () => ({ auth: authMock }));
@@ -28,7 +28,7 @@ const invalidOrder = {
 describe("credit-note action revalidation and safe diagnostics", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authMock.mockResolvedValue({ user: { id: "user-1", businessId: "business-1" } });
+    authMock.mockResolvedValue({ user: { id: "user-1", businessId: "business-1", role: "ADMIN" } });
     dbMock.order.findFirst.mockResolvedValue(invalidOrder);
   });
 

@@ -112,6 +112,7 @@ function setValidActionDependencies() {
   persistedBusinessFindUniqueMock.mockResolvedValue({
     id: "business-1",
     features: { hasAfipBilling: true },
+    planDefinition: { name: "BASIC", features: { hasAfipBilling: true }, limits: {} },
   });
   credentialsMock.mockResolvedValue({
     success: {

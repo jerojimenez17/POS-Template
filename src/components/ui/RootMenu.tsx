@@ -36,16 +36,14 @@ const RootMenu = () => {
             <BarChart3 className="w-16 h-16" strokeWidth={1.5} />
           </MenuCard>
 
-          {businessSlug && (
-            <MenuCard url={`/${businessSlug}/catalogo`} title="Catálogo">
-              <LayoutGrid className="w-16 h-16" strokeWidth={1.5} />
-            </MenuCard>
-          ) || (
-            // Fallback if businessSlug is not loaded yet or unavailable
-             <MenuCard url="#" title="Catálogo">
-              <LayoutGrid className="w-16 h-16 opacity-50" strokeWidth={1.5} />
-            </MenuCard>
-          )}
+          <MenuCard
+            url={businessSlug ? `/${businessSlug}/catalogo` : undefined}
+            title="Catálogo"
+            disabled={!businessSlug}
+            loading={!businessSlug}
+          >
+            <LayoutGrid className="w-16 h-16" strokeWidth={1.5} />
+          </MenuCard>
           
           {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
             <MenuCard url="/admin/users" title="Usuarios">

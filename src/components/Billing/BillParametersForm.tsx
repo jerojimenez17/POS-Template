@@ -104,24 +104,40 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType, layout = "compact
 
   useEffect(() => {
     const requestId = ++requestSequence.current;
-    const fetchVoucher = async () => {
-      if (!watchPtoVenta) return;
-      setLoadingVoucher(true);
-      const tipoFactura = getVoucherTypeCode(watchBillType);
-      const res = await getVoucherNumberAction(watchPtoVenta, tipoFactura);
-      // Ignore stale responses after rapid ptoVenta/billType changes (Jero).
-      if (requestId !== requestSequence.current) return;
-      if (res.success !== undefined) {
-        setLastVoucherNum(res.success);
-        setVoucherError(null);
-      } else {
-        setLastVoucherNum(null);
-        setVoucherError(res.errorDetails ?? res.error ?? "No se pudo obtener la numeración");
-      }
+    setLastVoucherNum(null);
+    setVoucherError(null);
+
+    if (!watchPtoVenta) {
+      setVoucherError(
+        ptoVentas.length === 0
+          ? "No hay un punto de venta configurado para consultar la numeración. Revise la configuración del negocio."
+          : "Seleccione un punto de venta configurado para consultar la numeración.",
+      );
       setLoadingVoucher(false);
+      return;
+    }
+
+    const fetchVoucher = async () => {
+      setLoadingVoucher(true);
+      try {
+        const res = await getVoucherNumberAction(watchPtoVenta, getVoucherTypeCode(watchBillType));
+        if (requestId !== requestSequence.current) return;
+        if (typeof res.success === "number") {
+          setLastVoucherNum(res.success);
+          setVoucherError(null);
+        } else {
+          setVoucherError(res.errorDetails ?? res.error ?? "No se pudo obtener la numeración");
+        }
+      } catch {
+        if (requestId === requestSequence.current) {
+          setVoucherError("No se pudo consultar la numeración del comprobante. Verifique el punto de venta y el tipo.");
+        }
+      } finally {
+        if (requestId === requestSequence.current) setLoadingVoucher(false);
+      }
     };
     fetchVoucher();
-  }, [watchBillType, watchPtoVenta]);
+  }, [ptoVentas, watchBillType, watchPtoVenta]);
 
   useEffect(() => {
     onOrderResetRef.current = () => {

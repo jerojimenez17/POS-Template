@@ -71,7 +71,7 @@ describe("clients cursor loader and authorization", () => {
     expect(query.take).toBeLessThanOrEqual(26);
   });
 
-  it("exposes three cursor pages for 76 ordered records without repeating a record", async () => {
+   it("exposes four cursor pages for 76 ordered records without repeating a record", async () => {
     const records = Array.from({ length: 76 }, (_, index) => client(String(index + 1), `Client ${String(index + 1).padStart(2, "0")}`));
     clientDb.findMany.mockImplementation(({ cursor }: { cursor?: { id: string } }) => {
       const start = cursor ? records.findIndex((item) => item.id === cursor.id) + 1 : 0;
@@ -80,11 +80,13 @@ describe("clients cursor loader and authorization", () => {
     const actions = await loadActions();
     const first = await actions.getClientsPage({ limit: 25 });
     const second = await actions.getClientsPage({ limit: 25, cursor: first.nextCursor });
-    const third = await actions.getClientsPage({ limit: 25, cursor: second.nextCursor });
-    expect(first).toMatchObject({ clients: records.slice(0, 25), hasMore: true });
-    expect(second).toMatchObject({ clients: records.slice(26, 51), hasMore: true });
-    expect(third).toMatchObject({ clients: records.slice(52), hasMore: false, nextCursor: null });
-    const loaded = [...(first.clients as unknown[]), ...(second.clients as unknown[]), ...(third.clients as unknown[])];
+     const third = await actions.getClientsPage({ limit: 25, cursor: second.nextCursor });
+     const fourth = await actions.getClientsPage({ limit: 25, cursor: third.nextCursor });
+     expect(first).toMatchObject({ clients: records.slice(0, 25), hasMore: true });
+     expect(second).toMatchObject({ clients: records.slice(25, 50), hasMore: true });
+     expect(third).toMatchObject({ clients: records.slice(50, 75), hasMore: true });
+     expect(fourth).toMatchObject({ clients: records.slice(75), hasMore: false, nextCursor: null });
+     const loaded = [...(first.clients as unknown[]), ...(second.clients as unknown[]), ...(third.clients as unknown[]), ...(fourth.clients as unknown[])];
     expect(new Set(loaded.map((item) => (item as { id: string }).id)).size).toBe(76);
   });
 

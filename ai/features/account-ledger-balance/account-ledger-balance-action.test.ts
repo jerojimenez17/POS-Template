@@ -9,7 +9,12 @@ const { authFunctionMock, orderFindManyMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/auth", () => ({ auth: authFunctionMock }));
-vi.mock("@/lib/db", () => ({ db: { order: { findMany: orderFindManyMock } } }));
+vi.mock("@/lib/db", () => ({
+  db: {
+    order: { findMany: orderFindManyMock },
+    business: { findUnique: vi.fn().mockResolvedValue({ planDefinition: { features: { hasClientLedger: true }, limits: {} } }) },
+  },
+}));
 
 const findMany = vi.mocked(db.order.findMany);
 

@@ -82,7 +82,7 @@ describe("ProductPrintModal — selector explícito de formatos", () => {
   it("mantiene A4, su grid de tres columnas, contenido y paginación por grupos", () => {
     openModal({ products: Array.from({ length: 14 }, (_, index) => product({ id: `p-${index}`, code: `C-${index}` })) });
     const grid = document.querySelector('[style*="grid-template-columns"]');
-    expect(grid).toHaveStyle("grid-template-columns: repeat(3, 6.3cm)");
+    expect(grid).toHaveStyle("grid-template-columns: repeat(3, 6.5cm)");
     expect(document.querySelectorAll(".label-container")).toHaveLength(14);
     expect(Array.from(document.querySelectorAll<HTMLElement>("div")).filter((node) => node.style.pageBreakAfter === "always")).toHaveLength(1);
     expect(screen.getAllByText("Producto de prueba").length).toBeGreaterThan(0);

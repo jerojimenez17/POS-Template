@@ -227,7 +227,7 @@ describe("pdf-templates — AC6 AC7 AC8 content + presupuesto-print-fix regressi
     const html = buildPDFHTML(receipt, { pointOfSale: 1, invoiceNumber: 23 });
     expect(html).toContain("Factura B");
     expect(html).toContain("001-0023");
-    expect(html).toContain("CUIT:");
+    expect(html).toContain("CUIT</span>");
     expect(html).toContain("CAE:");
     expect(html).toContain("Comprobante Autorizado");
     expect(containsCI(html, "Factura")).toBe(true);
@@ -250,7 +250,7 @@ describe("pdf-templates — AC6 AC7 AC8 content + presupuesto-print-fix regressi
     expect(presupuestoHtml).not.toContain("Medio de Pago");
     expect(presupuestoHtml).not.toContain("¡Gracias por su compra!");
     expect(presupuestoHtml).toMatch(/No válido como factura/i);
-    expect(facturaHtml).toContain("Medio de Pago");
+    expect(facturaHtml).toContain("Pago</span>");
     expect(facturaHtml).toContain("¡Gracias por su compra!");
   });
 });

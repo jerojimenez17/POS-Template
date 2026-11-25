@@ -2,10 +2,12 @@ import { db } from "@/lib/db";
 import { auth } from "@/auth";
 import type BillState from "@/models/BillState";
 import { StockActivityItem } from "@/components/StockActivityModal";
-import { fail } from "@/lib/action-result";
-import { Prisma } from "@prisma/client";
-import { normalizeHistoricalDocumentType } from "@/lib/print/receipt-data";
+import { fail, type ActionResult } from "@/lib/action-result";
+import { PAGINATION } from "@/lib/pagination";
+import { Prisma, UserRole } from "@prisma/client";
 import { parseCAE } from "@/lib/cae";
+import { normalizeHistoricalDocumentType } from "@/lib/print/receipt-data";
+import { SalesQuerySchema, type SalesQueryInput } from "@/schemas/sales-query";
 import { getRecoveredSalesBillType } from "@/services/sales-document-classification";
 import { CREDIT_NOTE_NON_ACTIONABLE_MESSAGE, getFiscalDiagnosticLogFields, normalizeAuthorizedFiscalSnapshot, normalizeSaleFiscalMetadata, type SaleFiscalContext, type SaleFiscalDiagnostic, type SaleFiscalRecovery } from "@/services/afip/credit-note";
 
@@ -156,11 +158,15 @@ export function mapOrderToBillState(order: OrderWithItems & Record<string, unkno
           : {}),
         billType: item.creditNoteBillType as "Nota de Crédito A" | "Nota de Crédito B" | "Nota de Crédito C" | undefined,
         afipVoucherType: item.creditNoteAfipType as 3 | 8 | 13 | undefined,
-        ...(typeof item.creditNoteCAE === "string" ? { cae: item.creditNoteCAE } : {}),
+         ...(typeof item.creditNoteCAE === "string" && /^\d{14}$/.test(item.creditNoteCAE.trim())
+           ? { cae: item.creditNoteCAE.trim() }
+           : {}),
         number: typeof item.creditNoteNumber === "number" ? item.creditNoteNumber : undefined,
         pointOfSale: typeof item.creditNotePointOfSale === "number" ? item.creditNotePointOfSale : undefined,
         originalBillType: item.originalVoucherType === 1 ? "Factura A" : item.originalVoucherType === 11 ? "Factura C" : "Factura B",
-        originalCae: typeof item.originalCAE === "string" ? item.originalCAE : (normalizedFiscal?.originalCAE ?? ""),
+         originalCae: typeof item.originalCAE === "string" && /^\d{14}$/.test(item.originalCAE.trim())
+           ? item.originalCAE.trim()
+           : (normalizedFiscal?.originalCAE ?? ""),
         originalAfipVoucherType: item.originalVoucherType as 1 | 6 | 11 | undefined,
         originalNumber: item.originalNumber,
         originalPointOfSale: item.originalPointOfSale,
@@ -212,10 +218,47 @@ interface ReportReturn {
   total: number;
 }
 
-export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
+interface DailyReportData {
+  totalSales: number;
+  totalDiscounts: number;
+  totalReturns: number;
+  netTotal: number;
+  orderCount: number;
+  returnCount: number;
+  paymentMethods: Record<string, number>;
+  stockMovementCount: number;
+  stockActivity: { outs: StockActivityItem[]; ins: StockActivityItem[] };
+}
+
+type ReportPhase = "orders" | "returns" | "stockMovements";
+
+function safeReportErrorDetails(error: unknown): { name: string; code?: string } {
+  if (error instanceof Error) {
+    const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
+    return { name: error.name || "Error", code };
+  }
+
+  return { name: "UnknownError" };
+}
+
+async function readReportPhase<T>(phase: ReportPhase, read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    console.error("Daily report query failed", { phase, ...safeReportErrorDetails(error) });
+    throw error;
+  }
+}
+
+export const getDailyReportAction = async (
+  startDate: Date,
+  endDate?: Date,
+): Promise<ActionResult<DailyReportData>> => {
   const session = await auth();
+  if (!session) return fail("No autorizado", "UNAUTHENTICATED");
+
   const businessId = session?.user?.businessId;
-  if (!businessId) return { error: "No autorizado" };
+  if (!businessId) return fail("Tu sesión no tiene un negocio asignado", "FORBIDDEN");
 
   const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
@@ -224,11 +267,11 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
 
   try {
     const [orders, returns, stockMovements] = await Promise.all([
-      db.order.findMany({
+      readReportPhase("orders", () => db.order.findMany({
         where: { businessId, date: { gte: start, lte: end }, paidStatus: "pago" },
         include: { items: true },
-      }),
-       db.saleReturn.findMany({
+      })),
+       readReportPhase("returns", () => db.saleReturn.findMany({
          where: {
            businessId,
            date: { gte: start, lte: end },
@@ -237,13 +280,13 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
              { kind: "MANUAL_RETURN", status: { in: ["PENDING", "AUTHORIZED"] } },
              { kind: "CREDIT_NOTE", status: "AUTHORIZED" },
            ],
-         },
-         include: { items: true },
-       }),
-      db.stockMovement.findMany({
+          },
+          include: { items: true },
+        })),
+      readReportPhase("stockMovements", () => db.stockMovement.findMany({
         where: { businessId, date: { gte: start, lte: end } },
         include: { product: true },
-      }),
+      })),
     ]);
 
     const totalSales = orders.reduce((acc: number, o: ReportOrder) => acc + o.total, 0);
@@ -298,9 +341,92 @@ export const getDailyReportAction = async (startDate: Date, endDate?: Date) => {
         stockActivity: { outs, ins },
       }
     };
-  } catch (error) {
-    console.error("Error fetching daily report:", error);
+  } catch {
     return fail("Error al generar el reporte");
+  }
+};
+
+export interface GetSalesResult {
+  sales: BillState[];
+  nextCursor: string | null;
+  error?: string;
+}
+
+function calendarStart(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function buildSalesWhere(params: SalesQueryInput, businessId: string): Prisma.OrderWhereInput {
+  const where: Prisma.OrderWhereInput = { businessId, paidStatus: "pago" };
+
+  if (params.from || params.to) {
+    const date: Prisma.DateTimeFilter = {};
+    if (params.from) date.gte = calendarStart(params.from);
+    if (params.to) {
+      const exclusiveEnd = calendarStart(params.to);
+      exclusiveEnd.setDate(exclusiveEnd.getDate() + 1);
+      date.lt = exclusiveEnd;
+    }
+    where.date = date;
+  }
+
+  if (params.seller) where.seller = params.seller;
+  if (params.documentTypes?.length) where.clientDocumentType = { in: params.documentTypes };
+  if (params.paymentMethods?.length) {
+    where.OR = [
+      { paymentMethod: { in: params.paymentMethods } },
+      { paymentMethod2: { in: params.paymentMethods } },
+    ];
+  }
+
+  return where;
+}
+
+export const getSalesAction = async (params?: SalesQueryInput): Promise<GetSalesResult> => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId) return { sales: [], nextCursor: null };
+
+  const isBusinessWideRole = session.user.role === UserRole.ADMIN || session.user.role === UserRole.SUPER_ADMIN;
+  const sellerScope = session.user.email?.trim();
+  if (!isBusinessWideRole && !sellerScope) return { sales: [], nextCursor: null };
+
+  const parsedParams = SalesQuerySchema.safeParse(params ?? {});
+  if (!parsedParams.success) {
+    return { sales: [], nextCursor: null, error: "Filtros de ventas inválidos" };
+  }
+
+  try {
+    const query = parsedParams.data;
+    const take = query.take ?? PAGINATION.SALES_MAX;
+    const orders = await db.order.findMany({
+      where: buildSalesWhere(
+        isBusinessWideRole ? query : { ...query, seller: sellerScope },
+        businessId,
+      ),
+      include: {
+        items: true,
+        client: true,
+      },
+      orderBy: [{ date: "desc" }, { id: "desc" }],
+      take: take + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    });
+
+    const hasMore = orders.length > take;
+    const results = hasMore ? orders.slice(0, take) : orders;
+    const nextCursor = hasMore ? results[results.length - 1].id : null;
+
+    const parsedSales = results.map(mapOrderToBillState);
+
+    return { sales: parsedSales, nextCursor };
+  } catch (error) {
+    console.error("Sales query failed", {
+      phase: "orders",
+      ...safeReportErrorDetails(error),
+    });
+    return { sales: [], nextCursor: null, error: "No se pudieron cargar las ventas" };
   }
 };
 
@@ -341,6 +467,57 @@ export const getSaleByIdAction = async (id: string): Promise<BillState | null> =
   }
 };
 
+export const getUniqueSellersAction = async (): Promise<string[]> => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId) return [];
+
+  const isBusinessWideRole = session.user.role === UserRole.ADMIN || session.user.role === UserRole.SUPER_ADMIN;
+  const sellerEmail = session.user.email?.trim();
+  if (!isBusinessWideRole) return sellerEmail ? [sellerEmail] : [];
+
+  try {
+    const sellers = await db.order.findMany({
+      where: {
+        businessId,
+        seller: { not: null, notIn: [""] }
+      },
+      select: {
+        seller: true,
+      },
+      distinct: ['seller'],
+    });
+
+    return sellers.map(s => s.seller as string);
+  } catch (error) {
+    console.error("Error fetching unique sellers:", error);
+    return [];
+  }
+};
+
+export const getSaleHistoryAction = async (orderId: string) => {
+  const session = await auth();
+  const businessId = session?.user?.businessId;
+  if (!businessId) return [];
+
+  try {
+    const updates = await db.orderUpdate.findMany({
+      where: { orderId, order: { businessId } },
+      include: {
+        updatedBy: {
+          select: { name: true, email: true }
+        }
+      },
+      orderBy: { date: "desc" },
+    });
+
+    return updates;
+  } catch (error) {
+    console.error("Error fetching sale history:", error);
+    return [];
+  }
+};
+
 export type OrderUpdateWithUser = Prisma.OrderUpdateGetPayload<{
   include: {
     updatedBy: {
@@ -352,5 +529,3 @@ export type OrderUpdateWithUser = Prisma.OrderUpdateGetPayload<{
   };
 }>;
 
-export { getSaleHistoryAction } from "./get-sale-history";
-export { getSalesAction } from "./get-sales";

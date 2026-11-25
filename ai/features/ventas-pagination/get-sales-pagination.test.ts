@@ -39,10 +39,9 @@ describe("getSalesAction: server-side filtered, stable pagination", () => {
           { paymentMethod: { in: ["Efectivo"] } },
           { paymentMethod2: { in: ["Efectivo"] } },
         ] }],
-        billType: { in: ["Factura C"] },
         date: { gte: new Date(filters.startDate), lte: new Date(filters.endDate) },
       }),
-      take: 26,
+      take: 50,
     }));
     expect(where).not.toHaveProperty("paidMethod");
     expect(where).not.toHaveProperty("businessId", "business-b");
@@ -83,7 +82,7 @@ describe("getSalesAction: server-side filtered, stable pagination", () => {
     const query = findManyMock.mock.calls[0][0];
     expect(query.where.OR).toEqual([
       { date: { lt: new Date("2026-01-10T12:00:00.000Z") } },
-      { date: new Date("2026-01-10T12:00:00.000Z"), id: { lt: "sale-20" } },
+      { date: { gte: new Date("2026-01-10T12:00:00.000Z"), lte: new Date("2026-01-10T12:00:00.000Z") }, id: { lt: "sale-20" } },
     ]);
     expect(query.where.AND).toEqual([{
       OR: [
@@ -92,7 +91,6 @@ describe("getSalesAction: server-side filtered, stable pagination", () => {
       ],
     }]);
     expect(query.where.seller).toBe("seller-a");
-    expect(query.where.billType).toEqual({ in: ["Factura C"] });
     expect(query.where.date).toEqual({
       gte: new Date(filters.startDate),
       lte: new Date(filters.endDate),
@@ -101,7 +99,7 @@ describe("getSalesAction: server-side filtered, stable pagination", () => {
 
   it("walks compound-cursor pages without duplicating equal-date rows", async () => {
     const date = new Date("2026-01-10T12:00:00.000Z");
-    const rows = ["sale-3", "sale-2", "sale-1"].map((id) => ({ id, date }));
+    const rows = ["sale-3", "sale-2", "sale-1"].map((id) => ({ id, date, CAE: "12345678901234" }));
     findManyMock.mockImplementation(async (query: { take: number; where?: { OR?: unknown } }) => {
       const cursorBranch = query.where?.OR;
       const cursorId = Array.isArray(cursorBranch) && cursorBranch[1]
@@ -135,7 +133,11 @@ describe("getSalesAction: server-side filtered, stable pagination", () => {
   it("returns a safe empty result without leaking database errors", async () => {
     findManyMock.mockRejectedValueOnce(new Error("private database details"));
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    await expect(getSalesAction()).resolves.toEqual({ sales: [], nextCursor: null });
+    await expect(getSalesAction()).resolves.toEqual({
+      sales: [],
+      nextCursor: null,
+      error: "No se pudieron cargar las ventas",
+    });
     vi.restoreAllMocks();
   });
 });

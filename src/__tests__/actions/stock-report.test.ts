@@ -77,6 +77,7 @@ const buildDbMock = (overrides: {
     supplier: { findUnique: vi.fn().mockResolvedValue(null) },
     stockMovement: {
       create: stockMovementCreate,
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
       findMany: vi.fn().mockResolvedValue(overrides.stockMovementsSeed ?? []),
     },
     productImage: {
@@ -101,6 +102,8 @@ const buildDbMock = (overrides: {
     cashBox: { update: vi.fn().mockResolvedValue({}) },
     cashMovement: { create: vi.fn().mockResolvedValue({ id: "cm-1" }) },
     productRanking: { upsert: vi.fn().mockResolvedValue({}) },
+    $executeRaw: vi.fn().mockResolvedValue(1),
+    $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn().mockImplementation(async (cb: unknown) => {
       if (Array.isArray(cb)) return Promise.all(cb);
       return typeof cb === "function" ? cb(dbMock) : cb;
@@ -112,7 +115,6 @@ const buildDbMock = (overrides: {
 beforeEach(() => {
   vi.clearAllMocks();
 });
-
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -326,12 +328,12 @@ describe("FR-026B — SALE / RETURN movements (existing behavior preserved)", ()
     vi.doMock("@/lib/db", () => ({
       db: {
         product: { update: vi.fn().mockResolvedValue({}) },
-        stockMovement: { create: stockMovementCreate },
+        stockMovement: { create: stockMovementCreate, createMany: stockMovementCreate },
         cashboxSession: { findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }) },
         order: { create: vi.fn().mockResolvedValue({ id: "order-1", items: [] }) },
         cashBox: { update: vi.fn().mockResolvedValue({}) },
         cashMovement: { create: vi.fn().mockResolvedValue({ id: "cm-1" }) },
-        productRanking: { upsert: vi.fn().mockResolvedValue({}) },
+      productRanking: { upsert: vi.fn().mockResolvedValue({}) },
         $transaction: vi.fn().mockImplementation(async (cb: unknown) => {
           if (Array.isArray(cb)) return Promise.all(cb);
           return typeof cb === "function"
@@ -339,7 +341,8 @@ describe("FR-026B — SALE / RETURN movements (existing behavior preserved)", ()
                 cashboxSession: { findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }) },
                 order: { create: vi.fn().mockResolvedValue({ id: "order-1", items: [] }) },
                 product: { update: vi.fn().mockResolvedValue({}) },
-                stockMovement: { create: stockMovementCreate },
+                stockMovement: { create: stockMovementCreate, createMany: stockMovementCreate },
+                $executeRaw: vi.fn().mockResolvedValue(1),
                 productRanking: { upsert: vi.fn().mockResolvedValue({}) },
                 cashBox: { update: vi.fn().mockResolvedValue({}) },
                 cashMovement: { create: vi.fn().mockResolvedValue({ id: "cm-1" }) },
@@ -358,16 +361,14 @@ describe("FR-026B — SALE / RETURN movements (existing behavior preserved)", ()
       products: [{ id: "p-1", code: "P1", description: "Pd1", salePrice: 100, amount: 2 }],
     });
 
-    expect(stockMovementCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
+    expect(stockMovementCreate).toHaveBeenCalledWith({
+      data: [expect.objectContaining({
           type: "SALE",
           quantity: -2,
           productId: "p-1",
           businessId: BUSINESS_ID,
-        }),
-      }),
-    );
+      })],
+    });
   });
 
   it("processReturnAction writes a RETURN movement with positive quantity", async () => {
@@ -377,22 +378,39 @@ describe("FR-026B — SALE / RETURN movements (existing behavior preserved)", ()
     vi.doMock("@/lib/db", () => ({
       db: {
         product: { update: vi.fn().mockResolvedValue({}) },
-        stockMovement: { create: stockMovementCreate },
+        stockMovement: { create: stockMovementCreate, createMany: stockMovementCreate },
         saleReturn: { create: returnCreate },
         saleReturnItem: { create: vi.fn().mockResolvedValue({}) },
         orderItem: { findFirst: vi.fn().mockResolvedValue({ id: "oi-1" }) },
+        order: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: "order-1",
+            items: [{ id: "oi-1", productId: "p-1", product: { businessId: BUSINESS_ID } }],
+                    returns: [],
+          }),
+        },
         cashboxSession: { findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }) },
         cashBox: { update: vi.fn().mockResolvedValue({}) },
         cashMovement: { create: vi.fn().mockResolvedValue({ id: "cm-1" }) },
+                $executeRaw: vi.fn().mockResolvedValue(1),
         $transaction: vi.fn().mockImplementation(async (cb: unknown) => {
           if (Array.isArray(cb)) return Promise.all(cb);
           return typeof cb === "function"
             ? cb({
                 saleReturn: { create: returnCreate },
                 product: { update: vi.fn().mockResolvedValue({}) },
-                stockMovement: { create: stockMovementCreate },
-                saleReturnItem: { create: vi.fn().mockResolvedValue({}) },
+                 stockMovement: { create: stockMovementCreate, createMany: stockMovementCreate },
+                 saleReturnItem: { create: vi.fn().mockResolvedValue({}), createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+                 $executeRaw: vi.fn().mockResolvedValue(1),
+                 $queryRaw: vi.fn().mockResolvedValue([]),
                 orderItem: { findFirst: vi.fn().mockResolvedValue({ id: "oi-1" }) },
+                order: {
+                  findFirst: vi.fn().mockResolvedValue({
+                    id: "order-1",
+                    items: [{ id: "oi-1", productId: "p-1", product: { businessId: BUSINESS_ID } }],
+                    returns: [],
+                  }),
+                },
                 cashboxSession: { findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }) },
                 cashBox: { update: vi.fn().mockResolvedValue({}) },
                 cashMovement: { create: vi.fn().mockResolvedValue({ id: "cm-1" }) },
@@ -409,16 +427,14 @@ describe("FR-026B — SALE / RETURN movements (existing behavior preserved)", ()
       reason: "test",
     });
 
-    expect(stockMovementCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
+    expect(stockMovementCreate).toHaveBeenCalledWith({
+      data: [expect.objectContaining({
           type: "RETURN",
           quantity: 3,
           productId: "p-1",
           businessId: BUSINESS_ID,
-        }),
-      }),
-    );
+      })],
+    });
   });
 });
 

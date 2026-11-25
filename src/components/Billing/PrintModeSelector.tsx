@@ -15,9 +15,11 @@ interface ModeButtonProps {
 
 const ModeButton = ({ mode, current, icon, label, onClick }: ModeButtonProps) => (
   <button
+    type="button"
     onClick={onClick}
+    aria-pressed={mode === current}
     className={cn(
-      "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-all first:rounded-l-md last:rounded-r-md",
+      "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md",
       mode === current
         ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm z-10"
         : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
@@ -51,12 +53,15 @@ export default function PrintModeSelector() {
         />
       </div>
       <button
+        type="button"
         onClick={() => setQzTrayActive(!qzTrayActive)}
+        aria-pressed={qzTrayActive}
+        aria-label={qzTrayActive ? "Desactivar QZ Tray" : "Activar QZ Tray"}
         className={cn(
-          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all",
+          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
           qzTrayActive
-            ? "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400"
-            : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent"
         )}
         title={qzTrayActive ? "QZ Tray conectado" : "QZ Tray desconectado"}
       >

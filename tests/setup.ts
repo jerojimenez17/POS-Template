@@ -1,5 +1,4 @@
 import { vi } from 'vitest';
-import '@testing-library/jest-dom';
 
 // jsdom does not implement ResizeObserver; Radix UI primitives (@radix-ui/react-use-size,
 // used by Select/Popover/etc.) throw "ResizeObserver is not defined" without a polyfill.
@@ -17,6 +16,10 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 }
 
 export const mockDb = {
+  // Raw methods are neutral defaults only. Locking and query-result assertions
+  // must provide their own transaction fixture in the relevant suite.
+  $queryRaw: vi.fn().mockResolvedValue([]),
+  $executeRaw: vi.fn().mockResolvedValue(0),
   $executeRawUnsafe: vi.fn().mockResolvedValue(0),
   $transaction: vi.fn().mockImplementation(async (arg) => {
     if (typeof arg === 'function') {
@@ -88,27 +91,9 @@ export const mockDb = {
   },
   // --- Our side (plan limits / daily usage / ranking / unpaid orders) ---
   planDefinition: {
-    findUnique: vi.fn().mockResolvedValue({
-      id: 'plan_pro',
-      name: 'PRO',
-      features: {
-        hasAfipBilling: true,
-        hasPublicCatalog: true,
-        hasClientLedger: true,
-        hasMultiCashbox: true,
-        hasSupplierFilter: true,
-        hasBudget: true,
-      },
-      limits: {
-        maxUsers: 5,
-        maxProducts: 1000,
-        maxCashboxes: 3,
-        maxClients: 500,
-        dailySalesLimit: 999999,
-        dailyProductsLimit: 999999,
-        dailyClientsLimit: 999999,
-      },
-    }),
+    // Keep the shared fixture neutral; suites that exercise plan-gated paths
+    // must declare the plan they intend to test.
+    findUnique: vi.fn().mockResolvedValue(null),
   },
   dailyUsage: {
     findUnique: vi.fn().mockResolvedValue(null),

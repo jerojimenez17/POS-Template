@@ -8,6 +8,7 @@ import { auth } from "../../auth";
 import { db } from "@/lib/db";
 import { encrypt } from "@/lib/encryption";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { requireFeature } from "@/lib/auth-gates";
 
 interface GeneratedCertificates {
   cert: string;
@@ -94,6 +95,16 @@ export const generateCertsAction = async (
   const targetBusinessId = validatedBusinessId ?? session.user.businessId;
   if (!targetBusinessId) {
     return { error: "Negocio no especificado" };
+  }
+
+  // ADMIN users are entitled through their own business plan. SUPER_ADMIN
+  // intentionally bypasses this session-business check so they can configure
+  // certificates for a selected/new business before its plan is assigned.
+  if (session.user.role === UserRole.ADMIN) {
+    const feature = await requireFeature("hasAfipBilling");
+    if (!feature.success) {
+      return { error: feature.error || "Esta función no está habilitada en tu plan actual." };
+    }
   }
 
   try {

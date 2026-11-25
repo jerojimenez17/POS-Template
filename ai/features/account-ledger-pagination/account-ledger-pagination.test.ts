@@ -4,6 +4,15 @@ import { getUnpaidOrders } from "@/actions/unpaid-orders";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 
+const { requireFeatureMock } = vi.hoisted(() => ({
+  requireFeatureMock: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/lib/auth-gates", () => ({
+  requireFeature: requireFeatureMock,
+  assertWritePermission: vi.fn(),
+}));
+
 interface LedgerOrder {
   id: string;
   date: Date;
@@ -39,6 +48,7 @@ const order = (id: string): LedgerOrder => ({
 describe("getUnpaidOrders paginated contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    requireFeatureMock.mockResolvedValue({ success: true });
     authMock.mockResolvedValue({ user: { businessId: "business-from-session" } } as never);
     orderFindMany.mockResolvedValue([]);
     orderFindUnique.mockResolvedValue(null);
@@ -59,6 +69,37 @@ describe("getUnpaidOrders paginated contract", () => {
     });
     expect((result.data as { orders: LedgerOrder[] }).orders).toHaveLength(50);
     expect(orderFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 51 }));
+  });
+
+  it("bounds the Todos tab to the first page and returns a cursor envelope", async () => {
+    orderFindMany.mockResolvedValue(Array.from({ length: 26 }, (_, index) => order(`all-${index}`)) as never);
+
+    const result = await getUnpaidOrders(input({ status: "all", limit: 25 }));
+
+    expect(result).toEqual({
+      success: true,
+      data: { orders: expect.any(Array), nextCursor: expect.any(String), hasMore: true },
+    });
+    expect((result.data as { orders: LedgerOrder[] }).orders).toHaveLength(25);
+    expect(orderFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 26 }));
+  });
+
+  it("keeps an empty Todos page truthful instead of falling back to a legacy array", async () => {
+    const result = await getUnpaidOrders(input({ status: "all", limit: 25 }));
+
+    expect(result).toEqual({
+      success: true,
+      data: { orders: [], nextCursor: null, hasMore: false },
+    });
+  });
+
+  it("returns a visible action error for a bounded Todos request", async () => {
+    orderFindMany.mockRejectedValue(new Error("database unavailable"));
+
+    await expect(getUnpaidOrders(input({ status: "all", limit: 25 }))).resolves.toEqual({
+      success: false,
+      error: "database unavailable",
+    });
   });
 
   it("caps a requested limit at 100 while still querying limit plus one", async () => {
@@ -91,17 +132,15 @@ describe("getUnpaidOrders paginated contract", () => {
     expect(query).not.toHaveProperty("skip", expect.any(Number));
   });
 
-  it.each([
-    ["pendiente", { status: "pendiente" }],
-    ["inpago", { paidStatus: "inpago", status: { not: "pendiente" } }],
-    ["pagado", { paidStatus: "pago", status: { not: "pendiente" } }],
-    ["all", { status: { not: "pendiente" } }],
-  ])("preserves %s filtering semantics in every page request", async (_name, expected) => {
+   it.each([
+     ["pendiente", { status: "pendiente" }],
+     ["inpago", { paidStatus: "inpago", status: { not: "pendiente" } }],
+     ["pagado", { paidStatus: "pago", status: { not: "pendiente" } }],
+     ["all", { businessId: "business-from-session" }],
+   ])("preserves %s filtering semantics in every page request", async (_name, expected) => {
     await getUnpaidOrders(input({ status: _name }));
 
-    expect(orderFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining(expected) }),
-    );
+     expect(orderFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining(expected) }));
   });
 
   it("trims search, omits whitespace-only filters, and searches the client relation", async () => {
@@ -128,6 +167,62 @@ describe("getUnpaidOrders paginated contract", () => {
       error: "No autorizado",
     });
     expect(orderFindMany).not.toHaveBeenCalled();
+  });
+
+  it("denies BASIC feature access before any ledger query", async () => {
+    requireFeatureMock.mockResolvedValue({
+      success: false,
+      error: "Esta función no está habilitada en tu plan actual.",
+    });
+
+    await expect(getUnpaidOrders(input())).resolves.toEqual({
+      success: false,
+      error: "Esta función no está habilitada en tu plan actual.",
+    });
+    expect(requireFeatureMock).toHaveBeenCalledWith("hasClientLedger");
+    expect(authMock).not.toHaveBeenCalled();
+    expect(orderFindMany).not.toHaveBeenCalled();
+    expect(orderFindUnique).not.toHaveBeenCalled();
+  });
+
+  it.each(["PRO", "ENTERPRISE"])("allows %s feature access and preserves the request filters", async (plan) => {
+    requireFeatureMock.mockResolvedValue({
+      success: true,
+      data: { business: { plan } },
+    });
+
+    await getUnpaidOrders(input({ status: "inpago", search: "  Ana  ", limit: 25, cursor: null }));
+
+    expect(requireFeatureMock).toHaveBeenCalledWith("hasClientLedger");
+    expect(orderFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        businessId: "business-from-session",
+        paidStatus: "inpago",
+        client: { name: { contains: "Ana", mode: "insensitive" } },
+      }),
+      take: 101,
+    }));
+  });
+
+  it("returns the auth-gate error when requireFeature throws", async () => {
+    requireFeatureMock.mockRejectedValue(new Error("feature resolver unavailable"));
+
+    await expect(getUnpaidOrders(input())).resolves.toEqual({
+      success: false,
+      error: "feature resolver unavailable",
+    });
+    expect(orderFindMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps the action error visible when the session is missing", async () => {
+    authMock.mockResolvedValue(null as never);
+
+    await expect(getUnpaidOrders(input())).resolves.toEqual({
+      success: false,
+      error: "No autorizado",
+    });
+    expect(orderFindMany).not.toHaveBeenCalled();
+    expect(orderFindUnique).not.toHaveBeenCalled();
   });
 
   it("keeps detail requests unpaginated and preserves the full detail relation contract", async () => {

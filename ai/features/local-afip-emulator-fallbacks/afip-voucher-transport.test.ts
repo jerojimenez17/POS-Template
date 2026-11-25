@@ -74,6 +74,7 @@ describe("AFIP create-voucher transport URL selection", () => {
     persistedBusinessFindUniqueMock.mockResolvedValue({
       id: "tenant-1",
       features: { hasAfipBilling: true },
+      planDefinition: { name: "BASIC", features: { hasAfipBilling: true }, limits: {} },
     });
     requireFeatureMock.mockResolvedValue({
       success: true,

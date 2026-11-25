@@ -101,6 +101,7 @@ const CodeBarModal = ({ code, codebar, description, salePrice }: Props) => {
           onClick={(e) => e.stopPropagation()}
           variant="outline"
           size="sm"
+          aria-label="Imprimir código de barras"
         >
           <Barcode className="h-4 w-4" />
         </Button>

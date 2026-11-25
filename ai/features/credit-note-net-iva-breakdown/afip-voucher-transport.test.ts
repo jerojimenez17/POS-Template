@@ -69,6 +69,7 @@ describe("createAFIPVoucher local transport contract", () => {
     persistedBusinessFindUniqueMock.mockResolvedValue({
       id: "tenant-1",
       features: { hasAfipBilling: true },
+      planDefinition: { name: "BASIC", features: { hasAfipBilling: true }, limits: {} },
     });
     requireFeatureMock.mockResolvedValue({ success: true, data: { ...actor, businessId: "tenant-1", role: "ADMIN" } });
     credentialsMock.mockResolvedValue({ success: {

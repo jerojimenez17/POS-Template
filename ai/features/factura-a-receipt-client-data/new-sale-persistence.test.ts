@@ -1,7 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/db", () => ({ db: { $transaction: vi.fn() } }));
+vi.mock("@/lib/db", () => ({
+  db: {
+    $transaction: vi.fn(),
+    business: { findUnique: vi.fn(), findFirst: vi.fn() },
+  },
+}));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/auth-gates", () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+  requireFeature: vi.fn().mockResolvedValue({ success: true }),
+}));
+vi.mock("@/lib/daily-limits", () => ({
+  getDailyUsage: vi.fn().mockResolvedValue({ salesCount: 0 }),
+  checkDailyLimit: vi.fn().mockResolvedValue({ allowed: true }),
+  incrementDailyUsage: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidateTag: vi.fn() }));
 vi.mock("@/lib/pusher-server", () => ({ pusherServer: { trigger: vi.fn() } }));
@@ -25,7 +39,9 @@ describe("new-sale Factura A client snapshot", () => {
     vi.mocked(db.$transaction).mockImplementation(async (callback) => callback({
       cashboxSession: { findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }) },
       order: { create: orderCreate },
-      stockMovement: { createMany: vi.fn() },
+      product: { update: vi.fn() },
+      stockMovement: { create: vi.fn() },
+      productRanking: { upsert: vi.fn() },
       cashBox: { update: vi.fn() },
       cashMovement: { create: vi.fn().mockResolvedValue({ id: "movement-1" }) },
       $executeRaw: vi.fn(),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getUnpaidOrders, type AccountLedgerOrder, type AccountLedgerPage } from "@/actions/unpaid-orders";
 import { getBusinessBillingInfoAction } from "@/actions/business";
@@ -65,12 +65,9 @@ export default function AccountLedgerContent({
   businessId: string;
 }) {
   const router = useRouter();
-  const [allOrders, setAllOrders] = useState<OrderWithClient[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [refreshToggle, setRefreshToggle] = useState(0);
   const [billingInfo, setBillingInfo] = useState<Record<string, unknown> | null>(null);
 
@@ -95,24 +92,6 @@ export default function AccountLedgerContent({
     getBusinessBillingInfoAction().then(setBillingInfo);
   }, []);
 
-  // "Todos" tab keeps the legacy unfiltered contract (raw array, includes
-  // "pendiente" orders) and our client-side filtering/sorting/pagination.
-  useEffect(() => {
-    if (!isAllTab) return;
-    let cancelled = false;
-    getUnpaidOrders({ businessId, status: "all" }).then((result) => {
-      if (cancelled) return;
-      const data = result as { success: boolean; data?: OrderWithClient[] };
-      if (data.success) {
-        setAllOrders(data.data || []);
-      }
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [businessId, refreshToggle, isAllTab]);
-
   // Pusher listener for real-time updates
   useEffect(() => {
     if (!businessId) return;
@@ -132,11 +111,6 @@ export default function AccountLedgerContent({
 
   // Optimistic UI update when an order is confirmed (applies to both data paths)
   const handleOrderConfirmed = useCallback((orderId: string) => {
-    setAllOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId ? { ...o, status: "confirmado" } : o
-      )
-    );
     setPageData((prev) =>
       prev
         ? {
@@ -153,7 +127,6 @@ export default function AccountLedgerContent({
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
-      setPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
@@ -170,14 +143,20 @@ export default function AccountLedgerContent({
         businessId,
         status: activeTab,
         search: debouncedSearch,
-        limit: isInfinite ? INFINITE_LIMIT : undefined,
+        limit: isInfinite ? INFINITE_LIMIT : ITEMS_PER_PAGE,
         cursor,
       });
       if (generation !== generationRef.current || queryKey !== queryKeyRef.current) return;
-      if (!result.success || !isPage(result.data)) {
+      if (!result.success) {
         throw new Error(result.error || "No se pudieron cargar las órdenes");
       }
-      const pageResult = result.data;
+      // Keep the UI compatible with older deployments that still return the
+      // legacy raw array for Todos while the current action returns a cursor page.
+      const pageResult: AccountLedgerPage = isPage(result.data)
+        ? result.data
+        : activeTab === "all" && Array.isArray(result.data)
+          ? { orders: result.data as AccountLedgerOrder[], nextCursor: null, hasMore: false }
+          : (() => { throw new Error("No se pudieron cargar las órdenes"); })();
       if (append) {
         setPageData((previous) => ({
           ...pageResult,
@@ -202,7 +181,6 @@ export default function AccountLedgerContent({
 
   // Tab/search/realtime changes provide a new first-page snapshot.
   useEffect(() => {
-    if (isAllTab) return;
     generationRef.current += 1;
     queryKeyRef.current = `${activeTab}\u0000${debouncedSearch}`;
     loadingRef.current = false;
@@ -216,7 +194,7 @@ export default function AccountLedgerContent({
     setPageCursors([null]);
     setServerError(null);
     void load(null, false);
-  }, [activeTab, debouncedSearch, refreshToggle, isAllTab, load]);
+  }, [activeTab, debouncedSearch, refreshToggle, load]);
 
   const loadMore = useCallback(() => {
     if (!isInfinite || !pageData?.nextCursor || serverLoading) return;
@@ -247,49 +225,7 @@ export default function AccountLedgerContent({
     void load(pageCursors[prevWindow - 1] ?? null, false);
   };
 
-  // Filter by tab + search + sort (only for the legacy "Todos" path)
-  const filteredOrders = useMemo(() => {
-    let orders = allOrders;
-
-    // Status filter
-    if (activeTab !== "all") {
-      if (activeTab === "pendiente") {
-        orders = orders.filter((o) => o.status === "pendiente");
-      } else {
-        orders = orders.filter(
-          (o) => o.status !== "pendiente" && o.paidStatus === activeTab
-        );
-      }
-    }
-
-    // Search filter
-    if (debouncedSearch) {
-      const term = debouncedSearch.toLowerCase();
-      orders = orders.filter(
-        (o) => o.client?.name?.toLowerCase().includes(term)
-      );
-    }
-
-    // Sort alphabetically by client name
-    return orders.sort((a, b) => {
-      const nameA = a.client?.name?.toLowerCase() || "";
-      const nameB = b.client?.name?.toLowerCase() || "";
-      if (nameA < nameB) return -1;
-      if (nameA > nameB) return 1;
-      return 0;
-    });
-  }, [allOrders, activeTab, debouncedSearch]);
-
-  // Paginate (legacy "Todos" path only)
-  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
-  const paginatedAllOrders = useMemo(() => {
-    const start = (page - 1) * ITEMS_PER_PAGE;
-    return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredOrders, page]);
-
-  const rows: (OrderWithClient | AccountLedgerOrder)[] = isAllTab
-    ? paginatedAllOrders
-    : pageData?.orders ?? [];
+  const rows: (OrderWithClient | AccountLedgerOrder)[] = pageData?.orders ?? [];
 
   // Status pill component
   const StatusPill = ({
@@ -351,7 +287,6 @@ export default function AccountLedgerContent({
               key={tab.value}
               onClick={() => {
                 setActiveTab(tab.value);
-                setPage(1);
               }}
               className={cn(
                 "px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 whitespace-nowrap",
@@ -368,11 +303,7 @@ export default function AccountLedgerContent({
 
       {/* Content */}
       <div className="mt-4">
-        {isAllTab && loading ? (
-          <div className="flex items-center justify-center py-12 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : !isAllTab && pageData === null && serverLoading && !serverError ? (
+        {pageData === null && serverLoading && !serverError ? (
           <div className="flex items-center justify-center py-12 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
@@ -394,7 +325,9 @@ export default function AccountLedgerContent({
           <div className="text-center py-12 text-muted-foreground bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
             {debouncedSearch
               ? "No se encontraron órdenes para este cliente"
-              : "No hay órdenes en esta categoría"}
+              : isAllTab
+                ? "No hay cuentas pendientes"
+                : "No hay órdenes en esta categoría"}
           </div>
         ) : (
           <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
@@ -501,65 +434,16 @@ export default function AccountLedgerContent({
               </div>
             )}
 
-            {/* Pagination */}
-            {isAllTab && totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  {filteredOrders.length} resultado
-                  {filteredOrders.length !== 1 ? "s" : ""}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm text-gray-500 dark:text-gray-400 px-2 min-w-[60px] text-center">
-                    {page} / {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
             {/* Fixed-window navigation (Por Confirmar / Pendientes) */}
-            {!isAllTab && !isInfinite && (
+            {!isInfinite && (
               <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  {rows.length} en esta página
-                </span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">{rows.length} en esta página</span>
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={currentPage <= 1 || serverLoading}
-                    onClick={goPrevWindow}
-                  >
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage <= 1 || serverLoading} onClick={goPrevWindow}>
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <span className="text-sm text-gray-500 dark:text-gray-400 px-2 min-w-[60px] text-center">
-                    Página {currentPage}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={!pageData?.hasMore || serverLoading}
-                    onClick={goNextWindow}
-                  >
+                  <span className="text-sm text-gray-500 dark:text-gray-400 px-2 min-w-[60px] text-center">Página {currentPage}</span>
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={!pageData?.hasMore || serverLoading} onClick={goNextWindow}>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>

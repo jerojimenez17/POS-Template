@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authMock, afipMock, dbMock } = vi.hoisted(() => ({
+const { authMock, prepareMock, issueMock, billingPreflightMock, dbMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
-  afipMock: vi.fn(),
+  prepareMock: vi.fn(), issueMock: vi.fn(), billingPreflightMock: vi.fn(),
   dbMock: {
   order: { findFirst: vi.fn() },
   saleReturn: {
@@ -10,22 +10,31 @@ const { authMock, afipMock, dbMock } = vi.hoisted(() => ({
     create: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
+    findUnique: vi.fn(),
   },
+  saleReturnItem: { createMany: vi.fn() },
+  stockMovement: { createMany: vi.fn() },
+  cashBox: { update: vi.fn() },
+  cashMovement: { create: vi.fn() },
   product: { findMany: vi.fn() },
   cashboxSession: { findFirst: vi.fn() },
+  business: { findUnique: vi.fn().mockResolvedValue({ id: "business-1", cuit: "20123456789", cert: "cert", key: "key", ptoVenta: [7], planDefinition: { name: "BASIC", features: { hasAfipBilling: true }, limits: {} } }) },
+  $queryRaw: vi.fn().mockResolvedValue([{ id: "order-1" }]),
   $transaction: vi.fn(),
   },
 }));
 
 vi.mock("@/auth", () => ({ auth: authMock }));
-vi.mock("@/actions/afip", () => ({ createAfipVoucherAction: afipMock }));
 vi.mock("@/lib/db", () => ({ db: dbMock }));
+vi.mock("@/lib/server/arca-billing", () => ({ preflightCreditNoteBillingConfiguration: billingPreflightMock }));
+vi.mock("@/lib/server/afip-voucher", () => ({ prepareAfipVoucherForActor: prepareMock, issuePreparedAfipVoucher: issueMock }));
 
 import { createCreditNoteAction } from "@/actions/sales/credit-note";
 
 const validOrder = (overrides: Record<string, unknown> = {}) => ({
   id: "order-1",
   businessId: "business-1",
+  paidStatus: "pago",
   CAE: { CAE: "71234567890123" },
   billType: "Factura A",
   afipVoucherType: 1,
@@ -37,22 +46,27 @@ const validOrder = (overrides: Record<string, unknown> = {}) => ({
   clientDocumentNumber: "12345678",
   items: [{ id: "item-1", productId: "product-1", code: "P1", description: "Product", price: 1000, costPrice: 500, quantity: 1, subTotal: 1000 }],
   returns: [],
+  fiscalSnapshot: { source: "AUTHORIZED_VOUCHER", version: 1, billType: "Factura A", afipVoucherType: 1, issuerIvaCondition: "Responsable Inscripto", buyerIvaCondition: "Consumidor Final", currency: "ARS", total: 1000, net: 1000, vat: 0, nonTaxed: 0, exempt: 0, otherTaxes: 0, iva: [{ id: 5, base: 1000, amount: 0 }] },
   ...overrides,
 });
 
 describe("createCreditNoteAction request boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authMock.mockResolvedValue({ user: { id: "user-1", businessId: "business-1", email: "user@example.test" } });
+    authMock.mockResolvedValue({ user: { id: "user-1", businessId: "business-1", role: "ADMIN", email: "user@example.test" } });
+    billingPreflightMock.mockResolvedValue({ success: true, emissionPointOfSale: 3 });
+    dbMock.business.findUnique.mockResolvedValue({ id: "business-1", ptoVenta: [3] });
+    prepareMock.mockResolvedValue({ success: true, prepared: {} });
+    issueMock.mockResolvedValue({ success: true, data: { cae: "79999999999999", nroComprobante: 20, ptoVenta: 3 } });
     dbMock.order.findFirst.mockResolvedValue(validOrder());
     dbMock.product.findMany.mockResolvedValue([{ id: "product-1" }]);
     dbMock.cashboxSession.findFirst.mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" });
     dbMock.saleReturn.findFirst.mockResolvedValue(null);
     dbMock.saleReturn.create.mockResolvedValue({ id: "return-1", status: "PENDING", idempotencyKey: "key-1" });
-    dbMock.saleReturn.update.mockResolvedValue({ id: "return-1", status: "AUTHORIZED" });
+    dbMock.saleReturn.update.mockResolvedValue({ id: "return-1", status: "PENDING", creditNoteCAE: "79999999999999", creditNoteNumber: 20, creditNotePointOfSale: 3 });
+    dbMock.saleReturn.findUnique.mockResolvedValue({ id: "return-1", status: "AUTHORIZED", creditNoteCAE: "79999999999999", creditNoteNumber: 20, creditNotePointOfSale: 3 });
     dbMock.saleReturn.updateMany.mockResolvedValue({ count: 1 });
     dbMock.$transaction.mockImplementation(async (callback: (tx: typeof dbMock) => unknown) => callback(dbMock));
-    afipMock.mockResolvedValue({ success: true, data: { cae: "79999999999999", nroComprobante: 20, ptoVenta: 3 } });
   });
 
   it("authenticates at invocation entry and rejects unauthenticated requests", async () => {
@@ -62,7 +76,7 @@ describe("createCreditNoteAction request boundary", () => {
 
     expect(result).toMatchObject({ success: false });
     expect(dbMock.order.findFirst).not.toHaveBeenCalled();
-    expect(afipMock).not.toHaveBeenCalled();
+    expect(issueMock).not.toHaveBeenCalled();
   });
 
   it("validates the confirmed action contract before request-bound work", async () => {
@@ -79,10 +93,10 @@ describe("createCreditNoteAction request boundary", () => {
     expect(dbMock.order.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "order-1", businessId: "business-1" },
     }));
-    expect(afipMock).toHaveBeenCalledWith(expect.objectContaining({
+    expect(prepareMock).toHaveBeenCalledWith(expect.objectContaining({
       nroAsociado: 10,
-      ptoVenta: 3,
-    }));
+      ptoVentaAsociado: 3,
+    }), expect.anything());
   });
 
   it("reconstructs historical fiscal values from persisted CAE metadata", async () => {
@@ -94,12 +108,12 @@ describe("createCreditNoteAction request boundary", () => {
 
     const result = await createCreditNoteAction({ orderId: "order-1", confirmed: true, idempotencyKey: "key-1" });
 
-    expect(result).toMatchObject({ success: true });
-    expect(afipMock).toHaveBeenCalledWith(expect.objectContaining({ nroAsociado: 44, ptoVenta: 7 }));
+    expect(result).toMatchObject({ success: false, pending: true });
+    expect(prepareMock).toHaveBeenCalledWith(expect.objectContaining({ nroAsociado: 44, ptoVentaAsociado: 7 }), expect.anything());
   });
 
   it("returns a controlled result for AFIP rejection and never leaks secret-shaped errors", async () => {
-    afipMock.mockRejectedValue(new Error("private key token=do-not-leak"));
+    issueMock.mockRejectedValue(new Error("private key token=do-not-leak"));
 
     const result = await createCreditNoteAction({ orderId: "order-1", confirmed: true, idempotencyKey: "key-1" });
 
@@ -109,36 +123,36 @@ describe("createCreditNoteAction request boundary", () => {
 
   it("returns the existing authorized result for the same idempotency key without another AFIP call", async () => {
     dbMock.order.findFirst.mockResolvedValue(validOrder({
-      returns: [{ id: "return-1", status: "AUTHORIZED", idempotencyKey: "key-1", creditNoteCAE: "79999999999999", creditNoteNumber: 20, creditNotePointOfSale: 3 }],
+      returns: [{ id: "return-1", kind: "CREDIT_NOTE", status: "AUTHORIZED", idempotencyKey: "key-1", creditNoteCAE: "79999999999999", creditNoteNumber: 20, creditNotePointOfSale: 3 }],
     }));
 
     const result = await createCreditNoteAction({ orderId: "order-1", confirmed: true, idempotencyKey: "key-1" });
 
     expect(result).toMatchObject({ success: true, data: { creditNoteCAE: "79999999999999" } });
-    expect(afipMock).not.toHaveBeenCalled();
+    expect(issueMock).not.toHaveBeenCalled();
     expect(dbMock.saleReturn.create).not.toHaveBeenCalled();
   });
 
   it("rejects a different idempotency key after authorization", async () => {
     dbMock.order.findFirst.mockResolvedValue(validOrder({
-      returns: [{ id: "return-1", status: "AUTHORIZED", idempotencyKey: "other-key", creditNoteCAE: "79999999999999", creditNoteNumber: 20, creditNotePointOfSale: 3 }],
+      returns: [{ id: "return-1", kind: "CREDIT_NOTE", status: "AUTHORIZED", idempotencyKey: "other-key", creditNoteCAE: "79999999999999", creditNoteNumber: 20, creditNotePointOfSale: 3 }],
     }));
 
     const result = await createCreditNoteAction({ orderId: "order-1", confirmed: true, idempotencyKey: "key-1" });
 
     expect(result).toMatchObject({ success: false });
-    expect(afipMock).not.toHaveBeenCalled();
+    expect(issueMock).not.toHaveBeenCalled();
   });
 
   it("does not start a second emission while an existing return is pending", async () => {
     dbMock.order.findFirst.mockResolvedValue(validOrder({
-      returns: [{ id: "return-1", status: "PENDING", idempotencyKey: "key-1" }],
+      returns: [{ id: "return-1", kind: "CREDIT_NOTE", status: "PENDING", idempotencyKey: "key-1" }],
     }));
 
     const result = await createCreditNoteAction({ orderId: "order-1", confirmed: true, idempotencyKey: "key-1" });
 
     expect(result).toMatchObject({ success: false, pending: true });
-    expect(afipMock).not.toHaveBeenCalled();
+    expect(issueMock).not.toHaveBeenCalled();
     expect(dbMock.saleReturn.create).not.toHaveBeenCalled();
   });
 });

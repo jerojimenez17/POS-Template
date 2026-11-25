@@ -5,6 +5,7 @@ const baseOrder = (overrides: Record<string, unknown> = {}) => ({
   id: "historic-order", CAE: JSON.stringify({ CAE: "71234567890123", qrData: "qr", billType: "Factura B", afipVoucherType: 6, nroComprobante: 42, ptoVenta: 7 }),
   billType: undefined, afipVoucherType: undefined, invoiceNumber: undefined, invoicePointOfSale: undefined,
   total: 1200, discountAmount: 0, date: new Date("2026-01-01"),
+  fiscalSnapshot: { version: 1, source: "AUTHORIZED_VOUCHER", billType: "Factura B", afipVoucherType: 6, issuerIvaCondition: "Responsable Inscripto", buyerIvaCondition: "Consumidor Final", currency: "ARS", total: 1200, net: 1200, vat: 0, nonTaxed: 0, exempt: 0, otherTaxes: 0, iva: [{ id: 5, base: 1200, amount: 0 }] },
   items: [{ id: "item-1", productId: "product-1", code: "P1", description: "Producto", price: 1200, costPrice: 900, quantity: 1 }],
   client: null, clientId: null, seller: "seller", discountPercentage: 0, paymentMethod: "Efectivo", paymentMethod2: null, totalMethod2: null,
   clientIvaCondition: "Consumidor Final", clientDocumentNumber: null, clientDocumentType: null, returns: [], ...overrides,

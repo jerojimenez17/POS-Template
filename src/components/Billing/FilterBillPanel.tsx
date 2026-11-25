@@ -126,7 +126,12 @@ const PaymentChip = ({
   </button>
 );
 
-const FilterBillPanel = () => {
+interface FilterBillPanelProps {
+  canViewAllSellers: boolean;
+  sellerEmail?: string | null;
+}
+
+const FilterBillPanel = ({ canViewAllSellers, sellerEmail }: FilterBillPanelProps) => {
   const {
     filtersState,
     switchAhora3,
@@ -162,10 +167,14 @@ const FilterBillPanel = () => {
   ].filter(Boolean).length;
 
   useEffect(() => {
+    if (!canViewAllSellers) return;
+
     getUniqueSellersAction().then((uniqueSellers) => {
       setSellers(uniqueSellers);
     });
-  }, []);
+  }, [canViewAllSellers, sellerEmail]);
+
+  const visibleSellers = canViewAllSellers ? sellers : sellerEmail ? [sellerEmail] : [];
 
   const paymentMethods = [
     {
@@ -274,6 +283,11 @@ const FilterBillPanel = () => {
               </button>
             </div>
           )}
+          {activeFilterCount === 0 && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Sin filtros activos · mostrando ventas pagadas
+            </span>
+          )}
         </div>
 
         <div className="p-5 space-y-5">
@@ -285,21 +299,30 @@ const FilterBillPanel = () => {
                 Vendedor
               </label>
               <Select
-                value={filtersState.Seller.active ? filtersState.Seller.filter : "__all__"}
+                value={
+                  filtersState.Seller.active
+                    ? filtersState.Seller.filter
+                    : canViewAllSellers
+                      ? "__all__"
+                      : sellerEmail || "__all__"
+                }
                 onValueChange={(val) => {
-                  if (val === "__all__") disableSeller();
+                  if (!canViewAllSellers) {
+                    if (sellerEmail) seller(sellerEmail);
+                  } else if (val === "__all__") disableSeller();
                   else seller(val);
                 }}
+                disabled={!canViewAllSellers}
               >
                 <SelectTrigger
                   id="SellersSelector"
                   className="w-full bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-100"
                 >
-                  <SelectValue placeholder="Todos los vendedores" />
+                  <SelectValue placeholder={canViewAllSellers ? "Todos los vendedores" : "Tu vendedor"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">Todos los vendedores</SelectItem>
-                  {sellers.map((s) => (
+                  {canViewAllSellers && <SelectItem value="__all__">Todos los vendedores</SelectItem>}
+                  {visibleSellers.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s.split("@")[0]}
                     </SelectItem>

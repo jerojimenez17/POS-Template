@@ -32,6 +32,12 @@ vi.mock("@/context/CashboxContext", () => ({
   CashboxProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+vi.mock("@/hooks/useFeatures", () => ({
+  useFeatures: () => ({
+    hasFeature: (feature: string) => feature === "hasBudget" || feature === "hasClientLedger",
+  }),
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
   Toaster: () => null,
@@ -185,9 +191,9 @@ describe("BillButtons — focus callback for successful new sales", () => {
     const onSaleCreated = vi.fn();
     const { billContext, handlePrint } = renderBillButtons({ onSaleCreated });
 
-    fireEvent.click(screen.getByRole("button", { name: buttonName }));
-    expect(await screen.findByRole("heading", { name: dialogTitle })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(buttonName) }));
+    expect(await screen.findByRole("heading", { name: new RegExp(buttonName === "Facturar" ? "Confirmar Factura" : "Confirmar Remito") })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(buttonName === "Facturar" ? "Facturar" : "Confirmar Remito") }));
 
     await waitFor(() =>
       expect(billContext.dispatch).toHaveBeenCalledWith(
@@ -221,8 +227,8 @@ describe("BillButtons — focus callback for successful new sales", () => {
     vi.mocked(processSaleAction).mockResolvedValue(saveResult as never);
 
     const isRemito = scenario.startsWith("Remito");
-    fireEvent.click(screen.getByRole("button", { name: isRemito ? "Remito" : "Facturar" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(isRemito ? "Remito" : "Facturar") }));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(isRemito ? "Confirmar Remito" : "Facturar") }));
 
     await waitFor(() => {
       if (scenario.includes("without valid CAE")) {
@@ -244,7 +250,7 @@ describe("BillButtons — focus callback for successful new sales", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: successControl === "Complete budget creation" ? "Presupuesto" : "A cuenta",
+        name: new RegExp(successControl === "Complete budget creation" ? "Presupuesto" : "A cuenta"),
       }),
     );
     fireEvent.click(await screen.findByRole("button", { name: successControl }));
@@ -268,7 +274,7 @@ describe("BillButtons — focus callback for successful new sales", () => {
     const onSaleCreated = vi.fn();
     renderBillButtons({ onSaleCreated });
 
-    fireEvent.click(screen.getByRole("button", { name: entryButton }));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(entryButton) }));
     fireEvent.click(await screen.findByRole("button", { name: failureControl }));
 
     expect(onSaleCreated).not.toHaveBeenCalled();

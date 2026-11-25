@@ -99,13 +99,11 @@ describe("sale stock updates for repeated variable-price catalog rows", () => {
     const orderCreate = vi.fn().mockResolvedValue({ id: "order-1" });
     const tx = {
       $executeRaw: vi.fn().mockResolvedValue(1),
-      cashboxSession: {
-        findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
-      },
       order: { create: orderCreate },
       stockMovement: { createMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      cashMovement: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({ id: "movement-1" }) },
+      cashboxSession: { findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }) },
       cashBox: { update: vi.fn().mockResolvedValue({ id: "cashbox-1" }) },
-      cashMovement: { create: vi.fn().mockResolvedValue({ id: "movement-1" }) },
     };
     vi.mocked(db.$transaction).mockImplementation(async (callback) => callback(tx as never) as never);
 
@@ -176,11 +174,15 @@ describe("sale stock updates for repeated variable-price catalog rows", () => {
         }),
         update: orderUpdate,
       },
+      product: { findMany: vi.fn().mockResolvedValue([]) },
       orderUpdate: {
         findFirst: vi.fn().mockResolvedValue(null),
         create: orderUpdateCreate,
       },
       stockMovement: { createMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      cashMovement: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({ id: "movement-1" }) },
+      cashboxSession: { findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }) },
+      cashBox: { update: vi.fn().mockResolvedValue({ id: "cashbox-1" }) },
     };
     vi.mocked(db.$transaction).mockImplementation(async (callback) => callback(tx as never) as never);
 
@@ -245,6 +247,9 @@ describe("sale stock updates for repeated variable-price catalog rows", () => {
         create: vi.fn().mockResolvedValue({ id: "update-1" }),
       },
       stockMovement: { createMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      cashMovement: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({ id: "movement-1" }) },
+      cashboxSession: { findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }) },
+      cashBox: { update: vi.fn().mockResolvedValue({ id: "cashbox-1" }) },
     };
     vi.mocked(db.$transaction).mockImplementation(async (callback) => callback(tx as never) as never);
 

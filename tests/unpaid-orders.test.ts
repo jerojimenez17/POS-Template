@@ -384,7 +384,7 @@ describe('Cuenta Corriente - Unpaid Orders', () => {
 
       await cancelUnpaidOrder(cancelInput);
 
-      expect(db.stockMovement.deleteMany).toHaveBeenCalledWith({ where: { orderId: 'order-1' } });
+       expect(db.stockMovement.deleteMany).toHaveBeenCalledWith({ where: { orderId: 'order-1', businessId: 'business-123' } });
     });
 
     it('AC7: Restores product stock amount', async () => {

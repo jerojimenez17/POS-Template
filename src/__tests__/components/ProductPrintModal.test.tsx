@@ -206,7 +206,7 @@ describe("ProductPrintModal Component", () => {
       expect(screen.getByText("Product with no code")).toBeInTheDocument();
     });
 
-    it("should display product code on each tag", () => {
+    it("should omit the internal product code from A4 no-barcode tags", () => {
       const products = createProductsWithoutCodebar(2);
       render(
         <ProductPrintModal
@@ -215,8 +215,8 @@ describe("ProductPrintModal Component", () => {
           products={products}
         />
       );
-      expect(screen.getByText("NBC001")).toBeInTheDocument();
-      expect(screen.getByText("NBC002")).toBeInTheDocument();
+      expect(screen.queryByText("NBC001")).not.toBeInTheDocument();
+      expect(screen.queryByText("NBC002")).not.toBeInTheDocument();
     });
   });
 
@@ -231,10 +231,10 @@ describe("ProductPrintModal Component", () => {
       );
       const gridContainer = document.querySelector('[style*="grid-template-columns"]');
       expect(gridContainer).toBeInTheDocument();
-      expect(gridContainer).toHaveStyle("grid-template-columns: repeat(3, 6.3cm)");
+      expect(gridContainer).toHaveStyle("grid-template-columns: repeat(3, 6.5cm)");
     });
 
-    it("should have tag width of 6cm", () => {
+    it("should have A4 tag width of 6.5cm", () => {
       render(
         <ProductPrintModal
           open={true}
@@ -244,7 +244,7 @@ describe("ProductPrintModal Component", () => {
       );
       const tagCards = document.querySelectorAll<HTMLElement>('[style*="width"]');
       const foundTag = Array.from(tagCards).find(
-        (el) => el.style.width === "6.3cm"
+        (el) => el.style.width === "6.5cm"
       );
       expect(foundTag).toBeTruthy();
     });

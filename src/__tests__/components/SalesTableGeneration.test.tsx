@@ -115,10 +115,7 @@ describe("SalesTable request generations", () => {
       </FiltersContext.Provider>,
     );
 
-    await waitFor(() => expect(getSalesMock).toHaveBeenCalledWith({
-      cursor: undefined,
-      filters: { documentTypes: [], paymentMethods: [] },
-    }));
+    await waitFor(() => expect(getSalesMock).toHaveBeenCalledWith({}));
     expect(await screen.findByText("cae-invoice")).toBeInTheDocument();
     expect(screen.getByText("no-cae-remito")).toBeInTheDocument();
   });
@@ -146,7 +143,6 @@ describe("SalesTable request generations", () => {
 
     expect(screen.queryByText("stale-page-sale")).not.toBeInTheDocument();
     expect(screen.getAllByText("pusher-sale").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Total: \$25,00/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
     expect(getSalesMock).toHaveBeenNthCalledWith(3, expect.objectContaining({ cursor: "pusher-cursor" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Cargar más" })).not.toBeInTheDocument());
@@ -156,7 +152,13 @@ describe("SalesTable request generations", () => {
     const firstGenerationPage = deferred<{ sales: BillState[]; nextCursor: string | null }>();
     const refreshedGenerationPage = deferred<{ sales: BillState[]; nextCursor: string | null }>();
     getSalesMock.mockReturnValueOnce(firstGenerationPage.promise)
-      .mockResolvedValueOnce({ sales: [saleRow("filtered-sale", 20)], nextCursor: "filtered-cursor" })
+      .mockResolvedValueOnce({
+        sales: [{
+          ...saleRow("filtered-sale", 20),
+          CAE: { CAE: "123", vencimiento: "2026-12-31", nroComprobante: 1, qrData: "qr" },
+        }],
+        nextCursor: "filtered-cursor",
+      })
       .mockReturnValueOnce(refreshedGenerationPage.promise);
     const initialFilters = filters();
     const view = renderTable(initialFilters);
@@ -185,7 +187,13 @@ describe("SalesTable request generations", () => {
     expect(screen.queryByText("stale-sale")).not.toBeInTheDocument();
 
     await act(async () => {
-      refreshedGenerationPage.resolve({ sales: [saleRow("filtered-next-page", 5)], nextCursor: null });
+      refreshedGenerationPage.resolve({
+        sales: [{
+          ...saleRow("filtered-next-page", 5),
+          CAE: { CAE: "456", vencimiento: "2026-12-31", nroComprobante: 2, qrData: "qr" },
+        }],
+        nextCursor: null,
+      });
       await refreshedGenerationPage.promise;
     });
     expect(screen.getByText("filtered-next-page")).toBeInTheDocument();

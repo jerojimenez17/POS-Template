@@ -19,6 +19,9 @@ vi.mock("@/lib/print", () => ({
 vi.mock("@/actions/business", () => ({
   getBusinessBillingInfoAction: vi.fn().mockResolvedValue(null),
 }));
+vi.mock("next-auth/react", () => ({
+  useSession: () => ({ data: { user: { role: "USER", business: { features: {} } } } }),
+}));
 vi.mock("@/components/Billing/ProductSearchBar", () => ({ default: () => null }));
 vi.mock("next/font/google", () => ({ Inter: () => ({ className: "", subsets: [], weight: [], variable: "" }) }));
 

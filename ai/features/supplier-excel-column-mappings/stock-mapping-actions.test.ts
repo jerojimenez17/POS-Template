@@ -61,7 +61,7 @@ function action(name: "getSupplierExcelColumnMapping" | "saveSupplierExcelColumn
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({ user: { businessId: BUSINESS_ID } });
-  mocks.supplierFindFirst.mockResolvedValue({ excelColumnMapping: VALID_MAPPING });
+  mocks.supplierFindFirst.mockResolvedValue({ id: SUPPLIER_ID, excelColumnMapping: VALID_MAPPING });
   mocks.supplierUpdate.mockResolvedValue({ id: SUPPLIER_ID });
 });
 
@@ -143,7 +143,7 @@ describe("supplier Excel mapping server actions", () => {
       where: { id: SUPPLIER_ID, businessId: BUSINESS_ID },
     }));
     expect(mocks.supplierUpdate).toHaveBeenCalledWith({
-      where: { id: SUPPLIER_ID, businessId: BUSINESS_ID },
+      where: { id: SUPPLIER_ID },
       data: {
         excelColumnMapping: {
           ...VALID_MAPPING,

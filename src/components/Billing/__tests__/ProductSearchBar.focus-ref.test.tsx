@@ -8,6 +8,11 @@ vi.mock("@/actions/stock", () => ({
   getProductsByCode: vi.fn().mockResolvedValue([]),
   getProductsBySearch: vi.fn().mockResolvedValue([]),
   getSuppliersForFilter: vi.fn().mockResolvedValue([]),
+  getProductsFiltered: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("@/context/CashboxContext", () => ({
+  useCashbox: () => ({ hasActiveSession: true, setIsOpeningModalOpen: vi.fn() }),
 }));
 
 vi.mock("@yudiel/react-qr-scanner", () => ({

@@ -19,6 +19,7 @@ vi.mock("@/lib/db", () => ({
     },
     product: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
   },
 }));
@@ -71,6 +72,7 @@ describe("Shortcut Server Actions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(db.product.findFirst).mockResolvedValue({ id: "product-1" });
   });
 
   // ───────── Authentication ─────────
@@ -273,6 +275,54 @@ describe("Shortcut Server Actions", () => {
     });
   });
 
+  it.each(["F1", "F2", "F3"] as const)(
+    "should save a valid %s shortcut only for the authenticated business",
+    async (key) => {
+      vi.mocked(auth).mockResolvedValue({
+        user: { id: "user-1", businessId: mockBusinessId },
+        expires: "1",
+      });
+      vi.mocked(db.shortcutConfig.upsert).mockResolvedValue({
+        ...mockConfigView,
+        key,
+      });
+
+      const result = await saveShortcutConfigAction(mockBusinessId, key, "product-1");
+
+      expect(result.success).toBe(true);
+      expect(db.product.findFirst).toHaveBeenCalledWith({
+        where: { id: "product-1", businessId: mockBusinessId },
+        select: { id: true },
+      });
+    }
+  );
+
+  it("should reject saving when the caller business differs from the session business", async () => {
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: mockBusinessId },
+      expires: "1",
+    });
+
+    const result = await saveShortcutConfigAction("other-business-456", "F1", "product-1");
+
+    expect(result).toEqual({ error: "No autorizado" });
+    expect(db.product.findFirst).not.toHaveBeenCalled();
+    expect(db.shortcutConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it("should reject saving a product owned by another business", async () => {
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: mockBusinessId },
+      expires: "1",
+    });
+    vi.mocked(db.product.findFirst).mockResolvedValue(null);
+
+    const result = await saveShortcutConfigAction(mockBusinessId, "F1", "foreign-product");
+
+    expect(result).toEqual({ success: false, error: "Producto no encontrado" });
+    expect(db.shortcutConfig.upsert).not.toHaveBeenCalled();
+  });
+
   it("should validate that key is one of F1, F2, F3", async () => {
     vi.mocked(auth).mockResolvedValue({
       user: { id: "user-1", businessId: mockBusinessId },
@@ -458,33 +508,17 @@ describe("Shortcut Server Actions", () => {
     });
   });
 
-  it("should use overrideBusinessId when provided to getProductByShortcutAction (Bug A fix)", async () => {
+  it("should reject an overrideBusinessId from another tenant", async () => {
     vi.mocked(auth).mockResolvedValue({
       user: { id: "user-1", businessId: mockBusinessId }, // session has "business-123"
       expires: "1",
     });
 
     const overrideBusinessId = "other-business-456";
-    const mockShortcutConfig = {
-      id: "config-1",
-      businessId: overrideBusinessId,
-      key: "F1",
-      productId: "product-1",
-      product: mockProduct,
-    };
-
-    vi.mocked(db.shortcutConfig.findUnique).mockResolvedValue(mockShortcutConfig);
-
-    // Calling with overrideBusinessId — the server action should use it instead of session's businessId
     const result = await getProductByShortcutAction("F1", overrideBusinessId as any);
 
-    expect(result).toEqual({ success: true, data: mockProduct });
-    expect(db.shortcutConfig.findUnique).toHaveBeenCalledWith({
-      where: {
-        businessId_key: { businessId: overrideBusinessId, key: "F1" },
-      },
-      include: { product: true },
-    });
+    expect(result).toEqual({ error: "No autorizado" });
+    expect(db.shortcutConfig.findUnique).not.toHaveBeenCalled();
   });
 
   // ─── Bug B: getShortcutConfigsAction with null product relation ───

@@ -9,8 +9,23 @@ import AccountLedgerContent from "./AccountLedgerContent";
 export default async function AccountLedgerPage() {
   const session = await auth();
 
-  if (!session?.user?.businessId) {
+  if (!session) {
     redirect("/");
+  }
+
+  if (!session.user?.businessId) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-gray-900 p-6">
+        <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-xl border bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-900">
+          <BookOpen className="h-8 w-8 text-muted-foreground" />
+          <h1 className="text-lg font-semibold">Cuenta Corriente no disponible</h1>
+          <p className="text-sm text-muted-foreground">
+            Tu sesión no tiene un negocio asociado. Cerrá sesión y volvé a ingresar para continuar.
+          </p>
+          <Button variant="outline" asChild><Link href="/">Volver al inicio</Link></Button>
+        </div>
+      </div>
+    );
   }
 
   const plan = await getCachedPlan(session.user.businessId);

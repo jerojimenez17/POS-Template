@@ -346,7 +346,7 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
                   </p>
                 </div>
               </div>
-              <Switch checked={hasAfipBilling} onCheckedChange={setHasAfipBilling} />
+              <Switch checked={hasAfipBilling} onCheckedChange={setHasAfipBilling} aria-label="Facturación AFIP (ARCA)" />
             </div>
 
             {/* Public Catalog Toggle */}
@@ -362,7 +362,7 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
                   </p>
                 </div>
               </div>
-              <Switch checked={hasPublicCatalog} onCheckedChange={setHasPublicCatalog} />
+              <Switch checked={hasPublicCatalog} onCheckedChange={setHasPublicCatalog} aria-label="Catálogo Público Web" />
             </div>
 
             {/* Client Ledger (Cuentas Corrientes) Toggle */}
@@ -378,7 +378,7 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
                   </p>
                 </div>
               </div>
-              <Switch checked={hasClientLedger} onCheckedChange={setHasClientLedger} />
+              <Switch checked={hasClientLedger} onCheckedChange={setHasClientLedger} aria-label="Cuentas Corrientes (Ledger)" />
             </div>
 
             {/* Multi Cashbox Toggle */}
@@ -394,7 +394,7 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
                   </p>
                 </div>
               </div>
-              <Switch checked={hasMultiCashbox} onCheckedChange={setHasMultiCashbox} />
+              <Switch checked={hasMultiCashbox} onCheckedChange={setHasMultiCashbox} aria-label="Múltiples Cajas Operativas" />
             </div>
 
             {/* Supplier Filter Toggle */}
@@ -410,7 +410,7 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
                   </p>
                 </div>
               </div>
-              <Switch checked={hasSupplierFilter} onCheckedChange={setHasSupplierFilter} />
+              <Switch checked={hasSupplierFilter} onCheckedChange={setHasSupplierFilter} aria-label="Filtro por Proveedor" />
             </div>
 
             {/* Budget Toggle */}
@@ -426,7 +426,7 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
                   </p>
                 </div>
               </div>
-              <Switch checked={hasBudget} onCheckedChange={setHasBudget} />
+              <Switch checked={hasBudget} onCheckedChange={setHasBudget} aria-label="Presupuestos" />
             </div>
 
             {/* Negative Stock Toggle */}
@@ -442,7 +442,7 @@ export function FeaturesForm({ businessId, businessName, planDefinitions, initia
                   </p>
                 </div>
               </div>
-              <Switch checked={hasNegativeStock} onCheckedChange={setHasNegativeStock} />
+              <Switch checked={hasNegativeStock} onCheckedChange={setHasNegativeStock} aria-label="Stock Negativo" />
             </div>
           </CardContent>
         </Card>

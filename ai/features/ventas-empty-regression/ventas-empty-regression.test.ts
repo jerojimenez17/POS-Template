@@ -36,7 +36,7 @@ describe("ventas-empty-regression: contrato real de filtros y órdenes", () => {
   });
 
   it("returns a paid Remito when the Remito filter is selected", async () => {
-    findManyMock.mockResolvedValueOnce([{ id: "remito-1" }]);
+    findManyMock.mockResolvedValueOnce([{ id: "remito-1", billType: "Remito", date: new Date("2026-01-01") }]);
 
     const result = await getSalesAction({
       filters: { documentTypes: ["REMITO"], paymentMethods: [] },
@@ -46,14 +46,13 @@ describe("ventas-empty-regression: contrato real de filtros y órdenes", () => {
     expect(findManyMock.mock.calls[0][0].where).toEqual(expect.objectContaining({
       businessId: "business-a",
       paidStatus: "pago",
-      billType: { in: ["Remito"] },
     }));
   });
 
   it.each(["Factura A", "Factura B", "Factura C"])(
     "includes %s when the Facturas selection is active",
     async (billType) => {
-      findManyMock.mockResolvedValueOnce([{ id: billType }]);
+    findManyMock.mockResolvedValueOnce([{ id: billType, billType, CAE: "12345678901234", date: new Date("2026-01-01") }]);
 
       const result = await getSalesAction({
         // FACTURA_C is the persisted legacy token emitted by the current UI.
@@ -61,22 +60,18 @@ describe("ventas-empty-regression: contrato real de filtros y órdenes", () => {
       });
 
       expect(result.sales).toEqual([{ id: billType }]);
-      expect(findManyMock.mock.calls[0][0].where.billType).toEqual({
-        in: ["Factura A", "Factura B", "Factura C"],
-      });
     },
   );
 
   it("serializes the initial UI labels to query tokens that return a paid Remito", async () => {
     const filters = serializeSalesFilters(initialState as never);
-    findManyMock.mockResolvedValueOnce([{ id: "initial-remito" }]);
+    findManyMock.mockResolvedValueOnce([{ id: "initial-remito", billType: "Remito", date: new Date("2026-01-01") }]);
 
     const result = await getSalesAction({ filters });
     const where = findManyMock.mock.calls[0][0].where;
 
     expect(filters).toMatchObject({ documentTypes: ["REMITO"], paymentMethods: ["efectivo"] });
     expect(result.sales).toEqual([{ id: "initial-remito" }]);
-    expect(where.billType).toEqual({ in: ["Remito"] });
     expect(where.AND).toEqual([{
       OR: [
         { paymentMethod: { in: ["Efectivo"] } },

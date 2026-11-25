@@ -31,7 +31,7 @@ describe("CodeBarModal — semántica compartida 55 × 45 landscape", () => {
     fireEvent.change(screen.getByLabelText(/cantidad de copias/i), { target: { value: "3" } }); expect(document.querySelectorAll(".label-container")).toHaveLength(3);
   });
   it("imprime thermal landscape con CSS físico, ayuda horizontal y fallback", async () => {
-    openModal(); fireEvent.click(screen.getByRole("button", { name: /imprimir/i })); await Promise.resolve();
+    openModal(); fireEvent.click(screen.getByRole("button", { name: /^Imprimir!$/i })); await Promise.resolve();
     const options = vi.mocked(printElement).mock.calls[0]?.[1]; expect(options).toEqual(expect.objectContaining({ format: "thermal", orientation: "landscape", fallbackToPDF: true })); expect(options?.pageStyle).toMatch(/55mm 45mm landscape/); expect(options?.pageStyle).not.toMatch(/45mm 55mm|portrait/); expect(screen.getByText(/orientación horizontal|landscape/i)).toBeInTheDocument();
   });
   it("usa CODE128 con displayValue y permite fallback al código interno", () => {

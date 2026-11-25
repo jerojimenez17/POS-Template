@@ -325,8 +325,8 @@ describe("variable-price shortcut cart rows", () => {
       { billContextMock: billContext, sessionMock: session },
     );
     await waitFor(() => expect(shortcuts.getShortcutConfigsAction).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: "Remito" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^Confirmar$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Remito/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Confirmar Remito$/ }));
 
     await waitFor(() => expect(processSaleAction).toHaveBeenCalledTimes(1));
     const saleInput = vi.mocked(processSaleAction).mock.calls[0][0];

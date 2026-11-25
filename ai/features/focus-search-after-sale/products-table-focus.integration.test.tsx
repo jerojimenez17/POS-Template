@@ -18,6 +18,9 @@ vi.mock("next/font/google", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
 }));
+vi.mock("next-auth/react", () => ({
+  useSession: () => ({ data: session }),
+}));
 
 vi.mock("@/actions/business", () => ({ getBusinessBillingInfoAction: vi.fn() }));
 vi.mock("@/actions/stock", () => ({
@@ -92,7 +95,7 @@ const session = {
     email: "cashier@example.com",
     businessId: "focus-integration-business",
     businessName: "Test Shop",
-    business: { features: { hasBudget: true, hasSupplierFilter: false } },
+    business: { features: { hasBudget: true, hasSupplierFilter: false, hasClientLedger: true } },
   },
   expires: "2099-01-01",
 };
@@ -192,8 +195,8 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     const focus = vi.spyOn(searchInput, "focus");
     fireEvent.change(searchInput, { target: { value: "q" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Remito" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Remito/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar/ }));
 
     await waitFor(() => expect(billContext.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: "removeAll" }),
@@ -218,7 +221,7 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     const searchInput = screen.getByPlaceholderText(/Buscar producto/);
     const focus = vi.spyOn(searchInput, "focus");
 
-    fireEvent.click(screen.getByRole("button", { name: "Remito" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Remito/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
 
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Confirmar creación de Remito" })).not.toBeInTheDocument());
@@ -234,8 +237,8 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     const searchInput = screen.getByPlaceholderText(/Buscar producto/);
     const focus = vi.spyOn(searchInput, "focus");
 
-    fireEvent.click(screen.getByRole("button", { name: "Remito" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Remito/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar/ }));
 
     await waitFor(() => expect(processSaleAction).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(billContext.dispatch).toHaveBeenCalledWith(
@@ -243,7 +246,7 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     ));
     expect(frameQueue).toHaveLength(1);
 
-    const remitoButton = screen.getByRole("button", { name: "Remito" });
+    const remitoButton = screen.getByRole("button", { name: /^Remito/ });
     // fireEvent does not reproduce the browser's native click-to-focus behavior.
     remitoButton.focus();
     fireEvent.click(remitoButton);
@@ -270,8 +273,8 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     const searchInput = screen.getByPlaceholderText(/Buscar producto/);
     const focus = vi.spyOn(searchInput, "focus");
 
-    fireEvent.click(screen.getByRole("button", { name: "Remito" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Remito/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar/ }));
 
     await waitFor(() => expect(processSaleAction).toHaveBeenCalledTimes(1));
     await flushDeferredFrames();
@@ -286,7 +289,7 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     const focus = vi.spyOn(searchInput, "focus");
 
     fireEvent.click(screen.getByRole("button", { name: "Actualizar Venta" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar/ }));
 
     await waitFor(() => expect(updateOrderAction).toHaveBeenCalledWith("existing-sale", expect.any(Object)));
     await flushDeferredFrames();
@@ -308,7 +311,7 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     const searchInput = screen.getByPlaceholderText(/Buscar producto/);
     const focus = vi.spyOn(searchInput, "focus");
 
-    fireEvent.click(screen.getByRole("button", { name: "A cuenta" }));
+    fireEvent.click(screen.getByRole("button", { name: /^A cuenta/ }));
     fireEvent.click(await screen.findByText("Customer One"));
     await waitFor(() => expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1"));
     fireEvent.click(await screen.findByTestId("submit-button"));
@@ -339,7 +342,7 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     const searchInput = screen.getByPlaceholderText(/Buscar producto/);
     const focus = vi.spyOn(searchInput, "focus");
 
-    fireEvent.click(screen.getByRole("button", { name: "A cuenta" }));
+    fireEvent.click(screen.getByRole("button", { name: /^A cuenta/ }));
     fireEvent.click(await screen.findByText("Customer One"));
     await waitFor(() => expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1"));
     fireEvent.click(await screen.findByTestId("submit-button"));
@@ -363,7 +366,7 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     const searchInput = screen.getByPlaceholderText(/Buscar producto/);
     const focus = vi.spyOn(searchInput, "focus");
 
-    fireEvent.click(screen.getByRole("button", { name: "A cuenta" }));
+    fireEvent.click(screen.getByRole("button", { name: /^A cuenta/ }));
     await screen.findByRole("heading", { name: "Crear Orden a Cuenta" });
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Crear Orden a Cuenta" })).not.toBeInTheDocument());
@@ -377,8 +380,8 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
   it("safely ignores an already-queued success focus if the billing tree unmounts", async () => {
     const view = renderProductsTable();
 
-    fireEvent.click(screen.getByRole("button", { name: "Remito" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Remito/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar/ }));
     await waitFor(() => expect(processSaleAction).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(view.billContext.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: "removeAll" }),

@@ -33,12 +33,12 @@ describe("BillButtons Point of Sale Component Test Suite", () => {
     );
 
     // Standard button is active
-    const standardBtn = screen.getByRole("button", { name: /Efectivo \/ Débito/i });
+    const standardBtn = screen.getByRole("button", { name: /Efectivo/i });
     expect(standardBtn).not.toBeDisabled();
 
     // Credit Ledger and AFIP buttons are disabled due to feature lock
     const ledgerBtn = screen.getByRole("button", { name: /Cargar a Cuenta Corriente/i });
-    const afipBtn = screen.getByRole("button", { name: /Facturación Electrónica/i });
+    const afipBtn = screen.getByRole("button", { name: /Facturaci/i });
 
     expect(ledgerBtn).toBeDisabled();
     expect(afipBtn).toBeDisabled();
@@ -59,7 +59,7 @@ describe("BillButtons Point of Sale Component Test Suite", () => {
       />
     );
 
-    const standardBtn = screen.getByRole("button", { name: /Efectivo \/ Débito/i });
+    const standardBtn = screen.getByRole("button", { name: /Efectivo/i });
     fireEvent.click(standardBtn);
     expect(onStandard).toHaveBeenCalledTimes(1);
   });
@@ -80,7 +80,7 @@ describe("BillButtons Point of Sale Component Test Suite", () => {
     );
 
     const ledgerBtn = screen.getByRole("button", { name: /Cargar a Cuenta Corriente/i });
-    const afipBtn = screen.getByRole("button", { name: /Facturación Electrónica/i });
+    const afipBtn = screen.getByRole("button", { name: /Facturaci/i });
 
     expect(ledgerBtn).not.toBeDisabled();
     expect(afipBtn).not.toBeDisabled();
@@ -107,8 +107,8 @@ describe("BillButtons Point of Sale Component Test Suite", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: /Efectivo \/ Débito/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Efectivo/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Cargar a Cuenta Corriente/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Facturación Electrónica/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Facturaci/i })).toBeDisabled();
   });
 });

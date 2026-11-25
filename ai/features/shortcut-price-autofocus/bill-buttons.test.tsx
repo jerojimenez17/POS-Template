@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, waitFor } from "../../../tests/test-utils";
+import { render, waitFor } from "../../../tests/test-utils";
 import BillButtons from "@/components/Billing/BillButtons";
 import * as shortcuts from "@/actions/shortcuts";
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -105,10 +105,11 @@ describe("BillButtons — atajos con autofoco de precio", () => {
     await waitFor(() => {
       expect(event.defaultPrevented).toBe(true);
       expect(bill.addItem).toHaveBeenCalledWith(
-        expect.objectContaining({ id, amount: 1, salePrice: 0 }),
+        expect.objectContaining({ id, amount: 1, salePrice: 0, cartRowId: expect.any(String) }),
       );
       expect(bill.addItem).toHaveBeenCalledTimes(1);
-      expect(bill.setFocusPriceProductId).toHaveBeenCalledWith(id);
+      const addedProduct = bill.addItem.mock.calls[0]?.[0] as { cartRowId?: string };
+      expect(bill.setFocusPriceProductId).toHaveBeenCalledWith(addedProduct.cartRowId);
     });
   });
 

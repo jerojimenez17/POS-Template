@@ -7,20 +7,33 @@ import { getUnpaidOrders } from "@/actions/unpaid-orders";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 
+const { authMock, orderFindManyMock, orderFindUniqueMock, requireFeatureMock } = vi.hoisted(() => ({
+  authMock: vi.fn(),
+  orderFindManyMock: vi.fn(),
+  orderFindUniqueMock: vi.fn(),
+  requireFeatureMock: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/db", () => ({
+  db: {
+    order: {
+      findMany: orderFindManyMock,
+      findUnique: orderFindUniqueMock,
+    },
+  },
+}));
+vi.mock("@/lib/auth-gates", () => ({
+  requireFeature: requireFeatureMock,
+  assertWritePermission: vi.fn(),
+}));
+
 const featureDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = join(featureDirectory, "..", "..", "..");
-const ledgerPagePath = join(
-  repositoryRoot,
-  "src",
-  "app",
-  "(protected)",
-  "account-ledger",
-  "page.tsx",
-);
 
 const orderFindMany = vi.mocked(db.order.findMany);
 const orderFindUnique = vi.mocked(db.order.findUnique);
-const authMock = vi.mocked(auth);
+const authResultMock = vi.mocked(auth);
 
 function listInput(overrides: Record<string, unknown> = {}) {
   // The search field is deliberately part of the RED contract before production
@@ -35,7 +48,8 @@ function listInput(overrides: Record<string, unknown> = {}) {
 describe("account ledger paid-orders query contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authMock.mockResolvedValue({
+    requireFeatureMock.mockResolvedValue({ success: true });
+    authResultMock.mockResolvedValue({
       user: { businessId: "business-from-session" },
     } as never);
     orderFindMany.mockResolvedValue([]);
@@ -66,6 +80,35 @@ describe("account ledger paid-orders query contract", () => {
 
     expect(orderFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining(expected) }),
+    );
+  });
+
+  it("keeps the all-tab query tenant-scoped, status-scoped, and bounded", async () => {
+    await getUnpaidOrders(listInput({ status: "all", limit: 25, cursor: null }));
+
+    expect(orderFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          businessId: "business-from-session",
+          status: { not: "pendiente" },
+        }),
+        take: 26,
+      }),
+    );
+  });
+
+  it("keeps the paid-tab query tenant-scoped, paid-only, and bounded", async () => {
+    await getUnpaidOrders(listInput({ status: "pago", limit: 25, cursor: null }));
+
+    expect(orderFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          businessId: "business-from-session",
+          status: { not: "pendiente" },
+          paidStatus: "pago",
+        }),
+        take: 26,
+      }),
     );
   });
 
@@ -103,7 +146,7 @@ describe("account ledger paid-orders query contract", () => {
       paidStatus: true,
       clientId: true,
       notes: true,
-      client: { select: { id: true, name: true } },
+      client: { select: { id: true, name: true, balance: true } },
     });
     expect(query).not.toHaveProperty("include");
   });
@@ -128,11 +171,27 @@ describe("account ledger paid-orders query contract", () => {
     );
 
     vi.clearAllMocks();
-    authMock.mockResolvedValue(null as never);
+    authResultMock.mockResolvedValue(null as never);
     const result = await getUnpaidOrders(listInput({ businessId: "attacker-business" }));
 
     expect(result).toEqual({ success: false, error: "No autorizado" });
     expect(orderFindMany).not.toHaveBeenCalled();
+  });
+
+  it("denies a disabled plan before auth or any database call", async () => {
+    requireFeatureMock.mockResolvedValue({
+      success: false,
+      error: "Esta función no está habilitada en tu plan actual.",
+    });
+
+    await expect(getUnpaidOrders(listInput())).resolves.toEqual({
+      success: false,
+      error: "Esta función no está habilitada en tu plan actual.",
+    });
+    expect(requireFeatureMock).toHaveBeenCalledWith("hasClientLedger");
+    expect(authResultMock).not.toHaveBeenCalled();
+    expect(orderFindMany).not.toHaveBeenCalled();
+    expect(orderFindUnique).not.toHaveBeenCalled();
   });
 
   it("performs one set-based list query and no per-order detail queries", async () => {
@@ -160,9 +219,9 @@ describe("account ledger paid-orders query contract", () => {
 
 describe("account ledger page data-flow contract", () => {
   it("passes search to getUnpaidOrders instead of filtering every returned row", () => {
-    const source = readFileSync(ledgerPagePath, "utf8");
+    const source = readFileSync(join(repositoryRoot, "src", "app", "(protected)", "account-ledger", "AccountLedgerContent.tsx"), "utf8");
 
-    expect(source).toMatch(/getUnpaidOrders\(\{[\s\S]*?search\s*:\s*search/);
-    expect(source).not.toMatch(/orders\.filter\(/);
+    expect(source).toMatch(/getUnpaidOrders\(\{[\s\S]*?search\s*:\s*debouncedSearch/);
+    expect(source).not.toMatch(/\borders\.filter\s*\(/);
   });
 });

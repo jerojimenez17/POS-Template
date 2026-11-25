@@ -51,11 +51,11 @@ const INITIAL_STATE: FilterState = {
     filter: "cuentaDNI",
   } as FilterField,
   startDate: {
-    active: true,
+    active: false,
     date: startOfToday,
   },
   endDate: {
-    active: true,
+    active: false,
     date: startOfTomorrow,
   },
 };
@@ -162,7 +162,7 @@ const FiltersProvider = ({ children }: props) => {
     dispatch({ type: "reset", payload: null });
   }, []);
 
-  const initFromUrl = useCallback((params: { startDate?: Date; endDate?: Date; showAll?: boolean }) => {
+  const initFromUrl = useCallback((params: { startDate?: Date; endDate?: Date; showAll?: boolean; directVisit?: boolean }) => {
     dispatch({ type: "initFromUrl", payload: params });
   }, []);
   

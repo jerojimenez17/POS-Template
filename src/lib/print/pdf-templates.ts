@@ -127,11 +127,8 @@ function formatInicioActividades(date: Date | string | null | undefined): string
   }).format(d);
 }
 
-function getDocTitle(billType: string, cae: unknown): string {
-  const lower = billType.toLowerCase();
-  if (lower.includes("presupuesto")) return "Presupuesto";
-  if (lower.includes("factura") || cae) return "Factura";
-  return "Comprobante";
+function getDocTitle(billType: string): string {
+  return billType;
 }
 
 function formatCurrency(value: number): string {
@@ -192,7 +189,7 @@ export function buildPDFHTML(
   const isCreditNote = receiptData.documentKind === "credit-note" || getDocumentPrintKind(receiptData.cae?.cae, receiptData.billType) === "credit-note";
   const isOfficialInvoice = !isPresupuesto && (isCreditNote || getDocumentPrintKind(receiptData.cae?.cae, receiptData.billType) === "official-invoice");
   const billType = getBillTypeDisplay(receiptData.billType, receiptData.cae?.cae, !isOfficialInvoice);
-  const docTitle = getDocTitle(billType, receiptData.cae);
+  const docTitle = getDocTitle(billType);
   const invoiceNumberFormatted = isOfficialInvoice && !isPresupuesto
     ? formatInvoiceNumberFull(
         invoiceNumber ?? receiptData.invoiceNumber,
@@ -224,7 +221,7 @@ export function buildPDFHTML(
 
   // ——— Establishment info (without Vendedor) ———
   const inicioStr = formatInicioActividades(receiptData.businessInfo?.inicioActividades);
-  const businessInfo = `
+  const businessInfo = isPresupuesto ? "" : `
     <div class="info-section">
       <div class="info-section-title">Establecimiento</div>
       ${receiptData.businessInfo?.cuit ? `<div class="info-row"><span class="info-label">CUIT</span><span class="info-value">${escapeHtml(receiptData.businessInfo.cuit)}</span></div>` : ""}

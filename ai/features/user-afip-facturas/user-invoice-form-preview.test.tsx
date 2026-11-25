@@ -81,20 +81,18 @@ describe("USER invoice-number preview form", () => {
   it("shows lastVoucher + 1 beside the matching configured POS and invoice type", async () => {
     renderInvoiceForm([3], "Factura B");
 
-    const nextNumber = await screen.findByText("0077");
+    const nextNumber = await screen.findByText(/003-0077/);
     expect(nextNumber.parentElement).toHaveTextContent("003-0077");
-    expect(screen.getByText("Factura B")).toBeInTheDocument();
+    expect(screen.getAllByText("Factura B").length).toBeGreaterThan(0);
     expect(voucherActionMock).toHaveBeenCalledWith(3, 6);
   });
 
   it("clears a stale number and shows a visible preview-specific returned error without claiming CAE rejection", async () => {
     renderInvoiceForm();
 
-    expect(await screen.findByText("0077")).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Editar" }));
+    expect(await screen.findByText(/003-0077/)).toBeInTheDocument();
     voucherActionMock.mockResolvedValueOnce({ error: "No se pudo consultar la numeración" });
     fireEvent.change(screen.getByLabelText("Tipo"), { target: { value: "Factura C" } });
-    await userEvent.setup().click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     await waitFor(() => expect(voucherActionMock).toHaveBeenCalledWith(3, 11));
     const alert = await screen.findByRole("alert");
@@ -131,18 +129,16 @@ describe("USER invoice-number preview form", () => {
     renderInvoiceForm([3], "Factura B");
     await waitFor(() => expect(voucherActionMock).toHaveBeenCalledWith(3, 6));
 
-    await userEvent.setup().click(screen.getByRole("button", { name: "Editar" }));
     voucherActionMock.mockResolvedValueOnce({ success: 90 });
     fireEvent.change(screen.getByLabelText("Tipo"), { target: { value: "Factura C" } });
-    await userEvent.setup().click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     await waitFor(() => expect(voucherActionMock).toHaveBeenCalledWith(3, 11));
-    expect(await screen.findByText("0091")).toBeInTheDocument();
+    expect(await screen.findByText(/003-0091/)).toBeInTheDocument();
 
     resolveInitial({ success: 12 });
 
     await waitFor(() => {
-      expect(screen.getByText("0091")).toBeInTheDocument();
+      expect(screen.getByText(/003-0091/)).toBeInTheDocument();
       expect(screen.queryByText("0013")).not.toBeInTheDocument();
     });
   });

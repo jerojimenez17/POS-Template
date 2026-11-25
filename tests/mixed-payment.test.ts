@@ -12,9 +12,11 @@ vi.mock('../src/lib/db', () => {
     orderId: null,
   }));
   return {
-    db: {
-      $transaction: vi.fn().mockImplementation(async (callback) => {
+        db: {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $transaction: vi.fn().mockImplementation(async (callback) => {
         return callback({
+          $executeRaw: vi.fn().mockResolvedValue(1),
           cashboxSession: {
             findFirst: vi.fn().mockResolvedValue({ id: 'session-1', cashboxId: 'cashbox-1' }),
           },
@@ -35,6 +37,7 @@ vi.mock('../src/lib/db', () => {
           },
           stockMovement: {
             create: vi.fn().mockResolvedValue({ id: 'stock-1' }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
           productRanking: {
             upsert: vi.fn().mockResolvedValue({ id: 'ranking-1' }),

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { encrypt } from "@/lib/encryption";
 import { generateCertsAction } from "@/actions/generate-certs";
 import { revalidateTag } from "next/cache";
+import { requireFeature } from "@/lib/auth-gates";
 
 vi.mock("../../../auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/db", () => ({
@@ -13,6 +14,7 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/encryption", () => ({ encrypt: vi.fn((value: string) => `encrypted:${value}`) }));
 vi.mock("next/cache", () => ({ revalidateTag: vi.fn(), revalidatePath: vi.fn() }));
+vi.mock("@/lib/auth-gates", () => ({ requireFeature: vi.fn() }));
 
 const CERT = "-----BEGIN CERTIFICATE-----\nCERT-SECRET\n-----END CERTIFICATE-----";
 const KEY = "-----BEGIN PRIVATE KEY-----\nKEY-SECRET\n-----END PRIVATE KEY-----";
@@ -35,6 +37,39 @@ describe("generateCertsAction: respuesta PROD y persistencia segura", () => {
       expires: "2099-01-01",
     } as never);
     vi.mocked(db.business.update).mockResolvedValue({ id: BUSINESS_ID } as never);
+    vi.mocked(requireFeature).mockResolvedValue({ success: true, data: {} } as never);
+  });
+
+  it("rechaza un plan sin AFIP antes de llamar al proveedor o a la base", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(requireFeature).mockResolvedValue({
+      success: false,
+      error: "Esta función no está habilitada en tu plan actual.",
+    } as never);
+
+    const result = await generateCertsAction("prod", "20123456789", "user", "password", "afipsdk", BUSINESS_ID);
+
+    expect(result).toEqual({ error: "Esta función no está habilitada en tu plan actual." });
+    expect(requireFeature).toHaveBeenCalledWith("hasAfipBilling");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.business.update).not.toHaveBeenCalled();
+  });
+
+  it("permite a SUPER_ADMIN configurar un negocio nuevo sin plan en su sesión", async () => {
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "superadmin-1", role: UserRole.SUPER_ADMIN, businessId: null },
+      expires: "2099-01-01",
+    } as never);
+    const fetchMock = vi.fn().mockResolvedValue(responseWith({ cert: CERT, key: KEY }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await generateCertsAction("prod", "20123456789", "user", "password", "afipsdk", BUSINESS_ID);
+
+    expect(result.success).toEqual(expect.any(String));
+    expect(requireFeature).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(db.business.update).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -49,6 +84,7 @@ describe("generateCertsAction: respuesta PROD y persistencia segura", () => {
     const result = await generateCertsAction("prod", "20123456789", "user", "password", "afipsdk", BUSINESS_ID);
 
     expect(result).toEqual({ success: expect.any(String) });
+    expect(requireFeature).toHaveBeenCalledWith("hasAfipBilling");
     expect(db.business.update).toHaveBeenCalledTimes(1);
     expect(db.business.update).toHaveBeenCalledWith({
       where: { id: BUSINESS_ID },

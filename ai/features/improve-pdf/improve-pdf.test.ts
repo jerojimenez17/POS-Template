@@ -10,6 +10,7 @@ const { dbMock } = vi.hoisted(() => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
+      findFirst: vi.fn(),
     },
     // Merged design tracks fiscal type via OrderUpdate history (Order has no
     // billType column) and gates DEMO-plan sales via DailyUsage counters.
@@ -96,6 +97,7 @@ describe("improve-pdf: billType persistence and historical mapping", () => {
       paymentMethod2: null,
       discountPercentage: 0,
     });
+    dbMock.order.findFirst.mockResolvedValue({ total: 100, fiscalSnapshot: null });
     dbMock.orderUpdate.findFirst.mockResolvedValue(null);
     dbMock.orderUpdate.findMany.mockResolvedValue([]);
     dbMock.orderUpdate.create.mockResolvedValue({ id: "order-update-1" });
@@ -124,9 +126,7 @@ describe("improve-pdf: billType persistence and historical mapping", () => {
     expect(dbMock.order.create).toHaveBeenCalledTimes(1);
     const createData = dbMock.order.create.mock.calls[0]?.[0]?.data;
     expect(createData).toMatchObject({ total: 100, paymentMethod: "Efectivo" });
-    // Upstream persisted billType directly on Order; our merged schema has no
-    // such column — the type is tracked via OrderUpdate history at invoice time.
-    expect(createData).not.toHaveProperty("billType");
+    expect(createData).toMatchObject({ billType: "Factura A" });
   });
 
   it("persists CAE via order.update and preserves billType in OrderUpdate history", async () => {
@@ -146,12 +146,8 @@ describe("improve-pdf: billType persistence and historical mapping", () => {
         paymentMethod: "Efectivo",
       }),
     }));
-    // billType is not an Order column: it is journaled on OrderUpdate
-    expect(dbMock.orderUpdate.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        message: "Facturación AFIP/ARCA",
-        changes: expect.objectContaining({ billTypeTo: "Factura B" }),
-      }),
+    expect(dbMock.order.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ billType: "Factura B" }),
     }));
   });
 
@@ -165,8 +161,7 @@ describe("improve-pdf: billType persistence and historical mapping", () => {
     const detail = await getSaleByIdAction("order-1");
 
     expect(list.sales[0]).toMatchObject({ seller: "seller@test", paidMethod: "Efectivo" });
-    // List path does not join OrderUpdate — fiscal type is detail-only by design
-    expect(list.sales[0]?.billType).toBeUndefined();
+    expect(list.sales[0]?.billType).toBe("Factura B");
     expect(detail?.billType).toBe("Factura B");
     expect(detail?.ptoVenta).toBe(3);
   });
@@ -212,9 +207,8 @@ describe("improve-pdf: scaled PDF layout and receipt integrity", () => {
   it("keeps document kind, all products, totals, CAE and QR in the generated HTML", () => {
     const html = buildPDFHTML(receipt, { qrSvgDataUrl: "data:image/svg+xml;base64,QR" });
 
-    // Merged pdf-templates renders the generic doc title (our pre-merge shape);
-    // rendering the lettered type was upstream-only and discarded (report-C).
-    expect(html).toContain(">Factura<");
+    // PDF preserves the authorized invoice's lettered fiscal type.
+    expect(html).toContain(">Factura B<");
     expect(html).toContain("Producto 1");
     expect(html).toContain("Producto 30");
     expect(html).toContain("12345678901234");

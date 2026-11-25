@@ -11,7 +11,7 @@ import { createAfipVoucherAction } from "@/actions/afip";
 import { processSaleAction, updateOrderAction } from "@/actions/sales";
 import { toast } from "sonner";
 import Spinner from "../ui/Spinner";
-import ClientSelectionModal from "../ledger/ClientSelectionModal";
+import ClientSelectionModal from "@/components/ledger/ClientSelectionModal";
 import CheckoutModal from "./CheckoutModal";
 import { useRouter } from "next/navigation";
 import { useCashbox } from "@/context/CashboxContext";
@@ -649,6 +649,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         onOpenChange={setOpenFacturaModal}
         type="factura"
         ptoVentas={ptoVentas}
+        onCancel={onSaleFocusCancelled}
         onConfirm={async () => {
           if (!acquireConfirmation()) return;
           const confirmationSnapshot = createBillStateSnapshot(BillState, billTypeRef?.current);
@@ -689,6 +690,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         onOpenChange={setOpenRemitoModal}
         type="remito"
         ptoVentas={ptoVentas}
+        onCancel={onSaleFocusCancelled}
         onConfirm={async () => {
           if (!acquireConfirmation()) return;
           const confirmationSnapshot = createBillStateSnapshot(BillState, billTypeRef?.current);

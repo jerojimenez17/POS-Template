@@ -10,8 +10,14 @@ import type { AfipVoucherSuccessData } from "@/services/afip/voucher-response";
 vi.mock("@/actions/afip", () => ({ createAfipVoucherAction: vi.fn() }));
 vi.mock("@/actions/sales", () => ({ processSaleAction: vi.fn(), updateOrderAction: vi.fn() }));
 vi.mock("@/actions/shortcuts", () => ({
-  getShortcutConfigsAction: vi.fn(),
+  getShortcutConfigsAction: vi.fn().mockResolvedValue({ success: true, data: [] }),
   getProductByShortcutAction: vi.fn(),
+}));
+vi.mock("next-auth/react", () => ({
+  SessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useSession: () => ({
+    data: { user: { role: "USER", business: { features: { hasBudget: false } } } },
+  }),
 }));
 vi.mock("@/context/CashboxContext", () => ({
   useCashbox: () => ({ hasActiveSession: true, setIsOpeningModalOpen: vi.fn() }),

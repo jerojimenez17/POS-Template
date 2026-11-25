@@ -59,12 +59,10 @@ describe("client server actions", () => {
     expect(clientDb.findMany).not.toHaveBeenCalled();
   });
 
-  it("creates with the session business and zero balance, ignoring client authorization fields", async () => {
-    const result = await (await actions()).createClient({ name: "Nueva", businessId: "business-b", balance: 900 } as never);
-    expect(result).toMatchObject({ success: true });
-    expect(clientDb.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ name: "Nueva", businessId: "business-a", balance: 0 }),
-    }));
+   it("rejects client-supplied authorization fields before writing", async () => {
+     const result = await (await actions()).createClient({ name: "Nueva", businessId: "business-b", balance: 900 } as never);
+     expect(result).toMatchObject({ success: false, code: "VALIDATION" });
+     expect(clientDb.create).not.toHaveBeenCalled();
   });
 
   it("rejects invalid create payloads without writing", async () => {
@@ -76,11 +74,15 @@ describe("client server actions", () => {
   it("updates and deletes only records belonging to the session business", async () => {
     clientDb.findFirst.mockResolvedValue(ownClient);
     const actionsModule = await actions();
-    await actionsModule.updateClient({ id: "client-a", name: "Ana actualizada", balance: 999, businessId: "business-b" } as never);
-    expect(clientDb.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "client-a", businessId: "business-a" },
-      data: expect.not.objectContaining({ balance: 999, businessId: "business-b" }),
-    }));
+     await actionsModule.updateClient({ id: "client-a", name: "Ana actualizada" });
+     expect(clientDb.findFirst).toHaveBeenCalledWith({
+       where: { id: "client-a", businessId: "business-a" },
+       select: { id: true },
+     });
+     expect(clientDb.update).toHaveBeenCalledWith(expect.objectContaining({
+       where: { id: "client-a" },
+       data: expect.not.objectContaining({ businessId: "business-b" }),
+     }));
 
     clientDb.findFirst.mockResolvedValue(null);
     const result = await actionsModule.deleteClient({ id: foreignClient.id } as never);
@@ -97,14 +99,15 @@ describe("client server actions", () => {
   });
 
   it("protects balance updates with authentication and business ownership", async () => {
-    clientDb.findUnique.mockResolvedValue(foreignClient);
+     clientDb.findFirst.mockResolvedValue(foreignClient);
     const actionsModule = await actions();
     authMock.mockResolvedValue(null);
     expect(await actionsModule.updateClientBalance("client-a", 10)).toMatchObject({ success: false, code: "UNAUTHORIZED" });
     expect(clientDb.update).not.toHaveBeenCalled();
 
-    authMock.mockResolvedValue(ownSession);
-    expect(await actionsModule.updateClientBalance(foreignClient.id, 10)).toMatchObject({ success: false });
+     authMock.mockResolvedValue(ownSession);
+     clientDb.findFirst.mockResolvedValue(null);
+     expect(await actionsModule.updateClientBalance(foreignClient.id, 10)).toMatchObject({ success: false });
     expect(clientDb.update).not.toHaveBeenCalled();
   });
 });

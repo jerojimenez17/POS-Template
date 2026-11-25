@@ -147,6 +147,18 @@ describe("getProductsPaginated product-search ranking", () => {
     expect(containsValue(query.values, "kg")).toBe(true);
   });
 
+  it("keeps the authenticated business scope on ranked product hydration", async () => {
+    const { db } = await import("@/lib/db");
+    (db.$queryRaw as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: "p1" }]);
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([product("p1", "Acido citrico")]);
+
+    await getProductsPaginated({ search: "acido" });
+
+    expect(db.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { businessId: "business-123", id: { in: ["p1"] } },
+    }));
+  });
+
   it("does not use description prefix ranking in codeOnly mode", async () => {
     const { db } = await import("@/lib/db");
     await getProductsPaginated({ search: "ACIDO", codeOnly: true });

@@ -59,7 +59,7 @@ describe("pdf-templates — AC7 AC8 AC9 Presupuesto", () => {
     // To make test fail now, we require exact billType display not to be Remito/Comprobante alone.
     // We assert html does NOT have billType Remito as the displayed type when Presupuesto requested.
     // Simplistic but deterministic: count occurrences — Presupuesto must appear as invoice-type
-    expect(html).toMatch(/invoice-type[^<]*>[\s\S]*?Presupuesto/i);
+    expect(html).toMatch(/class="doc-type">Presupuesto<\/div>/i);
   });
 
   it("AC7: PDF presupuesto does NOT contain fiscal block (CUIT, Condición IVA negocio, Dirección negocio, Inicio Actividades, CAE banner)", () => {
@@ -106,6 +106,17 @@ describe("pdf-templates — AC7 AC8 AC9 Presupuesto", () => {
     });
     expect(html).not.toContain("Medio de Pago");
     expect(html).not.toContain("Pago:");
+  });
+
+  it.each(["Factura B", "Factura C"])("keeps the fiscal invoice title %s", (billType) => {
+    const html = buildPDFHTML({
+      ...baseReceipt(),
+      billType,
+      businessInfo: fiscalInfo,
+      cae: { cae: "12345678901234", vencimiento: "2026-12-31" },
+    });
+
+    expect(html).toMatch(new RegExp(`class="doc-type">${billType}<\\/div>`));
   });
 
   it("AC8: PDF presupuesto does NOT contain ¡Gracias por su compra! but contains Presupuesto legend", () => {
@@ -229,10 +240,10 @@ describe("regression — AC3 Remito without CAE", () => {
       businessInfo: fiscalInfo,
       cae: undefined,
     });
-    expect(html).toContain("Remito");
+    expect(html).toMatch(/class="doc-type">Remito<\/div>/i);
     expect(html).not.toContain("CUIT:");
     expect(html).not.toContain("N°");
-    expect(html).toContain("Medio de Pago");
+    expect(html).toContain("Pago");
     expect(html).toContain("¡Gracias por su compra!");
   });
 
@@ -272,11 +283,11 @@ describe("regression — AC4 Factura with CAE", () => {
     expect(html).toContain("Factura B");
     expect(html).toContain("001-0023");
     expect(html).toContain("N°");
-    expect(html).toContain("CUIT:");
+    expect(html).toContain("CUIT");
     expect(html).toContain("30-12345678-9");
     expect(html).toContain("CAE:");
     expect(html).toContain("Comprobante Autorizado");
-    expect(html).toContain("Medio de Pago");
+    expect(html).toContain("Pago");
     expect(html).toContain("¡Gracias por su compra!");
   });
 

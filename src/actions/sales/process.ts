@@ -107,7 +107,12 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
     
     const result = await db.$transaction(async (tx) => {
       const activeSession = await tx.cashboxSession.findFirst({
-        where: { userId: session.user!.id, businessId, status: "OPEN" },
+        where: {
+          userId: session.user!.id,
+          businessId,
+          status: "OPEN",
+          cashbox: { businessId },
+        },
       });
       if (!activeSession) {
         throw new Error("No hay una sesión de caja abierta.");
@@ -214,7 +219,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
 
       if (cashToIncrement > 0) {
         await tx.cashBox.update({
-          where: { id: activeSession.cashboxId },
+          where: { id: activeSession.cashboxId, businessId },
           data: { total: { increment: cashToIncrement } },
         });
       }
@@ -356,9 +361,15 @@ export const processReturnAction = async (data: unknown) => {
       // concurrency authority for return state.
       const order = await tx.order.findFirst({
         where: { id: returnData.orderId, businessId },
-        include: { items: true, returns: { include: { items: true } } },
+        include: {
+          items: { include: { product: { select: { businessId: true } } } },
+          returns: { include: { items: true } },
+        },
       });
       if (!order) throw new Error("Venta no encontrada");
+      if (order.items.some((item) => item.product?.businessId !== businessId)) {
+        throw new Error("La venta contiene un producto de otro negocio");
+      }
       if (order.returns.some((item) => item.kind === "CREDIT_NOTE"
         && (item.status === "PENDING" || item.status === "AUTHORIZED"))) {
         throw new Error("La venta tiene una Nota de Crédito pendiente o autorizada");
@@ -417,7 +428,12 @@ export const processReturnAction = async (data: unknown) => {
       }
 
       const activeSession = await tx.cashboxSession.findFirst({
-        where: { userId, businessId, status: "OPEN" },
+        where: {
+          userId,
+          businessId,
+          status: "OPEN",
+          cashbox: { businessId },
+        },
       });
       if (!activeSession) {
         throw new Error("No hay una sesión de caja abierta.");
@@ -467,7 +483,7 @@ export const processReturnAction = async (data: unknown) => {
       }
 
       await tx.cashBox.update({
-        where: { id: activeSession.cashboxId },
+        where: { id: activeSession.cashboxId, businessId },
         data: { total: { decrement: totalRefund } },
       });
 
@@ -654,6 +670,21 @@ export const updateOrderAction = async (
         },
       });
 
+      const oldTotal = existingOrder.total;
+      const totalDiff = total - oldTotal;
+      const oldClientId = existingOrder.clientId;
+      const newClientId = updatedData.clientId;
+      if (oldClientId !== newClientId) {
+        if (oldClientId) {
+          await tx.client.update({ where: { id: oldClientId }, data: { balance: { decrement: oldTotal } } });
+        }
+        if (newClientId) {
+          await tx.client.update({ where: { id: newClientId }, data: { balance: { increment: total } } });
+        }
+      } else if (oldClientId && totalDiff !== 0) {
+        await tx.client.update({ where: { id: oldClientId }, data: { balance: { increment: totalDiff } } });
+      }
+
       // 🚀 FASE 1+2: descontar stock nuevo (bulk UPDATE + createMany)
       {
         const stockMovementsApply: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string; reason: string }[] = [];
@@ -671,6 +702,102 @@ export const updateOrderAction = async (
           updatedData.products.map((p) => ({ id: p.id, change: -p.amount })),
         ));
         await tx.stockMovement.createMany({ data: stockMovementsApply });
+      // 🔹 ajustar CashMovements y CashBox por edición (Fix 7C)
+      const oldCashMovements = await tx.cashMovement.findMany({
+        where: { orderId, businessId },
+      });
+
+      const oldCashTotal = oldCashMovements.reduce((sum, m) => sum + m.total, 0);
+
+      // Calcular nuevo total en efectivo según medios de pago actualizados
+      const isTwoMethodsEdit = !!updatedData.twoMethods;
+      const totalSecondMethodEdit = isTwoMethodsEdit ? (Number(updatedData.totalSecondMethod) || 0) : 0;
+      const totalEdit = updatedData.totalWithDiscount || updatedData.total;
+
+      let newCashTotal = 0;
+      if (updatedData.paidMethod === "Efectivo") {
+        newCashTotal += totalEdit - totalSecondMethodEdit;
+      }
+      if (isTwoMethodsEdit && updatedData.secondPaidMethod === "Efectivo") {
+        newCashTotal += totalSecondMethodEdit;
+      }
+
+      const cashDelta = newCashTotal - oldCashTotal;
+
+      // Solo tocar CashBox/CashMovement si realmente cambió algo en efectivo
+      if (cashDelta !== 0 || oldCashMovements.length > 0 || newCashTotal > 0) {
+        // Encontrar sesión activa del usuario que edita
+        const activeSession = await tx.cashboxSession.findFirst({
+          where: {
+            userId,
+            businessId,
+            status: "OPEN",
+            cashbox: { businessId },
+          },
+        });
+        if (!activeSession) {
+          throw new Error("No hay una sesión de caja abierta.");
+        }
+
+        // Ajustar CashBox por el delta (puede ser positivo o negativo)
+        if (cashDelta !== 0) {
+          await tx.cashBox.update({
+            where: { id: activeSession.cashboxId, businessId },
+            data: { total: { increment: cashDelta } },
+          });
+        }
+
+        // Eliminar movimientos viejos (son reemplazados por los nuevos)
+        if (oldCashMovements.length > 0) {
+          await tx.cashMovement.deleteMany({
+            where: { orderId, businessId },
+          });
+        }
+
+        // Crear nuevos movimientos si hay efectivo involucrado
+        if (newCashTotal > 0) {
+          if (isTwoMethodsEdit) {
+            if (totalEdit - totalSecondMethodEdit > 0 && updatedData.paidMethod === "Efectivo") {
+              await tx.cashMovement.create({
+                data: {
+                  total: totalEdit - totalSecondMethodEdit,
+                  seller: updatedData.seller,
+                  paidMethod: updatedData.paidMethod || "Efectivo",
+                  businessId,
+                  cashboxSessionId: activeSession.id,
+                  orderId,
+                  date: new Date(),
+                },
+              });
+            }
+            if (totalSecondMethodEdit > 0 && updatedData.secondPaidMethod === "Efectivo") {
+              await tx.cashMovement.create({
+                data: {
+                  total: totalSecondMethodEdit,
+                  seller: updatedData.seller,
+                  paidMethod: updatedData.secondPaidMethod || "Efectivo",
+                  businessId,
+                  cashboxSessionId: activeSession.id,
+                  orderId,
+                  date: new Date(),
+                },
+              });
+            }
+          } else if (updatedData.paidMethod === "Efectivo") {
+            await tx.cashMovement.create({
+              data: {
+                total: totalEdit,
+                seller: updatedData.seller,
+                paidMethod: updatedData.paidMethod || "Efectivo",
+                businessId,
+                cashboxSessionId: activeSession.id,
+                orderId,
+                date: new Date(),
+              },
+            });
+          }
+        }
+      }
       }
 
       return { success: true };

@@ -43,13 +43,13 @@ describe("voucher Server Action / parser module boundary", () => {
     expect(source).toMatch(
       /export\s+const\s+getVoucherNumberAction\s*=\s*async\s*\([\s\S]*?puntoVenta:\s*number\s*,\s*tipoFactura:\s*number\s*\)\s*:\s*Promise<VoucherNumberResult>/,
     );
-    expect(source).toMatch(/export\s+interface\s+VoucherNumberResult\b/);
+    expect(source).toMatch(/type\s+VoucherNumberResult[\s\S]*from\s+["']@\/lib\/server\/arca-billing["']/);
   });
 
   it("imports the parser from the pure service and does not re-export it", () => {
     const source = readSource(voucherPath);
 
-    expect(source).toMatch(
+    expect(readSource(join(repositoryRoot, "src", "lib", "server", "afip-voucher.ts"))).toMatch(
       /import\s*\{[\s\S]*?\bparseAfipPointSaleError\b[\s\S]*?\}\s*from\s*["']@\/services\/afip\/point-sale-validation["']/,
     );
     expect(source).not.toMatch(

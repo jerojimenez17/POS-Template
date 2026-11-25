@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 interface NavItem {
   label: string;
-  href: string;
+  href?: string;
   icon: React.ReactNode;
   adminOnly?: boolean;
 }
@@ -31,7 +31,7 @@ const navItems: NavItem[] = [
   { label: "Fichero", href: "/account-ledger", icon: <BookOpen className="h-5 w-5" /> },
   { label: "Caja", href: "/cashRegister", icon: <Calculator className="h-5 w-5" /> },
   { label: "Reportes", href: "/report", icon: <BarChart3 className="h-5 w-5" /> },
-  { label: "Catálogo", href: "#", icon: <LayoutGrid className="h-5 w-5" /> },
+  { label: "Catálogo", icon: <LayoutGrid className="h-5 w-5" /> },
   { label: "Usuarios", href: "/admin/users", icon: <Users className="h-5 w-5" />, adminOnly: true },
   { label: "Cajas", href: "/admin/cashboxes", icon: <Box className="h-5 w-5" />, adminOnly: true },
   { label: "Config.", href: "/admin/settings", icon: <Settings className="h-5 w-5" />, adminOnly: true },
@@ -46,22 +46,37 @@ const SideNav = () => {
   const { open: mobileOpen, setOpen: setMobileOpen } = useMobileNav();
 
   const isActive = (href: string) => {
-    if (href === "#") return false;
     return pathname.startsWith(href);
   };
 
   const resolvedItems = navItems.map((item) => ({
     ...item,
     href: item.label === "Catálogo" && businessSlug ? `/${businessSlug}/catalogo` : item.href,
+    disabled: item.label === "Catálogo" && !businessSlug,
     hidden: item.adminOnly ? !isAdmin : false,
   }));
 
   const visibleItems = resolvedItems.filter((item) => !item.hidden);
 
-  const NavLink = ({ item, active, onClick }: { item: typeof visibleItems[0]; active: boolean; onClick?: () => void }) => (
-    <Link
+  const NavLink = ({ item, active, onClick }: { item: typeof visibleItems[0]; active: boolean; onClick?: () => void }) => item.disabled ? (
+    <div
+       aria-busy="true"
+       aria-disabled="true"
+       className={cn(
+         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap overflow-hidden",
+         "text-gray-400 dark:text-gray-600 cursor-wait"
+       )}
+       title="Catálogo (cargando)"
+     >
+       <span className="shrink-0">{item.icon}</span>
+       <span className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200">
+         Catálogo (cargando)
+       </span>
+     </div>
+   ) : (
+     <Link
       key={item.label}
-      href={item.href}
+       href={item.href!}
       onClick={onClick}
       className={cn(
         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap overflow-hidden",
@@ -84,7 +99,7 @@ const SideNav = () => {
       <nav className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] z-40 hidden md:flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-200 w-14 hover:w-48 group/sidebar">
         <div className="flex flex-col gap-1 p-2 pt-4 overflow-hidden">
           {visibleItems.map((item) => (
-            <NavLink key={item.label} item={item} active={isActive(item.href)} />
+            <NavLink key={item.label} item={item} active={item.href ? isActive(item.href) : false} />
           ))}
         </div>
       </nav>
@@ -115,14 +130,25 @@ const SideNav = () => {
           </button>
         </div>
         <div className="flex flex-col gap-1 p-3">
-          {visibleItems.map((item) => (
+          {visibleItems.map((item) => item.disabled ? (
+            <div
+              key={item.label}
+              aria-busy="true"
+              aria-disabled="true"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 dark:text-gray-600 cursor-wait"
+              title="Catálogo (cargando)"
+            >
+              {item.icon}
+              {item.label} (cargando)
+            </div>
+          ) : (
             <Link
               key={item.label}
-              href={item.href}
+              href={item.href!}
               onClick={() => setMobileOpen(false)}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                isActive(item.href)
+                 item.href ? isActive(item.href) : false
                   ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
                   : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
               )}

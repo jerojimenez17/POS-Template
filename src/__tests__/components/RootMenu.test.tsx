@@ -15,8 +15,8 @@ import { useSession } from "next-auth/react";
 // Mock MenuCard since we just want to verify it receives the correct props
 vi.mock("@/components/ui/MenuCard", () => ({
   __esModule: true,
-  default: ({ title, url }: { title: string, url: string }) => (
-    <div data-testid={`menu-card-${title}`} data-url={url}>
+  default: ({ title, url, disabled, loading }: { title: string, url?: string, disabled?: boolean, loading?: boolean }) => (
+    <div data-testid={`menu-card-${title}`} data-url={url} data-disabled={disabled} data-loading={loading}>
       {title}
     </div>
   ),
@@ -63,5 +63,23 @@ describe("RootMenu Test Cases", () => {
     const adminCard = screen.getByTestId("menu-card-Usuarios");
     expect(adminCard).not.toBeNull();
     expect(adminCard.getAttribute("data-url")).toBe("/admin/users");
+  });
+
+  it("should keep Catálogo non-clickable while the business slug is unavailable", () => {
+    vi.mocked(useSession).mockReturnValue({
+      data: {
+        user: { role: "USER", businessSlug: undefined, businessId: null, businessName: null },
+        expires: new Date().toISOString(),
+      },
+      status: "authenticated" as const,
+      update: vi.fn(),
+    });
+
+    render(<RootMenu />);
+
+    const catalogCard = screen.getByTestId("menu-card-Catálogo");
+    expect(catalogCard).not.toHaveAttribute("data-url", "#");
+    expect(catalogCard).toHaveAttribute("data-disabled", "true");
+    expect(catalogCard).toHaveAttribute("data-loading", "true");
   });
 });

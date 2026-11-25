@@ -32,6 +32,7 @@ describe("USER invoice-number preview authorization", () => {
       key: "encrypted-key",
       ptoVenta: [3],
       features: { hasAfipBilling: true },
+      planDefinition: { name: "BASIC", features: { hasAfipBilling: true }, limits: {} },
     });
     fetchMock.mockResolvedValue({
       ok: true,
@@ -53,7 +54,7 @@ describe("USER invoice-number preview authorization", () => {
     expect(result).toEqual({ success: 76 });
     expect(businessFindUniqueMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "session-business" } }));
     expect(businessFindUniqueMock).toHaveBeenCalledWith(expect.objectContaining({
-      select: expect.objectContaining({ features: { select: { hasAfipBilling: true } } }),
+      include: { planDefinition: true },
     }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;

@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { post, preflight, requireFeature, credentials } = vi.hoisted(() => ({
+const { post, preflight, requireFeature, credentials, planAFIP } = vi.hoisted(() => ({
   post: vi.fn(),
   preflight: vi.fn(),
   requireFeature: vi.fn(),
   credentials: vi.fn(),
+  planAFIP: { value: true },
 }));
+
+vi.mock("@/auth", () => ({ auth: vi.fn().mockResolvedValue({ user: { id: "user-1", businessId: "business-1", role: "ADMIN" } }) }));
 
 vi.mock("axios", () => ({
   default: {
@@ -21,6 +24,15 @@ vi.mock("axios", () => ({
 vi.mock("@/actions/voucher", () => ({ getVoucherNumberAction: preflight }));
 vi.mock("@/lib/auth-gates", () => ({ requireFeature }));
 vi.mock("@/actions/arca", () => ({ getArcaCredentialsForBilling: credentials }));
+vi.mock("@/lib/server/arca-billing", () => ({
+  getArcaCredentialsForBilling: credentials,
+  getVoucherNumberForActor: preflight,
+}));
+vi.mock("@/lib/plan-resolver", () => ({
+  getEffectivePlan: vi.fn().mockImplementation(async () => ({ hasAfipBilling: planAFIP.value })),
+  getCachedPlan: vi.fn().mockImplementation(async () => ({ hasAfipBilling: planAFIP.value })),
+}));
+vi.mock("@/lib/db", () => ({ db: { business: { findUnique: vi.fn().mockResolvedValue({ id: "business-1" }) } } }));
 
 import { createAfipVoucherAction } from "@/actions/afip";
 import type BillState from "@/models/BillState";
@@ -50,7 +62,8 @@ describe("AFIP no-CAE response — G2 RED contract", () => {
     vi.clearAllMocks();
     process.env.INTERNAL_AFIP_API_KEY = "test-internal-key";
     process.env.AFIP_SDK_ACCESS_TOKEN = "test-access-token";
-    requireFeature.mockResolvedValue({ success: true });
+    planAFIP.value = true;
+    requireFeature.mockResolvedValue({ success: true, data: { id: "user-1", businessId: "business-1", role: "ADMIN" } });
     credentials.mockResolvedValue({ success: { cuit: "20123456789", cert: "cert-secret", key: "key-secret" } });
     preflight.mockResolvedValue({ success: 10 });
   });
@@ -110,7 +123,7 @@ describe("AFIP no-CAE response — G2 RED contract", () => {
     ["Factura A", 1], ["Factura B", 6], ["Factura C", 11],
   ] as const)("keeps %s as AFIP type %s in preflight and createVoucher payload", async (billType, tipoFactura) => {
     await runWithResponse({ data: { afip: { CAE: VALID_CAE, ...metadata } } }, billType);
-    expect(preflight).toHaveBeenCalledWith(7, tipoFactura);
+    expect(preflight).toHaveBeenCalledWith(7, tipoFactura, "invoice", expect.objectContaining({ businessId: "business-1", role: "ADMIN" }));
     expect(post).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
       action: "createVoucher",
       arca: expect.objectContaining({ puntoVenta: 7, tipoFactura }),

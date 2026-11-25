@@ -5,6 +5,7 @@ import PrintableTable from "@/components/Billing/PrintableTable";
 import { BillContext } from "@/context/BillContext";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
+import { printThermalReceipt } from "@/lib/print";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
@@ -303,6 +304,63 @@ describe("PrintableTable — Discount integration", () => {
 
       expect(screen.getByText(/Descuento \(7.5%\)/)).toBeTruthy();
       expect(screen.getByText("-$22,50")).toBeTruthy();
+      expect(getTotalsSection(document.body as HTMLElement).getByText("$277,50")).toBeTruthy();
+    });
+
+    it("should preserve fractional discount and total values in the thermal print data", async () => {
+      const products = [
+        createMockProduct({ id: "1", description: "Product 1", salePrice: 100, amount: 3 }),
+      ];
+
+      renderWithBillContext(
+        <PrintableTable
+          printTrigger={1}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={createMockBillState({
+            products,
+            discount: 7.5,
+            totalWithDiscount: 277.5,
+          })}
+        />
+      );
+
+      await waitFor(() => expect(printThermalReceipt).toHaveBeenCalled());
+
+      expect(vi.mocked(printThermalReceipt).mock.calls.at(-1)?.[0]).toMatchObject({
+        subtotal: 300,
+        discountAmount: 22.5,
+        total: 277.5,
+        products: [{ subtotal: 300 }],
+      });
+    });
+
+    it("should print zero total for a full discount without falling back to subtotal", async () => {
+      const products = [
+        createMockProduct({ id: "1", description: "Product 1", salePrice: 100, amount: 1 }),
+      ];
+
+      renderWithBillContext(
+        <PrintableTable
+          printTrigger={1}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={createMockBillState({
+            products,
+            discount: 100,
+            totalWithDiscount: 0,
+          })}
+        />
+      );
+
+      await waitFor(() => expect(printThermalReceipt).toHaveBeenCalled());
+
+      expect(vi.mocked(printThermalReceipt).mock.calls.at(-1)?.[0]).toMatchObject({
+        discountAmount: 100,
+        total: 0,
+      });
     });
   });
 

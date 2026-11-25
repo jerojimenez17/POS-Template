@@ -42,8 +42,8 @@ vi.mock("@/components/ui/dialog", () => {
 });
 
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, onClick, type }: any) => (
-    <button type={type ?? "button"} onClick={onClick}>
+  Button: ({ children, onClick, type, "aria-label": ariaLabel }: any) => (
+    <button type={type ?? "button"} onClick={onClick} aria-label={ariaLabel}>
       {children}
     </button>
   ),
@@ -92,6 +92,17 @@ describe("BarcodeModal Component", () => {
   });
 
   describe("Render product information", () => {
+    it("should expose an accessible name for the icon-only trigger", () => {
+      renderAndOpen(
+        <CodeBarModal
+          code="CODE001"
+          description="Test Product"
+          salePrice={99.99}
+        />
+      );
+      expect(screen.getByRole("button", { name: "Imprimir código de barras" })).toBeInTheDocument();
+    });
+
     it("should render the dialog title", () => {
       renderAndOpen(<BarcodeModal {...defaultProps} codebar={undefined} />);
       expect(screen.getByText("Código de Barras")).toBeInTheDocument();

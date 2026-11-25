@@ -16,6 +16,17 @@ vi.mock("lucide-react", () => ({
   Calendar: () => null,
   ArrowLeft: () => null,
   Edit2: () => null,
+  Lock: () => null,
+  Ban: () => null,
+  Calculator: () => null,
+  Receipt: () => null,
+  Printer: () => null,
+  FileText: () => null,
+  CheckCircle: () => null,
+  ShieldAlert: () => null,
+  Loader2: () => null,
+  ArrowRight: () => null,
+  MessageCircle: () => null,
 }));
 vi.mock("@/components/ui/badge", () => ({ Badge: ({ children }: { children: ReactNode }) => <span>{children}</span> }));
 vi.mock("@/components/ui/card", () => ({

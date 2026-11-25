@@ -34,8 +34,7 @@ export default function PrintOptionsPopover({
   useEffect(() => {
     let active = true;
     if (sale.CAE?.qrData) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setQrSvgDataUrl(null);
+       setQrSvgDataUrl(null);
       QRCode.toString(sale.CAE.qrData, { type: "svg", margin: 0, width: 60 })
         .then((svgString) => {
           if (active) setQrSvgDataUrl(`data:image/svg+xml;base64,${btoa(svgString)}`);
@@ -147,7 +146,7 @@ export default function PrintOptionsPopover({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir">
+         <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir" aria-label="Imprimir venta">
           <Printer className="h-4 w-4 text-blue-500 dark:text-blue-400" />
         </Button>
       </DropdownMenuTrigger>

@@ -18,9 +18,13 @@ vi.mock("@/lib/db", () => ({
   db: {
     $transaction: transactionMock,
     order: { update: orderUpdateMock, findUnique: vi.fn() },
+    orderUpdate: { findFirst: vi.fn(), create: vi.fn() },
   },
 }));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/auth-gates", () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+}));
 vi.mock("@/lib/pusher-server", () => ({ pusherServer: { trigger: vi.fn() } }));
 vi.mock("next/cache", () => ({ revalidateTag: vi.fn() }));
 
@@ -49,6 +53,7 @@ describe("Factura A durable client snapshot", () => {
         updateMany: grantUpdateManyMock,
       },
     } as never) as never);
+    vi.mocked(db.orderUpdate.findFirst).mockResolvedValue(null);
   });
 
   it.each([
@@ -61,10 +66,12 @@ describe("Factura A durable client snapshot", () => {
       documentType,
       documentNumber,
       paidMethod: "Efectivo",
+      billType: "Factura A",
     } as unknown as Parameters<typeof updateOrderCaeAction>[1];
 
-    await updateOrderCaeAction("order-1", input);
+    const result = await updateOrderCaeAction("order-1", input);
 
+    expect(result).toEqual({ success: true });
     expect(db.order.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "order-1", businessId: "business-1" },
       data: expect.objectContaining({
@@ -123,6 +130,9 @@ describe("Factura A durable client snapshot", () => {
       clientDocumentNumber: "0012345678",
     }));
     expect(typeof bill?.clientDocumentNumber).toBe("string");
+    expect(db.order.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "order-1", businessId: "business-1" },
+    }));
   });
 
   it.each([

@@ -28,6 +28,16 @@ export interface GetSalesParams {
 export interface GetSalesResult {
   sales: BillState[];
   nextCursor: string | null;
+  error?: string;
+}
+
+function safeSalesErrorDetails(error: unknown): { name: string; code?: string } {
+  if (error instanceof Error) {
+    const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
+    return { name: error.name || "Error", code };
+  }
+
+  return { name: "UnknownError" };
 }
 
 type SalesOrder = Prisma.OrderGetPayload<{
@@ -132,8 +142,11 @@ export const getSalesAction = async (
 
     return { sales: results.map(mapOrderToBillState), nextCursor };
   } catch (error) {
-    console.error("Error fetching sales:", error);
-    return { sales: [], nextCursor: null };
+    console.error("Sales query failed", {
+      phase: "orders",
+      ...safeSalesErrorDetails(error),
+    });
+    return { sales: [], nextCursor: null, error: "No se pudieron cargar las ventas" };
   }
 };
 

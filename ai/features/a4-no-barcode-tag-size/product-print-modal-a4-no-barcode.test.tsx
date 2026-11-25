@@ -262,7 +262,7 @@ describe("A4 no-barcode sizing (SPEC: a4-no-barcode-tag-size)", () => {
     );
   });
 
-  it("AC6 — A4 pageStyle contains .no-barcode.has-price .label-price with font-size 68px and font-weight 900", async () => {
+  it("AC6 — A4 pageStyle contains .no-barcode.has-price .label-price with font-size 72px and font-weight 900", async () => {
     const { printElement } = await import("@/lib/print");
     render(
       <ProductPrintModal
@@ -277,13 +277,12 @@ describe("A4 no-barcode sizing (SPEC: a4-no-barcode-tag-size)", () => {
     expect(calls.length).toBeGreaterThan(0);
     const pageStyle: string = calls[0][1].pageStyle;
     expect(pageStyle).toContain(".no-barcode.has-price .label-price");
-    // Merged source (Jero WIP 7e9bfcf) prints the A4 no-barcode price at 68px,
-    // superseding SPEC v6's interim 48px value (on-screen class stays text-[48px]).
-    expect(pageStyle).toContain("font-size: 68px");
+    // The current Jero label contract prints the A4 no-barcode price at 72px.
+    expect(pageStyle).toContain("font-size: 72px");
     expect(pageStyle).toContain("font-weight: 900");
   });
 
-  it("AC7 — A4 pageStyle rule .no-barcode.has-price .label-description declares font-size 14px", async () => {
+  it("AC7 — A4 pageStyle rule .no-barcode.has-price .label-description declares font-size 20px", async () => {
     const { printElement } = await import("@/lib/print");
     render(
       <ProductPrintModal
@@ -297,7 +296,7 @@ describe("A4 no-barcode sizing (SPEC: a4-no-barcode-tag-size)", () => {
     const calls = (printElement as any).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
     const pageStyle: string = calls[0][1].pageStyle;
-    // Verify the rule for the specific selector declares 14px (up from 12px).
+    // Verify the current A4 no-barcode description contract declares 20px.
     // Match the rule body between the opening brace following the selector and
     // the matching closing brace.
     const ruleMatch = pageStyle.match(
@@ -305,7 +304,7 @@ describe("A4 no-barcode sizing (SPEC: a4-no-barcode-tag-size)", () => {
     );
     expect(ruleMatch).not.toBeNull();
     const ruleBody = ruleMatch![1];
-    expect(ruleBody).toMatch(/font-size:\s*14px/);
+    expect(ruleBody).toMatch(/font-size:\s*20px/);
   });
 
   it("AC8 — A4 pageStyle contains .label-container.no-barcode with border-style solid !important", async () => {
@@ -381,7 +380,7 @@ describe("A4 no-barcode sizing (SPEC: a4-no-barcode-tag-size)", () => {
     );
     const gridContainer = document.querySelector('[style*="grid-template-columns"]') as HTMLElement;
     expect(gridContainer).toBeInTheDocument();
-    expect(gridContainer).toHaveStyle("grid-template-columns: repeat(3, 6.3cm)");
+    expect(gridContainer).toHaveStyle("grid-template-columns: repeat(3, 6.5cm)");
 
     const allLabelContainers = document.querySelectorAll(".label-container") as NodeListOf<HTMLElement>;
     expect(allLabelContainers.length).toBeGreaterThan(0);
@@ -410,7 +409,7 @@ describe("A4 no-barcode sizing (SPEC: a4-no-barcode-tag-size)", () => {
     expect(noBarcodeTag.className).toContain("border-dashed");
   });
 
-  it("AC15 — A4 on-screen no-barcode price element uses text-[48px] (on-screen mirror of AC6)", () => {
+  it("AC15 — A4 on-screen no-barcode price element uses text-[72px] (on-screen mirror of AC6)", () => {
     render(
       <ProductPrintModal
         open={true}
@@ -422,7 +421,7 @@ describe("A4 no-barcode sizing (SPEC: a4-no-barcode-tag-size)", () => {
       ".label-container.no-barcode .label-price"
     ) as HTMLElement;
     expect(noBarcodePrice).toBeInTheDocument();
-    expect(noBarcodePrice.className).toContain("text-[48px]");
+    expect(noBarcodePrice.className).toContain("text-[72px]");
     // Old 24px class must be gone (no regression back to text-2xl).
     expect(noBarcodePrice.className).not.toContain("text-2xl");
   });

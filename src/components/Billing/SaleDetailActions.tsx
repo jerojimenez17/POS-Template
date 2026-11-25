@@ -7,6 +7,7 @@ import PrintOptionsPopover from "./PrintOptionsPopover";
 import InvoiceModal from "./InvoiceModal";
 import type BillState from "@/models/BillState";
 import { Session } from "next-auth";
+import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
 
 
 interface SaleDetailActionsProps {
@@ -51,7 +52,7 @@ export default function SaleDetailActions({ sale, session }: SaleDetailActionsPr
               <div className="flex justify-between">
                 <span>Comprobante N°</span>
                 <span className="font-mono font-medium text-slate-900 dark:text-white">
-                  {sale.CAE.nroComprobante.toString().padStart(8, "0")}
+                  {formatInvoiceNumberFull(sale.CAE.nroComprobante, sale.ptoVenta ?? sale.CAE.ptoVenta)}
                 </span>
               </div>
             )}

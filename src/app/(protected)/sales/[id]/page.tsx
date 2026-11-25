@@ -31,7 +31,9 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
     );
   }
 
-  const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN";
+  // Credit-note issuance is restricted to business admins; SUPER_ADMIN is a
+  // platform role and must not receive tenant-level fiscal write controls.
+  const isAdmin = session?.user?.role === "ADMIN";
   const creditNotePrintContext = sale.creditNote
     ? buildCreditNotePrintContext({
         order: {

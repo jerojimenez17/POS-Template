@@ -27,7 +27,7 @@ describe("auth-scoped sales action boundary", () => {
     const barrel = source("src/actions/sales/index.ts");
 
     expect(table).toContain('from "@/actions/sales/get-sales"');
-    expect(table).not.toContain('from "@/actions/sales"');
+    expect(table).not.toContain('from "@/actions/sales/history"');
     expect(table).not.toMatch(/from\s+["']@\/auth|from\s+["']@\/lib\/db/);
     expect(page).toMatch(/auth\s*\(\s*\)/);
     expect(page).toContain('from "@/actions/sales/get-sales"');

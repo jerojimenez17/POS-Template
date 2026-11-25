@@ -368,6 +368,8 @@ export const getProductsPaginated = async (params: {
   categoryId?: string;
   brandId?: string;
   unit?: string;
+  codeOnly?: boolean;
+  exactCode?: boolean;
 }) => {
   const session = await auth();
   if (!session?.user?.businessId)
@@ -376,16 +378,19 @@ export const getProductsPaginated = async (params: {
   const page = Math.max(1, params.page || 1);
   const pageSize = Math.min(PAGINATION.MAX_PAGE_SIZE, Math.max(1, params.pageSize || PAGINATION.DEFAULT_PAGE_SIZE));
   const skip = (page - 1) * pageSize;
+  const businessId = session.user.businessId;
+
+  if (params.search?.trim() && params.exactCode) {
+    return getProductsByExactCode(params.search, businessId, page, pageSize, skip, params);
+  }
+
+  if (params.search?.trim().length && params.search.trim().length >= 3) {
+    return getProductsPaginatedWithRanking(params.search, businessId, page, pageSize, skip, params);
+  }
 
   const where: Prisma.ProductWhereInput = {
-    businessId: session.user.businessId,
-    ...(params.search && {
-      OR: [
-        { code: { contains: params.search, mode: "insensitive" } },
-        { codebar: { contains: params.search, mode: "insensitive" } },
-        { description: { contains: params.search, mode: "insensitive" } },
-      ],
-    }),
+    businessId,
+    ...buildProductSearchFilter(params.search, params.codeOnly),
     ...(params.categoryId && { categoryId: params.categoryId }),
     ...(params.brandId && { brandId: params.brandId }),
     ...(params.unit && { unit: params.unit }),
@@ -414,6 +419,173 @@ export const getProductsPaginated = async (params: {
     console.error("Error fetching paginated products:", error);
     return { products: [], total: 0, page, pageSize, totalPages: 0 };
   }
+};
+
+type ProductSearchFilters = {
+  categoryId?: string;
+  brandId?: string;
+  unit?: string;
+  codeOnly?: boolean;
+  exactCode?: boolean;
+};
+
+const getProductsByExactCode = async (
+  search: string,
+  businessId: string,
+  page: number,
+  pageSize: number,
+  skip: number,
+  filters: ProductSearchFilters,
+) => {
+  const normalizedSearch = search.trim().replace(/"/g, "-");
+  const where: Prisma.ProductWhereInput = {
+    businessId,
+    OR: [
+      { code: { equals: search.trim(), mode: "insensitive" } },
+      { code: { equals: normalizedSearch, mode: "insensitive" } },
+      { codebar: { equals: search.trim(), mode: "insensitive" } },
+      { codebar: { equals: normalizedSearch, mode: "insensitive" } },
+    ],
+    ...(filters.categoryId && { categoryId: filters.categoryId }),
+    ...(filters.brandId && { brandId: filters.brandId }),
+    ...(filters.unit && { unit: filters.unit }),
+  };
+
+  try {
+    const [products, total] = await db.$transaction([
+      db.product.findMany({
+        where,
+        include: { supplier: true, brand: true, category: true, subCategory: true, images: { orderBy: { createdAt: "asc" } } },
+        orderBy: { code: "asc" },
+        skip,
+        take: pageSize,
+      }),
+      db.product.count({ where }),
+    ]);
+    return { products, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  } catch (error) {
+    console.error("Error fetching exact-code products:", error);
+    return { products: [], total: 0, page, pageSize, totalPages: 0 };
+  }
+};
+
+const getProductsPaginatedWithRanking = async (
+  search: string,
+  businessId: string,
+  page: number,
+  pageSize: number,
+  skip: number,
+  filters: ProductSearchFilters,
+) => {
+  const normalizedSearch = search.trim().toLowerCase().replace(/"/g, "-");
+
+  try {
+    type IdResult = { id: string };
+    const codeOnly = Boolean(filters.codeOnly);
+    const idResults = await db.$queryRaw<IdResult[]>(Prisma.sql`
+      SELECT p.id
+      FROM "Product" p
+      LEFT JOIN "Brand" b ON b.id = p."brandId"
+      LEFT JOIN "Supplier" s ON s.id = p."supplierId"
+      WHERE p."businessId" = ${businessId}
+        AND (
+          ${codeOnly
+            ? Prisma.sql`similarity(LOWER(COALESCE(p.code, '')), ${normalizedSearch}) > 0 OR similarity(LOWER(COALESCE(p.codebar, '')), ${normalizedSearch}) > 0`
+            : Prisma.sql`(
+              LEFT(COALESCE(p."description", ''), LENGTH(${normalizedSearch})) ILIKE ${normalizedSearch}
+              OR similarity(LOWER(COALESCE(p."description", '')), ${normalizedSearch}) > 0
+              OR similarity(LOWER(COALESCE(p.code, '')), ${normalizedSearch}) > 0
+              OR similarity(LOWER(COALESCE(p.codebar, '')), ${normalizedSearch}) > 0
+              OR similarity(LOWER(COALESCE(b.name, '')), ${normalizedSearch}) > 0
+              OR similarity(LOWER(COALESCE(s.name, '')), ${normalizedSearch}) > 0
+            )`}
+        )
+        ${filters.categoryId ? Prisma.sql`AND p."categoryId" = ${filters.categoryId}` : Prisma.empty}
+        ${filters.brandId ? Prisma.sql`AND p."brandId" = ${filters.brandId}` : Prisma.empty}
+        ${filters.unit ? Prisma.sql`AND p."unit" = ${filters.unit}` : Prisma.empty}
+      ORDER BY
+        (LOWER(COALESCE(p.code, '')) = ${normalizedSearch} OR LOWER(COALESCE(p.codebar, '')) = ${normalizedSearch}) DESC,
+        ${codeOnly ? Prisma.empty : Prisma.sql`CASE WHEN LEFT(COALESCE(p."description", ''), LENGTH(${normalizedSearch})) ILIKE ${normalizedSearch} THEN 1 ELSE 0 END DESC,`}
+        ${codeOnly
+          ? Prisma.sql`GREATEST(COALESCE(similarity(LOWER(COALESCE(p.code, '')), ${normalizedSearch}), 0), COALESCE(similarity(LOWER(COALESCE(p.codebar, '')), ${normalizedSearch}), 0)) DESC,`
+          : Prisma.sql`(
+            COALESCE(similarity(LOWER(COALESCE(p."description", '')), ${normalizedSearch}), 0) * 3.0
+            + COALESCE(similarity(LOWER(COALESCE(p.code, '')), ${normalizedSearch}), 0) * 2.0
+            + COALESCE(similarity(LOWER(COALESCE(p.codebar, '')), ${normalizedSearch}), 0) * 1.5
+            + COALESCE(similarity(LOWER(COALESCE(b.name, '')), ${normalizedSearch}), 0)
+            + COALESCE(similarity(LOWER(COALESCE(s.name, '')), ${normalizedSearch}), 0) * 0.5
+          ) DESC,`}
+        ${codeOnly ? Prisma.empty : Prisma.sql`COALESCE(p."description", '') ASC,`}
+        p."id" ASC
+    `);
+
+    const total = idResults.length;
+    const pageIds = idResults.map(({ id }) => id).slice(skip, skip + pageSize);
+    if (pageIds.length === 0) return { products: [], total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+
+    const products = await db.product.findMany({
+      where: { businessId, id: { in: pageIds } },
+      include: { supplier: true, brand: true, category: true, subCategory: true, images: { orderBy: { createdAt: "asc" } } },
+    });
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    return {
+      products: pageIds.map((id) => productMap.get(id)).filter(Boolean),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  } catch (error) {
+    console.warn("pg_trgm no disponible, usando ILIKE fallback:", error);
+    const where: Prisma.ProductWhereInput = {
+      businessId,
+      ...buildProductSearchFilter(search, filters.codeOnly),
+      ...(filters.categoryId && { categoryId: filters.categoryId }),
+      ...(filters.brandId && { brandId: filters.brandId }),
+      ...(filters.unit && { unit: filters.unit }),
+    };
+    const [products, total] = await db.$transaction([
+      db.product.findMany({
+        where,
+        include: { supplier: true, brand: true, category: true, subCategory: true, images: { orderBy: { createdAt: "asc" } } },
+        orderBy: { id: "asc" },
+      }),
+      db.product.count({ where }),
+    ]);
+    const sortedProducts = filters.codeOnly
+      ? sortExactCode(products, search)
+      : sortFallbackSearch(products, search);
+    return { products: sortedProducts.slice(skip, skip + pageSize), total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+};
+
+const normalizeSearchValue = (value: string): string => value.trim().toLowerCase().replace(/"/g, "-");
+
+const sortExactCode = <T extends { code: string | null; codebar: string | null }>(products: T[], search: string): T[] => {
+  const normalized = normalizeSearchValue(search);
+  return [...products].sort((a, b) => Number(![a.code, a.codebar].some((value) => normalizeSearchValue(value ?? "") === normalized)) - Number(![b.code, b.codebar].some((value) => normalizeSearchValue(value ?? "") === normalized)));
+};
+
+const sortFallbackSearch = <T extends { id: string; code: string | null; codebar: string | null; description: string | null }>(products: T[], search: string): T[] => {
+  const normalized = normalizeSearchValue(search);
+  return [...products].sort((a, b) => {
+    const exactA = [a.code, a.codebar].some((value) => normalizeSearchValue(value ?? "") === normalized);
+    const exactB = [b.code, b.codebar].some((value) => normalizeSearchValue(value ?? "") === normalized);
+    if (exactA !== exactB) return exactA ? -1 : 1;
+    const prefixA = (a.description ?? "").toLowerCase().startsWith(normalized);
+    const prefixB = (b.description ?? "").toLowerCase().startsWith(normalized);
+    if (prefixA !== prefixB) return prefixA ? -1 : 1;
+    if ((a.description === null) !== (b.description === null)) return a.description === null ? 1 : -1;
+    return (a.description ?? "").localeCompare(b.description ?? "") || a.id.localeCompare(b.id);
+  });
+};
+
+const buildProductSearchFilter = (search?: string, codeOnly = false): Prisma.ProductWhereInput => {
+  if (!search?.trim()) return {};
+  const fields = codeOnly
+    ? [{ code: { contains: search, mode: "insensitive" as const } }, { codebar: { contains: search, mode: "insensitive" as const } }]
+    : [{ code: { contains: search, mode: "insensitive" as const } }, { codebar: { contains: search, mode: "insensitive" as const } }, { description: { contains: search, mode: "insensitive" as const } }];
+  return { OR: fields };
 };
 
 export const getProductByCode = async (code: string) => {

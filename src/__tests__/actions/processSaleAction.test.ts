@@ -20,7 +20,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 vi.mock("../../../auth", () => ({
-  auth: vi.fn().mockResolvedValue({ user: { id: "user-1", businessId: "business-123" } }),
+  auth: vi.fn().mockResolvedValue({ user: { id: "user-1", businessId: "business-123", role: "ADMIN", email: "admin@example.com" } }),
 }));
 
 vi.mock("next/cache", () => ({
@@ -34,7 +34,7 @@ vi.mock("@/lib/auth-gates", () => ({
 }));
 
 vi.mock("@/lib/daily-limits", () => ({
-  getDailyUsage: vi.fn().mockResolvedValue({ salesCreated: 0, productsCreated: 0, clientsCreated: 0 }),
+  getDailyUsage: vi.fn().mockResolvedValue({ salesCount: 0, productsCount: 0, clientsCount: 0 }),
   checkDailyLimit: vi.fn().mockResolvedValue({ allowed: true, limit: 999999 }),
   incrementDailyUsage: vi.fn().mockResolvedValue(undefined),
 }));
@@ -138,6 +138,8 @@ describe("Billing Fields - processSaleAction", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
           cashboxSession: {
             findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
           },
@@ -148,8 +150,9 @@ describe("Billing Fields - processSaleAction", () => {
             update: vi.fn().mockResolvedValue({ id: "product-1" }),
           },
           stockMovement: {
-            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
-          },
+             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+             createMany: vi.fn().mockResolvedValue({ count: 1 }),
+           },
           productRanking: {
             upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
@@ -195,6 +198,8 @@ describe("Billing Fields - processSaleAction", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
           cashboxSession: {
             findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
           },
@@ -205,8 +210,9 @@ describe("Billing Fields - processSaleAction", () => {
             update: vi.fn().mockResolvedValue({ id: "product-1" }),
           },
           stockMovement: {
-            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
-          },
+             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+             createMany: vi.fn().mockResolvedValue({ count: 1 }),
+           },
           productRanking: {
             upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
@@ -246,6 +252,8 @@ describe("Billing Fields - processSaleAction", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
           cashboxSession: {
             findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
           },
@@ -256,8 +264,9 @@ describe("Billing Fields - processSaleAction", () => {
             update: vi.fn().mockResolvedValue({ id: "product-1" }),
           },
           stockMovement: {
-            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
-          },
+             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+             createMany: vi.fn().mockResolvedValue({ count: 1 }),
+           },
           productRanking: {
             upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
@@ -490,6 +499,8 @@ describe("Billing Fields - CAE Field Optional Behavior", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
           cashboxSession: {
             findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
           },
@@ -500,8 +511,9 @@ describe("Billing Fields - CAE Field Optional Behavior", () => {
             update: vi.fn().mockResolvedValue({ id: "product-1" }),
           },
           stockMovement: {
-            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
-          },
+             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+             createMany: vi.fn().mockResolvedValue({ count: 1 }),
+           },
           productRanking: {
             upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
@@ -660,6 +672,8 @@ describe("AFIP Feature Gate - processSaleAction", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback: (tx: unknown) => Promise<unknown>) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
           cashboxSession: {
             findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
           },
@@ -670,8 +684,9 @@ describe("AFIP Feature Gate - processSaleAction", () => {
             update: vi.fn().mockResolvedValue({ id: "product-1" }),
           },
           stockMovement: {
-            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
-          },
+             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+             createMany: vi.fn().mockResolvedValue({ count: 1 }),
+           },
           productRanking: {
             upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
@@ -721,6 +736,8 @@ describe("AFIP Feature Gate - processSaleAction", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback: (tx: unknown) => Promise<unknown>) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
           cashboxSession: {
             findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
           },
@@ -731,8 +748,9 @@ describe("AFIP Feature Gate - processSaleAction", () => {
             update: vi.fn().mockResolvedValue({ id: "product-1" }),
           },
           stockMovement: {
-            create: vi.fn().mockResolvedValue({ id: "movement-1" }),
-          },
+             create: vi.fn().mockResolvedValue({ id: "movement-1" }),
+             createMany: vi.fn().mockResolvedValue({ count: 1 }),
+           },
           productRanking: {
             upsert: vi.fn().mockResolvedValue({ id: "ranking-1" }),
           },
@@ -786,10 +804,15 @@ describe("updateOrderAction — CAE validation", () => {
       items: [],
     };
 
-    let mockTx: { order: { findFirst?: ReturnType<typeof vi.fn>; update?: ReturnType<typeof vi.fn> } };
+    let mockTx: {
+      order: { findFirst?: ReturnType<typeof vi.fn>; update?: ReturnType<typeof vi.fn> };
+      cashboxSession?: { findFirst?: ReturnType<typeof vi.fn> };
+    };
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback: (tx: unknown) => Promise<unknown>) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
           order: {
             findFirst: vi.fn().mockResolvedValue(existingOrder),
             update: vi.fn().mockResolvedValue(existingOrder),
@@ -806,10 +829,15 @@ describe("updateOrderAction — CAE validation", () => {
           },
           stockMovement: {
             create: vi.fn().mockResolvedValue({}),
+            createMany: vi.fn().mockResolvedValue({ count: 0 }),
           },
           // Fix 7C (sale edit syncs CashMovements/CashBox) — merged behavior from 8352abd
           cashboxSession: {
-            findFirst: vi.fn().mockResolvedValue({ id: "session-1", cashboxId: "cashbox-1" }),
+            findFirst: vi.fn().mockResolvedValue({
+              id: "session-1",
+              cashboxId: "cashbox-1",
+              businessId: "business-123",
+            }),
           },
           cashBox: {
             update: vi.fn().mockResolvedValue({}),
@@ -836,15 +864,24 @@ describe("updateOrderAction — CAE validation", () => {
     });
 
     expect(result.success).toBe(true);
-    // Verify IVA fields were included in the update
+    // Verify the update uses the current server action contract.
     expect(mockTx.order.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          clientIvaCondition: "CUIT",
-          clientDocumentNumber: "20123456789",
+          total: 100,
+          seller: "Test Seller",
+          paymentMethod: "Efectivo",
         }),
       })
     );
+    expect(mockTx.cashboxSession?.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: "user-1",
+        businessId: "business-123",
+        status: "OPEN",
+        cashbox: { businessId: "business-123" },
+      },
+    });
   });
 
   it("should block editing invoiced sale (CAE present)", async () => {
@@ -874,6 +911,8 @@ describe("updateOrderAction — CAE validation", () => {
     (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
       async (callback: (tx: unknown) => Promise<unknown>) => {
         const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
           order: {
             findFirst: vi.fn().mockResolvedValue(existingOrderWithCAE),
           },

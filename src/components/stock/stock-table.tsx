@@ -11,6 +11,7 @@ import {
 import noImgPhoto from "../../../public/no-image.svg";
 import Image from "next/image";
 import ProductForm from "./product-form";
+import CodeBarModal from "./code-bar-modal";
 import { Button } from "../ui/button";
 import { Edit2, Trash2 } from "lucide-react";
 import {
@@ -236,6 +237,7 @@ const StockTable = ({ descriptionFilter }: props) => {
                           });
                         }}
                         onClick={(e) => e.stopPropagation()}
+                        aria-label={`Catálogo de ${product.description || product.code || "producto"}`}
                       />
                     </TableCell>
                     <TableCell className="text-right space-x-2 z-50" onClick={(e) => e.stopPropagation()}>
@@ -262,6 +264,12 @@ const StockTable = ({ descriptionFilter }: props) => {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                      <CodeBarModal
+                        code={product.code || ""}
+                        codebar={product.codebar || undefined}
+                        description={product.description || ""}
+                        salePrice={product.salePrice}
+                      />
                     </TableCell>
                   </TableRow>
                 );

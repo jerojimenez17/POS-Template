@@ -2,6 +2,8 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
+const runDbTests = process.env.RUN_DB_TESTS === "1";
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -13,7 +15,16 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    exclude: ["node_modules", ".next", "dist"],
+    exclude: [
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/e2e/**",
+      "**/.opencode/**",
+      "**/pos-api/**",
+      ...(runDbTests ? [] : ["**/src/__tests__/integration/**/*.postgres.test.ts"]),
+    ],
     execArgv: ["--experimental-require-module"],
     pool: "forks",
   },

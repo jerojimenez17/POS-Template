@@ -51,6 +51,7 @@ function configureSuccessfulPreflight(actor = user) {
   persistedBusinessFindUniqueMock.mockResolvedValue({
     id: "business-1",
     features: { hasAfipBilling: true },
+    planDefinition: { name: "BASIC", features: { hasAfipBilling: true }, limits: {} },
   });
   credentialsMock.mockResolvedValue({
     success: { cuit: "20123456789", cert: "encrypted-cert", key: "encrypted-key", ptoVentas: [3] },

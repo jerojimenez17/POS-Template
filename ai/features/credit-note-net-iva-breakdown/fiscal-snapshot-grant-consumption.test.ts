@@ -16,6 +16,15 @@ vi.mock("@/lib/batch-utils", () => ({
   processInBatches: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: dbMock }));
+vi.mock("@/lib/auth-gates", () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+  requireFeature: vi.fn().mockResolvedValue({ success: true }),
+}));
+vi.mock("@/lib/daily-limits", () => ({
+  getDailyUsage: vi.fn().mockResolvedValue({ salesCount: 0 }),
+  checkDailyLimit: vi.fn().mockResolvedValue({ allowed: true, limit: 100 }),
+  incrementDailyUsage: vi.fn(),
+}));
 vi.mock("@/lib/pusher-server", () => ({ pusherServer: { trigger: vi.fn() } }));
 vi.mock("next/cache", () => ({ revalidateTag: vi.fn() }));
 import { db } from "@/lib/db";

@@ -51,7 +51,7 @@ describe("R1: addItemsToOrder - adds items with addedAt timestamp", () => {
             update: vi.fn().mockResolvedValue({ ...existingOrder, total: 250 }),
           },
           product: {
-            findUnique: vi.fn().mockResolvedValue({ id: "product-1", amount: 10 }),
+             findFirst: vi.fn().mockResolvedValue({ id: "product-1", amount: 10 }),
             update: vi.fn().mockResolvedValue({ id: "product-1" }),
           },
           orderItem: {
@@ -177,7 +177,7 @@ describe("R2: updateOrderItem - edit quantity and price", () => {
             update: vi.fn().mockResolvedValue({ ...order, total: 250 }),
           },
           product: {
-            findUnique: vi.fn().mockResolvedValue({ id: "product-1", amount: 10 }),
+             findFirst: vi.fn().mockResolvedValue({ id: "product-1", amount: 10 }),
             update: vi.fn().mockResolvedValue({ id: "product-1" }),
           },
           stockMovement: {
@@ -489,7 +489,7 @@ describe("Order total updates automatically", () => {
             }),
           },
           product: {
-            findUnique: vi.fn().mockResolvedValue({ id: "product-1", amount: 10 }),
+             findFirst: vi.fn().mockResolvedValue({ id: "product-1", amount: 10 }),
             update: vi.fn().mockResolvedValue({ id: "product-1" }),
           },
           orderItem: {

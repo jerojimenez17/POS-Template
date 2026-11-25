@@ -9,6 +9,7 @@ const order = (overrides: Record<string, unknown> = {}) => ({
   invoiceNumber: 42,
   invoicePointOfSale: 7,
   total: 1200,
+  fiscalSnapshot: { version: 1, source: "AUTHORIZED_VOUCHER", billType: "Factura B", afipVoucherType: 6, issuerIvaCondition: "Responsable Inscripto", buyerIvaCondition: "Consumidor Final", currency: "ARS", total: 1200, net: 1200, vat: 0, nonTaxed: 0, exempt: 0, otherTaxes: 0, iva: [{ id: 5, base: 1200, amount: 0 }] },
   discountAmount: 0,
   date: new Date("2026-01-01T00:00:00.000Z"),
   items: [{ id: "item-1", productId: "product-1", code: "P1", description: "Producto", price: 1200, costPrice: 900, quantity: 1 }],

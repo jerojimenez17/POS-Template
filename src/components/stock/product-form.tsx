@@ -862,6 +862,7 @@ const ProductForm = ({ product, onClose }: Props) => {
                     checked={field.value || false}
                     onCheckedChange={field.onChange}
                     disabled={isPending}
+                    aria-label="Visible en catálogo"
                   />
                 </FormControl>
               </FormItem>

@@ -8,7 +8,7 @@ vi.mock("@/actions/clients", () => ({
 }));
 
 vi.mock("@/actions/unpaid-orders", () => ({
-  getClientUnpaidOrder: vi.fn(),
+  getClientUnpaidOrders: vi.fn(),
   addItemsToOrder: vi.fn(),
 }));
 
@@ -163,10 +163,17 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
       json: async () => mockClients,
     });
 
-    const { getClientUnpaidOrder } = await import("@/actions/unpaid-orders");
-    (getClientUnpaidOrder as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    const { getClientUnpaidOrders } = await import("@/actions/unpaid-orders");
+    (getClientUnpaidOrders as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       success: true,
-      data: mockUnpaidOrder,
+      data: [{
+        id: mockUnpaidOrder.id,
+        total: mockUnpaidOrder.total,
+        date: new Date("2024-01-15T10:00:00Z"),
+        itemsCount: mockUnpaidOrder.items.length,
+        status: "confirmada",
+        paidStatus: mockUnpaidOrder.paidStatus,
+      }],
     });
 
     render(
@@ -185,12 +192,8 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
     });
 
     await waitFor(() => {
-      const submitButton = screen.getByRole("button", { name: /confirmar/i });
-      fireEvent.click(submitButton);
-    });
-
-    await waitFor(() => {
       expect(screen.queryByText(/orden pendiente existente/i)).toBeTruthy();
+      expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1");
     });
   });
 
@@ -208,10 +211,17 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
       json: async () => mockClients,
     });
 
-    const { getClientUnpaidOrder } = await import("@/actions/unpaid-orders");
-    (getClientUnpaidOrder as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    const { getClientUnpaidOrders } = await import("@/actions/unpaid-orders");
+    (getClientUnpaidOrders as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       success: true,
-      data: mockUnpaidOrder,
+      data: [{
+        id: mockUnpaidOrder.id,
+        total: mockUnpaidOrder.total,
+        date: new Date("2024-01-15T10:00:00Z"),
+        itemsCount: 0,
+        status: "confirmada",
+        paidStatus: mockUnpaidOrder.paidStatus,
+      }],
     });
 
     const onOpenChange = vi.fn();
@@ -232,13 +242,9 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
     });
 
     await waitFor(() => {
-      const submitButton = screen.getByRole("button", { name: /confirmar/i });
-      fireEvent.click(submitButton);
-    });
-
-    await waitFor(() => {
       expect(screen.queryByText(/agregar a orden existente/i)).toBeTruthy();
       expect(screen.queryByText(/crear nueva orden/i)).toBeTruthy();
+      expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1");
     });
   });
 
@@ -259,8 +265,8 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
         json: async () => ({ success: true, order: { id: "new-order" } }),
       });
 
-    const { getClientUnpaidOrder } = await import("@/actions/unpaid-orders");
-    (getClientUnpaidOrder as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    const { getClientUnpaidOrders } = await import("@/actions/unpaid-orders");
+    (getClientUnpaidOrders as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       success: true,
       data: null,
     });

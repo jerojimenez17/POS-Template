@@ -104,7 +104,6 @@ export const BillReducer = (
         IVACondition: "Consumidor Final",
         paidMethod: "Efectivo",
         twoMethods: false,
-        secondPaidMethod: undefined,
         totalSecondMethod: 0,
         pago: false,
         entrega: 0,
@@ -259,14 +258,14 @@ export const BillReducer = (
     }
     case "updateSalePrice": {
       const productExists = state.products.some(
-        (product) => product.id === action.payload.id
+        (product) => getBillRowId(product) === action.payload.id
       );
       if (!productExists) {
         return state;
       }
 
       const updatedProducts = state.products.map((product) => {
-        if (product.id === action.payload.id) {
+        if (getBillRowId(product) === action.payload.id) {
           return { ...product, salePrice: action.payload.salePrice };
         }
         return product;

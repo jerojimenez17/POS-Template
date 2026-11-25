@@ -1,5 +1,5 @@
 import React, { useContext } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import BillProvider from "../../../src/context/BillProvider";
@@ -87,14 +87,18 @@ function createHistoricalState(): BillState {
 describe("new sale Factura B defaults", () => {
   it("preserves point of sale when a historical CAE is persisted and reloaded", () => {
     const persisted = JSON.parse(JSON.stringify({
-      CAE: "historic-cae",
+      CAE: "12345678901234",
       nroComprobante: 23,
       vencimiento: "31/12/2025",
       qrData: "historic-qr",
       ptoVenta: 7,
     })) as unknown;
 
-    expect(parseCAE(persisted)).toMatchObject({ CAE: "historic-cae", ptoVenta: 7 });
+    expect(parseCAE(persisted)).toMatchObject({ CAE: "12345678901234", ptoVenta: 7 });
+  });
+
+  it("does not turn a malformed historical CAE into an accepted CAE", () => {
+    expect(parseCAE({ CAE: "historic-cae", ptoVenta: 7 })).toBeUndefined();
   });
 
   it("starts BillProvider with Factura B, as /newBill must do on first render", () => {

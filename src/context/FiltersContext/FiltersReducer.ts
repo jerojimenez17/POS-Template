@@ -17,7 +17,7 @@ type FiltersAction =
   | { type: "disableSeller"; payload: null }
   | { type: "disableEndDate"; payload: null }
   | { type: "reset"; payload: null }
-  | { type: "initFromUrl"; payload: { startDate?: Date; endDate?: Date; showAll?: boolean } };
+  | { type: "initFromUrl"; payload: { startDate?: Date; endDate?: Date; showAll?: boolean; directVisit?: boolean } };
 
 export const FiltersReducer = (
   state: FiltersState,
@@ -151,6 +151,24 @@ export const FiltersReducer = (
       };
     case "initFromUrl": {
       const newState = { ...state };
+
+      if (action.payload.directVisit) {
+        return {
+          ...newState,
+          Remito: { ...newState.Remito, active: false },
+          FacturaC: { ...newState.FacturaC, active: false },
+          Debito: { ...newState.Debito, active: false },
+          UnPago: { ...newState.UnPago, active: false },
+          Ahora3: { ...newState.Ahora3, active: false },
+          Ahora6: { ...newState.Ahora6, active: false },
+          Transferencia: { ...newState.Transferencia, active: false },
+          Efectivo: { ...newState.Efectivo, active: false },
+          CuentaDNI: { ...newState.CuentaDNI, active: false },
+          Seller: { ...newState.Seller, active: false },
+          startDate: { ...newState.startDate, active: false },
+          endDate: { ...newState.endDate, active: false },
+        };
+      }
 
       if (action.payload.startDate) {
         newState.startDate = { active: true, date: action.payload.startDate };

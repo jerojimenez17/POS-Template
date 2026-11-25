@@ -1,27 +1,41 @@
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import SalesTable from "@/components/Billing/SalesTable";
 
+const { filtersState, resetFilters } = vi.hoisted(() => {
+  const createField = () => ({ active: false, filter: "", date: new Date(0) });
+  const filtersState = {
+    FacturaC: createField(),
+    Remito: createField(),
+    Debito: createField(),
+    UnPago: createField(),
+    Ahora3: createField(),
+    Ahora6: createField(),
+    Transferencia: createField(),
+    Efectivo: createField(),
+    CuentaDNI: createField(),
+    Seller: createField(),
+    startDate: { active: false, date: new Date(0) },
+    endDate: { active: false, date: new Date(0) },
+  };
+
+  return {
+    filtersState,
+    resetFilters: () => {
+      Object.values(filtersState).forEach((field) => {
+        field.active = false;
+        if ("filter" in field) field.filter = "";
+      });
+    },
+  };
+});
+
 vi.mock("@/context/FiltersContext/FiltersContext", async () => {
   const { createContext } = await import("react");
-  const field = { active: false, filter: "", date: new Date(0) };
   return {
     FiltersContext: createContext({
-      filtersState: {
-        FacturaC: field,
-        Remito: field,
-        Debito: field,
-        UnPago: field,
-        Ahora3: field,
-        Ahora6: field,
-        Transferencia: field,
-        Efectivo: field,
-        CuentaDNI: field,
-        Seller: field,
-        startDate: { active: false, date: new Date(0) },
-        endDate: { active: false, date: new Date(0) },
-      },
+      filtersState,
       seller: vi.fn(),
     }),
   };
@@ -35,7 +49,7 @@ vi.mock("@/lib/pusher-client", () => ({
   pusherClient: { subscribe: vi.fn(() => ({ bind: vi.fn(), unbind: vi.fn() })) },
 }));
 vi.mock("@/actions/sales", () => ({ getSalesAction: vi.fn() }));
-vi.mock("@/lib/utils/bill-type", () => ({ isAFIPAuthorized: vi.fn(() => true) }));
+vi.mock("@/lib/utils/bill-type", () => ({ isAFIPAuthorized: vi.fn((_type: unknown, cae: unknown) => Boolean(cae)) }));
 vi.mock("lucide-react", () => ({
   ChevronLeft: () => <span />, ChevronRight: () => <span />, ChevronDown: () => <span />,
   Eye: () => <span />,
@@ -54,6 +68,10 @@ vi.mock("@/components/ui/select", () => ({
 }));
 
 describe("searchBill: dark theme visual contract", () => {
+  beforeEach(() => {
+    resetFilters();
+  });
+
   it("uses semantic light/dark surfaces and text for the table summary and pagination", () => {
     render(<SalesTable sales={[]} nextCursor={null} session={null} />);
 
@@ -76,6 +94,71 @@ describe("searchBill: dark theme visual contract", () => {
     render(<SalesTable sales={[]} nextCursor={null} session={null} />);
 
     expect(screen.getByText("Fecha").parentElement).toHaveClass("text-gray-500", "dark:text-gray-400");
-    expect(screen.getByText(/No se encontraron ventas/)).toHaveClass("text-gray-500", "dark:text-gray-400");
+    const emptyState = screen.getByText("No hay ventas que coincidan con los filtros activos.");
+    expect(emptyState).toBeVisible();
+    expect(emptyState).toHaveClass("text-gray-500", "dark:text-gray-400");
+  });
+
+  it("shows a genuine visible empty result when an active filter excludes the sale", () => {
+    filtersState.Remito.active = true;
+    filtersState.Remito.filter = "Remito";
+
+    const sale = {
+      id: "factura-sale",
+      products: [],
+      total: 100,
+      totalWithDiscount: 100,
+      seller: "Ana",
+      discount: 0,
+      date: new Date("2026-10-05T12:00:00"),
+      typeDocument: "Factura",
+      CAE: { CAE: "12345678901234" },
+      documentNumber: 1,
+      IVACondition: "Consumidor Final",
+      twoMethods: false,
+    };
+
+    render(<SalesTable sales={[sale]} nextCursor={null} session={null} />);
+
+    const emptyState = screen.getByText("No hay ventas que coincidan con los filtros activos.");
+    expect(emptyState).toBeVisible();
+    expect(emptyState).not.toHaveAttribute("role", "alert");
+    expect(screen.queryByTestId("sale-factura-sale")).not.toBeInTheDocument();
+  });
+
+  it("keeps a server error alert distinct from a genuine filtered empty result", () => {
+    filtersState.Remito.active = true;
+    filtersState.Remito.filter = "Remito";
+
+    const sale = {
+      id: "factura-sale",
+      products: [],
+      total: 100,
+      totalWithDiscount: 100,
+      seller: "Ana",
+      discount: 0,
+      date: new Date("2026-10-05T12:00:00"),
+       typeDocument: "Factura",
+       CAE: { CAE: "12345678901234" },
+      documentNumber: 1,
+      IVACondition: "Consumidor Final",
+      twoMethods: false,
+    };
+
+    const { rerender } = render(<SalesTable sales={[sale]} nextCursor={null} session={null} />);
+    expect(screen.getByText("No hay ventas que coincidan con los filtros activos.")).not.toHaveAttribute("role", "alert");
+
+    rerender(
+      <SalesTable
+        sales={[]}
+        nextCursor={null}
+        session={null}
+        emptyState="No se pudieron cargar las ventas."
+      />,
+    );
+
+    const error = screen.getByRole("alert");
+    expect(error).toBeVisible();
+    expect(error).toHaveTextContent("No se pudieron cargar las ventas.");
   });
 });

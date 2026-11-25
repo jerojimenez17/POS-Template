@@ -5,6 +5,7 @@ import { getDocumentPrintKind } from "@/lib/print/receipt-data";
 
 const load = async (path: string) => (await import(/* @vite-ignore */ path)) as Record<string, unknown>;
 const authorized = { status: "AUTHORIZED", billType: "Nota de Crédito B", afipVoucherType: 8, cae: "79999999999999", number: 20, pointOfSale: 3, originalBillType: "Factura B", originalNumber: 42, originalPointOfSale: 7, originalCae: "HISTORICAL-CAE-0007" };
+const printContext = { documentKind: "credit-note", creditNote: authorized, original: { billType: "Factura B", cae: authorized.originalCae, number: 42, pointOfSale: 7 }, products: [{ description: "Producto", amount: 1, unitPrice: 100, subtotal: 100 }], total: 100 };
 
 describe("AC-09..AC-12: visible association and authorized printing", () => {
   it("AC-04: asks exactly for missing original fields and never asks for CAE", async () => {
@@ -31,12 +32,12 @@ describe("AC-09..AC-12: visible association and authorized printing", () => {
     const module = await load("@/components/Billing/CreditNoteStatusCard");
     const Card = (module.CreditNoteStatusCard ?? module.default) as React.ComponentType<Record<string, unknown>> | undefined;
     if (!Card) throw new Error("CreditNoteStatusCard export is missing");
-    render(React.createElement(Card, { creditNote: authorized }));
+    render(React.createElement(Card, { creditNote: authorized, printContext }));
     expect(screen.getByText(/Nota de Crédito B/i)).toBeInTheDocument();
     expect(screen.getByText(/79999999999999/)).toBeInTheDocument();
     expect(screen.getByText(/HISTORICAL-CAE-0007/)).toBeInTheDocument();
     expect(screen.getByText(/comprobante original asociado/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /imprimir/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /imprimir nota de crédito en térmica/i })).toBeEnabled();
   });
 
   it("prints a credit-note document from the SaleReturn snapshot and has no mutation callbacks", async () => {

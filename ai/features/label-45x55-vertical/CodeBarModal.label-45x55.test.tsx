@@ -87,7 +87,7 @@ describe("CodeBarModal — etiqueta individual 55 × 45 mm landscape", () => {
 
   it("prints with the exact landscape page, thermal format, and safe print CSS", async () => {
     renderOpen();
-    fireEvent.click(screen.getByRole("button", { name: /imprimir/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Imprimir!$/i }));
     await Promise.resolve();
 
     const options = vi.mocked(printElement).mock.calls[0]?.[1];
@@ -141,7 +141,7 @@ describe("CodeBarModal — etiqueta individual 55 × 45 mm landscape", () => {
     expect(labels()).toHaveLength(1);
 
     fireEvent.change(input, { target: { value: "3" } });
-    fireEvent.click(screen.getByRole("button", { name: /imprimir/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Imprimir!$/i }));
     const options = vi.mocked(printElement).mock.calls.at(-1)?.[1];
     expect(options?.pageStyle).toMatch(/page-break-(after|before|inside)/);
   });
@@ -151,7 +151,7 @@ describe("CodeBarModal — etiqueta individual 55 × 45 mm landscape", () => {
     fireEvent.click(screen.getByTestId("dialog-trigger"));
     const label = labels()[0];
     expectAuthoredLabelSize(label);
-    fireEvent.click(screen.getByRole("button", { name: /imprimir/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Imprimir!$/i }));
     await Promise.resolve();
     const style = vi.mocked(printElement).mock.calls.at(-1)?.[1]?.pageStyle ?? "";
     expect(style).toMatch(/overflow:\s*hidden/);

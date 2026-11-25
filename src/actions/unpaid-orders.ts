@@ -525,6 +525,9 @@ export const updateOrderDiscount = async (input: UpdateOrderDiscountInput): Prom
 
 export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<ActionResult> => {
   try {
+    const featureResult = await requireFeature("hasClientLedger");
+    if (!featureResult.success) return { success: false, error: featureResult.error };
+
     const session = await auth();
     const businessId = session?.user?.businessId;
     if (!businessId) return { success: false, error: "No autorizado" };
@@ -538,15 +541,6 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
         },
       } as never);
       return { success: true, data: order ? [order] : [] };
-    } else if (input.status === "all" && input.limit === undefined && input.cursor === undefined && input.search === undefined) {
-      // Legacy AccountLedgerContent contract: unfiltered full list (including
-      // "pendiente" status orders) returned as a raw array.
-      const orders = await db.order.findMany({
-        where: { businessId },
-        include: { client: true },
-        orderBy: { date: "desc" },
-      });
-      return { success: true, data: orders };
     } else {
       const status = input.status || "inpago";
       // Older callers omitted every pagination field and consumed the raw

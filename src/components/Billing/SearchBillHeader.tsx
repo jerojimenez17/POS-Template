@@ -8,32 +8,52 @@ import { FiltersContext } from "@/context/FiltersContext/FiltersContext";
 
 interface SearchBillHeaderProps {
   initialParams?: { from?: string; to?: string; showAll?: string };
+  canViewAllSellers?: boolean;
+  directVisit?: boolean;
 }
 
-const SearchBillHeader = ({ initialParams }: SearchBillHeaderProps) => {
+const parseCalendarDate = (value: string, endOfDay = false): Date | undefined => {
+  const [year, month, day] = value.split("-").map(Number);
+  if (![year, month, day].every(Number.isInteger)) return undefined;
+
+  const date = new Date(
+    year,
+    month - 1,
+    day,
+    ...(endOfDay ? [23, 59, 59, 999] : [0, 0, 0, 0]),
+  );
+
+  return date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+    ? date
+    : undefined;
+};
+
+const SearchBillHeader = ({ initialParams, canViewAllSellers = false, directVisit = false }: SearchBillHeaderProps) => {
   const { initFromUrl } = useContext(FiltersContext);
 
   const from = initialParams?.from;
   const to = initialParams?.to;
-  const showAll = initialParams?.showAll === "true";
+  const showAll = canViewAllSellers && initialParams?.showAll === "true";
 
   useEffect(() => {
-    if (!from && !to && !showAll) return;
+    if (!from && !to && !showAll && !directVisit) return;
 
-    const parsed: { startDate?: Date; endDate?: Date; showAll?: boolean } = {};
+    const parsed: { startDate?: Date; endDate?: Date; showAll?: boolean; directVisit?: boolean } = {};
+
+    if (directVisit) parsed.directVisit = true;
 
     if (from) {
-      const fromDate = new Date(from + "T00:00:00");
-      if (!isNaN(fromDate.getTime())) {
+      const fromDate = parseCalendarDate(from);
+      if (fromDate) {
         parsed.startDate = fromDate;
       }
     }
 
     if (to) {
-      const toDate = new Date(to + "T00:00:00");
-      if (!isNaN(toDate.getTime())) {
-        // Sumar 1 día para incluir todo el día (el filtro usa <= endDate)
-        toDate.setDate(toDate.getDate() + 1);
+      const toDate = parseCalendarDate(to, true);
+      if (toDate) {
         parsed.endDate = toDate;
       }
     }
@@ -43,7 +63,7 @@ const SearchBillHeader = ({ initialParams }: SearchBillHeaderProps) => {
     }
 
     initFromUrl(parsed);
-  }, [from, to, showAll, initFromUrl]);
+  }, [from, to, showAll, directVisit, initFromUrl]);
 
   return (
     <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">

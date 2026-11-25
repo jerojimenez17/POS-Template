@@ -6,6 +6,12 @@ vi.mock("@/lib/db", () => ({
     order: {
       create: vi.fn().mockResolvedValue({ id: "budget-zero-price" }),
     },
+    business: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "business-1",
+        planDefinition: { name: "BASIC", features: { hasBudget: true }, limits: {} },
+      }),
+    },
   },
 }));
 

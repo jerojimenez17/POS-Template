@@ -76,6 +76,7 @@ beforeEach(() => {
   persistedBusinessFindUniqueMock.mockResolvedValue({
     id: actor.businessId,
     features: { hasAfipBilling: true },
+    planDefinition: { name: "BASIC", features: { hasAfipBilling: true }, limits: {} },
   });
   credentialsMock.mockResolvedValue({
     success: {

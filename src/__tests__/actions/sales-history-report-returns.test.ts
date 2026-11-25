@@ -54,7 +54,7 @@ describe("daily report return kind/status treatment", () => {
 
     const result = await getDailyReportAction(windowStart);
 
-    expect(result).toEqual({ error: "No autorizado" });
+    expect(result).toMatchObject({ success: false, error: "No autorizado", code: "UNAUTHENTICATED" });
     expect(orderFindManyMock).not.toHaveBeenCalled();
     expect(saleReturnFindManyMock).not.toHaveBeenCalled();
     expect(stockMovementFindManyMock).not.toHaveBeenCalled();

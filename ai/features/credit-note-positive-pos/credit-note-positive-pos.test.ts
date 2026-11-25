@@ -17,6 +17,10 @@ const { authMock, axiosPostMock, businessFindUniqueMock, orderFindFirstMock, dbM
 vi.mock("@/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/db", () => ({ db: dbMock }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/plan-resolver", () => ({ getEffectivePlan: vi.fn().mockResolvedValue({ hasAfipBilling: true }), getCachedPlan: vi.fn().mockResolvedValue({ hasAfipBilling: true }) }));
+vi.mock("@/lib/auth-gates", () => ({
+  requireFeature: vi.fn().mockResolvedValue({ success: true, data: { id: "user-1", businessId: "business-1", role: "ADMIN" } }),
+}));
 vi.mock("axios", () => ({
   default: { post: axiosPostMock, isAxiosError: () => false },
 }));
@@ -24,7 +28,7 @@ vi.mock("axios", () => ({
 import { createAfipVoucherAction } from "@/actions/afip";
 import { createCreditNoteAction } from "@/actions/sales/credit-note";
 import { issuePreparedAfipVoucher, prepareAfipVoucherForActor } from "@/lib/server/afip-voucher";
-import { buildCreditNoteVoucherState } from "@/services/afip/credit-note";
+import { buildCreditNoteCreateVoucherPayload, buildCreditNoteVoucherState } from "@/services/afip/credit-note";
 import type BillState from "@/models/BillState";
 
 const business = {
@@ -58,6 +62,22 @@ const order = {
   clientIvaCondition: "Consumidor Final",
   clientDocumentType: null,
   clientDocumentNumber: null,
+  fiscalSnapshot: {
+    source: "AUTHORIZED_VOUCHER",
+    version: 1,
+    billType: "Factura B",
+    afipVoucherType: 6,
+    issuerIvaCondition: "Responsable Inscripto",
+    buyerIvaCondition: "Consumidor Final",
+    currency: "ARS",
+    total: 100,
+    net: 100,
+    vat: 0,
+    nonTaxed: 0,
+    exempt: 0,
+    otherTaxes: 0,
+    iva: [{ id: 5, base: 100, amount: 0 }],
+  },
   items: [{
     id: "line-1", productId: "product-1", code: "P1", description: "Product",
     quantity: 1, price: 100, costPrice: 60, subTotal: 100,
@@ -194,6 +214,7 @@ describe("credit-note emission point of sale is distinct from original associati
       products: [{ id: "product-1", code: "P1", description: "Product", price: 60, salePrice: 100, amount: 1 }],
       total: 100,
       totalWithDiscount: 100,
+      fiscalSnapshot: order.fiscalSnapshot,
       IVACondition: "Consumidor Final",
     });
 
@@ -286,7 +307,7 @@ describe("credit-note emission point of sale is distinct from original associati
       billType: "Factura B", emissionPointOfSale: 12, nroAsociado: 45,
       ptoVentaAsociado: 3, caeAsociado: order.CAE,
       products: [{ id: "product-1", code: "P1", description: "Product", price: 60, salePrice: 100, amount: 1 }],
-      total: 100, totalWithDiscount: 100, IVACondition: "Consumidor Final",
+      total: 100, totalWithDiscount: 100, fiscalSnapshot: order.fiscalSnapshot, IVACondition: "Consumidor Final",
     });
     // Exercise the server guard with a syntactically valid but non-selected
     // value, even before the builder learns to populate the trusted field.
@@ -368,10 +389,17 @@ describe("credit-note emission point of sale is distinct from original associati
       billType: "Factura B", emissionPointOfSale: business.ptoVenta[0], nroAsociado: 45,
       ptoVentaAsociado: order.invoicePointOfSale, caeAsociado: order.CAE,
       products: [{ id: "product-1", code: "P1", description: "Product", price: 60, salePrice: 100, amount: 1 }],
-      total: 100, totalWithDiscount: 100, IVACondition: "Consumidor Final",
+      total: 100, totalWithDiscount: 100, fiscalSnapshot: order.fiscalSnapshot, IVACondition: "Consumidor Final",
     });
 
-    const prepared = await prepareAfipVoucherForActor(state as unknown as BillState, actor);
+    const payload = buildCreditNoteCreateVoucherPayload({
+      arca: { tipoFactura: 8, puntoVenta: 9 },
+      billState: state,
+    });
+    const prepared = await prepareAfipVoucherForActor({
+      ...payload.billState,
+      date: new Date("2026-10-01T00:00:00.000Z"),
+    } as unknown as BillState, actor);
     expect(prepared).toHaveProperty("success", true);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(parseFetchBody(0)).toMatchObject({ puntoVenta: 9, tipoFactura: 8 });

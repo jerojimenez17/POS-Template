@@ -70,6 +70,27 @@ const sortByDescription = (a: Product, b: Product) => {
   return 0;
 };
 
+interface PrintableTotals {
+  subtotal: number;
+  discountAmount: number;
+  total: number;
+}
+
+export const calculatePrintableTotals = (
+  products: Product[],
+  discount: number,
+  totalWithDiscount?: number,
+): PrintableTotals => {
+  const subtotal = products.reduce((sum, product) => sum + product.salePrice * product.amount, 0);
+  const discountAmount = discount > 0 ? subtotal * (discount / 100) : 0;
+  const calculatedTotal = subtotal - discountAmount;
+  const storedTotal = Number(totalWithDiscount);
+  const hasStoredTotal = Number.isFinite(storedTotal) && (storedTotal > 0 || discount >= 100);
+  const total = hasStoredTotal ? storedTotal : calculatedTotal;
+
+  return { subtotal, discountAmount, total };
+};
+
 const PrintableTable = ({
   printTrigger,
   session,
@@ -171,7 +192,11 @@ const PrintableTable = ({
 
   const handlePrint = useCallback(async () => {
     const activeCaePrint = forceCae || effectiveState.CAE;
-    const subtotal = Math.round(effectiveState.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
+    const { subtotal, discountAmount, total } = calculatePrintableTotals(
+      effectiveState.products,
+      effectiveState.discount,
+      effectiveState.totalWithDiscount,
+    );
     const receiptData: ThermalReceiptData = {
       ...receiptBusinessInfo,
       date: effectiveState.date || new Date(),
@@ -186,12 +211,12 @@ const PrintableTable = ({
         description: p.description,
         amount: p.amount,
         unitPrice: p.salePrice,
-        subtotal: Math.round(p.salePrice * p.amount),
+        subtotal: p.salePrice * p.amount,
       })),
       subtotal,
       discount: effectiveState.discount > 0 ? effectiveState.discount : undefined,
-      discountAmount: effectiveState.discount > 0 ? Math.round(subtotal * (effectiveState.discount / 100)) : undefined,
-      total: Math.round(Number(effectiveState.totalWithDiscount || subtotal * (1 - effectiveState.discount / 100))),
+      discountAmount: effectiveState.discount > 0 ? discountAmount : undefined,
+      total,
       cae: activeCaePrint?.CAE ? {
         cae: activeCaePrint.CAE,
         vencimiento: activeCaePrint.vencimiento,
@@ -287,14 +312,11 @@ const PrintableTable = ({
   );
 
   const totals = useMemo(() => {
-    const subtotal = Math.round(effectiveState.products.reduce((sum, p) => sum + p.salePrice * p.amount, 0));
-    const discountAmount = effectiveState.discount > 0 ? Math.round(subtotal * (effectiveState.discount / 100)) : 0;
-    const total = effectiveState.discount > 0
-      ? Math.round(subtotal * (1 - effectiveState.discount / 100))
-      : effectiveState.totalWithDiscount !== undefined
-        ? Math.round(Number(effectiveState.totalWithDiscount))
-        : subtotal;
-    return { subtotal, discountAmount, total };
+    return calculatePrintableTotals(
+      effectiveState.products,
+      effectiveState.discount,
+      effectiveState.totalWithDiscount,
+    );
   }, [effectiveState.products, effectiveState.discount, effectiveState.totalWithDiscount]);
 
   const { hasFeature } = useFeatures();

@@ -28,7 +28,7 @@ describe("Factura A client data in receipt renderers", () => {
     expect(html).toContain("CUIT:");
     expect(html).toContain("01234567890");
     expect(html).toContain("30-99999999-1");
-    expect(html.indexOf("Datos del Cliente")).toBeLessThan(html.indexOf("Datos del Establecimiento"));
+    expect(html.indexOf("Datos del Cliente")).toBeLessThan(html.indexOf("Establecimiento"));
   });
 
   it("keeps client condition when the document type is absent and never renders empty rows", () => {
@@ -105,6 +105,6 @@ describe("Factura A client data in receipt renderers", () => {
 
     expect(html).toContain("Remito");
     expect(html).not.toContain("COMPROBANTE AUTORIZADO");
-    expect(html).toContain("$100.00");
+    expect(html).toContain("$100,00");
   });
 });

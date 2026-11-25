@@ -27,6 +27,7 @@ interface CheckoutModalProps {
   type: "factura" | "remito";
   ptoVentas?: number[];
   onConfirm: () => void;
+  onCancel?: () => void;
 }
 
 export default function CheckoutModal({
@@ -35,6 +36,7 @@ export default function CheckoutModal({
   type,
   ptoVentas = [],
   onConfirm,
+  onCancel,
 }: CheckoutModalProps) {
   const { BillState, dispatch } = useContext(BillContext);
 
@@ -345,7 +347,7 @@ export default function CheckoutModal({
 
           <DialogFooter className="gap-3 pt-4 border-t border-border">
             <DialogClose asChild>
-              <Button variant="outline">
+              <Button variant="outline" onClick={onCancel}>
                 Cancelar
               </Button>
             </DialogClose>

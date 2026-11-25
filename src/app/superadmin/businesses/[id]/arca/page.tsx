@@ -40,8 +40,8 @@ export default async function ArcaPage({ params }: ArcaPageProps) {
     razonSocial: business.razonSocial || "",
     inicioActividades: business.inicioActividades ? new Date(business.inicioActividades) : new Date(),
     condicionIva: business.condicionIva as "MONOTRIBUTO" | "RESPONSABLE_INSCRIPTO",
-    cert: "",
-    key: "",
+    cert: business.cert ? "CONFIGURADO" : "",
+    key: business.key ? "CONFIGURADO" : "",
     ptoVenta: business.ptoVenta || [],
   };
 

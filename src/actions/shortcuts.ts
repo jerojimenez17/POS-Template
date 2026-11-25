@@ -31,6 +31,9 @@ export async function getShortcutConfigsAction(
     if (!sessionBusinessId) {
       return unauthorized();
     }
+    if (businessId !== sessionBusinessId) {
+      return unauthorized();
+    }
 
     const configs = await db.shortcutConfig.findMany({
       where: { businessId },
@@ -59,6 +62,9 @@ export async function saveShortcutConfigAction(
     if (!sessionBusinessId) {
       return unauthorized();
     }
+    if (businessId !== sessionBusinessId) {
+      return unauthorized();
+    }
 
     // Validate input
     const validation = SaveShortcutConfigSchema.safeParse({ key, productId });
@@ -67,6 +73,14 @@ export async function saveShortcutConfigAction(
         success: false as const,
         error: validation.error.errors.map((e) => e.message).join(", "),
       };
+    }
+
+    const product = await db.product.findFirst({
+      where: { id: productId, businessId: sessionBusinessId },
+      select: { id: true },
+    });
+    if (!product) {
+      return { success: false as const, error: "Producto no encontrado" };
     }
 
     const config = await db.shortcutConfig.upsert({
@@ -104,6 +118,9 @@ export async function deleteShortcutConfigAction(
     if (!sessionBusinessId) {
       return unauthorized();
     }
+    if (businessId !== sessionBusinessId) {
+      return unauthorized();
+    }
 
     await db.shortcutConfig.delete({
       where: {
@@ -128,10 +145,14 @@ export async function getProductByShortcutAction(
 ) {
   try {
     const session = await auth();
-    const businessId = overrideBusinessId || getSessionBusinessId(session);
-    if (!businessId) {
+    const sessionBusinessId = getSessionBusinessId(session);
+    if (!sessionBusinessId) {
       return unauthorized();
     }
+    if (overrideBusinessId && overrideBusinessId !== sessionBusinessId) {
+      return unauthorized();
+    }
+    const businessId = overrideBusinessId || sessionBusinessId;
 
     const config = await db.shortcutConfig.findUnique({
       where: {

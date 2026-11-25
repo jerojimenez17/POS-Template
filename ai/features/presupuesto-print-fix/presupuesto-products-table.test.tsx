@@ -8,8 +8,8 @@
  * - PrintableTable does not accept printSnapshot, so Presupuesto snapshot is lost after resetCheckout
  * - PrintableTable billTypeDisplay ignores billType Presupuesto when CAE is null (shows Remito)
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, waitFor, act } from "@testing-library/react";
 import * as fs from "fs";
 import * as path from "path";
 import { createBillCheckoutSnapshot } from "@/utils/billing";
@@ -30,41 +30,38 @@ vi.mock("qrcode", () => ({
 vi.mock("@/actions/business", () => ({
   getBusinessBillingInfoAction: vi.fn().mockResolvedValue(null),
 }));
+vi.mock("@/context/CashboxContext", () => ({
+  useCashbox: () => ({ hasActiveSession: true, setIsOpeningModalOpen: vi.fn() }),
+}));
+vi.mock("next-auth/react", () => ({
+  useSession: () => ({ data: { user: { role: "USER", business: { features: {} } } } }),
+}));
 
 // ---------------------------------------------------------------------------
-// AC2 — contract: source-files must forward snapshot
+// AC2 — contract: source-files forward snapshot
 // ---------------------------------------------------------------------------
 describe("ProductsTable/PrintableTable snapshot contract — AC2 R1 R3", () => {
   const productsTablePath = path.resolve(process.cwd(), "src/components/Billing/ProductsTable.tsx");
   const printableTablePath = path.resolve(process.cwd(), "src/components/Billing/PrintableTable.tsx");
 
-  it("ProductsTable handlePrint must accept snapshot param and store it in printTrigger", () => {
+  it("ProductsTable handlePrint accepts and stores a snapshot", () => {
     const src = fs.readFileSync(productsTablePath, "utf8");
-    // Must have 3rd param snapshot handling
-    expect(src).toContain("snapshot");
-    // Must store snapshot in state that is passed to PrintableTable
-    // We look for printTrigger shape containing snapshot and passing printSnapshot prop
     expect(src).toMatch(/handlePrint\s*=\s*\([^)]*snapshot[^)]*\)/);
     expect(src).toMatch(/setPrintTrigger[\s\S]*?snapshot/);
   });
 
-  it("ProductsTable must forward snapshot to PrintableTable via printSnapshot/externalState prop", () => {
+  it("ProductsTable forwards snapshot to PrintableTable", () => {
     const src = fs.readFileSync(productsTablePath, "utf8");
-    expect(src).toMatch(/printSnapshot|externalState.*snapshot|snapshot.*PrintableTable/i);
-    // ensure PrintableTable is called with snapshot prop
-    expect(src).toMatch(/<PrintableTable[\s\S]*?snapshot/i);
+    expect(src).toMatch(/<PrintableTable[\s\S]*?printSnapshot/);
   });
 
-  it("PrintableTable must accept printSnapshot prop and use it as effectiveState for printing", () => {
+  it("PrintableTable uses printSnapshot as the effective print state", () => {
     const src = fs.readFileSync(printableTablePath, "utf8");
-    expect(src).toContain("printSnapshot");
-    // effectiveState prioritizes printSnapshot over BillState
     expect(src).toMatch(/printSnapshot\s*\?\?|effectiveState[\s\S]*?printSnapshot/i);
   });
 
-  it("PrintableTable handlePrint must derive billTypeDisplay from snapshot billType (Presupuesto) not reset state", () => {
+  it("PrintableTable derives bill type from the effective snapshot state", () => {
     const src = fs.readFileSync(printableTablePath, "utf8");
-    // billTypeDisplay must be computed from effectiveState/snapshot billType
     expect(src).toMatch(/getBillTypeDisplay\([\s\S]*?effectiveState|getBillTypeDisplay\([\s\S]*?printSnapshot|billTypeDisplay[\s\S]*?snapshot/i);
   });
 });
@@ -167,14 +164,14 @@ describe("PrintableTable integration — prints Presupuesto from snapshot despit
     };
 
     const { container } = render(
-      // @ts-ignore partial mock provider value
+      // @ts-expect-error partial mock provider value
       <BillContext.Provider value={resetContextValue as unknown as never}>
         <PrintableTable
           printTrigger={1}
           className=""
           handleClose={() => {}}
           session={{ user: { email: "vendedor@test.com", businessName: "Mi Comercio" } } as never}
-          // @ts-ignore printSnapshot is new prop that current code lacks -> will be ignored (test fails)
+          // @ts-expect-error printSnapshot is intentionally exercised as an integration prop
           printSnapshot={presupuestoSnapshot as unknown as never}
           forceCae={undefined}
         />
@@ -231,7 +228,7 @@ describe("PrintableTable integration — prints Presupuesto from snapshot despit
     };
 
     const { container } = render(
-      // @ts-ignore partial
+      // @ts-expect-error partial provider value
       <BillContext.Provider value={ctx as unknown as never}>
         <PrintableTable
           printTrigger={0}
