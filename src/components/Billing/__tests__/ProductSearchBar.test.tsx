@@ -2,6 +2,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import ProductSearchBar from "@/components/Billing/ProductSearchBar";
+import { useCashbox } from "@/context/CashboxContext";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,55 @@ describe("ProductSearchBar", () => {
 
       // performSearch forwards the object filter; empty supplierId normalizes to undefined.
       expect(mockGetProductsFiltered).toHaveBeenCalledWith({ search: "ab", supplierId: undefined });
+    });
+  });
+
+  describe("edición de venta sin caja abierta", () => {
+    it("permite agregar productos cuando allowAddWithoutSession está activo", async () => {
+      vi.mocked(useCashbox).mockReturnValueOnce({
+        hasActiveSession: false,
+        setHasActiveSession: vi.fn(),
+        isClosing: false,
+        setIsClosing: vi.fn(),
+        isOpeningModalOpen: false,
+        setIsOpeningModalOpen: vi.fn(),
+      } as never);
+      mockGetProductsFiltered.mockResolvedValueOnce([
+        {
+          id: "product-1",
+          code: "P001",
+          codebar: "",
+          description: "Producto sin caja",
+          price: 10,
+          salePrice: 10,
+          gain: 0,
+          amount: 5,
+          unit: "unidades",
+          image: "",
+          imageName: "",
+          client_bonus: 0,
+          last_update: new Date(),
+          creation_date: new Date(),
+          catalog: false,
+          details: "",
+          brand: null,
+          category: null,
+          subCategory: null,
+          supplier: null,
+        },
+      ]);
+
+      render(<ProductSearchBar {...defaultProps} allowAddWithoutSession />);
+      const input = screen.getByPlaceholderText(/Buscar producto/);
+
+      fireEvent.change(input, { target: { value: "pro" } });
+
+      const suggestion = await screen.findByText("Producto sin caja", {}, { timeout: 1500 });
+      fireEvent.click(suggestion);
+
+      expect(defaultProps.onProductAdd).toHaveBeenCalledWith(
+        expect.objectContaining({ description: "Producto sin caja", amount: 1 }),
+      );
     });
   });
 });

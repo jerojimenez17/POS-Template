@@ -208,7 +208,7 @@ describe("sale stock updates for repeated variable-price catalog rows", () => {
     }));
     expect(orderUpdateCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        changes: {
+        changes: expect.objectContaining({
           type: "ITEMS_UPDATED",
           items: [
             expect.objectContaining({
@@ -220,7 +220,7 @@ describe("sale stock updates for repeated variable-price catalog rows", () => {
               quantity: { from: 4, to: 3 },
             }),
           ],
-        },
+        }),
       }),
     }));
   });

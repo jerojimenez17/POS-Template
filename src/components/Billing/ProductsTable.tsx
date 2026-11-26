@@ -63,6 +63,7 @@ const ProductsTable = ({ session, isEditing, orderId, ptoVentas }: props) => {
         printSnapshot={printTrigger.snapshot}
         targetWindowRef={printWindowRef}
         searchInputRef={searchInputRef}
+        allowAddWithoutSession={isEditing}
         className="h-auto w-full"
         handleClose={function (): void {
           // handleClose currently not implemented or needed here

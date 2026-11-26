@@ -778,6 +778,46 @@ describe("updateOrderAction — CAE validation", () => {
     vi.clearAllMocks();
   });
 
+  const buildUpdateTx = (options: {
+    existingOrder: Record<string, unknown>;
+    orderUpdateCreate?: ReturnType<typeof vi.fn>;
+    orderUpdate?: ReturnType<typeof vi.fn>;
+    cashMovements?: unknown[];
+    activeSession?: Record<string, unknown> | null;
+  }) => {
+    const orderUpdateCreate = options.orderUpdateCreate ?? vi.fn().mockResolvedValue({ id: "update-1" });
+    const orderUpdate = options.orderUpdate ?? vi.fn().mockResolvedValue({ id: "order-1" });
+    const cashMovement = {
+      findMany: vi.fn().mockResolvedValue(options.cashMovements ?? []),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      create: vi.fn().mockResolvedValue({ id: "cash-1" }),
+    };
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      order: {
+        findFirst: vi.fn().mockResolvedValue(options.existingOrder),
+        update: orderUpdate,
+      },
+      orderUpdate: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: orderUpdateCreate,
+      },
+      product: { update: vi.fn().mockResolvedValue({}) },
+      productRanking: { upsert: vi.fn().mockResolvedValue({}) },
+      stockMovement: {
+        create: vi.fn().mockResolvedValue({}),
+        createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      cashMovement,
+      cashboxSession: {
+        findFirst: vi.fn().mockResolvedValue(options.activeSession ?? null),
+      },
+      cashBox: { update: vi.fn().mockResolvedValue({}) },
+    };
+    return { tx, orderUpdateCreate, orderUpdate, cashMovement };
+  };
+
   it.each(["ADMIN", "USER"])("should allow %s to edit a non-invoiced sale", async (role) => {
     const { db } = await import("@/lib/db");
     const { auth } = await import("@/auth");
@@ -881,6 +921,396 @@ describe("updateOrderAction — CAE validation", () => {
         status: "OPEN",
         cashbox: { businessId: "business-123" },
       },
+    });
+  });
+
+  it("should allow editing a cash sale without an open cashbox session", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "USER" },
+    });
+
+    const existingOrder = {
+      id: "order-no-session",
+      total: 100,
+      seller: "Test Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      businessId: "business-123",
+      clientId: null,
+      CAE: null,
+      discountAmount: 0,
+      discountPercentage: 0,
+      date: new Date(),
+      items: [],
+    };
+
+    let mockTx: {
+      cashboxSession: { findFirst: ReturnType<typeof vi.fn> };
+      cashBox: { update: ReturnType<typeof vi.fn> };
+      cashMovement: { create: ReturnType<typeof vi.fn> };
+    };
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
+          order: {
+            findFirst: vi.fn().mockResolvedValue(existingOrder),
+            update: vi.fn().mockResolvedValue(existingOrder),
+          },
+          orderUpdate: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue({ id: "update-1" }),
+          },
+          product: {
+            update: vi.fn().mockResolvedValue({}),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({}),
+          },
+          stockMovement: {
+            create: vi.fn().mockResolvedValue({}),
+            createMany: vi.fn().mockResolvedValue({ count: 0 }),
+          },
+          cashboxSession: {
+            findFirst: vi.fn().mockResolvedValue(null),
+          },
+          cashBox: {
+            update: vi.fn().mockResolvedValue({}),
+          },
+          cashMovement: {
+            findMany: vi.fn().mockResolvedValue([
+              { id: "cash-old", total: 100, cashboxSessionId: "session-original" },
+            ]),
+            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+            create: vi.fn().mockResolvedValue({ id: "cash-new" }),
+          },
+        };
+        mockTx = tx;
+        return callback(tx);
+      }
+    );
+
+    const result = await updateOrderAction("order-no-session", {
+      total: 150,
+      totalWithDiscount: 150,
+      seller: "Test Seller",
+      paidMethod: "Efectivo",
+      products: [
+        { id: "product-1", code: "P001", description: "Test", salePrice: 150, amount: 1 },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockTx.cashboxSession.findFirst).toHaveBeenCalled();
+    // Sin sesión abierta no se toca el CashBox...
+    expect(mockTx.cashBox.update).not.toHaveBeenCalled();
+    // ...pero el movimiento conserva la sesión histórica de la venta.
+    expect(mockTx.cashMovement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          total: 150,
+          cashboxSessionId: "session-original",
+        }),
+      })
+    );
+  });
+
+  it("records bill type, IVA, payment, discount and removed products in the update history", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "ADMIN" },
+    });
+
+    const existingOrder = {
+      id: "order-history",
+      total: 300,
+      seller: "Old Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      paymentMethod2: null,
+      discountPercentage: 0,
+      discountAmount: 0,
+      clientId: null,
+      clientIvaCondition: "Consumidor Final",
+      clientDocumentNumber: null,
+      billType: "Factura B",
+      CAE: null,
+      date: new Date(),
+      items: [
+        { productId: "product-1", code: "P1", description: "Producto 1", quantity: 2, price: 100, subTotal: 200 },
+        { productId: "product-2", code: "P2", description: "Producto 2", quantity: 1, price: 100, subTotal: 100 },
+      ],
+    };
+
+    const orderUpdateCreate = vi.fn().mockResolvedValue({ id: "update-1" });
+    const orderUpdate = vi.fn().mockResolvedValue({ id: "order-history" });
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          $queryRaw: vi.fn().mockResolvedValue([]),
+          order: {
+            findFirst: vi.fn().mockResolvedValue(existingOrder),
+            update: orderUpdate,
+          },
+          orderUpdate: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: orderUpdateCreate,
+          },
+          product: {
+            update: vi.fn().mockResolvedValue({}),
+          },
+          productRanking: {
+            upsert: vi.fn().mockResolvedValue({}),
+          },
+          stockMovement: {
+            create: vi.fn().mockResolvedValue({}),
+            createMany: vi.fn().mockResolvedValue({ count: 0 }),
+          },
+          cashMovement: {
+            findMany: vi.fn().mockResolvedValue([]),
+            create: vi.fn().mockResolvedValue({ id: "cash-new" }),
+          },
+          cashboxSession: {
+            findFirst: vi.fn().mockResolvedValue(null),
+          },
+          cashBox: {
+            update: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(tx);
+      }
+    );
+
+    const result = await updateOrderAction("order-history", {
+      total: 150,
+      totalWithDiscount: 150,
+      seller: "New Seller",
+      paidMethod: "Transferencia",
+      twoMethods: false,
+      discount: 10,
+      billType: "Factura A",
+      clientIvaCondition: "CUIT",
+      clientDocumentNumber: "20123456789",
+      products: [
+        { id: "product-1", code: "P1", description: "Producto 1", salePrice: 150, amount: 1 },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+
+    const changes = orderUpdateCreate.mock.calls[0][0].data.changes;
+    expect(changes).toEqual(expect.objectContaining({
+      type: "ITEMS_UPDATED",
+      removedItems: [
+        expect.objectContaining({ productId: "product-2", quantity: 1, code: "P2" }),
+      ],
+      billTypeChanged: { from: "Factura B", to: "Factura A" },
+      ivaChanged: {
+        from: { condition: "Consumidor Final", documentNumber: null },
+        to: { condition: "CUIT", documentNumber: "20123456789" },
+      },
+      paymentChanged: {
+        from: { method: "Efectivo", twoMethods: false, secondMethod: null, firstAmount: 300, secondAmount: 0 },
+        to: { method: "Transferencia", twoMethods: false, secondMethod: null, firstAmount: 150, secondAmount: 0 },
+      },
+      discountChanged: { from: 0, to: 10 },
+    }));
+    expect(changes.items[0]).toEqual(expect.objectContaining({
+      productId: "product-1",
+      quantity: { from: 2, to: 1 },
+      price: { from: 100, to: 150 },
+    }));
+    expect(orderUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        billType: "Factura A",
+        clientIvaCondition: "CUIT",
+        clientDocumentNumber: "20123456789",
+        paymentMethod: "Transferencia",
+        discountPercentage: 10,
+      }),
+    }));
+  });
+
+  it("keeps the IVA condition when only the bill type changes", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "ADMIN" },
+    });
+
+    const existingOrder = {
+      id: "order-iva-preserve",
+      total: 100,
+      seller: "Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      paymentMethod2: null,
+      totalMethod2: null,
+      discountPercentage: 0,
+      discountAmount: 0,
+      clientId: null,
+      clientIvaCondition: null,
+      clientDocumentNumber: null,
+      billType: "Factura B",
+      CAE: null,
+      date: new Date(),
+      items: [
+        { productId: "product-1", code: "P1", description: "Producto 1", quantity: 1, price: 100, subTotal: 100 },
+      ],
+    };
+    const { tx, orderUpdateCreate, orderUpdate } = buildUpdateTx({ existingOrder });
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => callback(tx),
+    );
+
+    const result = await updateOrderAction("order-iva-preserve", {
+      total: 100,
+      totalWithDiscount: 100,
+      seller: "Seller",
+      paidMethod: "Efectivo",
+      twoMethods: false,
+      discount: 0,
+      billType: "Factura A",
+      clientIvaCondition: "Consumidor Final",
+      clientDocumentNumber: "0",
+      products: [
+        { id: "product-1", code: "P1", description: "Producto 1", salePrice: 100, amount: 1 },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    const changes = orderUpdateCreate.mock.calls[0][0].data.changes;
+    expect(changes.billTypeChanged).toEqual({ from: "Factura B", to: "Factura A" });
+    expect(changes.ivaChanged).toBeUndefined();
+    expect(orderUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        billType: "Factura A",
+        clientIvaCondition: null,
+        clientDocumentNumber: null,
+      }),
+    }));
+  });
+
+  it("does not create a history version when the update has no real changes", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "ADMIN" },
+    });
+
+    const existingOrder = {
+      id: "order-no-changes",
+      total: 100,
+      seller: "Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      paymentMethod2: null,
+      totalMethod2: null,
+      discountPercentage: 0,
+      discountAmount: 0,
+      clientId: null,
+      clientIvaCondition: null,
+      clientDocumentNumber: null,
+      billType: "Factura B",
+      CAE: null,
+      date: new Date(),
+      items: [
+        { productId: "product-1", code: "P1", description: "Producto 1", quantity: 1, price: 100, subTotal: 100 },
+      ],
+    };
+    const { tx, orderUpdateCreate, orderUpdate } = buildUpdateTx({ existingOrder });
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => callback(tx),
+    );
+
+    const result = await updateOrderAction("order-no-changes", {
+      total: 100,
+      totalWithDiscount: 100,
+      seller: "Seller",
+      paidMethod: "Efectivo",
+      twoMethods: false,
+      discount: 0,
+      billType: "Factura B",
+      products: [
+        { id: "product-1", code: "P1", description: "Producto 1", salePrice: 100, amount: 1 },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(orderUpdateCreate).not.toHaveBeenCalled();
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it("records split payment amount changes as part of the payment combination", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "ADMIN" },
+    });
+
+    const existingOrder = {
+      id: "order-split",
+      total: 150,
+      seller: "Seller",
+      status: "confirmado",
+      paidStatus: "pago",
+      paymentMethod: "Efectivo",
+      paymentMethod2: "Débito",
+      totalMethod2: 50,
+      discountPercentage: 0,
+      discountAmount: 0,
+      clientId: null,
+      clientIvaCondition: null,
+      clientDocumentNumber: null,
+      billType: "Factura B",
+      CAE: null,
+      date: new Date(),
+      items: [
+        { productId: "product-1", code: "P1", description: "Producto 1", quantity: 1, price: 150, subTotal: 150 },
+      ],
+    };
+    const { tx, orderUpdateCreate } = buildUpdateTx({
+      existingOrder,
+      cashMovements: [{ id: "cash-old", total: 100, cashboxSessionId: "session-old" }],
+    });
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) => callback(tx),
+    );
+
+    const result = await updateOrderAction("order-split", {
+      total: 150,
+      totalWithDiscount: 150,
+      seller: "Seller",
+      paidMethod: "Efectivo",
+      twoMethods: true,
+      secondPaidMethod: "Débito",
+      totalSecondMethod: 80,
+      discount: 0,
+      billType: "Factura B",
+      products: [
+        { id: "product-1", code: "P1", description: "Producto 1", salePrice: 150, amount: 1 },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    const changes = orderUpdateCreate.mock.calls[0][0].data.changes;
+    expect(changes.paymentChanged).toEqual({
+      from: { method: "Efectivo", twoMethods: true, secondMethod: "Débito", firstAmount: 100, secondAmount: 50 },
+      to: { method: "Efectivo", twoMethods: true, secondMethod: "Débito", firstAmount: 70, secondAmount: 80 },
     });
   });
 

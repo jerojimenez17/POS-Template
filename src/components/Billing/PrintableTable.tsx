@@ -42,6 +42,7 @@ interface Props {
   forceCae?: CAE;
   targetWindowRef?: React.MutableRefObject<Window | null>;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
+  allowAddWithoutSession?: boolean;
 }
 
 const inter = Inter({
@@ -100,6 +101,7 @@ const PrintableTable = ({
   forceCae,
   targetWindowRef,
   searchInputRef,
+  allowAddWithoutSession,
 }: Props) => {
   const { BillState, dispatch, addItem, removeItem, printMode, qzTrayActive, qzTrayEnabled } = React.useContext(BillContext);
   const [state, setState] = useState<BillState>(externalState || BillState || defaultBillState);
@@ -392,6 +394,7 @@ const PrintableTable = ({
         onProductAdd={handleProductAdd}
         hasSupplierFilter={hasSupplierFilter}
         allowNegativeStock={allowNegativeStock}
+        allowAddWithoutSession={allowAddWithoutSession}
         searchInputRef={searchInputRef}
       />
 

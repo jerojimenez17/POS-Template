@@ -56,6 +56,41 @@ const SaleHistory = ({ saleId }: Props) => {
             (item.quantity && item.quantity.from !== item.quantity.to) ||
             (item.price && item.price.from !== item.price.to),
         );
+        const removedItems = changes.removedItems ?? [];
+        const billType = changes.billTypeChanged;
+        const hasBillTypeChanges = Boolean(billType && billType.from !== billType.to);
+        const iva = changes.ivaChanged;
+        const normalizeIvaCondition = (value: string | null) => {
+          const trimmed = (value ?? "").trim();
+          return trimmed === "" ? "Consumidor Final" : trimmed;
+        };
+        const normalizeDocumentNumber = (value: string | null) => {
+          const trimmed = (value ?? "").trim();
+          return trimmed === "" || trimmed === "0" ? null : trimmed;
+        };
+        const hasIvaChanges = Boolean(
+          iva && (
+            normalizeIvaCondition(iva.from.condition) !== normalizeIvaCondition(iva.to.condition) ||
+            normalizeDocumentNumber(iva.from.documentNumber) !== normalizeDocumentNumber(iva.to.documentNumber)
+          ),
+        );
+        const payment = changes.paymentChanged;
+        const hasPaymentChanges = Boolean(
+          payment && (
+            payment.from.method !== payment.to.method ||
+            payment.from.twoMethods !== payment.to.twoMethods ||
+            payment.from.secondMethod !== payment.to.secondMethod ||
+            (payment.to.twoMethods && (payment.from.secondAmount ?? 0) !== (payment.to.secondAmount ?? 0))
+          ),
+        );
+        const discount = changes.discountChanged;
+        const hasDiscountChanges = Boolean(discount && discount.from !== discount.to);
+        const hasVisibleChanges = changedItems.length > 0
+          || removedItems.length > 0
+          || hasBillTypeChanges
+          || hasIvaChanges
+          || hasPaymentChanges
+          || hasDiscountChanges;
 
         return (
           <div className="space-y-3">
@@ -99,38 +134,66 @@ const SaleHistory = ({ saleId }: Props) => {
               </div>
             )}
 
+            {/* Removed products */}
+            {removedItems.length > 0 && (
+              <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-800">
+                <Minus className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0 text-sm">
+                  <span className="font-medium text-red-700 dark:text-red-300">Productos Eliminados</span>
+                  <div className="mt-2 space-y-2">
+                    {removedItems.map((item, i) => (
+                      <div key={i} className="flex flex-col gap-1 pt-2 border-t border-red-100 dark:border-red-800 first:border-0 first:pt-0">
+                        <div className="font-medium text-slate-900 dark:text-white truncate">
+                          {item.description || "Producto sin descripción"}
+                          <span className="text-[10px] text-slate-400 font-mono ml-2">
+                            CODE: {item.code || item.productId || "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold px-1 py-0.5 bg-slate-100 dark:bg-slate-700 rounded uppercase text-slate-500">Eliminado:</span>
+                          <span className="text-red-500 font-bold text-xs">x{item.quantity}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Bill type changes */}
-            {changes.billTypeChanged && (
+            {billType && hasBillTypeChanges && (
               <div className="flex items-start gap-3 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-100 dark:border-violet-800">
                 <FileText className="h-5 w-5 text-violet-500 shrink-0 mt-0.5" />
                 <div className="text-sm">
                   <span className="font-medium text-violet-700 dark:text-violet-300">Tipo comprobante actualizado</span>
                   <div className="text-slate-600 dark:text-slate-400 mt-1">
-                    <span className="font-medium text-slate-700 dark:text-slate-300">{changes.billTypeChanged.from || "—"}</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">{billType.from || "—"}</span>
                     <span className="mx-1.5 text-slate-400">→</span>
-                    <span className="font-bold text-violet-700 dark:text-violet-300">{changes.billTypeChanged.to}</span>
+                    <span className="font-bold text-violet-700 dark:text-violet-300">{billType.to}</span>
                   </div>
                 </div>
               </div>
             )}
 
             {/* IVA changes */}
-            {changes.ivaChanged && (
+            {iva && hasIvaChanges && (
               <div className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-800">
                 <FileText className="h-5 w-5 text-purple-500 shrink-0 mt-0.5" />
                 <div className="text-sm space-y-1">
                   <span className="font-medium text-purple-700 dark:text-purple-300">Condición IVA actualizada</span>
                   <div className="text-slate-600 dark:text-slate-400">
-                    <span className="block">
-                      Condición: <span className="font-medium text-slate-700 dark:text-slate-300">{changes.ivaChanged.from.condition || "Consumidor Final"}</span>
-                      <span className="mx-1.5 text-slate-400">→</span>
-                      <span className="font-bold text-purple-700 dark:text-purple-300">{changes.ivaChanged.to.condition || "Consumidor Final"}</span>
-                    </span>
-                    {changes.ivaChanged.from.documentNumber !== changes.ivaChanged.to.documentNumber && (
+                    {normalizeIvaCondition(iva.from.condition) !== normalizeIvaCondition(iva.to.condition) && (
                       <span className="block">
-                        Documento: <span className="font-medium text-slate-700 dark:text-slate-300">{changes.ivaChanged.from.documentNumber || "—"}</span>
+                        Condición: <span className="font-medium text-slate-700 dark:text-slate-300">{iva.from.condition || "Consumidor Final"}</span>
                         <span className="mx-1.5 text-slate-400">→</span>
-                        <span className="font-bold text-purple-700 dark:text-purple-300">{changes.ivaChanged.to.documentNumber || "—"}</span>
+                        <span className="font-bold text-purple-700 dark:text-purple-300">{iva.to.condition || "Consumidor Final"}</span>
+                      </span>
+                    )}
+                    {normalizeDocumentNumber(iva.from.documentNumber) !== normalizeDocumentNumber(iva.to.documentNumber) && (
+                      <span className="block">
+                        Documento: <span className="font-medium text-slate-700 dark:text-slate-300">{iva.from.documentNumber || "—"}</span>
+                        <span className="mx-1.5 text-slate-400">→</span>
+                        <span className="font-bold text-purple-700 dark:text-purple-300">{iva.to.documentNumber || "—"}</span>
                       </span>
                     )}
                   </div>
@@ -139,20 +202,42 @@ const SaleHistory = ({ saleId }: Props) => {
             )}
 
             {/* Payment changes */}
-            {changes.paymentChanged && (
+            {payment && hasPaymentChanges && (
               <div className="flex items-start gap-3 p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-100 dark:border-cyan-800">
                 <Receipt className="h-5 w-5 text-cyan-500 shrink-0 mt-0.5" />
                 <div className="text-sm space-y-1">
                   <span className="font-medium text-cyan-700 dark:text-cyan-300">Pago actualizado</span>
                   <div className="text-slate-600 dark:text-slate-400">
-                    <span className="block">
-                      Método: <span className="font-medium text-slate-700 dark:text-slate-300">{changes.paymentChanged.from.method || "—"}</span>
-                      <span className="mx-1.5 text-slate-400">→</span>
-                      <span className="font-bold text-cyan-700 dark:text-cyan-300">{changes.paymentChanged.to.method || "—"}</span>
-                    </span>
-                    {changes.paymentChanged.from.twoMethods !== changes.paymentChanged.to.twoMethods && (
+                    {payment.from.method !== payment.to.method && (
+                      <span className="block">
+                        Método: <span className="font-medium text-slate-700 dark:text-slate-300">{payment.from.method || "—"}</span>
+                        <span className="mx-1.5 text-slate-400">→</span>
+                        <span className="font-bold text-cyan-700 dark:text-cyan-300">{payment.to.method || "—"}</span>
+                      </span>
+                    )}
+                    {payment.from.twoMethods !== payment.to.twoMethods && (
                       <span className="block text-xs">
-                        Pago dividido: {changes.paymentChanged.from.twoMethods ? "Sí" : "No"} → {changes.paymentChanged.to.twoMethods ? "Sí" : "No"}
+                        Pago dividido: {payment.from.twoMethods ? "Sí" : "No"} → {payment.to.twoMethods ? "Sí" : "No"}
+                      </span>
+                    )}
+                    {payment.from.secondMethod !== payment.to.secondMethod && (
+                      <span className="block">
+                        Segundo método: <span className="font-medium text-slate-700 dark:text-slate-300">{payment.from.secondMethod || "—"}</span>
+                        <span className="mx-1.5 text-slate-400">→</span>
+                        <span className="font-bold text-cyan-700 dark:text-cyan-300">{payment.to.secondMethod || "—"}</span>
+                      </span>
+                    )}
+                    {payment.to.twoMethods
+                      && ((payment.from.firstAmount ?? 0) !== (payment.to.firstAmount ?? 0)
+                        || (payment.from.secondAmount ?? 0) !== (payment.to.secondAmount ?? 0)) && (
+                      <span className="block text-xs">
+                        Montos: <span className="font-medium text-slate-700 dark:text-slate-300">
+                          ${(payment.from.firstAmount ?? 0).toLocaleString("es-AR")} + ${(payment.from.secondAmount ?? 0).toLocaleString("es-AR")}
+                        </span>
+                        <span className="mx-1.5 text-slate-400">→</span>
+                        <span className="font-bold text-cyan-700 dark:text-cyan-300">
+                          ${(payment.to.firstAmount ?? 0).toLocaleString("es-AR")} + ${(payment.to.secondAmount ?? 0).toLocaleString("es-AR")}
+                        </span>
                       </span>
                     )}
                   </div>
@@ -161,22 +246,22 @@ const SaleHistory = ({ saleId }: Props) => {
             )}
 
             {/* Discount changes */}
-            {changes.discountChanged && (
+            {discount && hasDiscountChanges && (
               <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-800">
                 <Percent className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                 <div className="text-sm">
                   <span className="font-medium text-amber-700 dark:text-amber-300">Descuento actualizado</span>
                   <div className="text-slate-600 dark:text-slate-400 mt-1">
-                    <span className="font-medium text-slate-700 dark:text-slate-300">{changes.discountChanged.from}%</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">{discount.from}%</span>
                     <span className="mx-1.5 text-slate-400">→</span>
-                    <span className="font-bold text-amber-700 dark:text-amber-300">{changes.discountChanged.to}%</span>
+                    <span className="font-bold text-amber-700 dark:text-amber-300">{discount.to}%</span>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Fallback */}
-            {changedItems.length === 0 && !changes.billTypeChanged && !changes.ivaChanged && !changes.paymentChanged && !changes.discountChanged && (
+            {!hasVisibleChanges && (
               <div className="text-sm text-slate-400 italic text-center py-2">Sin cambios detectados</div>
             )}
           </div>

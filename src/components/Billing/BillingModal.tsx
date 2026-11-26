@@ -129,7 +129,7 @@ const BillingModal = ({
         onSuccess();
         onOpenChange(false);
       } else {
-        toast.error("Error al crear factura: La respuesta no contiene un CAE v├ílido");
+        toast.error("Error al crear factura: La respuesta no contiene un CAE válido");
       }
     } catch (error) {
       const safeMessage = error instanceof Error ? sanitizeAfipText(error.message) : "unknown";

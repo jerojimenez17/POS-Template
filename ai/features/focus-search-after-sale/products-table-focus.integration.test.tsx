@@ -140,8 +140,11 @@ const createBillContext = () => ({
   setFocusPriceProductId: vi.fn(),
 });
 
-const renderProductsTable = (options?: { isEditing?: boolean }) => {
+const renderProductsTable = (options?: { isEditing?: boolean; billStateOverride?: Record<string, unknown> }) => {
   const billContext = createBillContext();
+  if (options?.billStateOverride) {
+    Object.assign(billContext.BillState, options.billStateOverride);
+  }
   const handlePrint = vi.fn();
   const view = render(
     <BillContext.Provider value={billContext as never}>
@@ -295,6 +298,16 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
     await flushDeferredFrames();
 
     expect(focus).not.toHaveBeenCalled();
+  });
+
+  it("updates a sale even when the AFIP snapshot projection would be invalid", async () => {
+    // La edición no emite comprobante: no debe depender de la validación AFIP.
+    renderProductsTable({ isEditing: true, billStateOverride: { IVACondition: null } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar Venta" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar/ }));
+
+    await waitFor(() => expect(updateOrderAction).toHaveBeenCalledWith("existing-sale", expect.any(Object)));
   });
 
   it("restores focus after the actual unpaid-order modal reports successful creation", async () => {

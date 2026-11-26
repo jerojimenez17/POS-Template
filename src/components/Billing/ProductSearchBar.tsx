@@ -17,10 +17,11 @@ interface ProductSearchBarProps {
   onProductAdd: (product: Product) => void;
   hasSupplierFilter: boolean;
   allowNegativeStock?: boolean;
+  allowAddWithoutSession?: boolean;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock, searchInputRef }: ProductSearchBarProps) => {
+const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock, allowAddWithoutSession, searchInputRef }: ProductSearchBarProps) => {
   const [searchCode, setSearchCode] = useState("");
   const searchCodeRef = useRef("");
   const [suggestions, setSuggestions] = useState<Product[]>([]);
@@ -35,6 +36,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock,
   const [duplicateProducts, setDuplicateProducts] = useState<Product[]>([]);
 
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
+  const canAddProduct = hasActiveSession || allowAddWithoutSession;
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const supplierContainerRef = useRef<HTMLDivElement>(null);
   const lastKeystrokeTime = useRef<number>(0);
@@ -154,7 +156,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock,
   };
 
   const addProductDirect = (product: Product) => {
-    if (!hasActiveSession) {
+    if (!canAddProduct) {
       toast.error("Debe abrir una sesión de caja antes de agregar productos");
       setIsOpeningModalOpen(true);
       return;
@@ -266,7 +268,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock,
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
                   const product = suggestions[selectedIndex];
-                  if (!hasActiveSession) {
+                  if (!canAddProduct) {
                     toast.error("Debe abrir una sesión de caja antes de agregar productos");
                     setIsOpeningModalOpen(true);
                     return;
@@ -321,7 +323,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock,
                       : "hover:bg-gray-50 dark:hover:bg-gray-700 border-l-4 border-l-transparent"
                   )}
                   onClick={() => {
-                    if (!hasActiveSession) {
+                    if (!canAddProduct) {
                       toast.error("Debe abrir una sesión de caja antes de agregar productos");
                       setIsOpeningModalOpen(true);
                       return;

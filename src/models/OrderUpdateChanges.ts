@@ -17,6 +17,12 @@ export type OrderUpdateChanges =
         quantity?: { from: number; to: number }
         price?: { from: number; to: number }
       }[]
+      removedItems?: {
+        productId: string | null
+        description: string | null
+        code: string | null
+        quantity: number
+      }[]
       ivaChanged?: {
         from: { condition: string | null; documentNumber: string | null }
         to: { condition: string | null; documentNumber: string | null }
@@ -26,8 +32,8 @@ export type OrderUpdateChanges =
         to: string | null
       }
       paymentChanged?: {
-        from: { method: string | null; twoMethods: boolean; secondMethod: string | null }
-        to: { method: string | null; twoMethods: boolean; secondMethod: string | null }
+        from: { method: string | null; twoMethods: boolean; secondMethod: string | null; firstAmount?: number; secondAmount?: number }
+        to: { method: string | null; twoMethods: boolean; secondMethod: string | null; firstAmount?: number; secondAmount?: number }
       }
       discountChanged?: {
         from: number

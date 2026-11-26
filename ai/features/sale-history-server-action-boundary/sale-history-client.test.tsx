@@ -33,6 +33,42 @@ describe("SaleHistory request states", () => {
     }
   });
 
+  it("hides change cards when the stored values are equivalent", async () => {
+    getSaleHistoryMock.mockResolvedValueOnce([{
+      id: "history-equivalent",
+      date: new Date(),
+      updatedBy: { name: "Ana", email: "ana@example.com" },
+      version: 2,
+      type: "ITEMS_UPDATED",
+      message: null,
+      changes: {
+        type: "ITEMS_UPDATED",
+        items: [
+          { productId: "product-1", description: "Producto 1", code: "P1", quantity: { from: 1, to: 1 } },
+        ],
+        billTypeChanged: { from: "Factura B", to: "Factura B" },
+        ivaChanged: {
+          from: { condition: "Consumidor Final", documentNumber: null },
+          to: { condition: "Consumidor Final", documentNumber: "0" },
+        },
+        paymentChanged: {
+          from: { method: "Efectivo", twoMethods: true, secondMethod: "Débito", firstAmount: 100, secondAmount: 50 },
+          to: { method: "Efectivo", twoMethods: true, secondMethod: "Débito", firstAmount: 100, secondAmount: 50 },
+        },
+        discountChanged: { from: 5, to: 5 },
+      },
+    }]);
+
+    render(<SaleHistory saleId="sale-1" />);
+
+    expect(await screen.findByText(/historial de modificaciones/i)).toBeVisible();
+    expect(screen.queryByText(/Productos Actualizados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tipo comprobante actualizado/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Condición IVA actualizada/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Pago actualizado/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Descuento actualizado/i)).not.toBeInTheDocument();
+  });
+
   it("clears loading and visibly reports a rejected Error", async () => {
     getSaleHistoryMock.mockRejectedValueOnce(new Error("No autorizado"));
     render(<SaleHistory saleId="sale-1" />);

@@ -559,31 +559,169 @@ export const updateOrderAction = async (
       const version = (lastUpdate?.version ?? 0) + 1;
 
       // 🔹 calcular cambios
-      const oldQuantitiesByProduct = new Map<string, number[]>();
+      const oldItemsByProduct = new Map<string, typeof existingOrder.items>();
       for (const item of existingOrder.items) {
         if (item.productId === null) continue;
-        const quantities = oldQuantitiesByProduct.get(item.productId) ?? [];
-        quantities.push(item.quantity);
-        oldQuantitiesByProduct.set(item.productId, quantities);
+        const items = oldItemsByProduct.get(item.productId) ?? [];
+        items.push(item);
+        oldItemsByProduct.set(item.productId, items);
       }
       const matchedLineCountByProduct = new Map<string, number>();
-      const getNextOldQuantity = (productId: string): number => {
+      const getNextOldItem = (productId: string) => {
         const matchedLineIndex = matchedLineCountByProduct.get(productId) ?? 0;
         matchedLineCountByProduct.set(productId, matchedLineIndex + 1);
-        return oldQuantitiesByProduct.get(productId)?.[matchedLineIndex] ?? 0;
+        return oldItemsByProduct.get(productId)?.[matchedLineIndex] ?? null;
       };
 
-      const changes: OrderUpdateChanges = {
-        type: "ITEMS_UPDATED",
-        items: updatedData.products.map((p) => ({
+      const itemChanges = updatedData.products.map((p) => {
+        const oldItem = getNextOldItem(p.id);
+        const newPrice = p.salePrice ?? p.price ?? 0;
+        return {
           productId: p.id,
           description: p.description,
           code: p.code,
           quantity: {
-            from: getNextOldQuantity(p.id),
+            from: oldItem?.quantity ?? 0,
             to: p.amount,
           },
-        })),
+          ...(oldItem && oldItem.price !== newPrice
+            ? { price: { from: oldItem.price, to: newPrice } }
+            : {}),
+        };
+      });
+
+      // Productos que estaban en la venta y ya no vienen en la edición.
+      const consumedLineCountByProduct = new Map<string, number>();
+      const removedItems: {
+        productId: string | null;
+        description: string | null;
+        code: string | null;
+        quantity: number;
+      }[] = [];
+      for (const item of existingOrder.items) {
+        if (item.productId === null) {
+          removedItems.push({
+            productId: null,
+            description: item.description,
+            code: item.code,
+            quantity: item.quantity,
+          });
+          continue;
+        }
+        const lineIndex = consumedLineCountByProduct.get(item.productId) ?? 0;
+        consumedLineCountByProduct.set(item.productId, lineIndex + 1);
+        const matchedCount = matchedLineCountByProduct.get(item.productId) ?? 0;
+        if (lineIndex < matchedCount) continue;
+        removedItems.push({
+          productId: item.productId,
+          description: item.description,
+          code: item.code,
+          quantity: item.quantity,
+        });
+      }
+
+      const discountPercent = Number(updatedData.discount ?? existingOrder.discountPercentage) || 0;
+      const oldBillType = existingOrder.billType ?? null;
+      const newBillType = updatedData.billType ?? oldBillType;
+      const billTypeChanged = newBillType !== oldBillType;
+
+      const oldIvaCondition = existingOrder.clientIvaCondition ?? null;
+      const oldDocumentNumber = existingOrder.clientDocumentNumber ?? null;
+      const newIvaCondition = updatedData.clientIvaCondition ?? oldIvaCondition;
+      const newDocumentNumber = updatedData.clientDocumentNumber ?? oldDocumentNumber;
+      // null/"" y "Consumidor Final" son equivalentes; "0" equivale a sin documento.
+      const comparableIvaCondition = (value: string | null) => {
+        const trimmed = (value ?? "").trim();
+        return trimmed === "" ? "Consumidor Final" : trimmed;
+      };
+      const comparableDocumentNumber = (value: string | null) => {
+        const trimmed = (value ?? "").trim();
+        return trimmed === "" || trimmed === "0" ? null : trimmed;
+      };
+      const ivaChanged =
+        comparableIvaCondition(oldIvaCondition) !== comparableIvaCondition(newIvaCondition)
+        || comparableDocumentNumber(oldDocumentNumber) !== comparableDocumentNumber(newDocumentNumber);
+
+      // Si la condición efectiva no cambió, conservar el valor persistido original.
+      const persistedIvaCondition = ivaChanged ? newIvaCondition : oldIvaCondition;
+      const persistedDocumentNumber = ivaChanged ? newDocumentNumber : oldDocumentNumber;
+
+      const oldPaymentMethod = existingOrder.paymentMethod ?? null;
+      const newPaymentMethod = updatedData.paidMethod ?? oldPaymentMethod;
+      const oldTwoMethods = Boolean(existingOrder.paymentMethod2);
+      const newTwoMethods = updatedData.twoMethods ?? oldTwoMethods;
+      const oldSecondPaymentMethod = oldTwoMethods ? existingOrder.paymentMethod2 ?? null : null;
+      const newSecondPaymentMethod = newTwoMethods
+        ? updatedData.secondPaidMethod ?? oldSecondPaymentMethod
+        : null;
+      const oldSecondAmount = oldTwoMethods ? existingOrder.totalMethod2 ?? 0 : 0;
+      const newSecondAmount = newTwoMethods ? Number(updatedData.totalSecondMethod) || 0 : 0;
+      const newTotalForChanges = updatedData.totalWithDiscount || updatedData.total;
+      const paymentChanged =
+        newPaymentMethod !== oldPaymentMethod
+        || newTwoMethods !== oldTwoMethods
+        || newSecondPaymentMethod !== oldSecondPaymentMethod
+        // En pagos divididos, cambiar el monto del segundo método también es un cambio.
+        || (newTwoMethods && newSecondAmount !== oldSecondAmount);
+
+      const discountChanged = discountPercent !== existingOrder.discountPercentage;
+      const hasItemChanges = itemChanges.some(
+        (item) => item.quantity.from !== item.quantity.to || "price" in item,
+      );
+      const hasChanges = hasItemChanges
+        || removedItems.length > 0
+        || billTypeChanged
+        || ivaChanged
+        || paymentChanged
+        || discountChanged;
+
+      // Sin diferencias reales no se genera una versión de historial.
+      if (!hasChanges) return { success: true, unchanged: true };
+
+      const changes: OrderUpdateChanges = {
+        type: "ITEMS_UPDATED",
+        items: itemChanges,
+        ...(removedItems.length > 0 ? { removedItems } : {}),
+        ...(billTypeChanged
+          ? { billTypeChanged: { from: oldBillType, to: newBillType } }
+          : {}),
+        ...(ivaChanged
+          ? {
+              ivaChanged: {
+                from: {
+                  condition: oldIvaCondition,
+                  documentNumber: oldDocumentNumber,
+                },
+                to: {
+                  condition: newIvaCondition,
+                  documentNumber: newDocumentNumber,
+                },
+              },
+            }
+          : {}),
+        ...(paymentChanged
+          ? {
+              paymentChanged: {
+                from: {
+                  method: oldPaymentMethod,
+                  twoMethods: oldTwoMethods,
+                  secondMethod: oldSecondPaymentMethod,
+                  firstAmount: existingOrder.total - oldSecondAmount,
+                  secondAmount: oldSecondAmount,
+                },
+                to: {
+                  method: newPaymentMethod,
+                  twoMethods: newTwoMethods,
+                  secondMethod: newSecondPaymentMethod,
+                  firstAmount: newTotalForChanges - newSecondAmount,
+                  secondAmount: newSecondAmount,
+                },
+              },
+            }
+          : {}),
+        ...(discountChanged
+          ? { discountChanged: { from: existingOrder.discountPercentage, to: discountPercent } }
+          : {}),
       };
 
       // 🔹 snapshot cada 10 versiones
@@ -643,10 +781,9 @@ export const updateOrderAction = async (
       }
 
       // 🔹 recalcular totales
-      const discountPercent = Number(updatedData.discount) || 0;
       const total = updatedData.totalWithDiscount || updatedData.total;
       const discountAmount = updatedData.total * discountPercent * 0.01;
-      const isTwoMethodsUpdate = !!updatedData.twoMethods;
+      const isTwoMethodsUpdate = newTwoMethods;
       const totalSecondMethodParsedUpdate = isTwoMethodsUpdate ? (Number(updatedData.totalSecondMethod) || 0) : 0;
 
       // 🔹 actualizar orden
@@ -655,12 +792,15 @@ export const updateOrderAction = async (
         data: {
           total,
           seller: updatedData.seller,
-          paymentMethod: updatedData.paidMethod || "Efectivo",
-          paymentMethod2: isTwoMethodsUpdate ? updatedData.secondPaidMethod : null,
+          paymentMethod: newPaymentMethod ?? "Efectivo",
+          paymentMethod2: isTwoMethodsUpdate ? newSecondPaymentMethod : null,
           totalMethod2: isTwoMethodsUpdate ? totalSecondMethodParsedUpdate : null,
           discountPercentage: discountPercent,
           discountAmount,
           clientId: updatedData.clientId,
+          billType: newBillType,
+          clientIvaCondition: persistedIvaCondition,
+          clientDocumentNumber: persistedDocumentNumber,
           items: {
             deleteMany: {},
             create: updatedData.products.map((p) => ({
@@ -716,23 +856,25 @@ export const updateOrderAction = async (
       const oldCashTotal = oldCashMovements.reduce((sum, m) => sum + m.total, 0);
 
       // Calcular nuevo total en efectivo según medios de pago actualizados
-      const isTwoMethodsEdit = !!updatedData.twoMethods;
+      const isTwoMethodsEdit = newTwoMethods;
       const totalSecondMethodEdit = isTwoMethodsEdit ? (Number(updatedData.totalSecondMethod) || 0) : 0;
       const totalEdit = updatedData.totalWithDiscount || updatedData.total;
 
       let newCashTotal = 0;
-      if (updatedData.paidMethod === "Efectivo") {
+      if (newPaymentMethod === "Efectivo") {
         newCashTotal += totalEdit - totalSecondMethodEdit;
       }
-      if (isTwoMethodsEdit && updatedData.secondPaidMethod === "Efectivo") {
+      if (isTwoMethodsEdit && newSecondPaymentMethod === "Efectivo") {
         newCashTotal += totalSecondMethodEdit;
       }
 
       const cashDelta = newCashTotal - oldCashTotal;
 
-      // Solo tocar CashBox/CashMovement si realmente cambió algo en efectivo
+      // La edición de una venta no exige una caja abierta. Si hay una sesión
+      // activa se sincroniza el CashBox; si no, se conservan los movimientos
+      // con su sesión histórica para no bloquear la edición de productos.
       if (cashDelta !== 0 || oldCashMovements.length > 0 || newCashTotal > 0) {
-        // Encontrar sesión activa del usuario que edita
+        // Buscar sesión activa del usuario que edita (opcional)
         const activeSession = await tx.cashboxSession.findFirst({
           where: {
             userId,
@@ -741,17 +883,18 @@ export const updateOrderAction = async (
             cashbox: { businessId },
           },
         });
-        if (!activeSession) {
-          throw new Error("No hay una sesión de caja abierta.");
-        }
 
-        // Ajustar CashBox por el delta (puede ser positivo o negativo)
-        if (cashDelta !== 0) {
+        // Ajustar CashBox por el delta solo si hay una sesión abierta
+        if (activeSession && cashDelta !== 0) {
           await tx.cashBox.update({
             where: { id: activeSession.cashboxId, businessId },
             data: { total: { increment: cashDelta } },
           });
         }
+
+        // Conservar la sesión original del movimiento si no hay una activa
+        const cashboxSessionId =
+          activeSession?.id ?? oldCashMovements[0]?.cashboxSessionId ?? null;
 
         // Eliminar movimientos viejos (son reemplazados por los nuevos)
         if (oldCashMovements.length > 0) {
@@ -763,40 +906,40 @@ export const updateOrderAction = async (
         // Crear nuevos movimientos si hay efectivo involucrado
         if (newCashTotal > 0) {
           if (isTwoMethodsEdit) {
-            if (totalEdit - totalSecondMethodEdit > 0 && updatedData.paidMethod === "Efectivo") {
+            if (totalEdit - totalSecondMethodEdit > 0 && newPaymentMethod === "Efectivo") {
               await tx.cashMovement.create({
                 data: {
                   total: totalEdit - totalSecondMethodEdit,
                   seller: updatedData.seller,
-                  paidMethod: updatedData.paidMethod || "Efectivo",
+                  paidMethod: newPaymentMethod || "Efectivo",
                   businessId,
-                  cashboxSessionId: activeSession.id,
+                  cashboxSessionId,
                   orderId,
                   date: new Date(),
                 },
               });
             }
-            if (totalSecondMethodEdit > 0 && updatedData.secondPaidMethod === "Efectivo") {
+            if (totalSecondMethodEdit > 0 && newSecondPaymentMethod === "Efectivo") {
               await tx.cashMovement.create({
                 data: {
                   total: totalSecondMethodEdit,
                   seller: updatedData.seller,
-                  paidMethod: updatedData.secondPaidMethod || "Efectivo",
+                  paidMethod: newSecondPaymentMethod || "Efectivo",
                   businessId,
-                  cashboxSessionId: activeSession.id,
+                  cashboxSessionId,
                   orderId,
                   date: new Date(),
                 },
               });
             }
-          } else if (updatedData.paidMethod === "Efectivo") {
+          } else if (newPaymentMethod === "Efectivo") {
             await tx.cashMovement.create({
               data: {
                 total: totalEdit,
                 seller: updatedData.seller,
-                paidMethod: updatedData.paidMethod || "Efectivo",
+                paidMethod: newPaymentMethod || "Efectivo",
                 businessId,
-                cashboxSessionId: activeSession.id,
+                cashboxSessionId,
                 orderId,
                 date: new Date(),
               },

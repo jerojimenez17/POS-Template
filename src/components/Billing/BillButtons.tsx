@@ -74,7 +74,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
   const [openLedgerBlockedModal, setOpenLedgerBlockedModal] = useState(false);
   const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const { hasActiveSession, setIsOpeningModalOpen } = useCashbox();
-  const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexi├│n
+  const latestCAE = useRef(BillState.CAE); // Agregar estado para rastrear la conexión
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== "undefined" ? navigator.onLine : true
   );
@@ -84,14 +84,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
 
   const checkSession = useCallback(() => {
     if (!hasActiveSession) {
-      toast.error("Debe abrir una sesi├│n de caja antes de realizar esta operaci├│n");
+      toast.error("Debe abrir una sesión de caja antes de realizar esta operación");
       setIsOpeningModalOpen(true);
       return false;
     }
     return true;
   }, [hasActiveSession, setIsOpeningModalOpen]);
 
-  // Verificar estado de conexi├│n al montar el componente
+  // Verificar estado de conexión al montar el componente
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -211,10 +211,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [session, dispatch, BillState.products?.length, isEditing, addItem, addIndependentItem, setFocusPriceProductId, checkSession, canUseBudget]);
 
-  // Funci├│n para verificar conexi├│n y mostrar error
+  // Función para verificar conexión y mostrar error
   const checkConnection = () => {
     if (!isOnline) {
-      toast.error("Sin conexi├│n a internet");
+      toast.error("Sin conexión a internet");
       return false;
     }
     return true;
@@ -265,7 +265,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         setBlockButton(false);
         return newCAE;
       } else {
-        const errorMsg = "La Cloud Function respondi├│ sin un CAE v├ílido";
+        const errorMsg = "La Cloud Function respondió sin un CAE válido";
         toast.error(errorMsg);
         setResponse(errorMsg);
         setBlockButton(false);
@@ -345,7 +345,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         return;
       }
 
-      // Validaci├│n de pagos divididos: monto > 0 y suma igual al total
+      // Validación de pagos divididos: monto > 0 y suma igual al total
       if (billState.twoMethods) {
         const secondAmount = billState.totalSecondMethod || 0;
         if (secondAmount < 1) {
@@ -362,20 +362,25 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
         }
       }
 
-      // Validaci├│n: Condici├│n IVA requiere n├║mero de documento
+      // Validación: Condición IVA requiere número de documento
       const ivaCond = billState.clientIvaCondition || billState.IVACondition;
       if (ivaCond && ivaCond !== "Consumidor Final") {
         const docNum = billState.clientDocumentNumber || billState.documentNumber;
         if (!docNum || String(docNum).trim() === "" || Number(docNum) === 0) {
           const tipoDoc = ivaCond === "CUIT" ? "CUIT" : "DNI";
-          setErrorMessage(`Debe ingresar un ${tipoDoc} para la condici├│n ${ivaCond}`);
+          setErrorMessage(`Debe ingresar un ${tipoDoc} para la condición ${ivaCond}`);
           setOpenErrorModal(true);
           setBlockButton(false);
           return;
         }
       }
 
-      const checkout = createBillCheckoutSnapshot(billState, billState.billType);
+      // Para actualizar una venta no se emite comprobante AFIP: usar el
+      // snapshot completo del BillState evita la validación/proyección AFIP
+      // que solo aplica al alta de facturas.
+      const checkout = isUpdate
+        ? createBillStateSnapshot(billState, billState.billType)
+        : createBillCheckoutSnapshot(billState, billState.billType);
       let caeData: CAE | null = null;
       if (afip && !isUpdate) {
         caeData = await handleCreateVoucher(checkout);
@@ -418,7 +423,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       return caeData ?? (afip ? undefined : EMPTY_CAE);
     } catch (err) {
       if (!isOnline) {
-        toast.error("Operaci├│n cancelada: Sin conexi├│n a internet");
+        toast.error("Operación cancelada: Sin conexión a internet");
       } else if (err instanceof Error && err.message.includes("ya fue facturada")) {
         toast.error(err.message);
       } else {
@@ -727,10 +732,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
       <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar actualizaci├│n</DialogTitle>
+            <DialogTitle>Confirmar actualización</DialogTitle>
           </DialogHeader>
           <DialogDescription>
-            ┬┐Est├í seguro que desea sobreescribir esta venta? Se registrar├í un
+            ¿Está seguro que desea sobreescribir esta venta? Se registrará un
             historial detallado de los cambios.
           </DialogDescription>
           <DialogFooter>
@@ -792,7 +797,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, ptoVenta
           }
         }}
         variant={planError?.variant ?? "feature"}
-        feature={featureBlockedName ?? planError?.feature ?? "Facturaci├│n electr├│nica (ARCA)"}
+        feature={featureBlockedName ?? planError?.feature ?? "Facturación electrónica (ARCA)"}
         resource={planError?.resource}
         limitValue={planError?.limitValue}
       />
@@ -863,7 +868,7 @@ export const BillButtons: React.FC<BillButtonsProps> = ({
           className="flex flex-col items-center justify-center p-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white rounded-xl shadow-lg border border-emerald-500 transition-all font-semibold relative overflow-hidden group"
         >
           <CheckCircle className="h-6 w-6 mb-2 group-hover:scale-110 transition-transform" />
-          <span className="text-sm">Efectivo / D├®bito</span>
+          <span className="text-sm">Efectivo / Débito</span>
           <kbd className="mt-2 text-xs bg-emerald-800 px-2 py-0.5 rounded opacity-80 border border-emerald-700">F1</kbd>
         </button>
 
@@ -900,7 +905,7 @@ export const BillButtons: React.FC<BillButtonsProps> = ({
                 className="bg-zinc-900 text-white border border-zinc-700 text-xs px-3 py-1.5 rounded-lg shadow-xl max-w-xs leading-relaxed z-50"
                 sideOffset={5}
               >
-                La funci├│n de Cuenta Corriente requiere una suscripci├│n **Plan PRO** o superior.
+                La función de Cuenta Corriente requiere una suscripción **Plan PRO** o superior.
                 <Tooltip.Arrow className="fill-zinc-950" />
               </Tooltip.Content>
             </Tooltip.Portal>
@@ -928,7 +933,7 @@ export const BillButtons: React.FC<BillButtonsProps> = ({
                   </div>
                 )}
                 <FileText className="h-6 w-6 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="text-sm">Facturaci├│n Electr├│nica</span>
+                <span className="text-sm">Facturación Electrónica</span>
                 <kbd className={`mt-2 text-xs px-2 py-0.5 rounded border ${canUseAfip ? "bg-violet-800 border-violet-700 text-violet-100 opacity-80" : "bg-gray-200 dark:bg-zinc-700 text-gray-400 border-gray-300 dark:border-zinc-600"}`}>F3</kbd>
               </button>
             </div>
@@ -940,7 +945,7 @@ export const BillButtons: React.FC<BillButtonsProps> = ({
                 className="bg-zinc-900 text-white border border-zinc-700 text-xs px-3 py-1.5 rounded-lg shadow-xl max-w-xs leading-relaxed z-50"
                 sideOffset={5}
               >
-                La Facturaci├│n Electr├│nica ARCA requiere una suscripci├│n **Plan ENTERPRISE**.
+                La Facturación Electrónica ARCA requiere una suscripción **Plan ENTERPRISE**.
                 <Tooltip.Arrow className="fill-zinc-950" />
               </Tooltip.Content>
             </Tooltip.Portal>
