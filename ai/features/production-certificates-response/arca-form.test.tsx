@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ArcaForm } from "@/components/Superadmin/arca-form";
@@ -20,9 +20,14 @@ describe("ArcaForm: generación de certificados", () => {
     const user = userEvent.setup();
     render(<ArcaForm businessId="business-target" initialData={{ cert: "", key: "", cuit: "20123456789", razonSocial: "Test", inicioActividades: new Date(), condicionIva: "MONOTRIBUTO", ptoVenta: [] }} />);
 
-    await user.click(screen.getByRole("button", { name: /generar prod/i }));
-    await user.type(screen.getByLabelText("Contraseña"), "password");
-    await user.click(screen.getByRole("button", { name: "Generar Certificados" }));
+    await user.click(screen.getByRole("button", { name: /generar certificados/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /^prod/i }));
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
+    await user.type(within(dialog).getByLabelText("Contraseña"), "password");
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
+    await user.click(within(dialog).getByRole("button", { name: "Generar Certificados" }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     expect(screen.getByText("Certificados generados y guardados correctamente")).toBeInTheDocument();
@@ -33,22 +38,46 @@ describe("ArcaForm: generación de certificados", () => {
     const user = userEvent.setup();
     render(<ArcaForm businessId="business-target" initialData={{ cert: "", key: "", cuit: "20123456789", razonSocial: "Test", inicioActividades: new Date(), condicionIva: "MONOTRIBUTO", ptoVenta: [] }} />);
 
-    await user.click(screen.getByRole("button", { name: /generar prod/i }));
-    await user.type(screen.getByLabelText("Contraseña"), "password");
-    const alias = screen.getByLabelText("Alias");
+    await user.click(screen.getByRole("button", { name: /generar certificados/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /^prod/i }));
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
+    await user.type(within(dialog).getByLabelText("Contraseña"), "password");
+    const alias = within(dialog).getByLabelText("Alias");
     await user.clear(alias);
     await user.type(alias, "   ");
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
 
-    expect(screen.getByRole("button", { name: "Generar Certificados" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Generar Certificados" })).toBeDisabled();
     expect(generateCertsAction).not.toHaveBeenCalled();
   });
 
-  it("muestra el estado configurado sin hidratar CERT o KEY con contenido sensible", () => {
+  it("en el paso 3 muestra los certificados configurados en verde con opción de reemplazar", async () => {
+    const user = userEvent.setup();
     render(<ArcaForm businessId="business-target" initialData={{ cert: "CONFIGURADO", key: "CONFIGURADO", cuit: "20123456789", razonSocial: "Test", inicioActividades: new Date(), condicionIva: "MONOTRIBUTO", ptoVenta: [] }} />);
 
-    expect(screen.getAllByText("Configurado")).toHaveLength(2);
-    expect(screen.getByLabelText("Certificado (CERT)")).toHaveValue("");
-    expect(screen.getByLabelText("Llave Privada (KEY)")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: /reemplazar certificados/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
+
+    expect(within(dialog).getAllByText("Configurado")).toHaveLength(2);
+    expect(within(dialog).getAllByRole("button", { name: "Reemplazar" })).toHaveLength(2);
+  });
+
+  it("en el paso 3 permite cargar archivo o pegar texto cuando no está configurado", async () => {
+    const user = userEvent.setup();
+    render(<ArcaForm businessId="business-target" initialData={{ cert: "", key: "", cuit: "20123456789", razonSocial: "Test", inicioActividades: new Date(), condicionIva: "MONOTRIBUTO", ptoVenta: [] }} />);
+
+    await user.click(screen.getByRole("button", { name: /generar certificados/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
+    await user.click(within(dialog).getByRole("button", { name: "Siguiente" }));
+
+    expect(within(dialog).getAllByText("Cargar archivo")).toHaveLength(2);
+    expect(within(dialog).getAllByText("O pegar el texto")).toHaveLength(2);
+    expect(within(dialog).getAllByText("Sin configurar")).toHaveLength(2);
   });
 
   it("conserva la interacción de puntos de venta y confirma el borrado", async () => {

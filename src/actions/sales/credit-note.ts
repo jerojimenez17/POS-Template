@@ -11,6 +11,7 @@ import {
 import type { AuthenticatedUserContext } from "@/lib/auth-gates";
 import type BillState from "@/models/BillState";
 import { z } from "zod";
+import { UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import {
   buildCreditNoteCreateVoucherPayload,
@@ -166,7 +167,9 @@ export async function createCreditNoteAction(input: unknown): Promise<CreateCred
   if (!parsed.success) return { success: false, error: "Datos de Nota de Crédito inválidos", code: "NOT_ELIGIBLE" };
 
   const session = await Promise.resolve().then(() => auth()).catch(() => null);
-  if (session?.user?.role !== "ADMIN") {
+  const role = session?.user?.role;
+  // Mirror invoice issuance: admins, sellers and super admins may issue an NC.
+  if (!role || (role !== UserRole.USER && role !== UserRole.ADMIN && role !== UserRole.SUPER_ADMIN)) {
     return { success: false, error: "No hay una sesión autorizada para emitir Notas de Crédito", code: "UNAUTHORIZED" };
   }
   const businessId = session.user.businessId;

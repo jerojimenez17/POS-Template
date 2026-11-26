@@ -80,9 +80,9 @@ describe("sale detail credit-note visibility", () => {
 
   it.each([
     ["ADMIN", true],
-    ["USER", false],
-    ["SUPER_ADMIN", false],
-  ])("shows the actionable control for %s only", async (role, shouldShowAction) => {
+    ["USER", true],
+    ["SUPER_ADMIN", true],
+  ])("shows the actionable control for %s", async (role, shouldShowAction) => {
     authMock.mockResolvedValue({ user: { id: "actor-1", businessId: "business-1", role } });
     render(await SaleDetailPage({ params: Promise.resolve({ id: "sale-1" }) }));
 

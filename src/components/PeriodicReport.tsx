@@ -148,7 +148,7 @@ const PeriodicReport: React.FC<PeriodicReportProps> = ({ period, session }) => {
               <ChevronRight aria-hidden="true" />
             </Button>
           </div>
-          <Button size="sm" onClick={openSales} className="h-10 w-full gap-1.5 bg-primary text-primary-foreground sm:w-auto">
+          <Button size="sm" onClick={openSales} className="h-12 w-full gap-1.5 bg-primary text-primary-foreground sm:w-auto">
             <Search aria-hidden="true" /> Ver Ventas
           </Button>
         </div>

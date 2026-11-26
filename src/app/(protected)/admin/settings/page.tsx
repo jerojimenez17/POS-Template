@@ -12,6 +12,7 @@ import * as z from "zod";
 import { ArcaFieldsSchema } from "@/schemas";
 import { ArcaData } from "@/models/Arca";
 import BusinessPrintSettingsSection from "@/components/AdminSettings/BusinessPrintSettingsSection";
+import SettingsBackLink from "@/components/AdminSettings/SettingsBackLink";
 import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 
 /**
@@ -69,11 +70,7 @@ export default async function AdminSettingsPage() {
         <div className="min-h-screen bg-slate-50 dark:bg-gray-900">
           <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" asChild title="Volver">
-                <Link href="/">
-                  <ArrowLeft className="h-5 w-5" />
-                </Link>
-              </Button>
+              <SettingsBackLink />
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                   <Settings className="h-5 w-5 text-blue-500" />
@@ -128,11 +125,7 @@ export default async function AdminSettingsPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900">
       <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild title="Volver">
-            <Link href="/">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
+          <SettingsBackLink />
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
               <Settings className="h-5 w-5 text-blue-500" />
@@ -145,7 +138,7 @@ export default async function AdminSettingsPage() {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-4 py-6">
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         <ArcaForm businessId={businessId || ""} initialData={initialData} />
         {"qzTray" in printSettings && <BusinessPrintSettingsSection businessId={printSettings.businessId} qzTray={printSettings.qzTray} address={printSettings.address} />}
       </div>

@@ -271,8 +271,8 @@ describe("createCreditNoteAction authorization and recovery", () => {
     vi.unstubAllEnvs();
   });
 
-  it.each(["USER", "SUPER_ADMIN"])("denies %s before reserving a return or calling AFIP", async (role) => {
-    setActor(role);
+  it("denies an unknown role before reserving a return or calling AFIP", async () => {
+    setActor("GUEST");
 
     const result = await createCreditNoteAction(request);
 
@@ -281,6 +281,14 @@ describe("createCreditNoteAction authorization and recovery", () => {
     expect(prepareAfipVoucherMock).not.toHaveBeenCalled();
     expect(issuePreparedAfipVoucherMock).not.toHaveBeenCalled();
     expect(result).toMatchObject({ success: false, code: "UNAUTHORIZED" });
+  });
+
+  it.each(["USER", "SUPER_ADMIN"])("allows %s to pass the authorization gate", async (role) => {
+    setActor(role);
+
+    const result = await createCreditNoteAction(request);
+
+    expect(result).not.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("checks the actor's open cashbox session before reservation and AFIP", async () => {

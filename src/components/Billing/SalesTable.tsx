@@ -327,11 +327,12 @@ const SalesTable = ({
         </div>
 
         {hasMore && (
-          <div className="flex justify-center py-4 border-t border-gray-100 dark:border-gray-700">
+          <div hidden className="flex justify-center py-4 border-t border-gray-100 dark:border-gray-700">
             <Button
               variant="outline"
               onClick={handleLoadMore}
               disabled={loadingMore}
+              hidden
               className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <ChevronDown className={`h-4 w-4 ${loadingMore ? "animate-bounce" : ""}`} />
@@ -349,7 +350,7 @@ const SalesTable = ({
             value={itemsPerPage.toString()}
             onValueChange={(value) => setItemsPerPage(Number(value))}
           >
-            <SelectTrigger className="w-[70px] h-8 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500">
+            <SelectTrigger className="w-[80px] h-8 border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="border-gray-200 bg-white text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">

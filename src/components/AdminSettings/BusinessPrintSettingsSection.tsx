@@ -80,9 +80,11 @@ export default function BusinessPrintSettingsSection({ businessId, qzTray, addre
           aria-describedby={`business-qz-description-${businessId}`}
         />
       </div>
-      <Button type="button" onClick={save} disabled={saveState === "pending"} className="mt-5">
-        {saveState === "pending" ? "Guardando..." : "Guardar configuración"}
-      </Button>
+      <div className="mt-5 flex justify-center">
+        <Button type="button" onClick={save} disabled={saveState === "pending"}>
+          {saveState === "pending" ? "Guardando..." : "Guardar configuración"}
+        </Button>
+      </div>
       <p
         className={cnStatus(saveState)}
         role="status"

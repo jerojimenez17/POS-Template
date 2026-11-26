@@ -2,15 +2,20 @@
 
 import { Component, useEffect, useRef, useState, type PropsWithChildren } from "react";
 import { useRouter } from "next/navigation";
+import { FileMinus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type { CreateCreditNoteResult } from "@/actions/sales/credit-note";
 import type { MissingFiscalData } from "./CreditNoteMissingDataModal";
 import CreditNoteMissingDataModal from "./CreditNoteMissingDataModal";
 import type { SaleFiscalContext, SaleFiscalRecovery } from "@/services/afip/credit-note";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 export interface CreditNoteButtonProps {
   sale: SaleFiscalContext | SaleFiscalRecovery | { readonly [key: string]: unknown };
   createCreditNote: (input: { orderId: string; confirmed: true; idempotencyKey: string; missingFiscalData?: MissingFiscalData }) => Promise<CreateCreditNoteResult>;
+  variant?: "section" | "icon" | "button";
+  onSuccess?: () => void;
 }
 
 function RefreshAfterSuccess() {
@@ -26,7 +31,15 @@ class RefreshBoundary extends Component<PropsWithChildren, RefreshBoundaryState>
   render() { return this.state.hasError ? null : this.props.children; }
 }
 
-export function CreditNoteButton({ sale, createCreditNote }: CreditNoteButtonProps) {
+const createIdempotencyKey = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+export function CreditNoteButton({ sale, createCreditNote, variant = "section", onSuccess }: CreditNoteButtonProps) {
+  const router = useRouter();
   const canonical = sale as SaleFiscalContext;
   const recovery = sale as SaleFiscalRecovery;
   const legacy = sale as SaleFiscalContext & { id?: string; items?: Array<{ id: string; description?: string; amount?: number }> };
@@ -42,7 +55,7 @@ export function CreditNoteButton({ sale, createCreditNote }: CreditNoteButtonPro
   const [missingOpen, setMissingOpen] = useState(false);
   const [missingData, setMissingData] = useState<MissingFiscalData | undefined>();
   const submitting = useRef(false);
-  const key = useRef(`credit-note-${orderId}-${crypto.randomUUID()}`);
+  const key = useRef(`credit-note-${orderId}-${createIdempotencyKey()}`);
 
   const invoke = async () => {
     if (loading || submitting.current) return;
@@ -51,9 +64,17 @@ export function CreditNoteButton({ sale, createCreditNote }: CreditNoteButtonPro
     try {
       const response = await createCreditNote({ orderId, confirmed: true, idempotencyKey: key.current, ...(missingData ? { missingFiscalData: missingData } : {}) });
       setResult(response);
-      if (response.success) setArmed(false);
+      if (response.success) {
+        setArmed(false);
+        toast.success(`Nota de Crédito #${response.data.creditNoteNumber} emitida. Devolución realizada.`);
+        onSuccess?.();
+        try { router.refresh(); } catch { /* success is already persisted */ }
+      } else if (!response.pending) {
+        toast.error(response.error);
+      }
     } catch {
       setResult({ success: false, error: "No se pudo comunicar con el servicio de Nota de Crédito", code: "INTERNAL_ERROR" });
+      toast.error("No se pudo comunicar con el servicio de Nota de Crédito");
     } finally {
       submitting.current = false;
       setLoading(false);
@@ -66,7 +87,72 @@ export function CreditNoteButton({ sale, createCreditNote }: CreditNoteButtonPro
     await invoke();
   };
 
+  const afterMissingData = (data: MissingFiscalData) => {
+    setMissingData(data);
+    setMissingOpen(false);
+    setArmed(true);
+  };
+
   if (!eligible || status === "AUTHORIZED") return null;
+
+  if (variant !== "section") {
+    if (status === "PENDING" || (result?.success === false && result.pending)) return null;
+    const openConfirmation = () => {
+      if (isRecovery && !armed) setMissingOpen(true);
+      else setArmed(true);
+    };
+    return (
+      <>
+        {isRecovery && <CreditNoteMissingDataModal open={missingOpen} onOpenChange={setMissingOpen} missingFields={recovery.missingFields} onContinue={afterMissingData} />}
+        {variant === "icon" ? (
+          <button
+            type="button"
+            onClick={openConfirmation}
+            disabled={loading}
+            className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
+            title="Nota de Crédito"
+            aria-label={`Nota de Crédito ${orderId}`}
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileMinus className="h-4 w-4" />}
+          </button>
+        ) : (
+          <Button type="button" variant="outline" onClick={openConfirmation} disabled={loading} className="w-full gap-2">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileMinus className="h-4 w-4" />}
+            {loading ? "Procesando…" : "Nota de Crédito"}
+          </Button>
+        )}
+        <Dialog open={armed} onOpenChange={setArmed}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Emitir Nota de Crédito</DialogTitle>
+              <DialogDescription>Revisá la devolución antes de confirmar. La operación es irreversible.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 text-sm">
+              <p>
+                Comprobante original: <strong>{canonical.billType ?? recovery.known?.billType ?? "—"}</strong>{" "}
+                #{canonical.invoiceNumber ?? recovery.known?.invoiceNumber ?? "—"} (punto de venta{" "}
+                {canonical.invoicePointOfSale ?? recovery.known?.invoicePointOfSale ?? "—"})
+              </p>
+              <p>
+                Se emitirá la Nota de Crédito completa, se restaurará el stock y se devolverá{" "}
+                <strong>${canonical.total ?? recovery.total ?? 0}</strong>.
+              </p>
+              {result?.success === false && !result.pending && (
+                <p role="alert" className="text-sm text-destructive">{result.error}</p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setArmed(false)} disabled={loading}>Cancelar</Button>
+              <Button type="button" onClick={submit} disabled={loading} className="bg-red-600 text-white hover:bg-red-700">
+                {loading ? "Procesando…" : "Confirmar Nota de Crédito"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
   if (result?.success === false && result.pending) {
     return <section role="status" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-live="polite">
       <p>{result.canFinalizeLocally
@@ -94,8 +180,6 @@ export function CreditNoteButton({ sale, createCreditNote }: CreditNoteButtonPro
       {result?.success === true && <><p role="status">Nota de Crédito #{result.data.creditNoteNumber} finalizada correctamente.</p><RefreshBoundary><RefreshAfterSuccess /></RefreshBoundary></>}
     </section>;
   }
-  const afterMissingData = (data: MissingFiscalData) => { setMissingData(data); setMissingOpen(false); setArmed(true); };
-
   return <section className="space-y-3 rounded-xl border border-red-200 bg-red-50 p-4" aria-live="polite">
     {isRecovery && <CreditNoteMissingDataModal open={missingOpen} onOpenChange={setMissingOpen} missingFields={recovery.missingFields} onContinue={afterMissingData} />}
     <button type="button" onClick={() => isRecovery && !armed ? setMissingOpen(true) : submit()} disabled={loading} aria-describedby="credit-note-warning" className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-60">{isRecovery && !armed ? "Completar datos y revisar" : armed ? "Confirmar emisión de Nota de Crédito" : "Revisar Nota de Crédito"}</button>

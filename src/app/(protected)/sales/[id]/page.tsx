@@ -9,7 +9,6 @@ import { Package, User, Calendar, ArrowLeft, Edit2, Calculator, Receipt } from "
 import Link from "next/link";
 import { Suspense } from "react";
 import Spinner from "@/components/ui/Spinner";
-import CreditNoteButton from "@/components/Billing/CreditNoteButton";
 import { createCreditNoteAction } from "@/actions/sales/credit-note";
 import CreditNoteEligibilityNotice from "@/components/Billing/CreditNoteEligibilityNotice";
 import CreditNoteStatusCard from "@/components/Billing/CreditNoteStatusCard";
@@ -234,7 +233,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
               )}
             </section>
 
-            <SaleDetailActions sale={sale} session={session} />
+            <SaleDetailActions sale={sale} session={session} createCreditNote={createCreditNoteAction} />
           </div>
         </div>
       </div>
@@ -242,7 +241,6 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
       <Separator />
 
       {sale.fiscalDiagnostic && <CreditNoteEligibilityNotice diagnostic={sale.fiscalDiagnostic} recovery={sale.creditNoteRecovery ? { missingFields: sale.creditNoteRecovery.missingFields, canCompleteFromUser: true } : undefined} />}
-      {isAdmin && (sale.fiscalContext || sale.creditNoteRecovery) && <CreditNoteButton sale={sale.fiscalContext ?? sale.creditNoteRecovery!} createCreditNote={createCreditNoteAction} />}
       {sale.creditNote && <CreditNoteStatusCard creditNote={sale.creditNote} printContext={creditNotePrintContext} businessName="Comercio" />}
 
       {/* History Section */}

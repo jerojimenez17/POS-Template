@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, FileText, CheckCircle, ShieldAlert } from "lucide-react";
+import { Printer, FileText, CheckCircle, ShieldAlert, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PrintOptionsPopover from "./PrintOptionsPopover";
 import InvoiceModal from "./InvoiceModal";
+import CreditNoteButton, { type CreditNoteButtonProps } from "./CreditNoteButton";
 import type BillState from "@/models/BillState";
 import { Session } from "next-auth";
 import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
@@ -13,12 +14,34 @@ import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
 interface SaleDetailActionsProps {
   sale: BillState;
   session: Session | null;
+  createCreditNote?: CreditNoteButtonProps["createCreditNote"];
 }
 
-export default function SaleDetailActions({ sale, session }: SaleDetailActionsProps) {
+export default function SaleDetailActions({ sale, session, createCreditNote }: SaleDetailActionsProps) {
   const [invoiceOpen, setInvoiceOpen] = useState(false);
 
   const isInvoiced = Boolean(sale.CAE?.CAE);
+  const canIssueCreditNote = session?.user?.role === "USER"
+    || session?.user?.role === "ADMIN"
+    || session?.user?.role === "SUPER_ADMIN";
+  const creditNoteSale = sale.fiscalContext ?? sale.creditNoteRecovery ?? null;
+  const ncStatus = sale.creditNote?.status ?? sale.fiscalContext?.creditNote?.status ?? sale.creditNoteRecovery?.creditNoteStatus;
+  const ncEligible = Boolean(
+    sale.fiscalContext?.eligibleForFullCreditNote === true
+    || (Array.isArray(sale.creditNoteRecovery?.missingFields) && sale.creditNoteRecovery.missingFields.length > 0),
+  );
+  const ncBlockedReason = !canIssueCreditNote
+    ? "Tu usuario no tiene permisos para emitir Notas de Crédito."
+    : ncStatus === "AUTHORIZED"
+      ? "La venta ya tiene una Nota de Crédito autorizada."
+      : ncStatus === "PENDING"
+        ? "Hay una Nota de Crédito pendiente de finalizar."
+        : !creditNoteSale
+          ? "La venta no tiene el desglose fiscal necesario para una Nota de Crédito."
+          : !ncEligible
+            ? "La venta no es elegible para una Nota de Crédito."
+            : null;
+  const showCreditNote = isInvoiced || Boolean(creditNoteSale);
 
   return (
     <>
@@ -89,6 +112,21 @@ export default function SaleDetailActions({ sale, session }: SaleDetailActionsPr
             <FileText className="h-4 w-4" />
             Facturar
           </Button>
+        </div>
+      )}
+
+      {showCreditNote && ncBlockedReason && (
+        <div className="border-t border-border pt-4">
+          <Button type="button" variant="outline" disabled className="w-full gap-2" title={ncBlockedReason} aria-label={ncBlockedReason}>
+            <Ban className="h-4 w-4" />
+            Nota de Crédito
+          </Button>
+        </div>
+      )}
+
+      {showCreditNote && !ncBlockedReason && canIssueCreditNote && creditNoteSale && createCreditNote && (
+        <div id="nota-credito" className="scroll-mt-24 border-t border-border pt-4">
+          <CreditNoteButton variant="button" sale={creditNoteSale} createCreditNote={createCreditNote} />
         </div>
       )}
     </section>
