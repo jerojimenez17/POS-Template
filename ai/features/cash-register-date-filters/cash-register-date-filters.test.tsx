@@ -41,6 +41,14 @@ const cashResult = (id: string, amount: number, total = amount) => ({
 
 const session = { user: { businessId: "business-a" } } as never;
 
+const todayDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 describe("CashRegister historical movement filters", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,18 +57,18 @@ describe("CashRegister historical movement filters", () => {
     pusherSubscribeMock.mockReturnValue({ bind: vi.fn() });
   });
 
-  it("starts with empty inclusive date limits and the accessible Solo efectivo method selected", async () => {
+  it("starts with today's inclusive date limits and the accessible Solo efectivo method selected", async () => {
     render(<CashRegister session={session} />);
 
     expect(screen.getByLabelText("Desde")).toHaveAttribute("type", "date");
     expect(screen.getByLabelText("Hasta")).toHaveAttribute("type", "date");
-    expect(screen.getByLabelText("Desde")).toHaveValue("");
-    expect(screen.getByLabelText("Hasta")).toHaveValue("");
+    expect(screen.getByLabelText("Desde")).toHaveValue(todayDateString());
+    expect(screen.getByLabelText("Hasta")).toHaveValue(todayDateString());
     expect(screen.getByRole("radio", { name: "Solo efectivo" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radio", { name: "Todos los medios de pago" })).toHaveAttribute("aria-checked", "false");
     await waitFor(() => expect(filteredMovementsMock).toHaveBeenCalledWith({
-      fromDate: "",
-      toDate: "",
+      fromDate: todayDateString(),
+      toDate: todayDateString(),
       paymentMethod: "CASH",
     }));
   });
@@ -80,7 +88,7 @@ describe("CashRegister historical movement filters", () => {
     await screen.findByText("cajero");
     expect(filteredMovementsMock).toHaveBeenLastCalledWith({
       fromDate: "2026-05-10",
-      toDate: "",
+      toDate: todayDateString(),
       paymentMethod: "CASH",
     });
     expect(screen.getByText(/Total de movimientos filtrados \(neto\)/i)).toBeInTheDocument();
@@ -89,7 +97,7 @@ describe("CashRegister historical movement filters", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Todos los medios de pago" }));
     await waitFor(() => expect(filteredMovementsMock).toHaveBeenLastCalledWith({
       fromDate: "2026-05-10",
-      toDate: "",
+      toDate: todayDateString(),
       paymentMethod: "ALL",
     }));
     expect(await screen.findByText("Tarjeta")).toBeInTheDocument();
@@ -200,7 +208,7 @@ describe("CashRegister historical movement filters", () => {
     await waitFor(() => expect(filteredMovementsMock).toHaveBeenCalledTimes(3));
     expect(filteredMovementsMock).toHaveBeenLastCalledWith({
       fromDate: "2026-05-10",
-      toDate: "",
+      toDate: todayDateString(),
       paymentMethod: "CASH",
     });
   });
@@ -250,13 +258,13 @@ describe("CashRegister historical movement filters", () => {
 
     expect(eventReadCount).toBe(2);
     expect(filteredMovementsMock).toHaveBeenNthCalledWith(1, {
-      fromDate: "",
-      toDate: "",
+      fromDate: todayDateString(),
+      toDate: todayDateString(),
       paymentMethod: "CASH",
     });
     expect(filteredMovementsMock).toHaveBeenNthCalledWith(2, {
-      fromDate: "",
-      toDate: "",
+      fromDate: todayDateString(),
+      toDate: todayDateString(),
       paymentMethod: "CASH",
     });
     expect(screen.getByText("event-first")).toBeInTheDocument();
@@ -309,7 +317,7 @@ describe("CashRegister historical movement filters", () => {
       resolveBusinessARead?.(staleBusinessAResult);
     });
 
-    const expectedFilters = { fromDate: "", toDate: "", paymentMethod: "CASH" };
+    const expectedFilters = { fromDate: todayDateString(), toDate: todayDateString(), paymentMethod: "CASH" };
     const businessBReadUsesOnlyFilters =
       filteredMovementsMock.mock.calls.length === 3 &&
       JSON.stringify(filteredMovementsMock.mock.calls[2][0]) === JSON.stringify(expectedFilters);

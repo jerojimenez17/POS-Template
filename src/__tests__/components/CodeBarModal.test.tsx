@@ -195,6 +195,17 @@ describe("BarcodeModal Component", () => {
       const position = codeEl!.compareDocumentPosition(barcodeEl!);
       expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
+
+    it("should hide and show the barcode via the toggle button", () => {
+      renderAndOpen(<BarcodeModal {...defaultProps} codebar="123456789012" />);
+      expect(document.querySelector("svg.label-barcode")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: /ocultar código de barras/i }));
+      expect(document.querySelector("svg.label-barcode")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: /mostrar código de barras/i }));
+      expect(document.querySelector("svg.label-barcode")).toBeTruthy();
+    });
   });
 
   describe("Barcode source selector", () => {

@@ -636,28 +636,30 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Fila de inicio <span className="text-red-500">*</span></Label>
-              <Input
-                type="number"
-                min={1}
-                value={startRow}
-                onChange={(e) => setStartRow(Number(e.target.value))}
-                placeholder="2"
-              />
-              <p className="text-xs text-muted-foreground">Fila donde empiezan los datos (1=Encabezados)</p>
+          <div className="grid gap-2">
+            <div className="grid grid-cols-2 gap-4 items-start">
+              <div className="grid gap-2">
+                <Label>Fila de inicio <span className="text-red-500">*</span></Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={startRow}
+                  onChange={(e) => setStartRow(Number(e.target.value))}
+                  placeholder="2"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Fila de fin (Opcional)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={endRow}
+                  onChange={(e) => setEndRow(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="Última fila"
+                />
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label>Fila de fin (Opcional)</Label>
-              <Input
-                type="number"
-                min={1}
-                value={endRow}
-                onChange={(e) => setEndRow(e.target.value === "" ? "" : Number(e.target.value))}
-                 placeholder="Última fila"
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">Fila donde empiezan los datos (1=Encabezados)</p>
           </div>
 
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -719,35 +721,35 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                <h3 className="font-semibold text-sm">Proveedor</h3>
              </div>
              <div className="p-4">
-               <div className="flex gap-2 items-end">
-                  <div className="flex-1 space-y-2">
-                    <Label htmlFor="supplier">Seleccionar proveedor</Label>
-                    <select
+               <div className="space-y-2">
+                 <Label htmlFor="supplier">Seleccionar proveedor</Label>
+                 <div className="flex items-center gap-2">
+                   <select
                      id="supplier"
                      value={selectedSupplierId}
                      onChange={(e) => handleSupplierSelect(e.target.value)}
-                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                     className="flex h-9 w-full min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm"
                    >
                      <option value="">Sin proveedor</option>
                      {suppliers.map((s) => (
                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                    {isCurrentSupplierMappingPending && (
-                      <p role="status" className="text-xs text-muted-foreground">
-                         Cargando la configuración de columnas del proveedor…
-                      </p>
-                    )}
-                    {isCurrentSupplierMappingInError && (
-                      <p role="alert" className="text-xs text-red-600">
-                        No se pudo cargar el mapeo. Vuelva a seleccionar el proveedor para reintentar.
-                      </p>
-                    )}
-                  </div>
-                 <CreateAttributeModal
-                   type="supplier"
-                   onSuccess={handleSupplierCreated}
-                 />
+                     ))}
+                   </select>
+                   <CreateAttributeModal
+                     type="supplier"
+                     onSuccess={handleSupplierCreated}
+                   />
+                 </div>
+                 {isCurrentSupplierMappingPending && (
+                   <p role="status" className="text-xs text-muted-foreground">
+                      Cargando la configuración de columnas del proveedor…
+                   </p>
+                 )}
+                 {isCurrentSupplierMappingInError && (
+                   <p role="alert" className="text-xs text-red-600">
+                     No se pudo cargar el mapeo. Vuelva a seleccionar el proveedor para reintentar.
+                   </p>
+                 )}
                </div>
              </div>
            </div>
@@ -774,7 +776,7 @@ export default function ExcelUploadModal({ open, onOpenChange, onSuccess }: Prop
                    id="iva"
                    value={adjustmentIva}
                    onChange={(e) => setAdjustmentIva(e.target.value)}
-                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
                  >
                    <option value="0">0%</option>
                    <option value="10.5">10.5%</option>

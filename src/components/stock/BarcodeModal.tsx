@@ -77,6 +77,7 @@ function formatPrice(price: number, unit?: string | null): string {
   const [isPending] = useTransition();
   const [copies, setCopies] = useState(1);
   const [showPrice, setShowPrice] = useState(true);
+  const [showBarcode, setShowBarcode] = useState(true);
   const [barcodeSource, setBarcodeSource] = useState<"code" | "codebar">("code");
   const [paperSize, setPaperSize] = useState<"a4" | "thermal" | "thermal5545">("thermal");
 
@@ -85,7 +86,7 @@ function formatPrice(price: number, unit?: string | null): string {
 
   const effectiveCodebar = savedCodebar || initialCodebar || null;
   const hasCodebar = Boolean(effectiveCodebar);
-  const tagHeight = hasCodebar ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE;
+  const tagHeight = showBarcode && hasCodebar ? TAG_HEIGHT_WITH_BARCODE : TAG_HEIGHT_WITHOUT_BARCODE;
   const barcodeValue =
     barcodeSource === "codebar" && effectiveCodebar ? effectiveCodebar : code;
   const is5545 = paperSize === "thermal5545";
@@ -266,6 +267,7 @@ function formatPrice(price: number, unit?: string | null): string {
             setIsEditing(!initialCodebar);
             setBarcodeSource("code");
             setPaperSize("thermal");
+            setShowBarcode(true);
           });
         }
       }}>
@@ -464,6 +466,18 @@ function formatPrice(price: number, unit?: string | null): string {
                     Mostrar precio en etiqueta
                   </Label>
                 </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowBarcode((value) => !value)}
+                  aria-pressed={showBarcode}
+                  className="col-span-2 h-8 text-xs font-semibold gap-1.5"
+                >
+                  <Barcode className="h-3.5 w-3.5" />
+                  {showBarcode ? "Ocultar código de barras" : "Mostrar código de barras"}
+                </Button>
               </div>
 
               {is5545 && (
@@ -509,13 +523,15 @@ function formatPrice(price: number, unit?: string | null): string {
                         <span className="label-code text-xs text-gray-600 dark:text-gray-400 mt-1">
                           {code}
                         </span>
-                        <svg
-                          ref={(el) => {
-                            barcodeRefs.current[i] = el;
-                            if (el) renderBarcode(el, barcodeValue);
-                          }}
-                          className="label-barcode w-full"
-                        />
+                        {showBarcode && (
+                          <svg
+                            ref={(el) => {
+                              barcodeRefs.current[i] = el;
+                              if (el) renderBarcode(el, barcodeValue);
+                            }}
+                            className="label-barcode w-full"
+                          />
+                        )}
                       </div>
                     ))}
                   </div>

@@ -38,13 +38,19 @@ const ProductDashboard = () => {
     }, 300);
   }, []);
 
-  const fetchProducts = useCallback(async (pageNum: number, searchTerm: string) => {
+  const fetchProducts = useCallback(async (
+    pageNum: number,
+    searchTerm: string,
+    options?: { codeOnly?: boolean; exactCode?: boolean },
+  ) => {
     setLoading(true);
     try {
       const result = await getProductsPaginated({
         page: pageNum,
         pageSize: PAGE_SIZE,
         search: searchTerm || undefined,
+        codeOnly: options?.codeOnly,
+        exactCode: options?.exactCode,
       });
       setProducts(result.products as ProductExtended[]);
       setTotal(result.total);
@@ -59,26 +65,36 @@ const ProductDashboard = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchProducts(1, "");
+      fetchProducts(1, "", { codeOnly: false, exactCode: false });
     }, 0);
     return () => clearTimeout(timer);
   }, [fetchProducts]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchProducts(page, debouncedSearch);
+      fetchProducts(page, debouncedSearch, { codeOnly, exactCode });
     }, 0);
     return () => clearTimeout(timer);
-  }, [page, debouncedSearch, fetchProducts]);
+  }, [page, debouncedSearch, codeOnly, exactCode, fetchProducts]);
+
+  const handleCodeOnlyChange = useCallback((value: boolean) => {
+    setCodeOnly(value);
+    setPage(1);
+  }, []);
+
+  const handleExactCodeChange = useCallback((value: boolean) => {
+    setExactCode(value);
+    setPage(1);
+  }, []);
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
-    fetchProducts(newPage, debouncedSearch);
-  }, [debouncedSearch, fetchProducts]);
+    fetchProducts(newPage, debouncedSearch, { codeOnly, exactCode });
+  }, [debouncedSearch, codeOnly, exactCode, fetchProducts]);
 
   const handleRefresh = useCallback(() => {
-    fetchProducts(page, debouncedSearch);
-  }, [page, debouncedSearch, fetchProducts]);
+    fetchProducts(page, debouncedSearch, { codeOnly, exactCode });
+  }, [page, debouncedSearch, codeOnly, exactCode, fetchProducts]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
@@ -121,9 +137,9 @@ const ProductDashboard = () => {
             handleOpenExcelModal={() => setOpenExcelModal(true)}
             handleOpenSelectionModal={() => {}}
             codeOnly={codeOnly}
-            onCodeOnlyChange={setCodeOnly}
+            onCodeOnlyChange={handleCodeOnlyChange}
             exactCode={exactCode}
-            onExactCodeChange={setExactCode}
+            onExactCodeChange={handleExactCodeChange}
           />
         </div>
 

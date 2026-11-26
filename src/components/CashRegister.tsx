@@ -16,7 +16,7 @@ import TotalPanel from "@/components/TotalPanel";
 import EditButton from "@/components/EditButton";
 import AddButton from "@/components/AddButton";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Wallet } from "lucide-react";
 import Link from "next/link";
 
 import { Session } from "next-auth";
@@ -35,10 +35,17 @@ interface MovementFilters {
 type FilteredMovementsResult = Awaited<ReturnType<typeof getFilteredMovements>>;
 type MovementRow = Extract<FilteredMovementsResult, { success: true }>["movements"][number];
 
-const initialFilters: MovementFilters = {
-  fromDate: "",
-  toDate: "",
-  paymentMethod: "CASH",
+const getTodayDateString = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const createInitialFilters = (): MovementFilters => {
+  const today = getTodayDateString();
+  return { fromDate: today, toDate: today, paymentMethod: "CASH" };
 };
 
 const isValidDate = (value: string): boolean => {
@@ -81,7 +88,10 @@ const CashRegister = ({ session }: Props) => {
   const [isLoadingMovements, setIsLoadingMovements] = useState(true);
   const [movementError, setMovementError] = useState("");
   const [refreshTotal, setRefreshTotal] = useState(0);
-  const [filters, setFilters] = useState<MovementFilters>(initialFilters);
+  const [filters, setFilters] = useState<MovementFilters>(() => createInitialFilters());
+  const [visibleCount, setVisibleCount] = useState(20);
+  const [openMovementInput, setOpenMovementInput] = useState<"ingreso" | "retiro" | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const latestRequestRef = useRef(0);
   const activeFiltersRef = useRef(filters);
   const requestsRef = useRef(new Map<string, ReturnType<typeof getFilteredMovements>>());
@@ -180,36 +190,71 @@ const CashRegister = ({ session }: Props) => {
     return dateDifference || right.id.localeCompare(left.id);
   });
 
+  const totalMovements = sortedMovements.length;
+  const visibleMovements = sortedMovements.slice(0, visibleCount);
+  const hasMoreVisible = visibleCount < totalMovements;
+
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node || !hasMoreVisible) return;
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((current) => Math.min(current + 20, totalMovements));
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMoreVisible, totalMovements]);
+
   const updateFilter = <Key extends keyof MovementFilters>(key: Key, value: MovementFilters[Key]) => {
     const nextFilters = { ...activeFiltersRef.current, [key]: value };
     activeFiltersRef.current = nextFilters;
     latestRequestRef.current += 1;
     if (getFilterValidationMessage(nextFilters)) setIsLoadingMovements(false);
+    setVisibleCount(20);
     setFilters(nextFilters);
   };
 
   return (
     <div className="min-h-full flex flex-col bg-slate-50 dark:bg-gray-900 pb-10">
-      <div className="w-full bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-8">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/" title="Volver" aria-label="Volver al inicio">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
+      <header className="p-4 md:p-6 border-b bg-white dark:bg-gray-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/" title="Volver" aria-label="Volver al inicio">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <Wallet className="h-5 w-5 text-blue-500" />
+            </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Caja Registradora</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gestión de ingresos, retiros y visualización de balance diario.</p>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Caja Registradora</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">Gestión de ingresos, retiros y balance diario.</p>
             </div>
           </div>
-
-          <div className="flex flex-col sm:flex-row items-center gap-4 w-full">
-            <AddButton session={session} onSuccess={() => setRefreshTotal((current) => current + 1)} />
-            <EditButton session={session} onSuccess={() => setRefreshTotal((current) => current + 1)} />
-          </div>
         </div>
-      </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+          <AddButton
+            session={session}
+            open={openMovementInput === "ingreso"}
+            onOpenChange={(next) => setOpenMovementInput(next ? "ingreso" : null)}
+            onSuccess={() => setRefreshTotal((current) => current + 1)}
+          />
+          <EditButton
+            session={session}
+            open={openMovementInput === "retiro"}
+            onOpenChange={(next) => setOpenMovementInput(next ? "retiro" : null)}
+            onSuccess={() => setRefreshTotal((current) => current + 1)}
+          />
+        </div>
+      </header>
 
       <div className="max-w-5xl w-full mx-auto px-6 mt-6 flex flex-col gap-6">
         <TotalPanel refreshCount={refreshTotal} />
@@ -338,7 +383,8 @@ const CashRegister = ({ session }: Props) => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  sortedMovements.map((movement) => {
+                  <>
+                  {visibleMovements.map((movement) => {
                     const roundedAmount = roundMovementToPeso(movement.total);
                     const isNegative = roundedAmount < 0;
                     const isDigital = movement.paidMethod && movement.paidMethod !== "Efectivo";
@@ -370,7 +416,15 @@ const CashRegister = ({ session }: Props) => {
                         </TableCell>
                       </TableRow>
                     );
-                  })
+                  })}
+                  {hasMoreVisible && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                        <div ref={loadMoreRef}>Cargando más movimientos…</div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </>
                 )}
               </TableBody>
             </Table>
