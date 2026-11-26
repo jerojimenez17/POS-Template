@@ -22,6 +22,13 @@ export async function createOrRetryPaymentVoucherAction(input: unknown): Promise
   const parsed = issueSchema.safeParse(input);
   if (!parsed.success) return { paymentRecorded: true, voucherStatus: "FAILED", error: "Los datos del comprobante no son válidos" };
   try {
+    const persistedStatus = await getPaymentVoucherForSession({ cashMovementId: parsed.data.cashMovementId });
+    // Historical MISSING payments predate the atomic reservation and cannot
+    // prove that no remote dispatch occurred. Keep them blocked pending an
+    // audited legacy-reconciliation policy.
+    if (persistedStatus?.status === "MISSING") {
+      return { paymentRecorded: true, voucherStatus: "MISSING" };
+    }
     return await issuePaymentVoucherForSession(parsed.data);
   } catch (error: unknown) {
     const outcome = paymentVoucherIssueFailureOutcome(error);

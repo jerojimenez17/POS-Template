@@ -72,6 +72,7 @@ export interface PaymentVoucherDependencies {
       recipientSnapshot: RecipientSnapshot;
     }) => Promise<{ status: string; attempt: number; acquired: boolean }>;
     markDispatched?: (input: { paymentId: string; businessId: string; attempt: number }) => Promise<void>;
+    failPreparing?: (input: { paymentId: string; businessId: string; attempt: number }) => Promise<void>;
     persistAuthorized: (input: Record<string, unknown>) => Promise<void>;
     persistFailure: (input: Record<string, unknown>) => Promise<void>;
     getVoucher: (paymentId: string, businessId: string) => Promise<Record<string, unknown> | null>;
@@ -93,9 +94,13 @@ export interface PaymentVoucherDependencies {
           qrData?: string;
         }
     >;
-    reconcile: (paymentId: string) => Promise<
-      | { kind: "authorized"; voucher: Record<string, unknown> }
-      | { kind: "absent" }
+    reconcile: (paymentId: string, attemptNumber: number) => Promise<
+      | {
+          kind: "authorized";
+          correlation: { cashMovementId: string; attemptNumber: number };
+          voucher: Record<string, unknown>;
+        }
+      | { kind: "absent"; correlation: { cashMovementId: string; attemptNumber: number } }
       | { kind: "unresolved" }
     >;
   };
@@ -255,6 +260,20 @@ function safeFiscalSnapshot(invoice: PaymentVoucherInvoiceDto): Record<string, u
   };
 }
 
+function isRecipientSnapshot(value: unknown): value is RecipientSnapshot {
+  if (!isRecord(value)
+    || typeof value.name !== "string" || value.name.trim() === ""
+    || typeof value.ivaCondition !== "string" || value.ivaCondition.trim() === "") {
+    return false;
+  }
+
+  const absentDocument = (value.documentType === null || value.documentType === undefined)
+    && (value.documentNumber === null || value.documentNumber === undefined);
+  const validDocument = (value.documentType === "CUIT" || value.documentType === "DNI")
+    && typeof value.documentNumber === "string" && value.documentNumber.trim() !== "";
+  return absentDocument || validDocument;
+}
+
 function printAmountPesos(value: unknown): number {
   const pesos = parseAfipWholePesos(value);
   if (pesos === null) {
@@ -410,11 +429,16 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
   const amountToPesos = requirePositiveWholePesos;
   const mapBillType = billTypeCode;
 
-  const buildInvoice = (payment: PaymentVoucherPayment, selectedBillType: string, proposedPtoVenta: number): PaymentVoucherInvoiceDto => {
+  const buildInvoice = (
+    payment: PaymentVoucherPayment,
+    selectedBillType: string,
+    proposedPtoVenta: number,
+    reservedRecipient?: RecipientSnapshot,
+  ): PaymentVoucherInvoiceDto => {
     const code = mapBillType(selectedBillType);
     const total = amountToPesos(payment.total);
     if (payment.businessId !== payment.order.businessId) throw new Error("Pago no encontrado");
-    const recipient = recipientFor(payment, selectedBillType);
+    const recipient = reservedRecipient ?? recipientFor(payment, selectedBillType);
     const ptoVenta = configuredPointOfSale(payment, proposedPtoVenta);
     const digits = recipient.documentNumber?.replace(/\D/g, "") ?? "";
     const numericDocument = /^\d+$/.test(digits) ? Number(digits) : 0;
@@ -431,6 +455,7 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
       clientIvaCondition: recipient.ivaCondition,
       clientDocumentType: recipient.documentType,
       clientDocumentNumber: recipient.documentNumber,
+      recipient,
       discount: 0,
       documentNumber: Number.isSafeInteger(numericDocument) ? numericDocument : 0,
       total,
@@ -468,12 +493,31 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
       throw new Error("Pago no encontrado");
     }
     const existing = await dependencies.repository.getVoucher(cashMovementId, actorBusinessId);
+    const failUnclaimedPreparation = async (): Promise<void> => {
+      if (existing?.status !== "PENDING" || existing.currentAttemptStatus !== "PREPARING"
+        || typeof existing.currentAttempt !== "number" || !dependencies.repository.failPreparing) return;
+      await dependencies.repository.transaction(() => dependencies.repository.failPreparing!({
+        paymentId: cashMovementId,
+        businessId: actorBusinessId,
+        attempt: existing.currentAttempt as number,
+      }));
+    };
     if (existing?.status === "NOT_REQUIRED") return { paymentRecorded: true, voucherStatus: "NOT_REQUIRED" };
     if (existing?.status === "AUTHORIZED") return { paymentRecorded: true, voucherStatus: "AUTHORIZED" };
     if (existing?.status === "UNKNOWN") return { paymentRecorded: true, voucherStatus: "UNKNOWN", reconciliationRequired: true };
+    const isReservedPreparation = existing?.status === "PENDING" && existing.currentAttemptStatus === "PREPARING";
+    if (isReservedPreparation && (
+      existing.billType !== billType
+      || existing.invoicePointOfSale !== proposedPtoVenta
+      || (typeof existing.currentAttemptBillType === "string" && existing.currentAttemptBillType !== billType)
+      || (typeof existing.currentAttemptPointOfSale === "number" && existing.currentAttemptPointOfSale !== proposedPtoVenta)
+    )) {
+      return { paymentRecorded: true, voucherStatus: "PENDING" };
+    }
     if ((existing?.status === "FAILED" || existing?.status === "PENDING" || existing?.status === "ISSUING") && !retry) {
       if (existing.status === "FAILED") return { paymentRecorded: true, voucherStatus: "FAILED" };
-      if (existing.status === "PENDING" || existing.status === "ISSUING") {
+      if (existing.status === "ISSUING"
+        || (existing.status === "PENDING" && existing.currentAttemptStatus !== "PREPARING")) {
         return { paymentRecorded: true, voucherStatus: safeResultStatus(existing.status) };
       }
     }
@@ -481,25 +525,64 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
     if (retry && existing && existing.status !== "FAILED") {
       return { paymentRecorded: true, voucherStatus: safeResultStatus(String(existing.status ?? "UNKNOWN")) };
     }
-    const recipient = recipientFor(payment, billType);
-    const ptoVenta = configuredPointOfSale(payment, proposedPtoVenta);
+    let recipient: RecipientSnapshot;
+    let ptoVenta: number;
+    try {
+      if (isReservedPreparation) {
+        if (!isRecipientSnapshot(existing.currentRecipientSnapshot)) {
+          throw new Error("reserved_payment_recipient_snapshot_invalid");
+        }
+        recipient = existing.currentRecipientSnapshot;
+      } else {
+        recipient = recipientFor(payment, billType);
+      }
+      ptoVenta = configuredPointOfSale(payment, proposedPtoVenta);
+    } catch {
+      await failUnclaimedPreparation();
+      return { paymentRecorded: true, voucherStatus: "FAILED", message: "Los datos fiscales no son válidos; el pago quedó registrado" };
+    }
     let amountPesos: number;
     try {
       amountPesos = amountToPesos(payment.total);
     } catch {
+      await failUnclaimedPreparation();
       return {
         paymentRecorded: true,
         voucherStatus: "FAILED",
         message: "El importe del pago no es válido; no se inició la emisión",
       };
     }
+    if (isReservedPreparation) {
+      const reservedAmount = existing.currentAttemptAmount ?? existing.amount;
+      if (typeof reservedAmount !== "number" || amountToPesos(reservedAmount) !== amountPesos) {
+        await failUnclaimedPreparation();
+        return { paymentRecorded: true, voucherStatus: "FAILED", message: "El importe reservado no coincide con el pago; no se inició la emisión" };
+      }
+    }
     if (existing?.status === "FAILED" && typeof existing.amount === "number"
       && amountToPesos(existing.amount) !== amountPesos) {
-      throw new Error("El importe del pago cambió y no se puede reutilizar el intento fiscal");
+      await failUnclaimedPreparation();
+      return { paymentRecorded: true, voucherStatus: "FAILED", message: "El importe del pago cambió; el pago quedó registrado" };
     }
-    if (!await dependencies.repository.isAfipEligible(actorBusinessId)) throw new Error("La facturación AFIP/ARCA no está habilitada");
+    let afipEligible = false;
+    try {
+      afipEligible = await dependencies.repository.isAfipEligible(actorBusinessId);
+    } catch {
+      await failUnclaimedPreparation();
+      return { paymentRecorded: true, voucherStatus: "FAILED", message: "No se pudo validar la habilitación AFIP/ARCA; el pago quedó registrado" };
+    }
+    if (!afipEligible) {
+      await failUnclaimedPreparation();
+      return { paymentRecorded: true, voucherStatus: "FAILED", message: "La facturación AFIP/ARCA no está habilitada; el pago quedó registrado" };
+    }
 
-    const invoice = buildInvoice(payment, billType, ptoVenta);
+    let invoice: PaymentVoucherInvoiceDto;
+    try {
+      invoice = buildInvoice(payment, billType, ptoVenta, recipient);
+    } catch {
+      await failUnclaimedPreparation();
+      return { paymentRecorded: true, voucherStatus: "FAILED", message: "Los datos de la factura no son válidos; el pago quedó registrado" };
+    }
     const claim = await dependencies.repository.transaction(() => dependencies.repository.claim({
       paymentId: cashMovementId,
       businessId: actorBusinessId,
@@ -578,7 +661,12 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
     }
 
     const authorizedPesos = parseAfipWholePesos(remoteResult.total);
-    if (authorizedPesos !== amountPesos || remoteResult.pointOfSale !== ptoVenta) {
+    const hasValidAuthorizationIdentity = /^\d{14}$/.test(remoteResult.cae)
+      && Number.isSafeInteger(remoteResult.invoiceNumber)
+      && remoteResult.invoiceNumber > 0
+      && remoteResult.issuedAt instanceof Date
+      && !Number.isNaN(remoteResult.issuedAt.getTime());
+    if (authorizedPesos !== amountPesos || remoteResult.pointOfSale !== ptoVenta || !hasValidAuthorizationIdentity) {
       try {
         await dependencies.repository.transaction(() => dependencies.repository.persistFailure({
           paymentId: cashMovementId,
@@ -638,15 +726,42 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
     const payment = await dependencies.repository.findPayment(input.cashMovementId, businessId);
     if (!payment || payment.businessId !== businessId || payment.order.businessId !== businessId) throw new Error("Pago no encontrado");
     const current = await dependencies.repository.getVoucher(input.cashMovementId, businessId);
-    if (current && current.status !== "UNKNOWN") return { status: safeResultStatus(String(current.status)) };
-    const result = await dependencies.afip.reconcile(input.cashMovementId);
+    if (!current) return { status: "UNKNOWN", reconciliationRequired: true };
+    if (current.status !== "UNKNOWN") return { status: safeResultStatus(String(current.status)) };
+    const currentAttempt = current.currentAttempt;
+    if (typeof currentAttempt !== "number" || !Number.isSafeInteger(currentAttempt) || currentAttempt <= 0) {
+      return { status: "UNKNOWN", reconciliationRequired: true };
+    }
+
+    const result = await dependencies.afip.reconcile(input.cashMovementId, currentAttempt);
     if (result.kind === "unresolved") return { status: "UNKNOWN", reconciliationRequired: true };
+    if (!result.correlation || result.correlation.cashMovementId !== input.cashMovementId
+      || result.correlation.attemptNumber !== currentAttempt) {
+      if (result.kind === "authorized") {
+        const uncorrelatedTotal = Object.prototype.hasOwnProperty.call(result.voucher, "total")
+          ? result.voucher.total
+          : result.voucher.amount;
+        const observedTotal = parseObservedTotal(uncorrelatedTotal);
+        // A fractional amount is safe to record as an observation, but never
+        // compare it with the payment or attach the uncorrelated voucher.
+        if (observedTotal !== null && parseAfipWholePesos(uncorrelatedTotal) === null) {
+          await dependencies.repository.transaction(() => dependencies.repository.persistFailure({
+            paymentId: input.cashMovementId,
+            businessId,
+            attempt: currentAttempt,
+            status: "UNKNOWN",
+            safeErrorCode: "TOTAL_MISMATCH",
+            observedTotalPesos: observedTotal,
+          }));
+        }
+      }
+      return { status: "UNKNOWN", reconciliationRequired: true };
+    }
     if (result.kind === "absent") {
-      const attempt = typeof current?.currentAttempt === "number" ? current.currentAttempt : 0;
       await dependencies.repository.transaction(() => dependencies.repository.persistFailure({
         paymentId: input.cashMovementId,
         businessId,
-        attempt,
+        attempt: currentAttempt,
         status: "FAILED",
         safeErrorCode: "AFIP_REJECTED",
       }));
@@ -656,32 +771,68 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
     const total = Object.prototype.hasOwnProperty.call(voucher, "total") ? voucher.total : voucher.amount;
     const reconciledPesos = parseAfipWholePesos(total);
     const paymentPesos = amountToPesos(payment.total);
-    if (reconciledPesos === null || reconciledPesos !== paymentPesos) {
+    const attemptBillType = current.currentAttemptBillType;
+    const attemptPtoVenta = current.currentAttemptPointOfSale;
+    const attemptAmount = current.currentAttemptAmount;
+    const attemptRecipient = current.currentRecipientSnapshot;
+    const voucherPtoVenta = voucher.invoicePointOfSale ?? voucher.pointOfSale;
+    const invoiceNumber = boundedPositiveInteger(voucher.invoiceNumber);
+    const issuedAt = safeObservedDate(voucher.issuedAt);
+    const hasValidAuthorizedVoucherIdentity = isSupportedBillType(attemptBillType)
+      && voucher.billType === attemptBillType
+      && voucher.afipVoucherType === billTypeCode(attemptBillType)
+      && typeof attemptPtoVenta === "number"
+      && voucherPtoVenta === attemptPtoVenta
+      && invoiceNumber !== null
+      && typeof voucher.cae === "string"
+      && /^\d{14}$/.test(voucher.cae)
+      && issuedAt !== null
+      && isRecipientSnapshot(attemptRecipient);
+
+    if (typeof attemptAmount !== "number" || !Number.isSafeInteger(attemptAmount)
+      || attemptAmount !== paymentPesos || reconciledPesos === null || reconciledPesos !== paymentPesos) {
       await dependencies.repository.transaction(() => dependencies.repository.persistFailure({
         paymentId: input.cashMovementId,
         businessId,
-        attempt: typeof current?.currentAttempt === "number" ? current.currentAttempt : 0,
+        attempt: currentAttempt,
         status: "UNKNOWN",
         safeErrorCode: "TOTAL_MISMATCH",
         ...safeAfipObservations(voucher),
       }));
       return { status: "UNKNOWN", reconciliationRequired: true };
     }
+    if (!hasValidAuthorizedVoucherIdentity) {
+      await dependencies.repository.transaction(() => dependencies.repository.persistFailure({
+        paymentId: input.cashMovementId,
+        businessId,
+        attempt: currentAttempt,
+        status: "UNKNOWN",
+        safeErrorCode: "REMOTE_OUTCOME_UNKNOWN",
+        ...safeAfipObservations(voucher),
+      }));
+      return { status: "UNKNOWN", reconciliationRequired: true };
+    }
+    const recipient = attemptRecipient as RecipientSnapshot;
+    const authorizedBillType = attemptBillType as SupportedBillType;
     await dependencies.repository.transaction(() => dependencies.repository.persistAuthorized({
       paymentId: input.cashMovementId,
       businessId,
-      attempt: typeof current?.currentAttempt === "number" ? current.currentAttempt : 0,
+      attempt: currentAttempt,
       status: "AUTHORIZED",
-      billType: voucher.billType,
-      afipVoucherType: voucher.afipVoucherType,
+      billType: authorizedBillType,
+      afipVoucherType: billTypeCode(authorizedBillType),
       amountPesos: paymentPesos,
       amount: paymentPesos,
       total,
       cae: voucher.cae,
-      invoiceNumber: voucher.invoiceNumber,
-      pointOfSale: voucher.pointOfSale,
-      issuedAt: voucher.issuedAt instanceof Date ? voucher.issuedAt : new Date(String(voucher.issuedAt)),
-      fiscalSnapshot: voucher.fiscalSnapshot,
+      invoiceNumber: boundedPositiveInteger(voucher.invoiceNumber) as number,
+      pointOfSale: attemptPtoVenta,
+      issuedAt,
+      fiscalSnapshot: {
+        client: recipient.name,
+        clientIvaCondition: recipient.ivaCondition,
+        recipient,
+      },
     }));
     return { status: "AUTHORIZED" };
   };
@@ -813,6 +964,7 @@ const databaseDependencies: PaymentVoucherDependencies = {
       if (voucher && voucher.businessId !== businessId) return { status: "UNKNOWN", attempt: voucher.currentAttempt, acquired: false };
       if (!voucher) {
         try {
+          const reservationTime = new Date();
           voucher = await client.paymentVoucher.create({
             data: {
               cashMovementId: paymentId,
@@ -823,6 +975,8 @@ const databaseDependencies: PaymentVoucherDependencies = {
               afipVoucherType: billTypeCode(billType),
               invoicePointOfSale: ptoVenta,
               currentAttempt: 1,
+              createdAt: reservationTime,
+              updatedAt: reservationTime,
               attempts: { create: {
                 attemptNumber: 1,
                 status: "PREPARING",
@@ -830,6 +984,7 @@ const databaseDependencies: PaymentVoucherDependencies = {
                 amount: new Prisma.Decimal(amount),
                 invoicePointOfSale: ptoVenta,
                 recipientSnapshot: recipientSnapshot as unknown as Prisma.InputJsonValue,
+                startedAt: reservationTime,
               } },
             },
           });
@@ -847,18 +1002,48 @@ const databaseDependencies: PaymentVoucherDependencies = {
         if (Date.now() - voucher.updatedAt.getTime() > 120_000) {
           const staleStatus = voucher.status === "PENDING" ? "FAILED" : "UNKNOWN";
           const staleCode = voucher.status === "PENDING" ? "PREFLIGHT_REJECTED" : "REMOTE_OUTCOME_UNKNOWN";
-          await client.paymentVoucher.update({ where: { id: voucher.id }, data: { status: staleStatus, lastErrorCode: staleCode } });
-          await client.paymentVoucherAttempt.updateMany({
-            where: { paymentVoucherId: voucher.id, attemptNumber: voucher.currentAttempt, status: { in: ["PREPARING", "ISSUING"] } },
-            data: { status: staleStatus, safeErrorCode: staleCode, finishedAt: new Date() },
+          const changed = await client.paymentVoucher.updateMany({
+            where: { id: voucher.id, status: voucher.status, updatedAt: voucher.updatedAt },
+            data: { status: staleStatus, lastErrorCode: staleCode },
           });
-          return { status: staleStatus, attempt: voucher.currentAttempt, acquired: false };
+          if (changed.count === 1) {
+            await client.paymentVoucherAttempt.updateMany({
+              where: { paymentVoucherId: voucher.id, attemptNumber: voucher.currentAttempt, status: { in: ["PREPARING", "ISSUING"] } },
+              data: { status: staleStatus, safeErrorCode: staleCode, finishedAt: new Date() },
+            });
+            return { status: staleStatus, attempt: voucher.currentAttempt, acquired: false };
+          }
+          const latest = await client.paymentVoucher.findUnique({ where: { cashMovementId: paymentId } });
+          return { status: latest?.status ?? "UNKNOWN", attempt: latest?.currentAttempt ?? voucher.currentAttempt, acquired: false };
+        }
+        if (voucher.status === "PENDING") {
+          const pendingAttempt = await client.paymentVoucherAttempt.findFirst({
+            where: { paymentVoucherId: voucher.id, attemptNumber: voucher.currentAttempt, status: "PREPARING" },
+          });
+          if (!pendingAttempt || pendingAttempt.startedAt.getTime() !== voucher.updatedAt.getTime()) {
+            return { status: voucher.status, attempt: voucher.currentAttempt, acquired: false };
+          }
+          const now = new Date();
+          const attemptClaimed = await client.paymentVoucherAttempt.updateMany({
+            where: { id: pendingAttempt.id, status: "PREPARING", startedAt: pendingAttempt.startedAt },
+            data: { startedAt: now },
+          });
+          if (attemptClaimed.count !== 1) {
+            return { status: voucher.status, attempt: voucher.currentAttempt, acquired: false };
+          }
+          const voucherClaimed = await client.paymentVoucher.updateMany({
+            where: { id: voucher.id, status: "PENDING", updatedAt: voucher.updatedAt },
+            data: { updatedAt: new Date(now.getTime() + 1) },
+          });
+          if (voucherClaimed.count !== 1) throw new Error("payment_voucher_preparation_claim_conflict");
+          return { status: voucher.status, attempt: voucher.currentAttempt, acquired: true };
         }
         return { status: voucher.status, attempt: voucher.currentAttempt, acquired: false };
       }
       if (voucher.status !== "FAILED") return { status: "UNKNOWN", attempt: voucher.currentAttempt, acquired: false };
 
       const attempt = voucher.currentAttempt + 1;
+      const retryReservationTime = new Date();
       await client.paymentVoucher.update({
         where: { id: voucher.id, status: "FAILED" },
         data: {
@@ -869,6 +1054,7 @@ const databaseDependencies: PaymentVoucherDependencies = {
           invoicePointOfSale: ptoVenta,
           currentAttempt: attempt,
           lastErrorCode: null,
+          updatedAt: retryReservationTime,
           attempts: { create: {
             attemptNumber: attempt,
             status: "PREPARING",
@@ -876,6 +1062,7 @@ const databaseDependencies: PaymentVoucherDependencies = {
             amount: new Prisma.Decimal(amount),
             invoicePointOfSale: ptoVenta,
             recipientSnapshot: recipientSnapshot as unknown as Prisma.InputJsonValue,
+            startedAt: retryReservationTime,
           } },
         },
       });
@@ -893,6 +1080,30 @@ const databaseDependencies: PaymentVoucherDependencies = {
         data: { status: "ISSUING" },
       });
       if (attemptChanged.count !== 1) throw new Error("payment_voucher_attempt_dispatch_transition_conflict");
+    },
+    failPreparing: async ({ paymentId, businessId, attempt }) => {
+      const client = currentClient();
+      const voucher = await client.paymentVoucher.findFirst({
+        where: { cashMovementId: paymentId, businessId, currentAttempt: attempt, status: "PENDING" },
+        select: { id: true, updatedAt: true },
+      });
+      if (!voucher) return;
+      const now = new Date();
+      const attemptChanged = await client.paymentVoucherAttempt.updateMany({
+        where: {
+          paymentVoucherId: voucher.id,
+          attemptNumber: attempt,
+          status: "PREPARING",
+          startedAt: voucher.updatedAt,
+        },
+        data: { status: "FAILED", safeErrorCode: "PREFLIGHT_REJECTED", finishedAt: now },
+      });
+      if (attemptChanged.count !== 1) return;
+      const voucherChanged = await client.paymentVoucher.updateMany({
+        where: { id: voucher.id, businessId, currentAttempt: attempt, status: "PENDING", updatedAt: voucher.updatedAt },
+        data: { status: "FAILED", lastErrorCode: "PREFLIGHT_REJECTED" },
+      });
+      if (voucherChanged.count !== 1) throw new Error("payment_voucher_preflight_transition_conflict");
     },
     persistAuthorized: async (input) => {
       const client = currentClient();
@@ -951,21 +1162,51 @@ const databaseDependencies: PaymentVoucherDependencies = {
       });
     },
     getVoucher: async (paymentId, businessId) => {
-      const voucher = await db.paymentVoucher.findFirst({
-        where: { cashMovementId: paymentId, businessId },
-        include: {
-          attempts: {
-            where: { status: "FAILED" },
-            orderBy: { attemptNumber: "desc" },
-            take: 1,
-            select: { billType: true },
+      const findVoucher = () => db.paymentVoucher.findFirst({
+          where: { cashMovementId: paymentId, businessId },
+          include: {
+            attempts: {
+              orderBy: { attemptNumber: "desc" },
+              take: 1,
+              select: {
+                billType: true,
+                status: true,
+                attemptNumber: true,
+                amount: true,
+                invoicePointOfSale: true,
+                recipientSnapshot: true,
+              },
+            },
           },
-        },
       });
+      const voucher = await findVoucher();
       if (!voucher) return null;
+      const projectVoucher = (row: typeof voucher, statusOverride?: string): Record<string, unknown> => {
+        if (!row) return { status: "MISSING" };
+        const latestAttempt = row.attempts[0];
+        const attemptMetadata = latestAttempt?.attemptNumber === row.currentAttempt
+          ? {
+              currentAttemptBillType: latestAttempt.billType,
+              currentAttemptPointOfSale: latestAttempt.invoicePointOfSale,
+              currentAttemptAmount: Number(latestAttempt.amount.toString()),
+              currentRecipientSnapshot: latestAttempt.recipientSnapshot,
+            }
+          : {};
+        const status = statusOverride ?? row.status;
+        return {
+          ...safePersistedVoucher({ ...row, status }),
+          ...attemptMetadata,
+          currentAttemptStatus: latestAttempt?.attemptNumber === row.currentAttempt
+            ? statusOverride ?? latestAttempt.status
+            : undefined,
+          lastFailedAttemptBillType: status === "FAILED" && latestAttempt?.status === "FAILED"
+            ? latestAttempt.billType
+            : null,
+        };
+      };
       if ((voucher.status === "ISSUING" || voucher.status === "PENDING")
         && Date.now() - voucher.updatedAt.getTime() > 120_000) {
-        await db.$transaction(async (tx) => {
+        const updated = await db.$transaction(async (tx) => {
           const changed = await tx.paymentVoucher.updateMany({
             where: { id: voucher.id, status: { in: ["ISSUING", "PENDING"] }, updatedAt: voucher.updatedAt },
             data: {
@@ -983,16 +1224,15 @@ const databaseDependencies: PaymentVoucherDependencies = {
               },
             });
           }
+          return changed.count;
         });
-        return {
-          ...safePersistedVoucher({ ...voucher, status: voucher.status === "PENDING" ? "FAILED" : "UNKNOWN" }),
-          lastFailedAttemptBillType: null,
-        };
+        if (updated === 0) {
+          const latestVoucher = await findVoucher();
+          return latestVoucher ? projectVoucher(latestVoucher) : null;
+        }
+        return projectVoucher(voucher, voucher.status === "PENDING" ? "FAILED" : "UNKNOWN");
       }
-      return {
-        ...safePersistedVoucher(voucher),
-        lastFailedAttemptBillType: voucher.attempts[0]?.billType ?? null,
-      };
+      return projectVoucher(voucher);
     },
     transaction: async <T>(callback: () => Promise<T>): Promise<T> => db.$transaction((tx) =>
       transactionStorage.run(tx, callback),

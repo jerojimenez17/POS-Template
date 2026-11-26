@@ -95,6 +95,41 @@ export interface GetUnpaidOrdersInput {
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
 
+const getSafePrismaErrorCode = (error: unknown): string | undefined => {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = error.code;
+    if (typeof code === "string" && /^P\d{4}$/.test(code)) return code;
+  }
+
+  return undefined;
+};
+
+type RegisterPaymentDiagnosticPhase =
+  | "validation"
+  | "auth"
+  | "pos-lookup"
+  | "transaction-lock"
+  | "idempotency"
+  | "load-balance"
+  | "movement"
+  | "voucher-reservation"
+  | "client-accounting"
+  | "order-accounting"
+  | "commit";
+type RegisterPaymentCommitOutcome = "not_started" | "rolled_back" | "unknown" | "committed";
+
+const getPaymentDiagnosticPrismaCode = (error: unknown): string | undefined => {
+  if (typeof error !== "object" || error === null) return undefined;
+
+  try {
+    const codeDescriptor = Object.getOwnPropertyDescriptor(error, "code");
+    const code = codeDescriptor?.value;
+    return typeof code === "string" && /^P\d{4}$/.test(code) ? code : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const logPaymentSideEffectFailure = (code: string, error: unknown): void => {
   console.error("[registerPayment] post-commit side effect failed", {
     code,
@@ -105,18 +140,137 @@ const logPaymentSideEffectFailure = (code: string, error: unknown): void => {
 type PaymentRegistrationErrorCode =
   | "ORDER_NOT_FOUND"
   | "INVALID_BALANCE"
-  | "OVERPAYMENT";
+  | "OVERPAYMENT"
+  | "IDEMPOTENCY_CONFLICT";
 
 const PAYMENT_REGISTRATION_ERROR_MESSAGES: Record<PaymentRegistrationErrorCode, string> = {
   ORDER_NOT_FOUND: "Orden no encontrada",
   INVALID_BALANCE: "El saldo de la orden no es válido",
   OVERPAYMENT: "El pago no puede exceder el saldo pendiente",
+  IDEMPOTENCY_CONFLICT: "La clave de confirmación ya fue utilizada para otro pago",
 };
 
 class PaymentRegistrationError extends Error {
   constructor(readonly code: PaymentRegistrationErrorCode) {
     super(PAYMENT_REGISTRATION_ERROR_MESSAGES[code]);
     this.name = "PaymentRegistrationError";
+  }
+}
+
+interface RegisteredPaymentReplay {
+  signature: string;
+  outcome: Record<string, unknown>;
+}
+
+interface PaymentIdempotencyLookupClient {
+  cashMovement?: {
+    findUnique?: (args: never) => Promise<unknown>;
+  };
+}
+
+interface ExistingPaymentWithVoucher {
+  id: string;
+  total: number;
+  orderId: string | null;
+  paidMethod: string | null;
+  paymentVoucher: {
+    status: string;
+    billType: string;
+    invoicePointOfSale: number | null;
+    currentAttempt: number;
+    attempts: Array<{
+      attemptNumber: number;
+      billType: string;
+      invoicePointOfSale: number | null;
+    }>;
+  } | null;
+}
+
+// This cache only accelerates same-worker replays. Database uniqueness is
+// still the durable authority across workers and process restarts.
+const registeredPaymentReplays = new Map<string, RegisteredPaymentReplay>();
+
+function paymentRequestSignature(input: {
+  orderId: string;
+  amount: number;
+  paymentMethod: string;
+  billType: string;
+  ptoVenta?: number;
+}): string {
+  return JSON.stringify([input.orderId, input.amount, input.paymentMethod, input.billType, input.ptoVenta ?? null]);
+}
+
+async function findPaymentByIdempotencyKey(
+  client: PaymentIdempotencyLookupClient,
+  businessId: string,
+  idempotencyKey: string,
+  requestSignature: string,
+): Promise<{ outcome: Record<string, unknown> } | null> {
+  const delegate = client.cashMovement;
+  const findUnique = delegate?.findUnique;
+  if (typeof findUnique !== "function") return null;
+
+  const result = await findUnique.call(delegate, {
+    where: { businessId_idempotencyKey: { businessId, idempotencyKey } },
+    select: {
+      id: true,
+      total: true,
+      orderId: true,
+      paidMethod: true,
+      paymentVoucher: {
+        select: {
+          status: true,
+          billType: true,
+          invoicePointOfSale: true,
+          currentAttempt: true,
+          attempts: {
+            where: { attemptNumber: 1 },
+            take: 1,
+            select: { attemptNumber: true, billType: true, invoicePointOfSale: true },
+          },
+        },
+      },
+    },
+  } as never);
+  if (typeof result !== "object" || result === null) return null;
+  const existing = result as ExistingPaymentWithVoucher;
+  const voucher = existing.paymentVoucher;
+  let originalBillType: string;
+  let originalPtoVenta: number | undefined;
+  if (voucher?.status === "NOT_REQUIRED" && voucher.currentAttempt === 0 && voucher.billType === "Remito") {
+    originalBillType = "Remito";
+  } else {
+    const firstAttempt = voucher?.attempts.find((attempt) => attempt.attemptNumber === 1);
+    if (!firstAttempt) {
+      // Never infer the original selection from mutable voucher fields or a
+      // later retry attempt. If attempt 1 is missing, replay cannot be proven.
+      throw new PaymentRegistrationError("IDEMPOTENCY_CONFLICT");
+    }
+    originalBillType = firstAttempt.billType;
+    if (firstAttempt.invoicePointOfSale !== null) originalPtoVenta = firstAttempt.invoicePointOfSale;
+  }
+  const existingSignature = paymentRequestSignature({
+    orderId: existing.orderId ?? "",
+    amount: Number(existing.total),
+    paymentMethod: existing.paidMethod ?? "",
+    billType: originalBillType,
+    ...(originalPtoVenta !== undefined ? { ptoVenta: originalPtoVenta } : {}),
+  });
+  if (existingSignature !== requestSignature) throw new PaymentRegistrationError("IDEMPOTENCY_CONFLICT");
+  return {
+    outcome: {
+      paymentRecorded: true,
+      voucherStatus: voucher?.status ?? "MISSING",
+      ...(voucher?.status === "UNKNOWN" ? { reconciliationRequired: true } : {}),
+    },
+  };
+}
+
+function cacheRegisteredPaymentReplay(key: string, replay: RegisteredPaymentReplay): void {
+  registeredPaymentReplays.set(key, replay);
+  if (registeredPaymentReplays.size > 2_000) {
+    const oldestKey = registeredPaymentReplays.keys().next().value;
+    if (oldestKey) registeredPaymentReplays.delete(oldestKey);
   }
 }
 
@@ -333,9 +487,15 @@ export const createUnpaidOrder = async (input: CreateUnpaidOrderInput): Promise<
 };
 
 export const registerPayment = async (input: unknown): Promise<ActionResult> => {
+  let diagnosticPhase: RegisterPaymentDiagnosticPhase = "validation";
+  let transactionStarted = false;
+  let transactionCommitAttempted = false;
+  let transactionCommitted = false;
+
   try {
     const parsedInput = z.object({
       orderId: z.string().min(1),
+      idempotencyKey: z.string().uuid(),
       amount: z.number().finite().positive(),
       paymentMethod: z.string().min(1),
       businessId: z.string().min(1),
@@ -364,13 +524,46 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
     if (paymentPesos > MAX_WHOLE_PESO_AMOUNT) {
       return { success: false, error: "El importe del pago supera el máximo permitido" };
     }
+    diagnosticPhase = "auth";
     const businessId = await getAuthorizedBusinessId(paymentInput.businessId);
     if (!businessId) return { success: false, error: "No autorizado" };
+
+    const scopedIdempotencyKey = `${businessId}:${paymentInput.idempotencyKey}`;
+    const requestSignature = paymentRequestSignature({ ...paymentInput, amount: paymentPesos });
+    diagnosticPhase = "idempotency";
+    const canReadDurableIdempotency = typeof db.cashMovement?.findUnique === "function";
+    const cachedReplay = registeredPaymentReplays.get(scopedIdempotencyKey);
+    if (cachedReplay) {
+      if (cachedReplay.signature !== requestSignature && canReadDurableIdempotency) {
+        return { success: false, error: PAYMENT_REGISTRATION_ERROR_MESSAGES.IDEMPOTENCY_CONFLICT };
+      }
+      if (cachedReplay.signature === requestSignature && !canReadDurableIdempotency) {
+        return { success: true, data: cachedReplay.outcome };
+      }
+      if (!canReadDurableIdempotency) registeredPaymentReplays.delete(scopedIdempotencyKey);
+    }
+
+    const lookupClient = db as unknown as PaymentIdempotencyLookupClient;
+    const findExistingPayment = (client: PaymentIdempotencyLookupClient = lookupClient) =>
+      findPaymentByIdempotencyKey(client, businessId, paymentInput.idempotencyKey, requestSignature);
+
+    // Resolve durable replays before consulting mutable POS configuration. The
+    // authenticated business scope and request signature are checked by the
+    // lookup before any persisted outcome is returned to the caller.
+    const durableReplay = await findExistingPayment();
+    if (durableReplay) {
+      cacheRegisteredPaymentReplay(scopedIdempotencyKey, {
+        signature: requestSignature,
+        outcome: durableReplay.outcome,
+      });
+      return { success: true, data: durableReplay.outcome };
+    }
 
     if (!isRemito) {
       // A POS proposal is required for invoices before the payment transaction
       // begins. Read the authenticated business's current configuration rather
       // than trusting the UI's potentially stale list.
+      diagnosticPhase = "pos-lookup";
       const business = await db.business.findUnique({
         where: { id: businessId },
         select: { ptoVenta: true },
@@ -384,17 +577,34 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
       }
     }
 
-    const movement = await db.$transaction(async (tx) => {
+    let transactionResult:
+      | { kind: "created"; movement: Awaited<ReturnType<typeof db.cashMovement.create>> }
+      | { kind: "replay"; outcome: Record<string, unknown> };
+    try {
+      transactionStarted = true;
+      diagnosticPhase = "transaction-lock";
+      transactionResult = await db.$transaction(async (tx) => {
       // Serialize payment registrations per tenant/order before reading its
       // balance. Interpolated values are parameterized by Prisma's SQL tag.
       await tx.$queryRaw<Array<{ id: string }>>`
         SELECT "id"
         FROM "Order"
         WHERE "id" = ${paymentInput.orderId}
-          AND "businessId" = ${businessId}
+        AND "businessId" = ${businessId}
         FOR UPDATE
       `;
 
+      // Resolve the durable key while holding the same order lock used for
+      // balance accounting, before reading or validating the balance.
+      diagnosticPhase = "idempotency";
+      const committedReplay = await findExistingPayment(tx as unknown as PaymentIdempotencyLookupClient);
+      if (committedReplay) {
+        transactionCommitAttempted = true;
+        diagnosticPhase = "commit";
+        return { kind: "replay", outcome: committedReplay.outcome };
+      }
+
+      diagnosticPhase = "load-balance";
       const order = await tx.order.findUnique({
         where: { id: paymentInput.orderId },
         include: { client: true, cashMovements: true },
@@ -439,11 +649,14 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
         total: paymentPesos,
         paidMethod: paymentInput.paymentMethod,
         businessId,
+        idempotencyKey: paymentInput.idempotencyKey,
         date: new Date(),
         orderId: paymentInput.orderId,
       };
+      diagnosticPhase = "movement";
       const newMovement = await tx.cashMovement.create({ data: cashMovementData });
 
+      diagnosticPhase = "voucher-reservation";
       if (isRemito) {
         await tx.paymentVoucher.create({
           data: {
@@ -463,9 +676,52 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
             currentAttempt: 0,
           },
         });
+      } else {
+        const reservationTime = new Date();
+        const client = order.client;
+        const legacyDocument = client?.cuit?.trim() || "";
+        const fiscalDocumentType = client?.fiscalDocumentType === "CUIT" || client?.fiscalDocumentType === "DNI"
+          ? client.fiscalDocumentType
+          : legacyDocument ? "CUIT" : null;
+        const recipientSnapshot = {
+          name: client?.name?.trim() ?? "",
+          ivaCondition: paymentInput.billType === "Factura B"
+            ? "Consumidor Final"
+            : client?.ivaCondition?.trim() || order.clientIvaCondition?.trim() || "Consumidor Final",
+          documentType: fiscalDocumentType,
+          documentNumber: client?.fiscalDocumentType
+            ? client.fiscalDocumentNumber?.trim() || null
+            : legacyDocument || null,
+        };
+        await tx.paymentVoucher.create({
+          data: {
+            cashMovementId: newMovement.id,
+            businessId,
+            status: "PENDING",
+            amount: paymentPesos,
+            billType: paymentInput.billType,
+            afipVoucherType: paymentInput.billType === "Factura A" ? 1 : paymentInput.billType === "Factura B" ? 6 : 11,
+            invoicePointOfSale: paymentInput.ptoVenta as number,
+            currentAttempt: 1,
+            createdAt: reservationTime,
+            updatedAt: reservationTime,
+            attempts: {
+              create: {
+                attemptNumber: 1,
+                status: "PREPARING",
+                billType: paymentInput.billType,
+                amount: paymentPesos,
+                invoicePointOfSale: paymentInput.ptoVenta as number,
+                recipientSnapshot: recipientSnapshot as Prisma.InputJsonObject,
+                startedAt: reservationTime,
+              },
+            },
+          },
+        });
       }
 
       if (order.clientId) {
+        diagnosticPhase = "client-accounting";
         await tx.client.update({
           where: { id: order.clientId },
           data: { balance: { decrement: paymentPesos } },
@@ -474,13 +730,40 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
 
       const newPaidStatus: PaidStatus =
         remainingBalancePesos === 0 ? "pago" : "inpago";
+      diagnosticPhase = "order-accounting";
       await tx.order.update({
         where: { id: paymentInput.orderId },
         data: { paidStatus: newPaidStatus },
       });
 
-      return newMovement;
-    });
+        transactionCommitAttempted = true;
+        diagnosticPhase = "commit";
+        return { kind: "created", movement: newMovement };
+      });
+      transactionCommitted = true;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        diagnosticPhase = "idempotency";
+        const replay = await findExistingPayment();
+        if (replay) {
+          cacheRegisteredPaymentReplay(scopedIdempotencyKey, {
+            signature: requestSignature,
+            outcome: replay.outcome,
+          });
+          return { success: true, data: replay.outcome };
+        }
+      }
+      throw error;
+    }
+
+    if (transactionResult.kind === "replay") {
+      cacheRegisteredPaymentReplay(scopedIdempotencyKey, {
+        signature: requestSignature,
+        outcome: transactionResult.outcome,
+      });
+      return { success: true, data: transactionResult.outcome };
+    }
+    const movement = transactionResult.movement;
 
     try {
       await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
@@ -497,7 +780,11 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
     }
 
     if (isRemito) {
-      return { success: true, data: { paymentRecorded: true, voucherStatus: "NOT_REQUIRED" } };
+      const outcome = { paymentRecorded: true, voucherStatus: "NOT_REQUIRED" };
+      cacheRegisteredPaymentReplay(scopedIdempotencyKey, {
+        signature: requestSignature, outcome,
+      });
+      return { success: true, data: outcome };
     }
 
     try {
@@ -506,19 +793,35 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
         billType: paymentInput.billType,
         ptoVenta: paymentInput.ptoVenta as number,
       });
-      return { success: true, data: { ...voucherResult, paymentRecorded: true } };
+      const outcome = { ...voucherResult, paymentRecorded: true };
+      cacheRegisteredPaymentReplay(scopedIdempotencyKey, {
+        signature: requestSignature, outcome,
+      });
+      return { success: true, data: outcome };
     } catch (voucherError: unknown) {
       const outcome = paymentVoucherIssueFailureOutcome(voucherError);
       logPaymentSideEffectFailure(`PAYMENT_VOUCHER_OUTCOME_${outcome.voucherStatus}`, voucherError);
+      cacheRegisteredPaymentReplay(scopedIdempotencyKey, {
+        signature: requestSignature, outcome,
+      });
       return {
         success: true,
         data: outcome,
       };
     }
   } catch (error) {
-    console.error("Error registering payment", {
-      code: "PAYMENT_REGISTRATION_FAILED",
-      errorType: error instanceof PaymentRegistrationError ? error.code : error instanceof Error ? "Error" : "NonError",
+    const commitOutcome: RegisterPaymentCommitOutcome = transactionCommitted
+      ? "committed"
+      : !transactionStarted
+        ? "not_started"
+        : transactionCommitAttempted
+          ? "unknown"
+          : "rolled_back";
+    const prismaCode = getPaymentDiagnosticPrismaCode(error);
+    console.error("[registerPayment] registration failed", {
+      phase: diagnosticPhase,
+      commitOutcome,
+      ...(prismaCode ? { prismaCode } : {}),
     });
     return {
       success: false,
@@ -794,13 +1097,16 @@ export const getUnpaidOrders = async (input: GetUnpaidOrdersInput): Promise<Acti
       return { success: true, data: { orders, nextCursor, hasMore } };
     }
   } catch (error) {
-    console.error("Error getting unpaid orders:", error);
+    const prismaErrorCode = getSafePrismaErrorCode(error);
+    console.error("Error getting unpaid orders:", {
+      errorType: error instanceof Error ? "Error" : "NonError",
+      ...(prismaErrorCode ? { code: prismaErrorCode } : {}),
+    });
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Error al obtener las órdenes",
+      error: prismaErrorCode
+        ? `Error al obtener las órdenes (${prismaErrorCode})`
+        : "Error al obtener las órdenes",
     };
   }
 };
