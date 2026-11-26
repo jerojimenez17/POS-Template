@@ -153,6 +153,9 @@ const decodeCursor = (value: string | null | undefined, status: string, search: 
 const addItemsToOrderSchema = z.object({
   orderId: z.string(),
   businessId: z.string(),
+  // Modal de origen: define la feature que debe estar habilitada para agregar
+  // ítems, de modo que coincida con la de "crear nueva orden".
+  mode: z.enum(["unpaid", "budget"]).optional(),
   items: z.array(
     z.object({
       productId: z.string(),
@@ -903,6 +906,23 @@ export const addItemsToOrder = async (input: z.infer<typeof addItemsToOrderSchem
       if (!order) throw new Error("Orden no encontrada");
       if (order.businessId && order.businessId !== businessId) throw new Error("Orden no encontrada");
       if (order.paidStatus === "pago") throw new Error("No se puede modificar una orden pagado");
+
+      // La funcionalidad debe estar habilitada en el plan tanto para crear como
+      // para agregar ítems. Si viene el modo del modal, usamos su feature para
+      // que "agregar a existente" y "crear nueva" queden bloqueados juntos;
+      // sin modo (edición directa) caemos al tipo de orden.
+      const requiredFeature =
+        validatedInput.mode === "budget"
+          ? "hasBudget"
+          : validatedInput.mode === "unpaid"
+            ? "hasClientLedger"
+            : order.status === "pendiente"
+              ? "hasBudget"
+              : "hasClientLedger";
+      const featureCheck = await requireFeature(requiredFeature, permission.data);
+      if (!featureCheck.success) {
+        throw new Error(featureCheck.error || "Esta funcionalidad no está disponible en tu plan actual.");
+      }
 
       const products = await tx.product.findMany({
         where: { id: { in: validatedInput.items.map(i => i.productId) }, businessId },

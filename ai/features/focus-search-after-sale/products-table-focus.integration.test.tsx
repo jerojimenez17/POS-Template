@@ -313,8 +313,8 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
 
     fireEvent.click(screen.getByRole("button", { name: /^A cuenta/ }));
     fireEvent.click(await screen.findByText("Customer One"));
-    await waitFor(() => expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1"));
     fireEvent.click(await screen.findByTestId("submit-button"));
+    await waitFor(() => expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1"));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/unpaid-orders", expect.objectContaining({ method: "POST" })));
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Crear Orden a Cuenta" })).not.toBeInTheDocument());
@@ -344,8 +344,8 @@ describe("ProductsTable → PrintableTable → ProductSearchBar checkout focus",
 
     fireEvent.click(screen.getByRole("button", { name: /^A cuenta/ }));
     fireEvent.click(await screen.findByText("Customer One"));
-    await waitFor(() => expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1"));
     fireEvent.click(await screen.findByTestId("submit-button"));
+    await waitFor(() => expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/unpaid-orders", expect.objectContaining({ method: "POST" })));
     await flushDeferredFrames();
 

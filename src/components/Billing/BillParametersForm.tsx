@@ -242,7 +242,7 @@ const BillParametersForm = ({ ptoVentas = [], initialBillType, layout = "compact
 
   const voucherErrorAlert = voucherErrorMessage ? (
     <div role="alert" className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
-      <p className="font-semibold">No se pudo obtener la numeración de AFIP/ARCA</p>
+      <p className="font-semibold">No se pudo obtener la numeración de ARCA</p>
       <p className="mt-1">{voucherErrorMessage}</p>
       {structuredVoucherError?.code === "11002" && (
         <ol className="mt-2 list-decimal space-y-1 pl-4">

@@ -383,7 +383,7 @@ const ProductSearchBar = ({ onProductAdd, hasSupplierFilter, allowNegativeStock,
         </button>
 
         {/* Supplier combobox */}
-        {hasSupplierFilter && (
+        {hasSupplierFilter && suppliers.length > 0 && (
           <div ref={supplierContainerRef} className="relative">
             <button
               type="button"

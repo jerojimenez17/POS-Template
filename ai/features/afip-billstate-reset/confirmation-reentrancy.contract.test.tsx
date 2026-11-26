@@ -8,6 +8,7 @@ import BillTypes from "@/models/billType";
 import type { AfipVoucherSuccessData } from "@/services/afip/voucher-response";
 
 vi.mock("@/actions/afip", () => ({ createAfipVoucherAction: vi.fn() }));
+vi.mock("@/actions/voucher", () => ({ getVoucherNumberAction: vi.fn().mockResolvedValue({ success: 1 }) }));
 vi.mock("@/actions/sales", () => ({ processSaleAction: vi.fn(), updateOrderAction: vi.fn() }));
 vi.mock("@/actions/shortcuts", () => ({
   getShortcutConfigsAction: vi.fn().mockResolvedValue({ success: true, data: [] }),

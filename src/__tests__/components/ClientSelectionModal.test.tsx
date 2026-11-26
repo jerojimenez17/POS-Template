@@ -192,6 +192,10 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
     });
 
     await waitFor(() => {
+      fireEvent.click(screen.getByTestId("submit-button"));
+    });
+
+    await waitFor(() => {
       expect(screen.queryByText(/orden pendiente existente/i)).toBeTruthy();
       expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1");
     });
@@ -239,6 +243,10 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
     await waitFor(() => {
       const clientOption = screen.getByText("Juan Perez");
       fireEvent.click(clientOption);
+    });
+
+    await waitFor(() => {
+      fireEvent.click(screen.getByTestId("submit-button"));
     });
 
     await waitFor(() => {

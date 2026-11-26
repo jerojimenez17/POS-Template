@@ -425,7 +425,7 @@ const PrintableTable = ({
                         <>
                           <button
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-300"
-                            onClick={() => updateProductAmount(getBillRowId(product), product.amount - 1)}
+                            onClick={() => updateProductAmount(getBillRowId(product), Math.max(1, product.amount - 1))}
                             aria-label="Disminuir cantidad"
                           >
                             −

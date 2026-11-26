@@ -2,7 +2,7 @@
 
 import { useContext } from "react";
 import { BillContext, PrintMode } from "@/context/BillContext";
-import { Printer, FileText, Monitor } from "lucide-react";
+import { Printer, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ModeButtonProps {
@@ -32,7 +32,7 @@ const ModeButton = ({ mode, current, icon, label, onClick }: ModeButtonProps) =>
 );
 
 export default function PrintModeSelector() {
-  const { printMode, setPrintMode, qzTrayActive, setQzTrayActive } = useContext(BillContext);
+  const { printMode, setPrintMode } = useContext(BillContext);
 
   return (
     <div className="flex items-center gap-2">
@@ -52,22 +52,6 @@ export default function PrintModeSelector() {
           onClick={() => setPrintMode("pdf")}
         />
       </div>
-      <button
-        type="button"
-        onClick={() => setQzTrayActive(!qzTrayActive)}
-        aria-pressed={qzTrayActive}
-        aria-label={qzTrayActive ? "Desactivar QZ Tray" : "Activar QZ Tray"}
-        className={cn(
-          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
-          qzTrayActive
-            ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:text-foreground hover:bg-accent"
-        )}
-        title={qzTrayActive ? "QZ Tray conectado" : "QZ Tray desconectado"}
-      >
-        <Monitor className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">QZ</span>
-      </button>
     </div>
   );
 }

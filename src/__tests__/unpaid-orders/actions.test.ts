@@ -25,6 +25,7 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@/lib/auth-gates", () => ({
   assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+  requireFeature: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 describe("R1: addItemsToOrder - adds items with addedAt timestamp", () => {

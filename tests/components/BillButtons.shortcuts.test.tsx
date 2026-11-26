@@ -29,6 +29,10 @@ vi.mock("@/actions/afip", () => ({
   createAfipVoucherAction: vi.fn(),
 }));
 
+vi.mock("@/actions/voucher", () => ({
+  getVoucherNumberAction: vi.fn().mockResolvedValue({ success: 1 }),
+}));
+
 // Mock sonner toast
 vi.mock("sonner", () => ({
   toast: {

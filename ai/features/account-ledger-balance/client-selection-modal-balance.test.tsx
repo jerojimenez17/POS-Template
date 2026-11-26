@@ -35,8 +35,8 @@ function renderModal(mode: "unpaid" | "budget") {
     <ClientSelectionModal
       open
       onOpenChange={vi.fn()}
-      items={[]}
-      total={0}
+      items={[{ id: "product-1", code: "P-1", description: "Producto", salePrice: 100, amount: 1 }]}
+      total={100}
       businessId="business-a"
       mode={mode}
     />,
@@ -99,6 +99,7 @@ describe("ClientSelectionModal current balance rendering", () => {
       expect(clientOptionText("Cora Crédito")).toContain(expectedBalanceLabel(-250.75));
 
       fireEvent.click(screen.getByText("Cora Crédito"));
+      fireEvent.click(screen.getByTestId("submit-button"));
       await waitFor(() => expect(getClientUnpaidOrdersMock).toHaveBeenCalledWith("client-credit"));
       expect(clientOptionText("Cora Crédito")).toContain(expectedBalanceLabel(-250.75));
       expect(screen.queryByText("Ana Deuda")).not.toBeInTheDocument();
@@ -135,6 +136,7 @@ describe("ClientSelectionModal current balance rendering", () => {
       expect(clientOptionText(client.name)).not.toContain("$0");
 
       fireEvent.click(screen.getByText(client.name));
+      fireEvent.click(screen.getByTestId("submit-button"));
       await waitFor(() => {
         expect(getClientUnpaidOrdersMock).toHaveBeenCalledWith(client.id);
       });
@@ -158,13 +160,14 @@ describe("ClientSelectionModal current balance rendering", () => {
       <ClientSelectionModal
         open
         onOpenChange={vi.fn()}
-        items={[]}
+        items={[{ id: "product-1", code: "P-1", description: "Producto", salePrice: 250, amount: 1 }]}
         total={250}
         businessId="business-a"
       />,
     );
     await screen.findByText("Ana Deuda");
     fireEvent.click(screen.getByText("Ana Deuda"));
+    fireEvent.click(screen.getByTestId("submit-button"));
 
     const orderDialog = await screen.findByRole("dialog", { name: "Orden Pendiente Existente" });
     const balanceLabel = getExistingOrderBalanceLabel(orderDialog);
@@ -184,18 +187,22 @@ describe("ClientSelectionModal current balance rendering", () => {
     { mode: "unpaid" as const, pickerTitle: "Crear Orden a Cuenta" },
     { mode: "budget" as const, pickerTitle: "Crear Presupuesto" },
   ])(
-    "widens only the Existing Order Dialog at md in $mode mode",
+    "widens the client picker and the Existing Order Dialog to the same width at md in $mode mode",
     async ({ mode, pickerTitle }) => {
       getClientUnpaidOrdersMock.mockResolvedValue({ success: true, data: [existingOrder] });
 
       renderModal(mode);
 
       const clientPickerDialog = await screen.findByRole("dialog", { name: pickerTitle });
-      expect(clientPickerDialog).toHaveClass("w-[calc(100%-1rem)]", "sm:max-w-md");
-      expect(clientPickerDialog).not.toHaveClass("md:max-w-2xl");
+      expect(clientPickerDialog).toHaveClass(
+        "w-[calc(100%-1rem)]",
+        "sm:max-w-md",
+        "md:max-w-2xl",
+      );
 
       await screen.findByText("Ana Deuda");
       fireEvent.click(screen.getByText("Ana Deuda"));
+      fireEvent.click(screen.getByTestId("submit-button"));
 
       const existingOrderDialog = await screen.findByRole("dialog", {
         name: "Orden Pendiente Existente",
@@ -205,7 +212,6 @@ describe("ClientSelectionModal current balance rendering", () => {
         "sm:max-w-md",
         "md:max-w-2xl",
       );
-      expect(clientPickerDialog).not.toHaveClass("md:max-w-2xl");
     },
   );
 
@@ -219,6 +225,7 @@ describe("ClientSelectionModal current balance rendering", () => {
     renderModal("unpaid");
     await screen.findByText(client.name);
     fireEvent.click(screen.getByText(client.name));
+    fireEvent.click(screen.getByTestId("submit-button"));
 
     const orderDialog = await screen.findByRole("dialog", { name: "Orden Pendiente Existente" });
     const balanceLabel = getExistingOrderBalanceLabel(orderDialog);
@@ -238,6 +245,7 @@ describe("ClientSelectionModal current balance rendering", () => {
     renderModal("unpaid");
     await screen.findByText(client.name);
     fireEvent.click(screen.getByText(client.name));
+    fireEvent.click(screen.getByTestId("submit-button"));
 
     const orderDialog = await screen.findByRole("dialog", { name: "Orden Pendiente Existente" });
     const balanceLabel = getExistingOrderBalanceLabel(orderDialog);
@@ -252,6 +260,7 @@ describe("ClientSelectionModal current balance rendering", () => {
     renderModal("unpaid");
     await screen.findByText("Ana Deuda");
     fireEvent.click(screen.getByText("Ana Deuda"));
+    fireEvent.click(screen.getByTestId("submit-button"));
     const firstDialog = await screen.findByRole("dialog", { name: "Orden Pendiente Existente" });
     const firstBalanceLabel = getExistingOrderBalanceLabel(firstDialog);
     expect(firstBalanceLabel.parentElement?.textContent).toContain("$1.250,5");
@@ -259,6 +268,7 @@ describe("ClientSelectionModal current balance rendering", () => {
     fireEvent.click(within(firstDialog).getByRole("button", { name: "Cancelar" }));
     await waitFor(() => expect(firstDialog).not.toBeInTheDocument());
     fireEvent.click(screen.getByText("Cora Crédito"));
+    fireEvent.click(screen.getByTestId("submit-button"));
 
     const secondDialog = await screen.findByRole("dialog", { name: "Orden Pendiente Existente" });
     const secondBalanceLabel = getExistingOrderBalanceLabel(secondDialog);
@@ -266,7 +276,7 @@ describe("ClientSelectionModal current balance rendering", () => {
     expect(secondBalanceLabel.parentElement?.textContent).not.toContain("$1.250,5");
   });
 
-  it("keeps add-to-existing-order mutation payload limited to orderId, businessId and items", async () => {
+  it("keeps add-to-existing-order mutation payload limited to orderId, businessId, mode and items", async () => {
     getClientUnpaidOrdersMock.mockResolvedValue({ success: true, data: [existingOrder] });
     const items = [{ id: "product-1", code: "P-1", description: "Producto", salePrice: 100, amount: 2 }];
 
@@ -281,6 +291,7 @@ describe("ClientSelectionModal current balance rendering", () => {
     );
     await screen.findByText("Ana Deuda");
     fireEvent.click(screen.getByText("Ana Deuda"));
+    fireEvent.click(screen.getByTestId("submit-button"));
 
     const orderDialog = await screen.findByRole("dialog", { name: "Orden Pendiente Existente" });
     fireEvent.click(within(orderDialog).getByRole("button", { name: "Agregar a orden existente" }));
@@ -289,6 +300,7 @@ describe("ClientSelectionModal current balance rendering", () => {
       expect(addItemsToOrderMock).toHaveBeenCalledWith({
         orderId: "order-123456",
         businessId: "business-a",
+        mode: "unpaid",
         items: [{
           productId: "product-1",
           code: "P-1",
@@ -302,6 +314,7 @@ describe("ClientSelectionModal current balance rendering", () => {
     expect(Object.keys(addItemsToOrderMock.mock.calls[0][0]).sort()).toEqual([
       "businessId",
       "items",
+      "mode",
       "orderId",
     ]);
   });

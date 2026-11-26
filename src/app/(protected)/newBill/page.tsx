@@ -1,5 +1,4 @@
 import ProductsTable from "@/components/Billing/ProductsTable";
-import BillParametersForm from "@/components/Billing/BillParametersForm";
 import BillProvider from "@/context/BillProvider";
 import { auth } from "../../../../auth";
 import { Suspense } from "react";
@@ -43,8 +42,6 @@ const NewBillPage = async () => {
       <div className="min-h-screen bg-slate-50 dark:bg-gray-900 pb-20">
           <BillProvider initialBillType={initialBillType} defaultPtoVenta={ptoVentas[0]} qzTrayEnabled={qzTrayEnabled}>
            <NewBillHeaderActions hasActiveSession={hasActiveSession} session={session} />
-
-           <BillParametersForm ptoVentas={ptoVentas} initialBillType={initialBillType} />
 
            {/* Products Table */}
           <div className="max-w-7xl mx-auto px-4 py-6">

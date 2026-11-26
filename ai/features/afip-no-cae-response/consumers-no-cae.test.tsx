@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/actions/afip", () => ({ createAfipVoucherAction: mocks.create }));
+vi.mock("@/actions/voucher", () => ({ getVoucherNumberAction: vi.fn().mockResolvedValue({ success: 1 }) }));
 vi.mock("@/actions/sales", () => ({ processSaleAction: mocks.process, updateOrderAction: vi.fn() }));
 vi.mock("@/actions/sales/update", () => ({ updateOrderCaeAction: mocks.update }));
 vi.mock("@/actions/business", () => ({ getBusinessBillingInfoAction: mocks.business }));

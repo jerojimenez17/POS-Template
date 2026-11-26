@@ -3,6 +3,7 @@ import { screen, render } from "../test-utils";
 import PrintableTable from "@/components/Billing/PrintableTable";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useFeatures } from "@/hooks/useFeatures";
+import { getSuppliersForFilter } from "@/actions/stock";
 
 vi.mock("next/font/google", () => ({
   Inter: () => ({ className: "inter-class", variable: "--font-inter" }),
@@ -51,7 +52,7 @@ describe("PrintableTable supplier filter feature gate", () => {
     vi.clearAllMocks();
   });
 
-  it("should show supplier filter control when hasSupplierFilter is true", () => {
+  it("should show supplier filter control when hasSupplierFilter is true", async () => {
     vi.mocked(useFeatures).mockReturnValue({
       plan: "PRO",
       hasFeature: (key: string) => key === "hasSupplierFilter",
@@ -59,12 +60,15 @@ describe("PrintableTable supplier filter feature gate", () => {
       isOverLimit: () => false,
       isPlanAtLeast: () => true,
     } as any);
+    vi.mocked(getSuppliersForFilter).mockResolvedValue([
+      { id: "supplier-1", name: "Proveedor Uno" },
+    ]);
 
     render(<PrintableTable {...defaultProps} />, {
       sessionMock: defaultProps.session,
     });
 
-    expect(screen.getByText("Todos los proveedores")).toBeInTheDocument();
+    expect(await screen.findByText("Todos los proveedores")).toBeInTheDocument();
   });
 
   it("should hide supplier filter control when hasSupplierFilter is false", () => {

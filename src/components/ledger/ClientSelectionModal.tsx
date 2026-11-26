@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
@@ -195,6 +195,34 @@ export default function ClientSelectionModal({
   const [isCheckingExistingOrder, setIsCheckingExistingOrder] = useState(false);
   const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const [checkedClientId, setCheckedClientId] = useState<string | null>(null);
+  // Evita que el cierre de un diálogo hijo (órdenes pendientes / nuevo cliente)
+  // se propague como interacción externa y cierre también este diálogo.
+  const suppressParentCloseRef = useRef(false);
+
+  const openExistingOrderDialog = () => {
+    suppressParentCloseRef.current = true;
+    setShowExistingOrderDialog(true);
+  };
+  const handleExistingOrderDialogChange = (next: boolean) => {
+    if (!next) {
+      window.setTimeout(() => {
+        suppressParentCloseRef.current = false;
+      }, 0);
+    }
+    setShowExistingOrderDialog(next);
+  };
+  const openCreateClientDialog = () => {
+    suppressParentCloseRef.current = true;
+    setIsCreateModalOpen(true);
+  };
+  const handleCreateClientDialogChange = (next: boolean) => {
+    if (!next) {
+      window.setTimeout(() => {
+        suppressParentCloseRef.current = false;
+      }, 0);
+    }
+    setIsCreateModalOpen(next);
+  };
 
   const fetchClients = async () => {
     setIsFetchingClients(true);
@@ -221,6 +249,7 @@ export default function ClientSelectionModal({
       setSelectedExistingOrderId(null);
       setShowExistingOrderDialog(false);
       setCheckedClientId(null);
+      suppressParentCloseRef.current = false;
     }
   }, [open]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -291,37 +320,24 @@ export default function ClientSelectionModal({
       return;
     }
 
+    // Las órdenes pendientes se consultan al confirmar, no al seleccionar el
+    // cliente. Si ya se consultaron para este cliente, reutilizamos el resultado.
     if (checkedClientId === selectedClientId) {
       if (existingOrders.length > 0) {
-        setShowExistingOrderDialog(true);
+        openExistingOrderDialog();
       } else {
         await createNewOrder(selectedClientId);
       }
       return;
     }
 
-    setIsCheckingExistingOrder(true);
-    try {
-      const result = await getClientUnpaidOrders(selectedClientId);
-      
-      if (result.success && result.data && result.data.length > 0) {
-        setExistingOrders(result.data);
-        setSelectedExistingOrderId(result.data[0].id);
-        setShowExistingOrderDialog(true);
-        setIsCheckingExistingOrder(false);
-        return;
-      }
-
+    const orders = await checkClientOrders(selectedClientId);
+    if (orders.length === 0) {
       await createNewOrder(selectedClientId);
-    } catch (error) {
-      console.error("Error checking existing orders:", error);
-      await createNewOrder(selectedClientId);
-    } finally {
-      setIsCheckingExistingOrder(false);
     }
   };
 
-  const checkClientOrders = async (clientId: string) => {
+  const checkClientOrders = async (clientId: string): Promise<ExistingOrder[]> => {
     setIsCheckingExistingOrder(true);
     try {
       const actionResult = await getClientUnpaidOrders(clientId);
@@ -343,10 +359,12 @@ export default function ClientSelectionModal({
       setCheckedClientId(clientId);
       if (orders.length > 0) {
         setSelectedExistingOrderId(orders[0].id);
-        setShowExistingOrderDialog(true);
+        openExistingOrderDialog();
       }
+      return orders;
     } catch (error) {
       console.error("Error checking existing orders:", error);
+      return [];
     } finally {
       setIsCheckingExistingOrder(false);
     }
@@ -455,6 +473,7 @@ export default function ClientSelectionModal({
       const result = await addItemsToOrder({
         orderId: selectedExistingOrderId,
         businessId,
+        mode,
         items: orderItems,
       });
 
@@ -483,8 +502,39 @@ export default function ClientSelectionModal({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-hidden overflow-x-hidden flex flex-col sm:max-w-md">
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          // No cerrar este diálogo cuando el cierre proviene de un diálogo hijo
+          // (órdenes pendientes o nuevo cliente) que aún está abierto o acaba
+          // de cerrarse en este mismo tick.
+          if (
+            !next &&
+            (suppressParentCloseRef.current || showExistingOrderDialog || isCreateModalOpen)
+          ) {
+            return;
+          }
+          onOpenChange(next);
+        }}
+      >
+      <DialogContent
+        className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-hidden overflow-x-hidden flex flex-col sm:max-w-md md:max-w-2xl"
+        onInteractOutside={(event) => {
+          if (suppressParentCloseRef.current || showExistingOrderDialog || isCreateModalOpen) {
+            event.preventDefault();
+          }
+        }}
+        onPointerDownOutside={(event) => {
+          if (suppressParentCloseRef.current || showExistingOrderDialog || isCreateModalOpen) {
+            event.preventDefault();
+          }
+        }}
+        onFocusOutside={(event) => {
+          if (suppressParentCloseRef.current || showExistingOrderDialog || isCreateModalOpen) {
+            event.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{mode === "budget" ? "Crear Presupuesto" : "Crear Orden a Cuenta"}</DialogTitle>
           <DialogDescription>
@@ -507,7 +557,7 @@ export default function ClientSelectionModal({
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={() => openCreateClientDialog()}
               title="Crear nuevo cliente"
             >
               <Plus className="h-4 w-4" />
@@ -535,7 +585,6 @@ export default function ClientSelectionModal({
                    setSelectedExistingOrderId(null);
                    setShowExistingOrderDialog(false);
                    setCheckedClientId(null);
-                   void checkClientOrders(client.id);
                   }}
                   className={`p-3 cursor-pointer border-b last:border-b-0 transition-colors ${
                     selectedClientId === client.id
@@ -636,7 +685,7 @@ export default function ClientSelectionModal({
     </Dialog>
 
     {/* Create Client Modal */}
-    <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+    <Dialog open={isCreateModalOpen} onOpenChange={handleCreateClientDialogChange}>
       <DialogContent className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-hidden overflow-x-hidden flex flex-col sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Crear Nuevo Cliente</DialogTitle>
@@ -722,7 +771,7 @@ export default function ClientSelectionModal({
     </Dialog>
 
     {/* Existing Order Dialog (R3: Smart Client Selection) */}
-    <Dialog open={showExistingOrderDialog} onOpenChange={setShowExistingOrderDialog}>
+    <Dialog open={showExistingOrderDialog} onOpenChange={handleExistingOrderDialogChange}>
       <DialogContent className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-hidden overflow-x-hidden flex flex-col sm:max-w-md md:max-w-2xl">
         <DialogHeader>
           <DialogTitle>

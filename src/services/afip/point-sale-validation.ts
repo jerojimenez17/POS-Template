@@ -56,9 +56,9 @@ export function formatAfipPointSaleErrorForUser(error: AfipPointSaleError): stri
   const safeMessage = sanitizeAfipText(error.message);
   if (error.code === "11002") {
     const environment = error.environment && error.environment !== "desconocido" ? error.environment : "ambiente desconocido";
-    return `AFIP/ARCA rechazó el punto de venta ${String(error.ptoVenta).padStart(3, "0")} para ${type} (tipo ${error.tipoFactura}) en el WebService de este CUIT y ${environment} (código 11002). Verifique en ARCA que esté habilitado para WSFE/WSFEv1, que corresponda al CUIT y al ambiente del certificado. Actualice la configuración o seleccione otro punto habilitado. No se generó CAE. Detalle: ${safeMessage}`;
+    return `ARCA rechazó el punto de venta ${String(error.ptoVenta).padStart(3, "0")} para ${type} (tipo ${error.tipoFactura}) en el WebService de este CUIT y ${environment} (código 11002). Verifique en ARCA que esté habilitado para WSFE/WSFEv1, que corresponda al CUIT y al ambiente del certificado. Actualice la configuración o seleccione otro punto habilitado. No se generó CAE. Detalle: ${safeMessage}`;
   }
-  return `No se pudo operar AFIP para el punto ${error.ptoVenta}, ${type}: ${safeMessage}`;
+  return `No se pudo operar con ARCA para el punto ${error.ptoVenta}, ${type}: ${safeMessage}`;
 }
 
 export function billTypeFromCode(code: AfipVoucherType): BillType {
