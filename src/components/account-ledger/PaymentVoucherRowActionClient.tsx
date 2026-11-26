@@ -7,6 +7,7 @@ import {
   createOrRetryPaymentVoucherAction,
   getPaymentVoucherStatusAction,
   printPaymentVoucherAction,
+  reconcilePaymentVoucherAction,
 } from "@/actions/payment-voucher";
 import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
 import { PaymentVoucherRowAction } from "./PaymentVoucherRowAction";
@@ -90,6 +91,20 @@ export function PaymentVoucherRowActionClient({ cashMovementId, amount, status, 
     router.refresh();
   };
 
+  const reconcile = async (input: { cashMovementId: string }) => {
+    try {
+      const result = await reconcilePaymentVoucherAction(input);
+      if (result.status === "UNKNOWN") {
+        setResolution({ sourceStatus: status, status: "UNKNOWN" });
+        return;
+      }
+      router.refresh();
+    } catch {
+      // A failed verification is never an authorization to issue again.
+      setResolution({ sourceStatus: status, status: "UNKNOWN" });
+    }
+  };
+
   const print = async () => {
     const popup = window.open("", "_blank");
     if (!popup) throw new Error("payment_voucher_print_unavailable");
@@ -145,6 +160,7 @@ export function PaymentVoucherRowActionClient({ cashMovementId, amount, status, 
         proposedBillType={effectiveStatus === "FAILED" ? effectiveProposedBillType : undefined}
         configuredPtoVentas={configuredPtoVentas}
         onCreateOrRetry={createOrRetry}
+        onReconcile={reconcile}
         onPrint={print}
       />
       {statusErrorKey === currentStatusKey && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,26 @@ export default function AddPaymentForm({
   const [billType, setBillType] = useState("");
   const [ptoVenta, setPtoVenta] = useState(configuredPtoVentas[0]?.toString() ?? "");
   const [isPending, setIsPending] = useState(false);
+  const idempotencyStorageKey = `account-ledger-payment:${orderId}:idempotency-key`;
+  const [idempotencyKey, setIdempotencyKey] = useState(() => {
+    if (typeof window === "undefined") return uuidv4();
+    let savedKey: string | null = null;
+    try {
+      savedKey = window.sessionStorage.getItem(idempotencyStorageKey);
+    } catch {
+      // The in-memory key still protects this mounted form if storage is blocked.
+    }
+    if (savedKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(savedKey)) {
+      return savedKey;
+    }
+    const nextKey = uuidv4();
+    try {
+      window.sessionStorage.setItem(idempotencyStorageKey, nextKey);
+    } catch {
+      // Keep the same key in React state for retries in this mounted form.
+    }
+    return nextKey;
+  });
   const isRemito = billType === "Remito";
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,6 +91,7 @@ export default function AddPaymentForm({
 
       const result = await registerPayment({
         orderId,
+        idempotencyKey,
         amount: amountNum,
         paymentMethod,
         businessId,
@@ -86,13 +108,26 @@ export default function AddPaymentForm({
         } else if (outcome.voucherStatus === "AUTHORIZED") {
           toast.success("Pago registrado y factura autorizada");
         } else if (outcome.voucherStatus === "UNKNOWN") {
-          toast.warning("Pago registrado; verifique la emisión de la factura antes de reintentar");
+          toast.warning("Pago registrado; verifique la emisión de la factura antes de reintentar. No vuelva a emitir hasta confirmar el resultado.");
+        } else if (outcome.voucherStatus === "PENDING" || outcome.voucherStatus === "ISSUING") {
+          toast.info("Pago registrado; la emisión de la factura está en curso. Espere a que finalice.");
+        } else if (outcome.voucherStatus === "MISSING") {
+          toast.warning("Pago registrado; este pago histórico no tiene una reserva fiscal. Requiere revisión manual y no puede reintentarse desde el historial.");
+        } else if (outcome.voucherStatus === "FAILED") {
+          toast.warning("Pago registrado; la factura no se emitió. Puede iniciar un reintento explícito desde el historial de pagos.");
         } else {
-          toast.warning("Pago registrado; la factura no se emitió. Puede recuperarla desde el historial de pagos.");
+          toast.warning("Pago registrado; el estado de facturación requiere verificación en el historial de pagos.");
         }
         router.refresh();
         setIsOpen(false);
         setAmount(String(remainingBalance));
+        const nextIdempotencyKey = uuidv4();
+        setIdempotencyKey(nextIdempotencyKey);
+        try {
+          window.sessionStorage.setItem(idempotencyStorageKey, nextIdempotencyKey);
+        } catch {
+          // A future render will create a new in-memory key as usual.
+        }
       } else {
         toast.error("No se pudo registrar el pago. Intente nuevamente.");
       }

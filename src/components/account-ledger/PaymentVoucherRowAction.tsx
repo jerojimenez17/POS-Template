@@ -14,6 +14,7 @@ interface PaymentVoucherRowActionProps {
   proposedBillType?: string;
   configuredPtoVentas?: number[];
   onCreateOrRetry?: (input: { cashMovementId: string; billType: string; ptoVenta: number }) => Promise<"FAILED" | "UNKNOWN" | void>;
+  onReconcile?: (input: { cashMovementId: string }) => Promise<void>;
   onPrint?: (input: { cashMovementId: string }) => Promise<void> | void;
 }
 
@@ -30,12 +31,14 @@ export function PaymentVoucherRowAction({
   proposedBillType,
   configuredPtoVentas = [],
   onCreateOrRetry,
+  onReconcile,
   onPrint,
 }: PaymentVoucherRowActionProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [billType, setBillType] = useState("");
   const [ptoVenta, setPtoVenta] = useState(configuredPtoVentas[0]?.toString() ?? "");
   const [submitting, setSubmitting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleCreate = async () => {
@@ -95,11 +98,39 @@ export function PaymentVoucherRowAction({
     return <p className="text-right text-xs text-muted-foreground">Sin emisión AFIP (Remito)</p>;
   }
 
+  if (status === "MISSING") {
+    return (
+      <p role="status" className="max-w-xs text-right text-xs text-muted-foreground">
+        Pago histórico sin reserva fiscal. Requiere revisión manual antes de emitir.
+      </p>
+    );
+  }
+
   if (status === "UNKNOWN") {
     return (
-      <p role="alert" className="max-w-xs text-right text-xs text-amber-800 dark:text-amber-300">
-        {error ?? "El pago quedó registrado, pero el resultado de la emisión es incierto. Debe verificar emisión y reconciliar el resultado antes de reintentar. No vuelva a emitir hasta confirmar el resultado."}
-      </p>
+      <div className="flex max-w-xs flex-col items-end gap-2">
+        <p role="alert" className="text-right text-xs text-amber-800 dark:text-amber-300">
+          {error ?? "El pago quedó registrado, pero el resultado de la emisión es incierto. No vuelva a emitir hasta confirmar el resultado."}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={verifying || !onReconcile}
+          onClick={async () => {
+            if (!onReconcile || verifying) return;
+            setVerifying(true);
+            try {
+              await onReconcile({ cashMovementId });
+            } finally {
+              setVerifying(false);
+            }
+          }}
+        >
+          {verifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+          {verifying ? "Verificando…" : "Verificar emisión"}
+        </Button>
+      </div>
     );
   }
 

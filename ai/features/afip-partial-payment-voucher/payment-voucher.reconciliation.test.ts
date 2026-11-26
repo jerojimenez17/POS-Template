@@ -121,22 +121,18 @@ describe("payment voucher authoritative reconciliation exact-total contract", ()
   );
 
   it.each([123, "123", "123.0", "123.00"])(
-    "attaches and authorizes exact reconciled total %s only",
+    "does not authorize exact total %s without evidence correlated to this payment attempt",
     async (total) => {
       const { dependencies, mocks, payment, remoteEvidence } = reconciliationFixture(total);
       const service = await loadService(dependencies);
 
       const result = await service.reconcile({ cashMovementId: "movement-1" });
 
-      expect(result).toEqual({ status: "AUTHORIZED" });
-      expect(mocks.persistAuthorized).toHaveBeenCalledWith(expect.objectContaining({
-        status: "AUTHORIZED",
-        amountPesos: 123,
-        total,
-        cae: "12345678901234",
-      }));
-      expect(mocks.persistAuthorized.mock.calls[0]?.[0]).not.toHaveProperty("providerDebug");
-      expect(mocks.persistFailure).not.toHaveBeenCalled();
+      // Matching CAE/type/POS/number/date/amount is not enough to prove this
+      // remote voucher belongs to this movement or attempt. The installed
+      // gateway has no authoritative per-payment lookup contract.
+      expect(result).toEqual({ status: "UNKNOWN", reconciliationRequired: true });
+      expect(mocks.persistAuthorized).not.toHaveBeenCalled();
       expect(payment.total).toBe(123);
       expect(payment.order.total).toBe(900);
       expect(mocks.issue).not.toHaveBeenCalled();

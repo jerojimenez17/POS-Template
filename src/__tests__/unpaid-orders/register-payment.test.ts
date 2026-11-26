@@ -7,6 +7,12 @@ import { Prisma } from "@prisma/client";
 import type { PaidStatus } from "@prisma/client";
 
 const CONFIGURED_PTO_VENTA = 3;
+let idempotencySequence = 1;
+
+const nextIdempotencyKey = (): string => {
+  const suffix = (idempotencySequence++).toString(16).padStart(12, "0");
+  return `00000000-0000-4000-8000-${suffix}`;
+};
 
 vi.mock("@/lib/db", () => {
   return {
@@ -50,6 +56,7 @@ describe("registerPayment", () => {
     const { db } = await import("@/lib/db");
     const input = {
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 20,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -70,6 +77,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-over-voucher-decimal-limit",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 10_000_000_000,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -89,6 +97,7 @@ describe("registerPayment", () => {
     const { db } = await import("@/lib/db");
     const input = {
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 20,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -132,6 +141,7 @@ describe("registerPayment", () => {
           cashMovement: {
             create: vi.fn().mockResolvedValue({ id: "cash-3" }),
           },
+          paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-3" }) },
           client: {
             update: vi.fn().mockResolvedValue({ id: "client-1" }),
           },
@@ -142,6 +152,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 20,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -183,6 +194,7 @@ describe("registerPayment", () => {
           cashMovement: {
             create: vi.fn().mockResolvedValue({ id: "cash-1" }),
           },
+          paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-1" }) },
           client: {
             update: vi.fn().mockResolvedValue({ id: "client-1" }),
           },
@@ -193,6 +205,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 100,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -232,6 +245,7 @@ describe("registerPayment", () => {
           cashMovement: {
             create: vi.fn().mockResolvedValue({ id: "cash-2" }),
           },
+          paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-2" }) },
           client: {
             update: vi.fn().mockResolvedValue({ id: "client-1" }),
           },
@@ -242,6 +256,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 20,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -287,6 +302,7 @@ describe("registerPayment", () => {
           cashMovement: {
             create: vi.fn().mockResolvedValue({ id: "cash-4" }),
           },
+          paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-4" }) },
           client: {
             update: vi.fn().mockResolvedValue({ id: "client-1" }),
           },
@@ -297,6 +313,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 25,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -340,12 +357,14 @@ describe("registerPayment", () => {
           update: orderUpdate,
         },
         cashMovement: { create: cashMovementCreate },
+        paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-invalid" }) },
         client: { update: clientUpdate },
       });
     });
 
     const result = await registerPayment({
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -397,6 +416,7 @@ describe("registerPayment", () => {
           update: orderUpdateSpy,
         },
         cashMovement: { create: cashMovementCreateSpy },
+        paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-rounded" }) },
         client: { update: vi.fn().mockResolvedValue({ id: "client-1" }) },
       });
     });
@@ -409,11 +429,13 @@ describe("registerPayment", () => {
         update: orderUpdateSpy,
       },
       cashMovement: { create: cashMovementCreateSpy },
+      paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-rounded" }) },
       client: { update: clientUpdateSpy },
     }));
 
     const result = await registerPayment({
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -446,11 +468,13 @@ describe("registerPayment", () => {
         update: orderUpdateSpy,
       },
       cashMovement: { create: cashMovementCreateSpy },
+      paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-normalized" }) },
       client: { update: vi.fn().mockResolvedValue({ id: "client-1" }) },
     }));
 
     const result = await registerPayment({
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 7.5,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -484,6 +508,7 @@ describe("registerPayment", () => {
           update: vi.fn().mockResolvedValue({ id: "order-1" }),
         },
         cashMovement: { create: vi.fn().mockResolvedValue({ id: "cash-committed" }) },
+        paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-committed" }) },
         client: { update: vi.fn().mockResolvedValue({ id: "client-1" }) },
       });
       transactionCommitted = true;
@@ -497,6 +522,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-1",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 20,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -541,6 +567,7 @@ describe("registerPayment", () => {
         update: vi.fn().mockResolvedValue({ id: "order-without-client" }),
       },
       cashMovement: { create: cashMovementCreate },
+      paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-no-client" }) },
       client: { update: vi.fn() },
     }));
     vi.mocked(issuePaymentVoucherForSession).mockRejectedValueOnce(
@@ -549,6 +576,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-without-client",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 20,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -581,6 +609,7 @@ describe("registerPayment", () => {
         update: vi.fn().mockResolvedValue({ id: "order-ambiguous-voucher" }),
       },
       cashMovement: { create: cashMovementCreate },
+      paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-ambiguous" }) },
       client: { update: vi.fn().mockResolvedValue({ id: "client-1" }) },
     }));
     vi.mocked(issuePaymentVoucherForSession).mockResolvedValueOnce({
@@ -591,6 +620,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-ambiguous-voucher",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 20,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -643,11 +673,13 @@ describe("registerPayment", () => {
       $queryRaw: orderLock,
       order: { findUnique: balanceRead, update: vi.fn().mockResolvedValue({ id: "order-locked" }) },
       cashMovement: { create: vi.fn().mockResolvedValue({ id: "cash-locked" }) },
+      paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-locked" }) },
       client: { update: vi.fn().mockResolvedValue({ id: "client-1" }) },
     }));
 
     const registration = registerPayment({
       orderId: "order-locked",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 1,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -729,6 +761,7 @@ describe("registerPayment", () => {
             return stagedMovement;
           }),
         },
+        paymentVoucher: { create: vi.fn().mockResolvedValue({ id: "voucher-concurrent" }) },
         client: {
           update: vi.fn().mockImplementation(async ({ data }: { data: { balance: { decrement: number } } }) => {
             stagedClientDecrement = data.balance.decrement;
@@ -755,7 +788,12 @@ describe("registerPayment", () => {
       billType: "Factura B" as const,
       ptoVenta: CONFIGURED_PTO_VENTA,
     };
-    const results = await Promise.all([registerPayment(payment), registerPayment(payment)]);
+    const firstConfirmation = { ...payment, idempotencyKey: nextIdempotencyKey() };
+    const secondConfirmation = { ...payment, idempotencyKey: nextIdempotencyKey() };
+    const results = await Promise.all([
+      registerPayment(firstConfirmation),
+      registerPayment(secondConfirmation),
+    ]);
 
     expect(results.filter((result) => result.success)).toHaveLength(1);
     expect(results.filter((result) => !result.success)).toHaveLength(1);
@@ -781,6 +819,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-db-failure",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 1,
       paymentMethod: "efectivo",
       businessId: "business-123",
@@ -862,6 +901,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-remito",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 10.5,
       paymentMethod: "Efectivo",
       businessId: "business-123",
@@ -965,6 +1005,7 @@ describe("registerPayment", () => {
 
     const result = await registerPayment({
       orderId: "order-remito-rollback",
+      idempotencyKey: nextIdempotencyKey(),
       amount: 10.5,
       paymentMethod: "Efectivo",
       businessId: "business-123",
@@ -998,11 +1039,13 @@ describe("registerPayment", () => {
           update: vi.fn().mockResolvedValue({ id: "order-factura" }),
         },
         cashMovement: { create: cashMovementCreate },
+        paymentVoucher: { create: vi.fn().mockResolvedValue({ id: `voucher-${billType}` }) },
         client: { update: vi.fn().mockResolvedValue({ id: "client-1" }) },
       } as never));
 
       const result = await registerPayment({
         orderId: "order-factura",
+        idempotencyKey: nextIdempotencyKey(),
         amount: 10.5,
         paymentMethod: "Efectivo",
         businessId: "business-123",
@@ -1029,6 +1072,7 @@ describe("registerPayment", () => {
 
       const result = await registerPayment({
         orderId: "order-factura-no-pos",
+        idempotencyKey: nextIdempotencyKey(),
         amount: 10,
         paymentMethod: "Efectivo",
         businessId: "business-123",
@@ -1040,4 +1084,217 @@ describe("registerPayment", () => {
       expect(issuePaymentVoucherForSession).not.toHaveBeenCalled();
     },
   );
+
+  it("reproduce un pago durable con la misma firma aunque el POS ya no esté configurado", async () => {
+    const { db } = await import("@/lib/db");
+    const { pusherServer } = await import("@/lib/pusher-server");
+    const { revalidateTag } = await import("next/cache");
+    const idempotencyKey = nextIdempotencyKey();
+    const durablePaymentLookup = vi.fn().mockResolvedValue({
+      id: "cash-committed-replay",
+      total: 20,
+      orderId: "order-durable-replay",
+      paidMethod: "efectivo",
+      paymentVoucher: {
+        status: "ISSUED",
+        billType: "Factura B",
+        invoicePointOfSale: CONFIGURED_PTO_VENTA,
+        currentAttempt: 1,
+        attempts: [{
+          attemptNumber: 1,
+          billType: "Factura B",
+          invoicePointOfSale: CONFIGURED_PTO_VENTA,
+        }],
+      },
+    });
+    (db as unknown as { cashMovement: { findUnique: typeof durablePaymentLookup } }).cashMovement = {
+      findUnique: durablePaymentLookup,
+    };
+    vi.mocked(db.business.findUnique).mockResolvedValue({ ptoVenta: [] } as never);
+
+    const result = await registerPayment({
+      orderId: "order-durable-replay",
+      idempotencyKey,
+      amount: 20,
+      paymentMethod: "efectivo",
+      businessId: "business-123",
+      billType: "Factura B",
+      ptoVenta: CONFIGURED_PTO_VENTA,
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: { paymentRecorded: true, voucherStatus: "ISSUED" },
+    });
+    expect(durablePaymentLookup).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        businessId_idempotencyKey: {
+          businessId: "business-123",
+          idempotencyKey,
+        },
+      },
+    }));
+    expect(db.business.findUnique).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(issuePaymentVoucherForSession).not.toHaveBeenCalled();
+    expect(pusherServer.trigger).not.toHaveBeenCalled();
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it("rechaza una firma distinta para una clave durable existente sin efectos", async () => {
+    const { db } = await import("@/lib/db");
+    const { pusherServer } = await import("@/lib/pusher-server");
+    const { revalidateTag } = await import("next/cache");
+    const idempotencyKey = nextIdempotencyKey();
+    const durablePaymentLookup = vi.fn().mockResolvedValue({
+      id: "cash-conflicting-replay",
+      total: 20,
+      orderId: "order-conflicting-replay",
+      paidMethod: "efectivo",
+      paymentVoucher: {
+        status: "ISSUED",
+        billType: "Factura B",
+        invoicePointOfSale: CONFIGURED_PTO_VENTA,
+        currentAttempt: 1,
+        attempts: [{
+          attemptNumber: 1,
+          billType: "Factura B",
+          invoicePointOfSale: CONFIGURED_PTO_VENTA,
+        }],
+      },
+    });
+    (db as unknown as { cashMovement: { findUnique: typeof durablePaymentLookup } }).cashMovement = {
+      findUnique: durablePaymentLookup,
+    };
+    vi.mocked(db.business.findUnique).mockResolvedValue({ ptoVenta: [] } as never);
+
+    const result = await registerPayment({
+      orderId: "order-conflicting-replay",
+      idempotencyKey,
+      amount: 21,
+      paymentMethod: "efectivo",
+      businessId: "business-123",
+      billType: "Factura B",
+      ptoVenta: CONFIGURED_PTO_VENTA,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "La clave de confirmación ya fue utilizada para otro pago",
+    });
+    expect(durablePaymentLookup).toHaveBeenCalledTimes(1);
+    expect(db.business.findUnique).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(issuePaymentVoucherForSession).not.toHaveBeenCalled();
+    expect(pusherServer.trigger).not.toHaveBeenCalled();
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it("no crea un segundo movimiento, intento ni emisión al repetir la confirmación", async () => {
+    const { db } = await import("@/lib/db");
+    const idempotencyKey = nextIdempotencyKey();
+    let durablePayment: {
+      id: string;
+      total: number;
+      orderId: string;
+      paidMethod: string;
+      paymentVoucher?: {
+        status: string;
+        billType: string;
+        invoicePointOfSale: number;
+        currentAttempt: number;
+        attempts: Array<{ attemptNumber: number; billType: string; invoicePointOfSale: number }>;
+      };
+    } | null = null;
+    const durablePaymentLookup = vi.fn(async () => durablePayment);
+    (db as unknown as { cashMovement: { findUnique: typeof durablePaymentLookup } }).cashMovement = {
+      findUnique: durablePaymentLookup,
+    };
+    const movementCreate = vi.fn(async ({ data }: { data: {
+      total: number;
+      orderId: string;
+      paidMethod: string;
+    } }) => {
+      durablePayment = { id: "cash-repeated-confirmation", ...data };
+      return durablePayment;
+    });
+    const voucherCreate = vi.fn(async ({ data }: { data: {
+      status: string;
+      billType: string;
+      invoicePointOfSale: number;
+      currentAttempt: number;
+      attempts: { create: { attemptNumber: number; billType: string; invoicePointOfSale: number } };
+    } }) => {
+      if (durablePayment) {
+        durablePayment.paymentVoucher = {
+          status: "ISSUED",
+          billType: data.billType,
+          invoicePointOfSale: data.invoicePointOfSale,
+          currentAttempt: data.currentAttempt,
+          attempts: [{ ...data.attempts.create }],
+        };
+      }
+      return { id: "voucher-repeated-confirmation" };
+    });
+    const clientUpdate = vi.fn().mockResolvedValue({ id: "client-1" });
+    const orderUpdate = vi.fn().mockResolvedValue({ id: "order-repeated-confirmation" });
+
+    vi.mocked(db.business.findUnique).mockResolvedValue({ ptoVenta: [CONFIGURED_PTO_VENTA] } as never);
+    vi.mocked(db.$transaction).mockImplementation(async (callback: (tx: never) => Promise<unknown>) => callback({
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      order: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "order-repeated-confirmation",
+          total: 100,
+          clientId: "client-1",
+          businessId: "business-123",
+          paidStatus: "inpago",
+          client: { id: "client-1", name: "Cliente de prueba" },
+          cashMovements: [],
+        }),
+        update: orderUpdate,
+      },
+      cashMovement: {
+        findUnique: vi.fn(async () => durablePayment),
+        create: movementCreate,
+      },
+      paymentVoucher: { create: voucherCreate },
+      client: { update: clientUpdate },
+    } as never));
+
+    const request = {
+      orderId: "order-repeated-confirmation",
+      idempotencyKey,
+      amount: 20,
+      paymentMethod: "efectivo",
+      businessId: "business-123",
+      billType: "Factura B",
+      ptoVenta: CONFIGURED_PTO_VENTA,
+    };
+    const firstResult = await registerPayment(request);
+    vi.mocked(db.business.findUnique).mockResolvedValue({ ptoVenta: [] } as never);
+    const replayResult = await registerPayment(request);
+
+    expect(firstResult).toEqual({
+      success: true,
+      data: { paymentRecorded: true, voucherStatus: "ISSUED" },
+    });
+    expect(replayResult).toEqual(firstResult);
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(movementCreate).toHaveBeenCalledTimes(1);
+    expect(voucherCreate).toHaveBeenCalledTimes(1);
+    expect(voucherCreate.mock.calls[0]?.[0].data.attempts.create).toMatchObject({
+      attemptNumber: 1,
+      billType: "Factura B",
+      invoicePointOfSale: CONFIGURED_PTO_VENTA,
+    });
+    expect(clientUpdate).toHaveBeenCalledTimes(1);
+    expect(orderUpdate).toHaveBeenCalledTimes(1);
+    expect(issuePaymentVoucherForSession).toHaveBeenCalledTimes(1);
+    expect(durablePayment).toMatchObject({
+      id: "cash-repeated-confirmation",
+      total: 20,
+      paymentVoucher: { status: "ISSUED", currentAttempt: 1 },
+    });
+  });
 });

@@ -63,6 +63,7 @@ describe("initial account-ledger payment POS selection", () => {
       businessId: "business-1",
       billType: "Factura B",
       ptoVenta: 9,
+      idempotencyKey: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
     })));
   });
 
@@ -131,13 +132,14 @@ describe("initial account-ledger payment POS selection", () => {
 
     await user.click(screen.getByRole("button", { name: /confirmar/i }));
 
-    await waitFor(() => expect(registerPayment).toHaveBeenCalledWith({
+    await waitFor(() => expect(registerPayment).toHaveBeenCalledWith(expect.objectContaining({
       orderId: "order-remito-ui",
       amount: 11,
       paymentMethod: "Efectivo",
       businessId: "business-1",
+      idempotencyKey: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
       billType: "Remito",
-    }));
+    })));
     expect(registerPayment).not.toHaveBeenCalledWith(expect.objectContaining({ ptoVenta: expect.anything() }));
   });
 });

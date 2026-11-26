@@ -81,28 +81,19 @@ describe("account-ledger payment-voucher row failure feedback", () => {
     expect(paymentActionMocks.createOrRetry).not.toHaveBeenCalled();
   });
 
-  it("tells the operator to verify an UNKNOWN issuance instead of retrying it", async () => {
-    paymentActionMocks.createOrRetry.mockResolvedValue({ voucherStatus: "UNKNOWN" });
+  it("blocks invoice creation for a legacy MISSING payment without an approved recovery policy", async () => {
     const PaymentVoucherRowActionClient = await loadVoucherRow();
     render(<PaymentVoucherRowActionClient
-      cashMovementId="movement-unknown-issuance"
+      cashMovementId="movement-legacy-missing"
       amount={45}
       status="MISSING"
       configuredPtoVentas={[3]}
       client={null}
     />);
 
-    fireEvent.click(screen.getByRole("button", { name: /create invoice/i }));
-    fireEvent.click(screen.getByRole("radio", { name: /factura b/i }));
-    fireEvent.click(screen.getByRole("button", { name: /confirm issue/i }));
-
-    await waitFor(() => expect(paymentActionMocks.createOrRetry).toHaveBeenCalledWith({
-      cashMovementId: "movement-unknown-issuance",
-      billType: "Factura B",
-      ptoVenta: 3,
-      retry: false,
-    }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/verifique la emisión.*antes de reintentar|verificar emisión.*no vuelva a emitir/i);
-    expect(screen.getByRole("alert")).not.toHaveTextContent(/la factura no se emitió/i);
+    expect(screen.getByRole("status")).toHaveTextContent(/pago histórico sin reserva fiscal.*revisión manual/i);
+    expect(screen.queryByRole("button", { name: /create invoice|retry/i })).not.toBeInTheDocument();
+    expect(paymentActionMocks.createOrRetry).not.toHaveBeenCalled();
+    expect(paymentActionMocks.getStatus).not.toHaveBeenCalled();
   });
 });

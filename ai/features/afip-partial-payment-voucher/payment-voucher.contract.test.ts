@@ -133,7 +133,7 @@ function dependencies(overrides: Partial<VoucherDependencies> = {}) {
       return {
         kind: "authorized" as const,
         total: 123,
-        cae: "PAYMENT-CAE",
+        cae: "12345678901234",
         invoiceNumber: 77,
         pointOfSale: 3,
         issuedAt: new Date("2026-10-01T12:00:00.000Z"),
@@ -222,7 +222,7 @@ describe("payment voucher amount, mapping, and DTO contract", () => {
     mocks.issue.mockResolvedValue({
       kind: "authorized",
       total: 10,
-      cae: "PAYMENT-CAE-LEGACY",
+      cae: "12345678901234",
       invoiceNumber: 79,
       pointOfSale: 3,
       issuedAt: new Date("2026-10-03T12:00:00.000Z"),
@@ -348,7 +348,8 @@ describe("payment-scoped issuance and safety contract", () => {
 
     mocks.findPayment.mockResolvedValue(payment());
     mocks.isAfipEligible.mockResolvedValue(false);
-    await expect(service.issue({ cashMovementId: "movement-1", billType: "Factura B", ptoVenta: 3 })).rejects.toThrow();
+    const result = await service.issue({ cashMovementId: "movement-1", billType: "Factura B", ptoVenta: 3 });
+    expect(result).toMatchObject({ paymentRecorded: true, voucherStatus: "FAILED" });
     expect(mocks.issue).not.toHaveBeenCalled();
   });
 
@@ -389,7 +390,7 @@ describe("payment-scoped issuance and safety contract", () => {
       cashMovementId: "movement-1",
       billType: "Factura A",
       ptoVenta,
-    })).rejects.toThrow();
+    })).resolves.toMatchObject({ paymentRecorded: true, voucherStatus: "FAILED" });
 
     expect(mocks.claim).not.toHaveBeenCalled();
     expect(mocks.prepare).not.toHaveBeenCalled();
@@ -405,7 +406,7 @@ describe("payment-scoped issuance and safety contract", () => {
       cashMovementId: "movement-1",
       billType: "Factura C",
       ptoVenta: 3,
-    })).rejects.toThrow();
+    })).resolves.toMatchObject({ paymentRecorded: true, voucherStatus: "FAILED" });
 
     expect(mocks.claim).not.toHaveBeenCalled();
     expect(mocks.prepare).not.toHaveBeenCalled();
@@ -421,7 +422,7 @@ describe("payment-scoped issuance and safety contract", () => {
       cashMovementId: "movement-1",
       billType: "Factura B",
       ptoVenta: 3,
-    })).rejects.toThrow();
+    })).resolves.toMatchObject({ paymentRecorded: true, voucherStatus: "FAILED" });
 
     expect(mocks.claim).not.toHaveBeenCalled();
     expect(mocks.prepare).not.toHaveBeenCalled();
@@ -435,7 +436,7 @@ describe("payment-scoped issuance and safety contract", () => {
       .mockResolvedValueOnce({
         kind: "authorized",
         total: 123,
-        cae: "PAYMENT-CAE-RETRY",
+        cae: "12345678901234",
         invoiceNumber: 78,
         pointOfSale: 8,
         issuedAt: new Date("2026-10-02T12:00:00.000Z"),
@@ -620,7 +621,8 @@ describe("payment-scoped issuance and safety contract", () => {
     });
     const service = await createService(deps);
 
-    await expect(service.issue({ cashMovementId: "movement-1", billType: "Factura B", ptoVenta: 3 })).rejects.toThrow();
+    const result = await service.issue({ cashMovementId: "movement-1", billType: "Factura B", ptoVenta: 3 });
+    expect(result).toMatchObject({ paymentRecorded: true, voucherStatus: "FAILED" });
     expect(mocks.claim).not.toHaveBeenCalled();
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.issue).not.toHaveBeenCalled();
@@ -645,7 +647,7 @@ describe("payment-scoped issuance and safety contract", () => {
       .mockResolvedValueOnce({
         kind: "authorized",
         total: 123,
-        cae: "PAYMENT-CAE-RETRY",
+        cae: "12345678901234",
         invoiceNumber: 78,
         pointOfSale: 3,
         issuedAt: new Date("2026-10-02T12:00:00.000Z"),
@@ -687,7 +689,7 @@ describe("payment-scoped issuance and safety contract", () => {
     ]);
     expect(mocks.issue).toHaveBeenCalledTimes(1);
 
-    mocks.getVoucher.mockResolvedValue({ status: "AUTHORIZED", cae: "PAYMENT-CAE", billType: "Factura B" });
+    mocks.getVoucher.mockResolvedValue({ status: "AUTHORIZED", cae: "12345678901234", billType: "Factura B" });
     await service.issue({ cashMovementId: "movement-1", billType: "Factura A", ptoVenta: 3 });
     expect(mocks.issue).toHaveBeenCalledTimes(1);
   });
@@ -709,7 +711,7 @@ describe("payment-scoped issuance and safety contract", () => {
     mocks.issue.mockResolvedValue({
       kind: "authorized",
       total: 122,
-      cae: "PAYMENT-CAE",
+      cae: "12345678901234",
       invoiceNumber: 77,
       pointOfSale: 3,
       issuedAt: new Date("2026-10-01T12:00:00.000Z"),
@@ -723,14 +725,15 @@ describe("payment-scoped issuance and safety contract", () => {
     expect(mocks.persistFailure).toHaveBeenCalledWith(expect.objectContaining({ status: "UNKNOWN" }));
   });
 
-  it("reconciles an existing remote voucher without issuing a replacement", async () => {
+  it("fails closed on incomplete remote reconciliation evidence without issuing a replacement", async () => {
     const { deps, mocks } = dependencies();
     mocks.reconcile.mockResolvedValue({ kind: "authorized", voucher: { cae: "FOUND-CAE", total: 123 } });
     const service = await createService(deps);
 
     const result = await service.reconcile({ cashMovementId: "movement-1" });
 
-    expect(result).toMatchObject({ status: "AUTHORIZED" });
+    expect(result).toEqual({ status: "UNKNOWN", reconciliationRequired: true });
+    expect(mocks.persistAuthorized).not.toHaveBeenCalled();
     expect(mocks.issue).not.toHaveBeenCalled();
   });
 

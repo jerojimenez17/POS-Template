@@ -32,7 +32,7 @@ async function loadRowAction(): Promise<(props: PaymentVoucherRowActionProps) =>
 }
 
 describe("individual payment-row voucher actions", () => {
-  it("lets the operator explicitly select A/B/C before creating a missing voucher", async () => {
+  it("blocks creation for a legacy MISSING voucher until a safe recovery policy exists", async () => {
     const PaymentVoucherRowAction = await loadRowAction();
     const onCreateOrRetry = vi.fn().mockResolvedValue(undefined);
     render(createElement(PaymentVoucherRowAction, {
@@ -42,15 +42,25 @@ describe("individual payment-row voucher actions", () => {
       onCreateOrRetry,
     }));
 
-    fireEvent.click(screen.getByRole("button", { name: /create.*invoice|invoice.*create/i }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /factura a/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /factura b/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /factura c/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /factura a/i })).not.toBeChecked();
-    expect(screen.getByRole("radio", { name: /factura b/i })).not.toBeChecked();
-    expect(screen.getByRole("radio", { name: /factura c/i })).not.toBeChecked();
-    expect(screen.getByText(/123/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/pago histórico sin reserva fiscal.*revisión manual/i);
+    expect(screen.queryByRole("button", { name: /create.*invoice|invoice.*create|retry/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onCreateOrRetry).not.toHaveBeenCalled();
+  });
+
+  it("states that a historical MISSING payment needs manual review without promising history recovery or retry", async () => {
+    const PaymentVoucherRowAction = await loadRowAction();
+    const onCreateOrRetry = vi.fn().mockResolvedValue(undefined);
+    render(createElement(PaymentVoucherRowAction, {
+      cashMovementId: "movement-legacy-review",
+      amount: 123,
+      status: "MISSING",
+      onCreateOrRetry,
+    }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(/pago histórico.*revisión manual/i);
+    expect(screen.queryByText(/(recuperar|reintentar).*(desde|del) historial/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /crear factura|reintentar factura|retry|recover/i })).not.toBeInTheDocument();
     expect(onCreateOrRetry).not.toHaveBeenCalled();
   });
 
@@ -119,7 +129,7 @@ describe("individual payment-row voucher actions", () => {
     }));
   });
 
-  it("shows the configured POS choices, defaulting to the first one", async () => {
+  it("does not expose POS choices for a legacy payment without a safe recovery policy", async () => {
     const PaymentVoucherRowAction = await loadRowAction();
     render(createElement(PaymentVoucherRowAction, {
       cashMovementId: "movement-pos",
@@ -128,21 +138,20 @@ describe("individual payment-row voucher actions", () => {
       configuredPtoVentas: [4, 9],
     }));
 
-    fireEvent.click(screen.getByRole("button", { name: /create.*invoice|invoice.*create/i }));
-
-    const selector = screen.getByRole("combobox", { name: /punto de venta/i });
-    expect(selector).toHaveTextContent("4");
-    fireEvent.click(selector);
-    expect(screen.getByRole("option", { name: "4" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "9" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/revisión manual antes de emitir/i);
+    expect(screen.queryByRole("combobox", { name: /punto de venta/i })).not.toBeInTheDocument();
   });
 
-  it.each(["PENDING", "ISSUING"] as const)("prevents duplicate submission while %s", async (status) => {
+  it.each([
+    ["PENDING", /pendiente de preparación/i],
+    ["ISSUING", /emisión en proceso/i],
+  ] as const)("announces %s as an active process and prevents duplicate submission", async (status, activeMessage) => {
     const PaymentVoucherRowAction = await loadRowAction();
     render(createElement(PaymentVoucherRowAction, { cashMovementId: "movement-3", amount: 3, status }));
 
-    expect(screen.getByRole("button")).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent(/pending|issuing|processing|preparing/i);
+    expect(screen.getByRole("button", { name: /invoice is processing/i })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(activeMessage);
+    expect(screen.queryByRole("button", { name: /create invoice|retry payment|reintentar factura|crear factura/i })).not.toBeInTheDocument();
   });
 
   it("shows reconciliation guidance but no retry for an unknown remote outcome", async () => {
