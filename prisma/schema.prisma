@@ -546,6 +546,7 @@ model SaleReturnItem {
 model CashMovement {
   id         String   @id @default(cuid())
   total      Float    @default(0)
+  idempotencyKey String?
   seller     String?
   paidMethod String?
   date       DateTime @default(now())
@@ -559,6 +560,8 @@ model CashMovement {
   cashboxSessionId String?
   cashboxSession   CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
   paymentVoucher   PaymentVoucher?
+
+  @@unique([businessId, idempotencyKey])
 }
 
 enum PaymentVoucherStatus {

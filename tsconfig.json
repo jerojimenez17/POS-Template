@@ -51,7 +51,6 @@
     "tests",
     "ai",
     "e2e",
-    "video",
     "src/__tests__",
     "**/__tests__"
   ]
