@@ -35,9 +35,9 @@ export default function ConfirmOrderButton({
 
   return (
     <Button
-      variant="default"
+      variant="outline"
       size="sm"
-      className="bg-green-600 hover:bg-green-700"
+      className="gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
       onClick={handleConfirm}
       disabled={isConfirming}
     >

@@ -84,13 +84,11 @@ export default function EditableOrderDetail({
   const [isLoading, setIsLoading] = useState(false);
 
   type OptimisticAction =
-    | { type: "add"; item: OrderItem }
     | { type: "remove"; itemId: string };
 
   const [optimisticItems, addOptimisticAction] = useOptimistic(
     items,
     (state, action: OptimisticAction) => {
-      if (action.type === "add") return [...state, action.item];
       if (action.type === "remove") return state.filter((item) => item.id !== action.itemId);
       return state;
     }
@@ -181,19 +179,20 @@ export default function EditableOrderDetail({
   };
 
   const handleUpdateQuantity = async (itemId: string, newQuantity: number) => {
+    const safeQuantity = Math.max(1, Number.isFinite(newQuantity) ? newQuantity : 1);
     setIsLoading(true);
     try {
       const result = await updateOrderItem({
         itemId,
         orderId: order.id,
-        quantity: newQuantity,
+        quantity: safeQuantity,
       });
 
       if (result.success) {
         setItems((prev) =>
           prev.map((item) =>
             item.id === itemId
-              ? { ...item, quantity: newQuantity, subTotal: newQuantity * item.price }
+              ? { ...item, quantity: safeQuantity, subTotal: safeQuantity * item.price }
               : item
           )
         );
@@ -288,25 +287,10 @@ export default function EditableOrderDetail({
     }
 
     const quantityNum = parseFloat(quantity);
-    if (!quantityNum || quantityNum <= 0) {
-      toast.error("La cantidad debe ser mayor a 0");
+    if (!Number.isFinite(quantityNum) || quantityNum < 1) {
+      toast.error("La cantidad mínima es 1");
       return;
     }
-
-    const newItem: OrderItem = {
-      id: Date.now().toString(),
-      productId: selectedProduct.id,
-      description: selectedProduct.description || "Producto",
-      code: selectedProduct.code,
-      price: selectedProduct.salePrice,
-      quantity: quantityNum,
-      subTotal: selectedProduct.salePrice * quantityNum,
-      addedAt: new Date(),
-    };
-
-    startTransition(() => {
-      addOptimisticAction({ type: "add", item: newItem });
-    });
 
     setIsLoading(true);
     try {
@@ -328,17 +312,14 @@ export default function EditableOrderDetail({
       if (result.success) {
         toast.success("Producto agregado");
         setHasChanges(true);
-        setItems((prev) => [...prev, newItem]);
         setIsAddProductOpen(false);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al agregar producto");
-        setItems((prev) => [...prev]);
       }
     } catch (error) {
       console.error("Error adding product:", error);
       toast.error("Error al agregar producto");
-      setItems((prev) => [...prev]);
     } finally {
       setIsLoading(false);
     }
@@ -608,12 +589,12 @@ export default function EditableOrderDetail({
                   <label className="text-sm font-medium">Cantidad</label>
                   <Input
                     type="number"
-                    min={0.01}
+                    min={1}
                     step="0.01"
                     max={selectedProduct.amount}
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    placeholder="0"
+                    placeholder="1"
                   />
                 </div>
                 <div className="flex-1 text-right">

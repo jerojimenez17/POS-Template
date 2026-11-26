@@ -82,8 +82,16 @@ export const mockDb = {
   },
   cashMovement: {
     create: vi.fn().mockResolvedValue({ id: 'cash-1' }),
+    findMany: vi.fn().mockResolvedValue([]),
     deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     aggregate: vi.fn().mockResolvedValue({ _sum: { total: 0 }, _count: { total: 0 } }),
+  },
+  paymentVoucher: {
+    findMany: vi.fn().mockResolvedValue([]),
+    deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+  },
+  paymentVoucherAttempt: {
+    deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
   },
   cashBox: {
     findUnique: vi.fn().mockResolvedValue(null),

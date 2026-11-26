@@ -93,8 +93,9 @@ describe("account-ledger payment-voucher row failure feedback", () => {
     />);
 
     fireEvent.click(screen.getByRole("button", { name: /create invoice/i }));
-    fireEvent.click(screen.getByRole("radio", { name: /factura b/i }));
-    fireEvent.click(screen.getByRole("button", { name: /confirm issue/i }));
+    fireEvent.click(screen.getByRole("combobox", { name: /tipo de factura/i }));
+    fireEvent.click(screen.getByRole("option", { name: "Factura B" }));
+    fireEvent.click(screen.getByRole("button", { name: /confirmar/i }));
 
     await waitFor(() => expect(paymentActionMocks.createOrRetry).toHaveBeenCalledWith({
       cashMovementId: "movement-unknown-issuance",

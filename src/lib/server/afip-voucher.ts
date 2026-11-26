@@ -233,12 +233,16 @@ export async function prepareAfipVoucherForActor(
   } catch {
     return { error: "Los datos de la factura no son válidos", issuanceNotStarted: true };
   }
-  const ptoVenta: unknown = validatedBillState.ptoVenta;
+  const configuredPtoVentas = Array.isArray(credentials.success.ptoVentas) ? credentials.success.ptoVentas : [];
+  const ptoVenta: unknown = validatedBillState.ptoVenta ?? configuredPtoVentas[0];
+  if (validatedBillState.ptoVenta === undefined && isPositiveSafeInteger(ptoVenta)) {
+    validatedBillState.ptoVenta = ptoVenta;
+  }
   let validatedFiscalBreakdown: FiscalBreakdownV1 | undefined;
   let tipoFactura: AfipVoucherType;
   try {
     if (!isPositiveSafeInteger(ptoVenta)) {
-      throw new Error("El punto de venta de emisión debe ser un entero positivo válido");
+      throw new Error("No hay un punto de venta configurado para facturar. Configuralo en Configuración > ARCA.");
     }
     if (isCreditNote && (!isPositiveSafeInteger(validatedBillState.nroAsociado)
       || !isPositiveSafeInteger(validatedBillState.ptoVentaAsociado))) {

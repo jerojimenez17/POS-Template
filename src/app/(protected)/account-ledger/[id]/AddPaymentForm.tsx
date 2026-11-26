@@ -42,6 +42,14 @@ export default function AddPaymentForm({
   const [isPending, setIsPending] = useState(false);
   const isRemito = billType === "Remito";
 
+  const closeForm = () => {
+    setIsOpen(false);
+    setAmount(String(remainingBalance));
+    setPaymentMethod("Efectivo");
+    setBillType("");
+    setPtoVenta(configuredPtoVentas[0]?.toString() ?? "");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsPending(true);
@@ -91,10 +99,9 @@ export default function AddPaymentForm({
           toast.warning("Pago registrado; la factura no se emitió. Puede recuperarla desde el historial de pagos.");
         }
         router.refresh();
-        setIsOpen(false);
-        setAmount(String(remainingBalance));
+        closeForm();
       } else {
-        toast.error("No se pudo registrar el pago. Intente nuevamente.");
+        toast.error(result.error || "No se pudo registrar el pago. Intente nuevamente.");
       }
       } catch {
         toast.error("Error al registrar el pago");
@@ -103,7 +110,7 @@ export default function AddPaymentForm({
     }
   };
 
-  if (!showForm && !isOpen) {
+  if (!isOpen) {
     return (
       <Button className="w-full" onClick={() => setIsOpen(true)}>
         <CreditCard className="h-4 w-4 mr-2" />
@@ -113,7 +120,7 @@ export default function AddPaymentForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div className="flex items-center gap-2">
         <CreditCard className="h-5 w-5" />
         <span className="font-medium">Registrar Pago</span>
@@ -184,7 +191,7 @@ export default function AddPaymentForm({
           type="button"
           variant="outline"
           className="flex-1"
-          onClick={() => setIsOpen(false)}
+          onClick={closeForm}
           disabled={isPending}
         >
           Cancelar

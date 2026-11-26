@@ -1,8 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Printer, ReceiptText } from "lucide-react";
+import { FileText, Loader2, Printer, Receipt, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PointOfSaleSelector } from "@/components/account-ledger/PointOfSaleSelector";
 
 type VoucherStatus = "NOT_REQUIRED" | "MISSING" | "FAILED" | "PENDING" | "ISSUING" | "AUTHORIZED" | "UNKNOWN";
@@ -142,57 +151,101 @@ export function PaymentVoucherRowAction({
       {failed && <span className="text-xs text-muted-foreground">El pago quedó registrado; la factura no se emitió.</span>}
       {error && !dialogOpen && <p role="alert" className="max-w-xs text-right text-xs text-destructive">{error}</p>}
 
-      {dialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`payment-voucher-title-${cashMovementId}`}
-            className="w-full max-w-sm space-y-5 rounded-lg border bg-background p-5 shadow-xl"
-          >
-            <div>
-              <h2 id={`payment-voucher-title-${cashMovementId}`} className="text-lg font-semibold">
-                Facturar pago parcial
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">Importe del pago: ${formatAmount(amount)}</p>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[95vh] overflow-y-auto gap-0 p-0">
+          <DialogHeader className="px-6 pt-6 pb-0">
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              Facturar pago parcial
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="px-6 py-5">
+            <div className="grid grid-cols-1 gap-5">
+              <section className="bg-card border rounded-xl p-5 shadow-sm self-start">
+                <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  Datos del comprobante
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                      Tipo
+                    </Label>
+                    <Select value={billType} onValueChange={setBillType}>
+                      <SelectTrigger aria-label="Tipo de factura">
+                        <SelectValue placeholder="Seleccione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INVOICE_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                      Punto de venta
+                    </Label>
+                    <PointOfSaleSelector
+                      values={configuredPtoVentas}
+                      value={ptoVenta}
+                      onChange={setPtoVenta}
+                      disabled={configuredPtoVentas.length === 0}
+                    />
+                    {configuredPtoVentas.length === 0 && (
+                      <p className="mt-1 text-xs text-destructive">No hay puntos de venta configurados.</p>
+                    )}
+                    {ptoVenta && configuredPtoVentas.length > 0 && (
+                      <p className="mt-1 text-xs text-muted-foreground">Se emitirá en el punto de venta {ptoVenta}.</p>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-card border rounded-xl p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-muted-foreground" />
+                  Pago
+                </h3>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm text-muted-foreground">Importe del pago</span>
+                  <span className="text-2xl font-bold font-mono tabular-nums">$ {formatAmount(amount)}</span>
+                </div>
+              </section>
+
+              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
             </div>
+          </div>
 
-            <fieldset className="space-y-3">
-              <legend className="mb-2 text-sm font-medium">Seleccione el tipo de factura</legend>
-              {INVOICE_TYPES.map((type) => (
-                <label key={type} className="flex cursor-pointer items-center gap-3 rounded-md border p-3">
-                  <input
-                    type="radio"
-                    name={`payment-voucher-type-${cashMovementId}`}
-                    value={type}
-                    checked={billType === type}
-                    onChange={() => setBillType(type)}
-                  />
-                  <span>{type}</span>
-                </label>
-              ))}
-            </fieldset>
-
-            <div className="space-y-2">
-              <label htmlFor={`payment-voucher-pto-${cashMovementId}`} className="text-sm font-medium">Punto de venta</label>
-              <PointOfSaleSelector values={configuredPtoVentas} value={ptoVenta} onChange={setPtoVenta} disabled={configuredPtoVentas.length === 0} />
-              {configuredPtoVentas.length === 0 && <p className="text-sm text-destructive">No hay puntos de venta configurados.</p>}
-              {ptoVenta && <p className="text-xs text-muted-foreground">Se emitirá en el punto de venta {ptoVenta}.</p>}
-            </div>
-
-            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" disabled={submitting} onClick={() => setDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="button" aria-label="Confirm issue" disabled={!billType || !configuredPtoVentas.includes(Number(ptoVenta)) || submitting} onClick={handleCreate}>
-                {submitting ? "Procesando…" : "Confirm invoice"}
-              </Button>
-            </div>
-          </section>
-        </div>
-      )}
+          <div className="px-6 py-4 border-t border-border flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={submitting}
+              onClick={() => setDialogOpen(false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={!billType || !configuredPtoVentas.includes(Number(ptoVenta)) || submitting}
+              onClick={handleCreate}
+              className="gap-2 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white shadow-sm active:scale-[0.98] transition-all duration-150"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Procesando…
+                </>
+              ) : (
+                "Confirmar"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

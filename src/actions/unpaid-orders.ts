@@ -354,6 +354,8 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
       return { success: false, error };
     }
     const paymentInput = parsedInput.data;
+    const session = await auth();
+    const seller = session?.user?.name || session?.user?.email || null;
     const isRemito = paymentInput.billType === "Remito";
     if (isRemito && paymentInput.ptoVenta !== undefined) {
       return { success: false, error: "Los datos del pago no son válidos" };
@@ -448,6 +450,7 @@ export const registerPayment = async (input: unknown): Promise<ActionResult> => 
         businessId,
         date: new Date(),
         orderId: paymentInput.orderId,
+        seller,
       };
       const newMovement = await tx.cashMovement.create({ data: cashMovementData });
 
@@ -583,9 +586,29 @@ export const cancelUnpaidOrder = async (input: CancelUnpaidOrderInput): Promise<
         });
       }
 
-      // Delete related records before deleting the order
+      // Delete related records before deleting the order. PaymentVoucher has a
+      // Restrict FK to CashMovement (and attempts restrict the voucher), so the
+      // voucher chain must be removed first or the cash movement delete fails.
       await tx.stockMovement.deleteMany({ where: { orderId: input.orderId, businessId } });
-      await tx.cashMovement.deleteMany({ where: { orderId: input.orderId, businessId } });
+      const cashMovementIds = (await tx.cashMovement.findMany({
+        where: { orderId: input.orderId, businessId },
+        select: { id: true },
+      })).map((movement) => movement.id);
+      if (cashMovementIds.length > 0) {
+        const voucherIds = (await tx.paymentVoucher.findMany({
+          where: { cashMovementId: { in: cashMovementIds } },
+          select: { id: true, status: true },
+        }));
+        if (voucherIds.some((voucher) => voucher.status === "AUTHORIZED")) {
+          throw new Error("No se puede cancelar una orden con una factura de pago parcial autorizada. Emití una nota de crédito o revertí el comprobante primero.");
+        }
+        const voucherIdList = voucherIds.map((voucher) => voucher.id);
+        if (voucherIdList.length > 0) {
+          await tx.paymentVoucherAttempt.deleteMany({ where: { paymentVoucherId: { in: voucherIdList } } });
+          await tx.paymentVoucher.deleteMany({ where: { id: { in: voucherIdList } } });
+        }
+        await tx.cashMovement.deleteMany({ where: { id: { in: cashMovementIds } } });
+      }
 
       // Delete the order (cascades to OrderItem and OrderUpdate)
       await tx.order.delete({ where: { id: input.orderId } });

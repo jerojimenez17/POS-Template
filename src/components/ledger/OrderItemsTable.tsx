@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Trash2, Plus, RefreshCw } from "lucide-react";
@@ -56,7 +57,7 @@ export default function OrderItemsTable({
   onRemoveItem,
   onAddItem,
 }: OrderItemsTableProps) {
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
 
   const groupedItems = groupItemsByDate(items);
   const sortedDates = Array.from(groupedItems.keys()).sort((a, b) => 
@@ -64,13 +65,16 @@ export default function OrderItemsTable({
   );
 
   const handleQuantityChange = (itemId: string, value: string) => {
-    const qty = parseFloat(value) || 0;
-    setQuantities((prev) => ({ ...prev, [itemId]: qty }));
+    setQuantities((prev) => ({ ...prev, [itemId]: value }));
   };
 
   const handleQuantityBlur = (itemId: string, originalQuantity: number) => {
-    const newQty = quantities[itemId];
-    if (newQty !== undefined && newQty !== originalQuantity && onUpdateQuantity) {
+    const raw = quantities[itemId];
+    if (raw === undefined) return;
+    const parsed = parseFloat(raw);
+    const newQty = Number.isFinite(parsed) ? Math.max(1, parsed) : originalQuantity;
+    setQuantities((prev) => ({ ...prev, [itemId]: String(newQty) }));
+    if (newQty !== originalQuantity && onUpdateQuantity) {
       onUpdateQuantity(itemId, newQty);
     }
   };
@@ -88,6 +92,7 @@ export default function OrderItemsTable({
   }
 
   return (
+    <Tooltip.Provider delayDuration={150}>
     <div className="space-y-6">
       {sortedDates.map((dateKey) => {
         const dateItems = groupedItems.get(dateKey) || [];
@@ -130,15 +135,29 @@ export default function OrderItemsTable({
                               className="w-24 text-right"
                             />
                             {item.productId && onRefreshPrice && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 shrink-0"
-                                title="Actualizar al precio actual del catálogo"
-                                onClick={() => onRefreshPrice(item.id)}
-                              >
-                                <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
-                              </Button>
+                              <Tooltip.Root>
+                                <Tooltip.Trigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 shrink-0"
+                                    aria-label="Actualizar al precio actual del catálogo"
+                                    onClick={() => onRefreshPrice(item.id)}
+                                  >
+                                    <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </Button>
+                                </Tooltip.Trigger>
+                                <Tooltip.Portal>
+                                  <Tooltip.Content
+                                    side="top"
+                                    sideOffset={5}
+                                    className="z-50 max-w-xs rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs leading-relaxed text-white shadow-xl"
+                                  >
+                                    Reemplaza el precio de este ítem por el precio actual del catálogo.
+                                    <Tooltip.Arrow className="fill-zinc-950" />
+                                  </Tooltip.Content>
+                                </Tooltip.Portal>
+                              </Tooltip.Root>
                             )}
                           </div>
                         ) : (
@@ -150,7 +169,9 @@ export default function OrderItemsTable({
                           <Input
                             data-testid="quantity-input"
                             type="number"
-                            value={quantities[item.id] ?? item.quantity}
+                            min={1}
+                            step="any"
+                            value={quantities[item.id] ?? String(item.quantity)}
                             onChange={(e) => handleQuantityChange(item.id, e.target.value)}
                             onBlur={() => handleQuantityBlur(item.id, item.quantity)}
                             className="w-20 text-right"
@@ -186,9 +207,14 @@ export default function OrderItemsTable({
       {isEditable && onAddItem && (
         <div className="flex gap-2">
           {onRefreshAllPrices && items.some((item) => item.productId) && (
-            <Button variant="outline" onClick={onRefreshAllPrices} className="flex-1">
+            <Button
+              variant="outline"
+              onClick={onRefreshAllPrices}
+              className="flex-1"
+              title="Reemplaza los precios personalizados por el precio actual del catálogo"
+            >
               <RefreshCw className="h-4 w-4 mr-2" />
-              Actualizar precios
+              Restablecer precios al catálogo
             </Button>
           )}
           <Button variant="outline" onClick={onAddItem} className={onRefreshAllPrices && items.some((item) => item.productId) ? "flex-1" : "w-full"}>
@@ -207,5 +233,6 @@ export default function OrderItemsTable({
         </div>
       </div>
     </div>
+    </Tooltip.Provider>
   );
 }

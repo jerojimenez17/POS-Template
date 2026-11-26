@@ -126,7 +126,7 @@ export default function PrintRowButton({ orderId, billingInfo }: Props) {
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="ghost"
+          variant="outline"
           size="icon"
           className="h-8 w-8"
           title="Imprimir"

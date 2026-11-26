@@ -44,12 +44,10 @@ describe("individual payment-row voucher actions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /create.*invoice|invoice.*create/i }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /factura a/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /factura b/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /factura c/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /factura a/i })).not.toBeChecked();
-    expect(screen.getByRole("radio", { name: /factura b/i })).not.toBeChecked();
-    expect(screen.getByRole("radio", { name: /factura c/i })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("combobox", { name: /tipo de factura/i }));
+    expect(screen.getByRole("option", { name: "Factura A" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Factura B" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Factura C" })).toBeInTheDocument();
     expect(screen.getByText(/123/)).toBeInTheDocument();
     expect(onCreateOrRetry).not.toHaveBeenCalled();
   });
@@ -68,25 +66,21 @@ describe("individual payment-row voucher actions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /retry|create.*invoice/i }));
 
-    const facturaA = screen.getByRole("radio", { name: /factura a/i });
-    const facturaB = screen.getByRole("radio", { name: /factura b/i });
-    const facturaC = screen.getByRole("radio", { name: /factura c/i });
-    expect(facturaA).toBeChecked();
-    expect(facturaB).not.toBeChecked();
-    expect(facturaC).not.toBeChecked();
+    const typeSelect = screen.getByRole("combobox", { name: /tipo de factura/i });
+    await waitFor(() => expect(typeSelect).toHaveTextContent("Factura A"));
     expect(onCreateOrRetry).not.toHaveBeenCalled();
 
-    fireEvent.click(facturaB);
-    expect(facturaB).toBeChecked();
-    expect(facturaA).not.toBeChecked();
+    fireEvent.click(typeSelect);
+    fireEvent.click(screen.getByRole("option", { name: "Factura B" }));
+    await waitFor(() => expect(typeSelect).toHaveTextContent("Factura B"));
     expect(onCreateOrRetry).not.toHaveBeenCalled();
 
-    fireEvent.click(facturaC);
-    expect(facturaC).toBeChecked();
-    expect(facturaB).not.toBeChecked();
+    fireEvent.click(typeSelect);
+    fireEvent.click(screen.getByRole("option", { name: "Factura C" }));
+    await waitFor(() => expect(typeSelect).toHaveTextContent("Factura C"));
     expect(onCreateOrRetry).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /confirm issue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirmar/i }));
 
     await waitFor(() => expect(onCreateOrRetry).toHaveBeenCalledWith({
       cashMovementId: "movement-retry-type",
@@ -107,10 +101,11 @@ describe("individual payment-row voucher actions", () => {
     }));
 
     fireEvent.click(screen.getByRole("button", { name: /retry|create.*invoice/i }));
-    fireEvent.click(screen.getByRole("radio", { name: /factura c/i }));
+    fireEvent.click(screen.getByRole("combobox", { name: /tipo de factura/i }));
+    fireEvent.click(screen.getByRole("option", { name: "Factura C" }));
     fireEvent.click(screen.getByRole("combobox", { name: /punto de venta/i }));
     fireEvent.click(screen.getByRole("option", { name: "8" }));
-    fireEvent.click(screen.getByRole("button", { name: /confirm|issue|create invoice/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirmar/i }));
 
     await waitFor(() => expect(onCreateOrRetry).toHaveBeenCalledWith({
       cashMovementId: "movement-2",

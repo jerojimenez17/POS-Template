@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, Fragment } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getUnpaidOrders, type AccountLedgerOrder, type AccountLedgerPage } from "@/actions/unpaid-orders";
 import { getBusinessBillingInfoAction } from "@/actions/business";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,8 @@ import {
   ChevronRight,
   User,
   Loader2,
+  CreditCard,
+  XCircle,
 } from "lucide-react";
 import { LocalDate } from "@/components/ui/LocalDate";
 import { pusherClient } from "@/lib/pusher-client";
@@ -78,6 +81,7 @@ export default function AccountLedgerContent({
   const [serverError, setServerError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const generationRef = useRef(0);
@@ -225,7 +229,35 @@ export default function AccountLedgerContent({
     void load(pageCursors[prevWindow - 1] ?? null, false);
   };
 
-  const rows: (OrderWithClient | AccountLedgerOrder)[] = pageData?.orders ?? [];
+  const rows = useMemo<(OrderWithClient | AccountLedgerOrder)[]>(() => pageData?.orders ?? [], [pageData?.orders]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, { key: string; clientName: string; balance: number | null; orders: AccountLedgerOrder[] }>();
+    for (const order of rows as AccountLedgerOrder[]) {
+      const key = order.client?.id ?? order.clientId ?? "sin-cliente";
+      const existing = map.get(key);
+      if (existing) {
+        existing.orders.push(order);
+      } else {
+        map.set(key, {
+          key,
+          clientName: order.client?.name || "Sin cliente",
+          balance: order.client?.balance ?? null,
+          orders: [order],
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [rows]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   // Status pill component
   const StatusPill = ({
@@ -335,7 +367,7 @@ export default function AccountLedgerContent({
               <TableHeader>
                 <TableRow className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                   <TableHead className="font-semibold text-gray-700 dark:text-gray-200 h-12">
-                    Cliente
+                    Orden
                   </TableHead>
                   <TableHead className="font-semibold text-gray-700 dark:text-gray-200 h-12">
                     Total
@@ -352,54 +384,124 @@ export default function AccountLedgerContent({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((order) => (
-                  <TableRow
-                    key={order.id}
-                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer"
-                    onClick={() =>
-                      router.push(`/account-ledger/${order.id}`)
-                    }
-                  >
-                    <TableCell className="font-medium py-3">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="truncate max-w-[200px]">
-                          {order.client?.name || "Sin cliente"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono font-medium">
-                        ${order.total.toLocaleString("es-AR")}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <LocalDate date={order.date} />
-                    </TableCell>
-                    <TableCell>
-                      <StatusPill
-                        status={order.status}
-                        paidStatus={order.paidStatus}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div
-                        className="flex items-center justify-end gap-1"
-                        onClick={(e) => e.stopPropagation()}
+                {groups.map((group) => (
+                  <Fragment key={group.key}>
+                    <TableRow
+                      className="cursor-pointer border-b border-gray-100 bg-gray-50/70 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-800/40 dark:hover:bg-gray-800/60"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expandedGroups.has(group.key)}
+                      onClick={() => toggleGroup(group.key)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleGroup(group.key);
+                        }
+                      }}
+                    >
+                      <TableCell colSpan={5} className="py-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <ChevronRight
+                              aria-hidden="true"
+                              className={cn("h-4 w-4 shrink-0 text-gray-400 transition-transform", expandedGroups.has(group.key) && "rotate-90")}
+                            />
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
+                              <User className="h-4 w-4" />
+                            </span>
+                            <span className="truncate font-semibold text-gray-900 dark:text-gray-100">{group.clientName}</span>
+                            <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+                              {group.orders.length} orden{group.orders.length === 1 ? "" : "es"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Saldo de cuenta</span>
+                            <span
+                              className={cn(
+                                "rounded-full border px-3 py-1 text-sm font-bold tabular-nums",
+                                group.balance === null
+                                  ? "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400"
+                                  : group.balance > 0
+                                    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                                    : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              )}
+                            >
+                              {group.balance === null ? "—" : `${group.balance < 0 ? "-" : ""}$${Math.abs(group.balance).toLocaleString("es-AR")}`}
+                            </span>
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {expandedGroups.has(group.key) && group.orders.map((order) => (
+                      <TableRow
+                        key={order.id}
+                        className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer"
+                        onClick={() => router.push(`/account-ledger/${order.id}`)}
                       >
-                        {order.status === "pendiente" && (
-                          <ConfirmOrderButton
-                            orderId={order.id}
-                            onConfirmed={handleOrderConfirmed}
+                        <TableCell className="py-3">
+                          <div className="pl-9 text-sm font-medium text-gray-900 dark:text-gray-100">
+                            #{order.id.slice(-6).toUpperCase()}
+                          </div>
+                          {order.notes && (
+                            <p className="mt-0.5 line-clamp-2 pl-9 text-xs text-muted-foreground" title={order.notes}>
+                              {order.notes}
+                            </p>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono font-medium">
+                            ${order.total.toLocaleString("es-AR")}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <LocalDate date={order.date} />
+                        </TableCell>
+                        <TableCell>
+                          <StatusPill
+                            status={order.status}
+                            paidStatus={order.paidStatus}
                           />
-                        )}
-                        <PrintRowButton
-                          orderId={order.id}
-                          billingInfo={billingInfo}
-                        />
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div
+                            className="flex items-center justify-end gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {order.status === "pendiente" ? (
+                              <ConfirmOrderButton
+                                orderId={order.id}
+                                onConfirmed={handleOrderConfirmed}
+                              />
+                            ) : order.paidStatus !== "pago" ? (
+                              <>
+                                <Button variant="outline" size="sm" asChild className="gap-1">
+                                  <Link href={`/account-ledger/${order.id}?action=payment`}>
+                                    <CreditCard className="h-4 w-4" />
+                                    Pagar
+                                  </Link>
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  asChild
+                                  className="gap-1 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+                                >
+                                  <Link href={`/account-ledger/${order.id}?action=cancel`}>
+                                    <XCircle className="h-4 w-4" />
+                                    Cancelar
+                                  </Link>
+                                </Button>
+                              </>
+                            ) : null}
+                            <PrintRowButton
+                              orderId={order.id}
+                              billingInfo={billingInfo}
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

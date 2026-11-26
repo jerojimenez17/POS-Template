@@ -95,10 +95,13 @@ export default function InvoiceModal({ open, onOpenChange, sale }: InvoiceModalP
 
       const result = await createAfipVoucherAction(payload);
       if ("error" in result && result.error) {
-        const errorText =
+        const rawError =
           typeof result.error === "string"
             ? result.error
             : formatAfipPointSaleErrorForUser(result.error);
+        const errorText = /entero positivo v[aá]lido|punto de venta de emisi[oó]n/i.test(rawError)
+          ? "No se pudo determinar el punto de venta para facturar. Revisá la configuración de ARCA e intentá nuevamente."
+          : rawError;
         const parsed = parsePlanError(errorText);
         if (parsed.isPlanError) {
           setPlanError(parsed);
