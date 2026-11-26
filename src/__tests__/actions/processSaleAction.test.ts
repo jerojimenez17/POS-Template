@@ -778,12 +778,12 @@ describe("updateOrderAction — CAE validation", () => {
     vi.clearAllMocks();
   });
 
-  it("should update non-invoiced sale (no CAE) successfully", async () => {
+  it.each(["ADMIN", "USER"])("should allow %s to edit a non-invoiced sale", async (role) => {
     const { db } = await import("@/lib/db");
     const { auth } = await import("@/auth");
 
     vi.mocked(auth).mockResolvedValue({
-      user: { id: "user-1", businessId: "business-123", role: "ADMIN" },
+      user: { id: "user-1", businessId: "business-123", role },
     });
 
     const existingOrder = {
@@ -933,10 +933,32 @@ describe("updateOrderAction — CAE validation", () => {
 
     // Should fail because CAE exists (throw inside transaction → outer catch returns error)
     expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
+    expect(result.error).toContain("ya fue facturada");
     // order.findFirst was called (CAE check happened)
     expect(mockTx.order.findFirst).toHaveBeenCalled();
     // order.update should NOT have been called because CAE check throws before it
     expect(mockTx.order.update).toBeUndefined();
+  });
+
+  it("should reject roles without sale-edit permission before opening a transaction", async () => {
+    const { db } = await import("@/lib/db");
+    const { auth } = await import("@/auth");
+
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-1", businessId: "business-123", role: "GUEST" },
+    });
+
+    const result = await updateOrderAction("order-forbidden", {
+      total: 100,
+      seller: "Test Seller",
+      paidMethod: "Efectivo",
+      products: [
+        { id: "product-1", code: "P001", description: "Test", salePrice: 100, amount: 1 },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("No tenés permisos para editar ventas");
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 });

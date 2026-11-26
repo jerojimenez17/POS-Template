@@ -30,9 +30,11 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
     );
   }
 
-  // Credit-note issuance is restricted to business admins; SUPER_ADMIN is a
-  // platform role and must not receive tenant-level fiscal write controls.
-  const isAdmin = session?.user?.role === "ADMIN";
+  // Edición de ventas: vendedores y administradores. Las ventas facturadas
+  // (con CAE autorizado) no se pueden editar; se resuelven con nota de crédito.
+  const role = session?.user?.role;
+  const isInvoiced = Boolean(sale.CAE?.CAE);
+  const canEdit = (role === "USER" || role === "ADMIN" || role === "SUPER_ADMIN") && !isInvoiced;
   const creditNotePrintContext = sale.creditNote
     ? buildCreditNotePrintContext({
         order: {
@@ -65,7 +67,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
               Confirmada
             </Badge>
           </div>
-          {isAdmin && (
+          {canEdit && (
             <Link href={`/sales/${sale.id}/edit`} className="w-full sm:w-auto bg-blue-600 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-lg active:scale-[0.98] font-semibold text-sm">
               <Edit2 className="h-4 w-4" /> Editar Venta
             </Link>

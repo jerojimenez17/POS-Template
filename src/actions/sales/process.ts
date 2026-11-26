@@ -534,8 +534,8 @@ export const updateOrderAction = async (
     if (!businessId || !userId) return { error: "No autorizado" };
     const permission = await assertWritePermission();
     if (!permission.success) return { error: permission.error, code: permission.code };
-    if (userRole !== "ADMIN")
-      return { error: "Solo los administradores pueden editar ventas" };
+    if (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN" && userRole !== "USER")
+      return fail("No tenés permisos para editar ventas", "FORBIDDEN");
     const result = await db.$transaction(async (tx) => {
       const existingOrder = await tx.order.findFirst({
         where: { id: orderId, businessId },
@@ -543,6 +543,12 @@ export const updateOrderAction = async (
       });
 
       if (!existingOrder) throw new Error("Orden no encontrada");
+
+      // Bloquear la edición de ventas ya facturadas (tienen CAE autorizado)
+      const orderCae = existingOrder.CAE as { CAE?: unknown } | null;
+      if (orderCae?.CAE) {
+        throw new Error("Esta venta ya fue facturada. No se puede editar. Genere una nota de crédito.");
+      }
 
       // 🔹 calcular versión
       const lastUpdate = await tx.orderUpdate.findFirst({
@@ -819,6 +825,10 @@ export const updateOrderAction = async (
     return result;
   } catch (error) {
     console.error("Error updating sale:", error);
+    // Preservar el mensaje específico del bloqueo de ventas facturadas
+    if (error instanceof Error && error.message.includes("ya fue facturada")) {
+      return fail(error.message);
+    }
     return fail("Error al actualizar la venta");
   }
 };

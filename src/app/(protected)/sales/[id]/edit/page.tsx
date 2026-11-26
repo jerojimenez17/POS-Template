@@ -10,13 +10,14 @@ import Spinner from "@/components/ui/Spinner";
 export default async function EditSalePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
-  const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN";
+  const role = session?.user?.role;
+  const canEditSales = role === "USER" || role === "ADMIN" || role === "SUPER_ADMIN";
 
-  if (!isAdmin) {
+  if (!canEditSales) {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] space-y-4">
         <h2 className="text-2xl font-bold text-red-500">Acceso Denegado</h2>
-        <p>Solo los administradores pueden editar ventas.</p>
+        <p>No tenés permisos para editar ventas.</p>
         <Link href={`/sales/${id}`} className="text-blue-500 hover:underline flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Volver a la venta
         </Link>
@@ -32,6 +33,20 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
         <h2 className="text-2xl font-bold">Venta no encontrada</h2>
         <Link href="/searchBill" className="text-blue-500 hover:underline flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Volver a ventas
+        </Link>
+      </div>
+    );
+  }
+
+  if (sale.CAE?.CAE) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[50vh] space-y-4">
+        <h2 className="text-2xl font-bold text-red-500">Venta facturada</h2>
+        <p className="text-center text-muted-foreground">
+          Esta venta ya fue facturada. No se puede editar. Genere una nota de crédito.
+        </p>
+        <Link href={`/sales/${id}`} className="text-blue-500 hover:underline flex items-center gap-1">
+          <ArrowLeft className="h-4 w-4" /> Volver a la venta
         </Link>
       </div>
     );
