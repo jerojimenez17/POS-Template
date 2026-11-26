@@ -133,16 +133,16 @@ export const UsersTable = ({ users, cashboxes }: UsersTableProps) => {
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
                     {user.role === "SUPER_ADMIN" ? (
-                      <Badge variant="default" className="bg-red-600 hover:bg-red-700">
+                      <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-800 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200">
                         <ShieldCheck className="w-3 h-3 mr-1" /> Super Admin
                       </Badge>
                     ) : user.role === "ADMIN" ? (
-                      <Badge variant="default" className="bg-blue-600 hover:bg-blue-700">
+                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
                         <ShieldCheck className="w-3 h-3 mr-1" /> Administrador
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                        <ShieldAlert className="w-3 h-3 mr-1 opacity-50" /> Vendedor
+                      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                        <ShieldAlert className="w-3 h-3 mr-1" /> Vendedor
                       </Badge>
                     )}
                   </TableCell>

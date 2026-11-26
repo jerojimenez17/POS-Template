@@ -12,6 +12,7 @@ import {
   BarChart3,
   LayoutGrid,
   Users,
+  Contact,
   Box,
   Settings,
   X,
@@ -22,19 +23,47 @@ interface NavItem {
   label: string;
   href?: string;
   icon: React.ReactNode;
-  adminOnly?: boolean;
 }
 
-const navItems: NavItem[] = [
-  { label: "Facturar", href: "/newBill", icon: <FileText className="h-5 w-5" /> },
-  { label: "Stock", href: "/stock/productDashboard", icon: <Package className="h-5 w-5" /> },
-  { label: "Fichero", href: "/account-ledger", icon: <BookOpen className="h-5 w-5" /> },
-  { label: "Caja", href: "/cashRegister", icon: <Calculator className="h-5 w-5" /> },
-  { label: "Reportes", href: "/report", icon: <BarChart3 className="h-5 w-5" /> },
-  { label: "Catálogo", icon: <LayoutGrid className="h-5 w-5" /> },
-  { label: "Usuarios", href: "/admin/users", icon: <Users className="h-5 w-5" />, adminOnly: true },
-  { label: "Cajas", href: "/admin/cashboxes", icon: <Box className="h-5 w-5" />, adminOnly: true },
-  { label: "Config.", href: "/admin/settings", icon: <Settings className="h-5 w-5" />, adminOnly: true },
+interface NavGroup {
+  label: string;
+  adminOnly?: boolean;
+  items: NavItem[];
+}
+
+type ResolvedNavItem = NavItem & {
+  resolvedHref?: string;
+  disabled: boolean;
+};
+
+const navGroups: NavGroup[] = [
+  {
+    label: "Operación",
+    items: [
+      { label: "Facturar", href: "/newBill", icon: <FileText className="h-5 w-5" /> },
+      { label: "Stock", href: "/stock/productDashboard", icon: <Package className="h-5 w-5" /> },
+      { label: "Fichero", href: "/account-ledger", icon: <BookOpen className="h-5 w-5" /> },
+      { label: "Clientes", href: "/clients", icon: <Contact className="h-5 w-5" /> },
+      { label: "Caja", href: "/cashRegister", icon: <Calculator className="h-5 w-5" /> },
+      { label: "Reportes", href: "/report", icon: <BarChart3 className="h-5 w-5" /> },
+      { label: "Catálogo", icon: <LayoutGrid className="h-5 w-5" /> },
+    ],
+  },
+  {
+    label: "Administración",
+    adminOnly: true,
+    items: [
+      { label: "Usuarios", href: "/admin/users", icon: <Users className="h-5 w-5" /> },
+      { label: "Cajas", href: "/admin/cashboxes", icon: <Box className="h-5 w-5" /> },
+    ],
+  },
+  {
+    label: "Configuración",
+    adminOnly: true,
+    items: [
+      { label: "Config.", href: "/admin/settings", icon: <Settings className="h-5 w-5" /> },
+    ],
+  },
 ];
 
 const SideNav = () => {
@@ -49,34 +78,36 @@ const SideNav = () => {
     return pathname.startsWith(href);
   };
 
-  const resolvedItems = navItems.map((item) => ({
-    ...item,
-    href: item.label === "Catálogo" && businessSlug ? `/${businessSlug}/catalogo` : item.href,
-    disabled: item.label === "Catálogo" && !businessSlug,
-    hidden: item.adminOnly ? !isAdmin : false,
-  }));
+  const resolvedGroups = navGroups
+    .filter((group) => !group.adminOnly || isAdmin)
+    .map((group) => ({
+      ...group,
+      items: group.items.map((item) => ({
+        ...item,
+        resolvedHref: item.label === "Catálogo" && businessSlug ? `/${businessSlug}/catalogo` : item.href,
+        disabled: item.label === "Catálogo" && !businessSlug,
+      })) as ResolvedNavItem[],
+    }));
 
-  const visibleItems = resolvedItems.filter((item) => !item.hidden);
-
-  const NavLink = ({ item, active, onClick }: { item: typeof visibleItems[0]; active: boolean; onClick?: () => void }) => item.disabled ? (
+  const NavLink = ({ item, active, onClick }: { item: ResolvedNavItem; active: boolean; onClick?: () => void }) => item.disabled ? (
     <div
-       aria-busy="true"
-       aria-disabled="true"
-       className={cn(
-         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap overflow-hidden",
-         "text-gray-400 dark:text-gray-600 cursor-wait"
-       )}
-       title="Catálogo (cargando)"
-     >
-       <span className="shrink-0">{item.icon}</span>
-       <span className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200">
-         Catálogo (cargando)
-       </span>
-     </div>
-   ) : (
-     <Link
+      aria-busy="true"
+      aria-disabled="true"
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap overflow-hidden",
+        "text-gray-400 dark:text-gray-600 cursor-wait"
+      )}
+      title="Catálogo (cargando)"
+    >
+      <span className="shrink-0">{item.icon}</span>
+      <span className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200">
+        {item.label} (cargando)
+      </span>
+    </div>
+  ) : (
+    <Link
       key={item.label}
-       href={item.href!}
+      href={item.resolvedHref!}
       onClick={onClick}
       className={cn(
         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap overflow-hidden",
@@ -98,8 +129,22 @@ const SideNav = () => {
       {/* Desktop sidebar */}
       <nav className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] z-40 hidden md:flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-200 w-14 hover:w-48 group/sidebar">
         <div className="flex flex-col gap-1 p-2 pt-4 overflow-hidden">
-          {visibleItems.map((item) => (
-            <NavLink key={item.label} item={item} active={item.href ? isActive(item.href) : false} />
+          {resolvedGroups.map((group, groupIndex) => (
+            <div key={group.label} className="flex flex-col gap-1">
+              {groupIndex > 0 && (
+                <div className="my-2 h-px bg-gray-100 dark:bg-gray-800" aria-hidden="true" />
+              )}
+              <span className="whitespace-nowrap pl-3 pr-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
+                {group.label}
+              </span>
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.label}
+                  item={item}
+                  active={item.resolvedHref ? isActive(item.resolvedHref) : false}
+                />
+              ))}
+            </div>
           ))}
         </div>
       </nav>
@@ -130,32 +175,42 @@ const SideNav = () => {
           </button>
         </div>
         <div className="flex flex-col gap-1 p-3">
-          {visibleItems.map((item) => item.disabled ? (
-            <div
-              key={item.label}
-              aria-busy="true"
-              aria-disabled="true"
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 dark:text-gray-600 cursor-wait"
-              title="Catálogo (cargando)"
-            >
-              {item.icon}
-              {item.label} (cargando)
-            </div>
-          ) : (
-            <Link
-              key={item.label}
-              href={item.href!}
-              onClick={() => setMobileOpen(false)}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                 item.href ? isActive(item.href) : false
-                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+          {resolvedGroups.map((group, groupIndex) => (
+            <div key={group.label} className="flex flex-col gap-1">
+              {groupIndex > 0 && (
+                <div className="my-2 h-px bg-gray-100 dark:bg-gray-800" aria-hidden="true" />
               )}
-            >
-              {item.icon}
-              {item.label}
-            </Link>
+              <span className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                {group.label}
+              </span>
+              {group.items.map((item) => item.disabled ? (
+                <div
+                  key={item.label}
+                  aria-busy="true"
+                  aria-disabled="true"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 dark:text-gray-600 cursor-wait"
+                  title="Catálogo (cargando)"
+                >
+                  {item.icon}
+                  {item.label} (cargando)
+                </div>
+              ) : (
+                <Link
+                  key={item.label}
+                  href={item.resolvedHref!}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    (item.resolvedHref ? isActive(item.resolvedHref) : false)
+                      ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  )}
+                >
+                  {item.icon}
+                  {item.label}
+                </Link>
+              ))}
+            </div>
           ))}
         </div>
       </div>
