@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getProductsFiltered } from "@/actions/stock";
+import { getProductsFiltered, getFilteredProductIds } from "@/actions/stock";
 
 vi.mock("@/lib/db", () => ({
   db: {
-    product: {
-      findMany: vi.fn(),
-    },
+    $transaction: vi.fn(),
+    product: { findMany: vi.fn(), update: vi.fn() },
   },
 }));
 
@@ -14,298 +13,203 @@ vi.mock("../../../auth", () => ({
 }));
 
 describe("getProductsFiltered Server Action", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { db } = await import("@/lib/db");
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation((operations: Promise<unknown>[]) => Promise.all(operations));
   });
 
-  it("should return products filtered by search term (description)", async () => {
+  it("preserves the complete array API used by ProductSearchBar and bulk update", async () => {
     const { db } = await import("@/lib/db");
+    const products = [{ id: "product-1", description: "Manzana Roja" }];
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(products);
 
-    const mockProducts = [
-      {
-        id: "product-1",
-        code: "P001",
-        description: "Manzana Roja",
-        salePrice: 100,
-        price: 60,
+    const result = await getProductsFiltered({ search: "Manzana", supplierId: "supplier-1" });
+
+    expect(result).toEqual(products);
+    expect(db.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ businessId: "business-123", supplierId: "supplier-1" }),
+    }));
+  });
+
+  it("applies all supported filters without pagination options", async () => {
+    const { db } = await import("@/lib/db");
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    await getProductsFiltered({ search: "Product", categoryId: "category-1", brandId: "brand-1", unit: "kg", supplierId: "supplier-1" });
+
+    expect(db.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        businessId: "business-123",
+        categoryId: "category-1",
+        brandId: "brand-1",
         unit: "kg",
-        brand: { name: "Brand A" },
-        category: { name: "Frutas" },
-        subCategory: { name: "Tropicales" },
-      },
-    ];
-
-    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
-
-    const result = await getProductsFiltered({ search: "Manzana" });
-
-    expect(result).toHaveLength(1);
-    expect(result[0].description).toBe("Manzana Roja");
-    expect(db.product.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          OR: expect.arrayContaining([
-            { description: { contains: "Manzana", mode: "insensitive" } },
-            { code: { contains: "Manzana", mode: "insensitive" } },
-          ]),
-        }),
-      })
-    );
+        supplierId: "supplier-1",
+        OR: expect.any(Array),
+      }),
+      orderBy: { description: "asc" },
+    }));
   });
 
-  it("should return products filtered by search term (code)", async () => {
+  it("returns an empty array when unauthenticated or when the database fails", async () => {
     const { db } = await import("@/lib/db");
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("DB error"));
+    expect(await getProductsFiltered({})).toEqual([]);
 
-    const mockProducts = [
-      {
-        id: "product-1",
-        code: "P001",
-        description: "Product A",
-        salePrice: 100,
-        price: 60,
-        unit: "unidades",
-        brand: null,
-        category: null,
-        subCategory: null,
-      },
-    ];
+    const authModule = await import("../../../auth");
+    (authModule.auth as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    expect(await getProductsFiltered({})).toEqual([]);
+  });
+});
 
-    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
+describe("getProductsFiltered recentlyModified contract", () => {
+  beforeEach(() => vi.clearAllMocks());
 
-    const result = await getProductsFiltered({ search: "P001" });
-
-    expect(result).toHaveLength(1);
-    expect(result[0].code).toBe("P001");
+  it("adds a 30-day last_update clause when recentlyModified is true", async () => {
+    const { db } = await import("@/lib/db");
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    const before = Date.now();
+    await getProductsFiltered({ recentlyModified: true });
+    const where = (db.product.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where;
+    expect(where.last_update.gte).toBeInstanceOf(Date);
+    expect(Math.abs(where.last_update.gte.getTime() - (before - 30 * 24 * 60 * 60 * 1000))).toBeLessThan(1000);
   });
 
-  it("should return products filtered by categoryId", async () => {
+  it("does not add last_update when recentlyModified is false or undefined", async () => {
     const { db } = await import("@/lib/db");
-
-    const mockProducts = [
-      {
-        id: "product-1",
-        code: "P001",
-        description: "Product A",
-        salePrice: 100,
-        price: 60,
-        unit: "unidades",
-        brand: null,
-        category: { name: "Frutas" },
-        subCategory: null,
-      },
-    ];
-
-    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
-
-    const result = await getProductsFiltered({ categoryId: "category-1" });
-
-    expect(result).toHaveLength(1);
-    expect(db.product.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          categoryId: "category-1",
-        }),
-      })
-    );
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    await getProductsFiltered({ recentlyModified: false });
+    expect((db.product.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where).not.toHaveProperty("last_update");
+    vi.clearAllMocks();
+    await getProductsFiltered({});
+    expect((db.product.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where).not.toHaveProperty("last_update");
   });
 
-  it("should return products filtered by brandId", async () => {
+  it("scopes getFilteredProductIds to the authenticated business", async () => {
     const { db } = await import("@/lib/db");
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: "product-1" }]);
+    expect(await getFilteredProductIds({ recentlyModified: true })).toEqual(["product-1"]);
+    expect((db.product.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where.businessId).toBe("business-123");
+  });
+});
 
-    const mockProducts = [
-      {
-        id: "product-1",
-        code: "P001",
-        description: "Product A",
-        salePrice: 100,
-        price: 60,
-        unit: "unidades",
-        brand: { name: "Brand A" },
-        category: null,
-        subCategory: null,
-      },
-    ];
+describe("getProductsFiltered recovered array coverage", () => {
+  beforeEach(() => vi.clearAllMocks());
 
-    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
+  it("builds case-insensitive search predicates for code, barcode, and description", async () => {
+    const { db } = await import("@/lib/db");
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-    const result = await getProductsFiltered({ brandId: "brand-1" });
+    await getProductsFiltered({ search: "Manzana" });
 
-    expect(result).toHaveLength(1);
-    expect(db.product.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          brandId: "brand-1",
-        }),
-      })
-    );
+    expect((db.product.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0]).toEqual(expect.objectContaining({
+      where: expect.objectContaining({
+        businessId: "business-123",
+        OR: expect.arrayContaining([
+          { code: { contains: "Manzana", mode: "insensitive" } },
+          { codebar: { contains: "Manzana", mode: "insensitive" } },
+          { description: { contains: "Manzana", mode: "insensitive" } },
+        ]),
+      }),
+    }));
   });
 
-  it("should return products filtered by supplierId", async () => {
+  it("applies category, brand, supplier, and unit filters as exact tenant-scoped predicates", async () => {
     const { db } = await import("@/lib/db");
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-    const mockProducts = [
-      {
-        id: "product-1",
-        code: "P001",
-        description: "Product A",
-        salePrice: 100,
-        price: 60,
-        unit: "unidades",
-        supplier: { id: "supplier-1", name: "Proveedor A" },
-        brand: null,
-        category: null,
-        subCategory: null,
-      },
-    ];
+    await getProductsFiltered({ categoryId: "category-1", brandId: "brand-1", supplierId: "supplier-1", unit: "kg" });
 
-    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
+    expect((db.product.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where).toMatchObject({
+      businessId: "business-123",
+      categoryId: "category-1",
+      brandId: "brand-1",
+      supplierId: "supplier-1",
+      unit: "kg",
+    });
+  });
+
+  it("preserves product IVA and related supplier/category/brand data in the array result", async () => {
+    const { db } = await import("@/lib/db");
+    const product = {
+      id: "product-1",
+      description: "Leche",
+      iva: 21,
+      supplier: { id: "supplier-1", name: "Proveedor A" },
+      category: { id: "category-1", name: "Almacén" },
+      brand: { id: "brand-1", name: "Marca A" },
+    };
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([product]);
 
     const result = await getProductsFiltered({ supplierId: "supplier-1" });
 
-    expect(result).toHaveLength(1);
-    expect(db.product.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          supplierId: "supplier-1",
-        }),
-      })
-    );
+    expect(result).toEqual([product]);
+    expect(result[0]).toMatchObject({ iva: 21, supplier: product.supplier, category: product.category, brand: product.brand });
   });
 
-  it("should return products filtered by unit", async () => {
+  it("returns an empty array for a valid query with no matching products", async () => {
     const { db } = await import("@/lib/db");
-
-    const mockProducts = [
-      {
-        id: "product-1",
-        code: "P001",
-        description: "Product A",
-        salePrice: 100,
-        price: 60,
-        unit: "kg",
-        brand: null,
-        category: null,
-        subCategory: null,
-      },
-    ];
-
-    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
-
-    const result = await getProductsFiltered({ unit: "kg" });
-
-    expect(result).toHaveLength(1);
-    expect(db.product.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          unit: "kg",
-        }),
-      })
-    );
-  });
-
-  it("should combine multiple filters (search + category + brand)", async () => {
-    const { db } = await import("@/lib/db");
-
-    const mockProducts = [
-      {
-        id: "product-1",
-        code: "P001",
-        description: "Product A",
-        salePrice: 100,
-        price: 60,
-        unit: "unidades",
-        brand: { name: "Brand A" },
-        category: { name: "Category A" },
-        subCategory: null,
-      },
-    ];
-
-    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
-
-    const result = await getProductsFiltered({
-      search: "Product",
-      categoryId: "category-1",
-      brandId: "brand-1",
-    });
-
-    expect(result).toHaveLength(1);
-    expect(db.product.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          OR: expect.any(Array),
-          categoryId: "category-1",
-          brandId: "brand-1",
-        }),
-      })
-    );
-  });
-
-  it("should return empty array when no products match filters", async () => {
-    const { db } = await import("@/lib/db");
-
     (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-    const result = await getProductsFiltered({ search: "NonExistent" });
+    const result = await getProductsFiltered({ search: "does-not-exist", categoryId: "category-1" });
 
     expect(result).toEqual([]);
+    expect(db.product.findMany).toHaveBeenCalledTimes(1);
   });
 
-  it("should return empty array when user is not authenticated", async () => {
+  it("rejects unauthenticated access without querying products", async () => {
+    const { db } = await import("@/lib/db");
     const authModule = await import("../../../auth");
     (authModule.auth as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
 
-    const result = await getProductsFiltered({ search: "test" });
-
-    expect(result).toEqual([]);
+    expect(await getProductsFiltered({ search: "secret" })).toEqual([]);
+    expect(db.product.findMany).not.toHaveBeenCalled();
   });
 
-  it("should return empty array when user has no businessId", async () => {
-    const authModule = await import("../../../auth");
-    (authModule.auth as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      user: { id: "user-1", businessId: null },
-    });
-
-    const result = await getProductsFiltered({ search: "test" });
-
-    expect(result).toEqual([]);
-  });
-
-  it("should include related brand, category, and subCategory in results", async () => {
+  it("rejects sessions without a businessId without querying products", async () => {
     const { db } = await import("@/lib/db");
+    const authModule = await import("../../../auth");
+    (authModule.auth as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ user: { id: "user-1", businessId: null } });
 
-    const mockProducts = [
-      {
-        id: "product-1",
-        code: "P001",
-        description: "Product A",
-        salePrice: 100,
-        price: 60,
-        unit: "unidades",
-        brand: { name: "Brand A" },
-        category: { name: "Category A" },
-        subCategory: { name: "SubCategory A" },
-      },
-    ];
-
-    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(mockProducts);
-
-    const result = await getProductsFiltered({});
-
-    expect(result[0].brand).toBeDefined();
-    expect(result[0].category).toBeDefined();
-    expect(result[0].subCategory).toBeDefined();
+    expect(await getProductsFiltered({ search: "secret" })).toEqual([]);
+    expect(db.product.findMany).not.toHaveBeenCalled();
   });
 
-  it("should handle database errors gracefully", async () => {
+  it("returns an empty array and logs the action error when the query fails", async () => {
     const { db } = await import("@/lib/db");
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = new Error("DB error");
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockRejectedValue(error);
 
-    (db.product.findMany as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("DB error"));
-
-    const result = await getProductsFiltered({ search: "test" });
-
-    expect(result).toEqual([]);
-    expect(consoleSpy).toHaveBeenCalledWith("Error fetching filtered products:", expect.any(Error));
+    expect(await getProductsFiltered({ search: "Manzana" })).toEqual([]);
+    expect(consoleSpy).toHaveBeenCalledWith("Error fetching filtered products:", error);
     consoleSpy.mockRestore();
+  });
+});
+
+describe("bulk update audit behavior", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { db } = await import("@/lib/db");
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation((operations: Promise<unknown>[]) => Promise.all(operations));
+  });
+
+  it("updates last_update in bulkUpdatePrices", async () => {
+    const { db } = await import("@/lib/db");
+    const { bulkUpdatePrices } = await import("@/actions/stock");
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: "prod-1", price: 50, salePrice: 100 }]);
+    (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "prod-1" });
+    const before = Date.now();
+    await bulkUpdatePrices(["prod-1"], 10);
+    const timestamp = (db.product.update as ReturnType<typeof vi.fn>).mock.calls[0][0].data.last_update as Date;
+    expect(timestamp.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it("updates last_update in toggleProductCatalogAction", async () => {
+    const { db } = await import("@/lib/db");
+    const { toggleProductCatalogAction } = await import("@/actions/stock");
+    (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "prod-1", catalog: true });
+    await toggleProductCatalogAction("prod-1", true);
+    expect((db.product.update as ReturnType<typeof vi.fn>).mock.calls[0][0].data.last_update).toBeInstanceOf(Date);
   });
 });

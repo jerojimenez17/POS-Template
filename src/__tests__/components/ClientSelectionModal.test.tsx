@@ -6,6 +6,15 @@ import ClientSelectionModal from "@/components/ledger/ClientSelectionModal";
 vi.mock("@/actions/clients", () => ({
   createClient: vi.fn(),
 }));
+
+vi.mock("@/actions/unpaid-orders", () => ({
+  getClientUnpaidOrders: vi.fn(),
+  addItemsToOrder: vi.fn(),
+}));
+
+vi.mock("@/components/ui/feature-blocked-modal", () => ({
+  FeatureBlockedModal: () => null,
+}));
 //disable any error for eslint
 /* eslint-disable @typescript-eslint/no-explicit-any */
 vi.mock("@/components/ui/input", () => ({
@@ -64,7 +73,7 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
       { id: "client-2", name: "Maria Garcia" },
     ];
 
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => mockClients,
     });
@@ -87,7 +96,7 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
   it("should fetch clients when modal opens", async () => {
     const mockClients = [{ id: "client-1", name: "Juan Perez" }];
 
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => mockClients,
     });
@@ -113,7 +122,7 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
       { id: "client-2", name: "Maria Garcia" },
     ];
 
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => mockClients,
     });
@@ -129,7 +138,7 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
     );
 
     await waitFor(() => {
-      const searchInput = screen.getByTestId("search-input");
+      const searchInput = screen.getByPlaceholderText("Buscar cliente...");
       fireEvent.change(searchInput, { target: { value: "Juan" } });
     });
 
@@ -149,15 +158,23 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
       ],
     };
 
-    (global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockClients,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockUnpaidOrder,
-      });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => mockClients,
+    });
+
+    const { getClientUnpaidOrders } = await import("@/actions/unpaid-orders");
+    (getClientUnpaidOrders as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: true,
+      data: [{
+        id: mockUnpaidOrder.id,
+        total: mockUnpaidOrder.total,
+        date: new Date("2024-01-15T10:00:00Z"),
+        itemsCount: mockUnpaidOrder.items.length,
+        status: "confirmada",
+        paidStatus: mockUnpaidOrder.paidStatus,
+      }],
+    });
 
     render(
       <ClientSelectionModal
@@ -175,7 +192,12 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText(/orden existente/i)).toBeTruthy();
+      fireEvent.click(screen.getByTestId("submit-button"));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/orden pendiente existente/i)).toBeTruthy();
+      expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1");
     });
   });
 
@@ -188,15 +210,23 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
       items: [],
     };
 
-    (global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockClients,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockUnpaidOrder,
-      });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => mockClients,
+    });
+
+    const { getClientUnpaidOrders } = await import("@/actions/unpaid-orders");
+    (getClientUnpaidOrders as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: true,
+      data: [{
+        id: mockUnpaidOrder.id,
+        total: mockUnpaidOrder.total,
+        date: new Date("2024-01-15T10:00:00Z"),
+        itemsCount: 0,
+        status: "confirmada",
+        paidStatus: mockUnpaidOrder.paidStatus,
+      }],
+    });
 
     const onOpenChange = vi.fn();
 
@@ -216,8 +246,13 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
     });
 
     await waitFor(() => {
+      fireEvent.click(screen.getByTestId("submit-button"));
+    });
+
+    await waitFor(() => {
       expect(screen.queryByText(/agregar a orden existente/i)).toBeTruthy();
       expect(screen.queryByText(/crear nueva orden/i)).toBeTruthy();
+      expect(getClientUnpaidOrders).toHaveBeenCalledWith("client-1");
     });
   });
 
@@ -231,12 +266,18 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => null,
+        json: async () => mockClients,
       })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true, order: { id: "new-order" } }),
       });
+
+    const { getClientUnpaidOrders } = await import("@/actions/unpaid-orders");
+    (getClientUnpaidOrders as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: true,
+      data: null,
+    });
 
     render(
       <ClientSelectionModal
@@ -254,7 +295,7 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
     });
 
     await waitFor(() => {
-      const submitButton = screen.getByTestId("submit-button");
+      const submitButton = screen.getByRole("button", { name: /confirmar/i });
       fireEvent.click(submitButton);
     });
 
@@ -269,7 +310,7 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
   it("should display total amount correctly", async () => {
     const mockClients = [{ id: "client-1", name: "Juan Perez" }];
 
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => mockClients,
     });
@@ -285,7 +326,7 @@ describe("R3: ClientSelectionModal - Smart client selection", () => {
     );
 
     await waitFor(() => {
-      expect(screen.queryByText("250")).toBeTruthy();
+      expect(screen.queryByText("$250")).toBeTruthy();
     });
   });
 });

@@ -260,7 +260,7 @@ const CreateAttributeModal = ({ type, parentId, onSuccess }: Props) => {
             disabled={isPending || !name.trim()}
             className="w-full sm:w-auto bg-black dark:bg-white dark:text-gray-900"
           >
-            {isPending ? "Guardando..." : `Crear ${type}`}
+            {isPending ? "Guardando..." : `Crear ${type === "supplier" ? "Proveedor" : type === "category" ? "Categoría" : type === "subcategory" ? "Subcategoría" : type === "brand" ? "Marca" : type}`}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -40,6 +40,7 @@ import { Toaster } from "sonner";
 
 import { AuthProvider } from "@/components/auth/SessionProvider";
 import { WebVitals } from "@/components/WebVitals";
+import { MobileNavProvider } from "@/context/MobileNavContext";
 
 export default function RootLayout({
   children,
@@ -58,19 +59,28 @@ export default function RootLayout({
             className={`${geistSans.variable} ${geistMono.variable} ${poppins.className} antialiased min-h-screen overflow-x-hidden`}
             >
             <AuthProvider>
+            <MobileNavProvider>
             <CashboxProvider>
             <ThemeProvider>
               <FiltersProvider>
-                <div className="min-h-screen bg-slate-100 dark:bg-gray-800">
+                <div className="min-h-screen bg-slate-100 dark:bg-gray-800 flex flex-col">
             <NavigationMenuHeader />
             <PaymentStatusGuard />
-            {children}
+            <div className="flex-1">
+              {children}
+            </div>
+            <footer className="py-4 px-4 border-t border-gray-200/40 dark:border-gray-800/40">
+              <p className="text-center text-xs font-light tracking-wider text-gray-400 dark:text-gray-600">
+                &copy; {new Date().getFullYear()} Stok.ia
+              </p>
+            </footer>
             <WebVitals />
-            <Toaster position="bottom-right" />
+            <Toaster position="bottom-right" richColors />
                 </div>
         </FiltersProvider>
       </ThemeProvider>
             </CashboxProvider>
+            </MobileNavProvider>
             </AuthProvider>
           </body>
     </html>

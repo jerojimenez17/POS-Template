@@ -1,188 +1,195 @@
 "use client";
 
-import { memo } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
-import Image from "next/image";
+import { memo, useState } from "react";
 import Link from "next/link";
-import noImgPhoto from "../../../public/no-image.svg";
-import { Input } from "../ui/input";
+import { Minus, Plus, ShoppingCart } from "lucide-react";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { PublicProduct } from "@/actions/catalog";
-import { ShoppingCart, Plus, Minus, ExternalLink } from "lucide-react";
-import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
+import { ProductVisual } from "./ProductVisual";
+import { formatCurrency, formatUnit } from "./catalog-format";
 
 interface ProductCardProps {
   product: PublicProduct;
-  isCatalog: boolean;
-  unitsToOrder: { id: string; amount: number };
-  onQuantityChange: (id: string, amount: number) => void;
+  cartQuantity: number;
   onAddToCart: (product: PublicProduct, quantity: number) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ProductModal: any;
-  businessSlug?: string;
+  businessSlug: string;
+  priority?: boolean;
 }
 
-function ImageContent({ product }: { product: PublicProduct }) {
-  const imageUrl = product.images?.[0] || product.image;
-  if (imageUrl && imageUrl.includes("https")) {
-    return (
-      <Image
-        className="object-cover motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover/image:scale-110"
-        src={imageUrl}
-        alt={`Imagen de ${product.description ?? "producto"}`}
-        fill
-        sizes="(max-width: 768px) 50vw, 25vw"
-        loading="lazy"
-      />
-    );
-  }
-  return (
-    <div className="flex items-center justify-center h-full w-full opacity-60">
-      <Image
-        className="object-contain p-4"
-        src={noImgPhoto}
-        alt="Imagen no disponible"
-        fill
-        sizes="100px"
-      />
-    </div>
-  );
+function stockLabel(amount: number) {
+  if (amount <= 0) return "Sin stock";
+  if (amount <= 5) return `Últimas ${amount}`;
+  return "Disponible";
 }
 
 const ProductCard = memo(function ProductCard({
   product,
-  unitsToOrder,
-  onQuantityChange,
+  cartQuantity,
   onAddToCart,
-  ProductModal,
   businessSlug,
+  priority = false,
 }: ProductCardProps) {
-  const quantity = unitsToOrder.id === product.id ? unitsToOrder.amount : 0;
-  const isDisabled = product.id !== unitsToOrder.id || unitsToOrder.amount === 0;
-  const detailHref = businessSlug ? `/${businessSlug}/catalogo/${product.id}` : "#";
+  const [quantity, setQuantity] = useState(() => (product.amount > 0 ? 1 : 0));
+  const detailHref = `/${businessSlug}/catalogo/${product.id}`;
+  const hasStock = product.amount > 0;
+  const remainingStock = Math.max(0, product.amount - cartQuantity);
+  const safeQuantity = Math.min(quantity, remainingStock);
+  const reachedLimit = hasStock && remainingStock === 0;
+  const disabled = !hasStock || reachedLimit || safeQuantity <= 0;
+  const stock = stockLabel(product.amount);
+
+  const handleAdd = () => {
+    if (disabled) return;
+    onAddToCart(product, safeQuantity);
+    const remainingAfterAdd = remainingStock - safeQuantity;
+    setQuantity(remainingAfterAdd > 0 ? 1 : 0);
+  };
 
   return (
-    <Card
-      className="group flex flex-col overflow-hidden motion-safe:hover:shadow-2xl motion-safe:transition-shadow duration-300 bg-white dark:bg-gray-800/50 backdrop-blur-sm border-gray-100 dark:border-gray-700 focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 rounded-2xl"
-      key={product.id}
+    <article
       aria-label={product.description ?? "Producto"}
+      className="group relative flex min-w-0 flex-col overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm motion-safe:transition-[transform,box-shadow] motion-safe:duration-300 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-lg focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
     >
-      <div className="relative aspect-[4/3] overflow-hidden bg-gray-50 dark:bg-gray-900/50">
-        {businessSlug ? (
-          <Link href={detailHref} className="block h-full w-full group/image">
-            <ImageContent product={product} />
-            <div className="absolute inset-0 bg-black/0 motion-safe:group-hover/image:bg-black/10 transition-colors duration-300 flex items-center justify-center opacity-0 group-hover/image:opacity-100">
-              <div className="bg-white/90 dark:bg-black/90 p-2 rounded-full shadow-lg transform translate-y-4 motion-safe:group-hover/image:translate-y-0 transition-transform duration-300 text-primary">
-                <ExternalLink className="w-5 h-5" />
-              </div>
-            </div>
-          </Link>
-        ) : (
-          <ProductModal product={product}>
-            <div className="cursor-pointer h-full w-full group/image">
-              <ImageContent product={product} />
-              <div className="absolute inset-0 bg-black/0 motion-safe:group-hover/image:bg-black/10 transition-colors duration-300 flex items-center justify-center opacity-0 group-hover/image:opacity-100">
-                <div className="bg-white/90 dark:bg-black/90 p-2 rounded-full shadow-lg transform translate-y-4 motion-safe:group-hover/image:translate-y-0 transition-transform duration-300 text-primary">
-                  <ExternalLink className="w-5 h-5" />
-                </div>
-              </div>
-            </div>
-          </ProductModal>
-        )}
+      <Link
+        href={detailHref}
+        className="absolute inset-0 z-10 rounded-3xl outline-none"
+        aria-label={`Ver detalle de ${product.description ?? "producto"}`}
+      >
+        <span className="sr-only">Ver detalle</span>
+      </Link>
 
-        <div className="absolute top-3 left-3 flex flex-col gap-2 pointer-events-none">
-          {product.category && (
-            <Badge variant="secondary" className="bg-white/80 dark:bg-black/60 backdrop-blur-md text-[10px] uppercase tracking-wider font-bold border-none shadow-sm">
-              {product.category}
-            </Badge>
-          )}
-        </div>
+      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+        <ProductVisual
+          image={product.image}
+          images={product.images}
+          description={product.description}
+          category={product.category}
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+          priority={priority}
+          className="motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover:scale-105"
+        />
 
-        <div className="absolute bottom-3 right-3 text-xs font-bold bg-white/90 dark:bg-black/80 px-2 py-1 rounded-lg shadow-sm backdrop-blur-sm pointer-events-none">
-          {product.code && <span className="opacity-60 mr-1">#</span>}
-          {product.code || "S/C"}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start gap-2 bg-linear-to-b from-black/25 to-transparent p-3">
+          <div className="flex min-w-0 flex-wrap gap-2">
+            {product.category && (
+              <span className="max-w-40 truncate rounded-full bg-background/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-foreground shadow-sm backdrop-blur-sm">
+                {product.category}
+              </span>
+            )}
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-1 text-[10px] font-bold shadow-sm backdrop-blur-sm",
+                !hasStock
+                  ? "bg-red-600/90 text-white"
+                  : product.amount <= 5
+                    ? "bg-amber-500/95 text-amber-950"
+                    : "bg-emerald-600/90 text-white",
+              )}
+            >
+              {stock}
+            </span>
+          </div>
         </div>
       </div>
 
-      <CardHeader className="p-4 pb-1">
-        <CardTitle className="text-base font-bold leading-tight line-clamp-1" title={product.description ?? undefined}>
-          {product.description ?? "Sin descripción"}
-        </CardTitle>
-        <div className="flex items-baseline gap-1 mt-1">
-          <span className="text-xl font-black text-primary">
-            ${product.salePrice.toLocaleString("es-AR", { minimumFractionDigits: 0 })}
-          </span>
-          <span className="text-xs text-muted-foreground font-medium uppercase">
-            {product.unit || "un"}
-          </span>
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+              {product.brand || "Genérico"}
+            </p>
+            {cartQuantity > 0 && (
+              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                {cartQuantity} en carrito
+              </span>
+            )}
+          </div>
+          <h3 className="min-h-10 text-sm font-semibold leading-snug text-card-foreground">
+            <span className="line-clamp-2">{product.description ?? "Producto sin descripción"}</span>
+          </h3>
         </div>
-        <div className="flex items-center gap-2 mt-0.5">
-           <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{product.brand || "Generico"}</span>
-        </div>
-      </CardHeader>
 
-      <CardContent className="p-4 pt-1 mt-auto">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-900/50 p-1 rounded-xl border border-gray-100 dark:border-gray-800">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-lg shrink-0"
-              onClick={() => onQuantityChange(product.id, Math.max(0, quantity - 1))}
-              disabled={quantity <= 0}
-              aria-label="Disminuir cantidad"
-            >
-              <Minus className="h-4 w-4" />
-            </Button>
-
-            <Input
-              type="number"
-              className="h-8 border-none bg-transparent text-center font-bold text-sm focus-visible:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              placeholder="0"
-              value={quantity > 0 ? quantity : ""}
-              autoComplete="off"
-              aria-label="Cantidad del producto"
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                if (value >= 0 && (!product.amount || value <= product.amount)) {
-                  onQuantityChange(product.id, value);
-                }
-              }}
-            />
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-lg shrink-0"
-              onClick={() => onQuantityChange(product.id, quantity + 1)}
-              disabled={product.amount > 0 && quantity >= product.amount}
-              aria-label="Aumentar cantidad"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
+        <div className="mt-auto space-y-3">
+          <div className="flex items-end justify-between gap-2">
+            <p className="text-xl font-black tabular-nums tracking-tight text-foreground">
+              {formatCurrency(product.salePrice)}
+            </p>
+            <span className="pb-0.5 text-xs font-medium text-muted-foreground">
+              por {formatUnit(product.unit)}
+            </span>
           </div>
 
-          <Button
-            onClick={() => onAddToCart(product, quantity)}
-            disabled={isDisabled}
-            className={cn(
-              "w-full rounded-xl h-10 font-bold motion-safe:transition-colors duration-300 flex items-center justify-center gap-2",
-              isDisabled ? "bg-gray-100 dark:bg-gray-800 text-gray-400" : "bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 scale-100 motion-safe:hover:scale-[1.02]"
-            )}
-            aria-label={`Agregar ${product.description} al carrito`}
-          >
-            <ShoppingCart className="w-4 h-4" />
-            <span>Agregar al pedido</span>
-          </Button>
+          <div className="relative z-20 space-y-2">
+            <div className="flex items-center justify-between gap-2 rounded-xl border bg-muted/40 p-1 pl-3">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                Cantidad
+              </span>
+              <div className="flex items-center">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 touch-manipulation rounded-lg"
+                  onClick={() => setQuantity(Math.max(0, safeQuantity - 1))}
+                  disabled={safeQuantity <= 0}
+                  aria-label={`Disminuir cantidad de ${product.description ?? "producto"}`}
+                >
+                  <Minus className="size-3.5" aria-hidden="true" />
+                </Button>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  name={`quantity-${product.id}`}
+                  value={safeQuantity > 0 ? safeQuantity : ""}
+                  placeholder="0"
+                  autoComplete="off"
+                  aria-label={`Cantidad de ${product.description ?? "producto"}`}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isFinite(value) && value >= 0 && value <= remainingStock) {
+                      setQuantity(value);
+                    }
+                  }}
+                  className="h-8 w-10 border-none bg-transparent p-0 text-center text-sm font-bold tabular-nums focus-visible:ring-0 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 touch-manipulation rounded-lg"
+                  onClick={() => setQuantity(Math.min(remainingStock, safeQuantity + 1))}
+                  disabled={safeQuantity >= remainingStock}
+                  aria-label={`Aumentar cantidad de ${product.description ?? "producto"}`}
+                >
+                  <Plus className="size-3.5" aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              onClick={handleAdd}
+              disabled={disabled}
+              className="h-10 w-full min-w-0 touch-manipulation rounded-xl bg-primary px-3 font-semibold text-primary-foreground shadow-sm motion-safe:transition-colors motion-safe:duration-200 hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
+              aria-label={`Agregar ${product.description ?? "producto"} al carrito`}
+            >
+              <ShoppingCart className="size-4" aria-hidden="true" />
+              <span className="truncate">
+                {!hasStock
+                  ? "Sin stock"
+                  : reachedLimit
+                    ? "Máximo en carrito"
+                    : safeQuantity <= 0
+                      ? "Elegí cantidad"
+                      : `Agregar · ${formatCurrency(product.salePrice * safeQuantity)}`}
+              </span>
+            </Button>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </article>
   );
 });
 

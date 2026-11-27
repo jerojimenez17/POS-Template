@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCashbox } from "@/context/CashboxContext";
 
 interface ZReport {
   totalSales: number;
@@ -42,6 +43,7 @@ export const CloseSessionModal = ({
   const [finalBalance, setFinalBalance] = useState<string>("");
   const [zReport, setZReport] = useState<ZReport | null>(null);
   const router = useRouter();
+  const { setHasActiveSession } = useCashbox();
 
   const handleCloseSession = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +68,7 @@ export const CloseSessionModal = ({
     setZReport(null);
     setFinalBalance("");
     onClosingChange?.(false);
+    setHasActiveSession(false);
     onClose();
     router.refresh();
   };
@@ -170,16 +173,10 @@ export const CloseSessionModal = ({
         <DialogHeader>
           <DialogTitle>Cierre de Caja</DialogTitle>
           <DialogDescription>
-            Confirme los montos finales y cierre la sesión de caja.
+            ¿Estás seguro de que deseas cerrar la sesión de caja? Confirme los montos finales y cierre la sesión de caja.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleCloseSession} className="space-y-4 pt-4">
-          <div className="py-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              ¿Estás seguro de que deseas cerrar la sesión de caja?
-            </p>
-          </div>
-
           <div className="space-y-2 px-4">
             <Label htmlFor="finalBalance" className="text-xs text-muted-foreground uppercase font-bold">
               Monto en efectivo (Opcional)

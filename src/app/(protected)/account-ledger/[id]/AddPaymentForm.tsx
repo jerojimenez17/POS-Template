@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,11 +15,15 @@ import {
 } from "@/components/ui/select";
 import { CreditCard, Loader2 } from "lucide-react";
 import { registerPayment } from "@/actions/unpaid-orders";
+import { PointOfSaleSelector } from "@/components/account-ledger/PointOfSaleSelector";
+import { InvoiceTypeSelector } from "@/components/account-ledger/InvoiceTypeSelector";
+import { toPositiveWholePesos, toWholePesos } from "@/lib/money";
 
 interface AddPaymentFormProps {
   orderId: string;
   remainingBalance: number;
   businessId: string;
+  configuredPtoVentas?: number[];
   showForm?: boolean;
 }
 
@@ -26,21 +31,54 @@ export default function AddPaymentForm({
   orderId,
   remainingBalance,
   businessId,
+  configuredPtoVentas = [],
   showForm = false,
 }: AddPaymentFormProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(showForm);
-  const [amount, setAmount] = useState(remainingBalance.toString());
+  const [amount, setAmount] = useState(String(remainingBalance));
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
+  const [billType, setBillType] = useState("");
+  const [ptoVenta, setPtoVenta] = useState(configuredPtoVentas[0]?.toString() ?? "");
   const [isPending, setIsPending] = useState(false);
+  const idempotencyStorageKey = `account-ledger-payment:${orderId}:idempotency-key`;
+  const [idempotencyKey, setIdempotencyKey] = useState(() => {
+    if (typeof window === "undefined") return uuidv4();
+    let savedKey: string | null = null;
+    try {
+      savedKey = window.sessionStorage.getItem(idempotencyStorageKey);
+    } catch {
+      // The in-memory key still protects this mounted form if storage is blocked.
+    }
+    if (savedKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(savedKey)) {
+      return savedKey;
+    }
+    const nextKey = uuidv4();
+    try {
+      window.sessionStorage.setItem(idempotencyStorageKey, nextKey);
+    } catch {
+      // Keep the same key in React state for retries in this mounted form.
+    }
+    return nextKey;
+  });
+  const isRemito = billType === "Remito";
+
+  const closeForm = () => {
+    setIsOpen(false);
+    setAmount(String(remainingBalance));
+    setPaymentMethod("Efectivo");
+    setBillType("");
+    setPtoVenta(configuredPtoVentas[0]?.toString() ?? "");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsPending(true);
 
     try {
-      const amountNum = parseFloat(amount);
-      if (isNaN(amountNum) || amountNum <= 0) {
+      const proposedAmount = Number(amount);
+      const amountNum = toPositiveWholePesos(proposedAmount);
+      if (amount.trim() === "" || amountNum === null) {
         toast.error("Ingrese un monto válido");
         return;
       }
@@ -49,32 +87,65 @@ export default function AddPaymentForm({
         toast.error("El monto no puede exceder el saldo pendiente");
         return;
       }
+      if (!["Factura A", "Factura B", "Factura C", "Remito"].includes(billType)) {
+        toast.error("Seleccione Factura A, Factura B o Factura C");
+        return;
+      }
+      const selectedPtoVenta = Number(ptoVenta);
+      if (!isRemito && (!Number.isSafeInteger(selectedPtoVenta) || selectedPtoVenta <= 0 || !configuredPtoVentas.includes(selectedPtoVenta))) {
+        toast.error("Seleccione un punto de venta configurado");
+        return;
+      }
 
       const result = await registerPayment({
         orderId,
+        idempotencyKey,
         amount: amountNum,
         paymentMethod,
         businessId,
+        billType: billType as "Factura A" | "Factura B" | "Factura C" | "Remito",
+        ...(!isRemito ? { ptoVenta: selectedPtoVenta } : {}),
       });
 
       if (result.success) {
-        toast.success("Pago registrado correctamente");
+        const outcome = typeof result.data === "object" && result.data !== null
+          ? result.data as { voucherStatus?: string }
+          : {};
+        if (outcome.voucherStatus === "NOT_REQUIRED") {
+          toast.success("Pago registrado como Remito, sin emisión AFIP");
+        } else if (outcome.voucherStatus === "AUTHORIZED") {
+          toast.success("Pago registrado y factura autorizada");
+        } else if (outcome.voucherStatus === "UNKNOWN") {
+          toast.warning("Pago registrado; verifique la emisión de la factura antes de reintentar. No vuelva a emitir hasta confirmar el resultado.");
+        } else if (outcome.voucherStatus === "PENDING" || outcome.voucherStatus === "ISSUING") {
+          toast.info("Pago registrado; la emisión de la factura está en curso. Espere a que finalice.");
+        } else if (outcome.voucherStatus === "MISSING") {
+          toast.warning("Pago registrado; este pago histórico no tiene una reserva fiscal. Requiere revisión manual y no puede reintentarse desde el historial.");
+        } else if (outcome.voucherStatus === "FAILED") {
+          toast.warning("Pago registrado; la factura no se emitió. Puede iniciar un reintento explícito desde el historial de pagos.");
+        } else {
+          toast.warning("Pago registrado; el estado de facturación requiere verificación en el historial de pagos.");
+        }
         router.refresh();
-        setIsOpen(false);
-        setAmount(remainingBalance.toString());
+        closeForm();
+        const nextIdempotencyKey = uuidv4();
+        setIdempotencyKey(nextIdempotencyKey);
+        try {
+          window.sessionStorage.setItem(idempotencyStorageKey, nextIdempotencyKey);
+        } catch {
+          // A future render will create a new in-memory key as usual.
+        }
       } else {
-        const errorMsg = 'error' in result ? result.error : "Error al registrar el pago";
-        toast.error(errorMsg || "Error al registrar el pago");
+        toast.error(result.error || "No se pudo registrar el pago. Intente nuevamente.");
       }
-      } catch (error) {
-        console.error("Error registering payment:", error);
+      } catch {
         toast.error("Error al registrar el pago");
       } finally {
       setIsPending(false);
     }
   };
 
-  if (!showForm && !isOpen) {
+  if (!isOpen) {
     return (
       <Button className="w-full" onClick={() => setIsOpen(true)}>
         <CreditCard className="h-4 w-4 mr-2" />
@@ -84,7 +155,7 @@ export default function AddPaymentForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div className="flex items-center gap-2">
         <CreditCard className="h-5 w-5" />
         <span className="font-medium">Registrar Pago</span>
@@ -95,11 +166,15 @@ export default function AddPaymentForm({
           <label className="text-sm text-muted-foreground">Monto</label>
           <Input
             type="number"
-            step="0.01"
-            min="0"
-            max={remainingBalance}
+            step="any"
+            min="1"
+            max={String(remainingBalance)}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+            onBlur={() => {
+              const rounded = toWholePesos(Number(amount));
+              if (amount.trim() !== "" && rounded !== null) setAmount(String(rounded));
+            }}
             placeholder="Monto del pago"
             className="mt-1"
           />
@@ -121,6 +196,29 @@ export default function AddPaymentForm({
             </SelectContent>
           </Select>
         </div>
+
+        <div>
+          <label className="text-sm text-muted-foreground">Tipo de factura</label>
+          <InvoiceTypeSelector value={billType} onChange={setBillType} />
+        </div>
+
+        {!isRemito && <div>
+          <label className="text-sm text-muted-foreground" htmlFor="payment-pto-venta">Punto de venta</label>
+          <PointOfSaleSelector id="payment-pto-venta" values={configuredPtoVentas} value={ptoVenta} onChange={setPtoVenta} disabled={configuredPtoVentas.length === 0} />
+          {configuredPtoVentas.length === 0 && <p className="mt-1 text-sm text-destructive">No hay puntos de venta configurados.</p>}
+        </div>}
+
+        <p className="rounded-md bg-muted p-3 text-sm" aria-live="polite">
+          Se registrará ${(() => {
+            const rounded = toWholePesos(Number(amount));
+            return rounded === null ? "—" : rounded.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+          })()}
+          {isRemito
+            ? " como Remito (sin emisión AFIP)."
+            : billType
+              ? ` como ${billType}${ptoVenta ? ` en el punto de venta ${ptoVenta}` : "; seleccione un punto de venta"}.`
+              : "; seleccione el tipo de factura"}
+        </p>
       </div>
 
       <div className="flex gap-2">
@@ -128,12 +226,12 @@ export default function AddPaymentForm({
           type="button"
           variant="outline"
           className="flex-1"
-          onClick={() => setIsOpen(false)}
+          onClick={closeForm}
           disabled={isPending}
         >
           Cancelar
         </Button>
-        <Button type="submit" className="flex-1" disabled={isPending}>
+        <Button type="submit" className="flex-1" disabled={isPending || (!isRemito && configuredPtoVentas.length === 0)}>
           {isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (

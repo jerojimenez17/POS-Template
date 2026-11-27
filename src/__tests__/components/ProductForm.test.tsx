@@ -55,16 +55,15 @@ describe("ProductForm - Select Group Layout", () => {
     vi.clearAllMocks();
   });
 
-  describe("FormItem width classes", () => {
-    it("should have flex-1 on category FormItem", () => {
+  describe("Attribute select row layout", () => {
+    it("should render category select and create button in a flex row", () => {
       const { container } = render(<ProductForm onClose={onClose} />);
-      const formItem = container.querySelector(
+      const row = container.querySelector(
         "[data-testid='create-attribute-category']",
-      )?.parentElement?.previousElementSibling;
-      // Select's FormItem should have flex-1
-      if (formItem) {
-        expect(formItem.className).toContain("flex-1");
-      }
+      )?.parentElement;
+
+      expect(row?.className).toContain("flex");
+      expect(row?.className).toContain("gap-2");
     });
   });
 
@@ -78,7 +77,7 @@ describe("ProductForm - Select Group Layout", () => {
   });
 
   describe("CreateAttributeModal button alignment", () => {
-    it("should have consistent pt-1.5 on all create-attribute button wrappers", () => {
+    it("should render all create-attribute buttons inside flex rows", () => {
       const { container } = render(<ProductForm onClose={onClose} />);
       const categoryBtn = container.querySelector(
         "[data-testid='create-attribute-category']",
@@ -93,10 +92,10 @@ describe("ProductForm - Select Group Layout", () => {
         "[data-testid='create-attribute-supplier']",
       )?.parentElement;
 
-      expect(categoryBtn?.className).toContain("pt-1.5");
-      expect(subcategoryBtn?.className).toContain("pt-1.5");
-      expect(brandBtn?.className).toContain("pt-1.5");
-      expect(supplierBtn?.className).toContain("pt-1.5");
+      expect(categoryBtn?.className).toContain("flex");
+      expect(subcategoryBtn?.className).toContain("flex");
+      expect(brandBtn?.className).toContain("flex");
+      expect(supplierBtn?.className).toContain("flex");
     });
   });
 

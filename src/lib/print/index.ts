@@ -28,3 +28,5 @@ export {
   buildPDFHTML,
   type PDFTemplateOptions,
 } from "./pdf-templates";
+
+export { getDocumentPrintKind, buildReceiptBusinessInfo, buildCreditNotePrintContext, isCreditNotePrintContext, type DocumentPrintKind, type ReceiptBusinessInfo } from "./receipt-data";

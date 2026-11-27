@@ -67,7 +67,7 @@ export const getBusinessStatusAction = async () => {
          type = "warning";
       }
     } else if (dayOfMonth >= 1 && dayOfMonth <= 10 && !isPaidThisMonth) {
-      message = `Recuerda realizar el pago mensual antes del día 10. (Día actual: ${dayOfMonth})`;
+      message = `Recuerda realizar el pago mensual antes del día 10. (Restan ${10 - dayOfMonth} días)`;
       type = "info";
     }
 

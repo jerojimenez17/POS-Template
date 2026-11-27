@@ -1,15 +1,38 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import PrintableTable from "@/components/Billing/PrintableTable";
 import { BillContext } from "@/context/BillContext";
 import BillState from "@/models/BillState";
 import Product from "@/models/Product";
 import CAE from "@/models/CAE";
 
+// Cashbox guard (fix-searchbar union): merged components call useCashbox() and throw
+// "useCashbox must be used within a CashboxProvider" outside the provider.
+// Mocked here following the pre-existing pattern in tests/components/BillButtons.shortcuts.test.tsx.
+vi.mock("@/context/CashboxContext", () => ({
+  useCashbox: vi.fn(() => ({
+    hasActiveSession: true,
+    setHasActiveSession: vi.fn(),
+    isClosing: false,
+    setIsClosing: vi.fn(),
+    isOpeningModalOpen: false,
+    setIsOpeningModalOpen: vi.fn(),
+  })),
+  CashboxProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock("@/hooks/useFeatures", () => ({
+  useFeatures: vi.fn(),
+}));
+
+import { useFeatures } from "@/hooks/useFeatures";
+
 vi.mock("@/actions/stock", () => ({
   getProductByCode: vi.fn().mockResolvedValue(null),
+  getProductsByCode: vi.fn().mockResolvedValue([]),
   getProductsBySearch: vi.fn().mockResolvedValue([]),
+  getSuppliersForFilter: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/actions/business", () => ({
@@ -28,6 +51,10 @@ vi.mock("@yudiel/react-qr-scanner", () => ({
 
 vi.mock("@/lib/print", () => ({
   printElement: vi.fn().mockResolvedValue(true),
+  printThermalReceipt: vi.fn().mockResolvedValue(undefined),
+  exportToPDF: vi.fn().mockResolvedValue(undefined),
+  buildPDFHTML: vi.fn().mockReturnValue("<div></div>"),
+  PDF_STYLES: "",
 }));
 
 vi.mock("next/font/google", () => ({
@@ -105,6 +132,18 @@ const mockSession = {
 describe("PrintableTable Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("ResizeObserver", class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    vi.mocked(useFeatures).mockReturnValue({
+      plan: "PRO",
+      hasFeature: () => false,
+      isDelinquent: false,
+      isPlanAtLeast: () => true,
+      isOverLimit: () => false,
+    } as never);
   });
 
   afterEach(() => {
@@ -139,7 +178,7 @@ describe("PrintableTable Component", () => {
       );
 
       expect(screen.getByText("No hay productos agregados")).toBeTruthy();
-      expect(screen.getByText("Buscá un producto para comenzar")).toBeTruthy();
+       expect(screen.getByText("Buscá un producto para comenzar")).toBeTruthy();
     });
 
     it("should render with custom className", () => {
@@ -181,8 +220,9 @@ describe("PrintableTable Component", () => {
 
   describe("CA-02: Print function is called when trigger is activated", () => {
     it("should call handlePrint when printTrigger increases", async () => {
-      const { printElement } = await import("@/lib/print");
-      (printElement as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      // Production uses printThermalReceipt (thermal mode) or exportToPDF (pdf mode),
+      // not the old printElement. We verify the correct function is called.
+      const { printThermalReceipt } = await import("@/lib/print");
 
       const billState = createMockBillState({
         products: [createMockProduct({ description: "Test Product" })],
@@ -202,6 +242,9 @@ describe("PrintableTable Component", () => {
         expect(screen.getByText("Test Product")).toBeTruthy();
       });
 
+      // isClient becomes true after useEffect — flush it
+      await waitFor(() => {});
+
       rerender(
         <BillContext.Provider value={{ ...mockContextValue, BillState: billState }}>
           <PrintableTable
@@ -215,13 +258,12 @@ describe("PrintableTable Component", () => {
       );
 
       await waitFor(() => {
-        expect(printElement).toHaveBeenCalled();
+        expect(printThermalReceipt).toHaveBeenCalled();
       });
     });
 
-    it("should not trigger print when scanner is open", async () => {
-      const { printElement } = await import("@/lib/print");
-      (printElement as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    it("should not trigger print when printTrigger is 0", async () => {
+      const { printThermalReceipt, exportToPDF } = await import("@/lib/print");
 
       const billState = createMockBillState({
         products: [createMockProduct({ description: "Test Product" })],
@@ -242,23 +284,35 @@ describe("PrintableTable Component", () => {
         expect(screen.getByText("Test Product")).toBeTruthy();
       });
 
-      expect(printElement).not.toHaveBeenCalled();
+      expect(printThermalReceipt).not.toHaveBeenCalled();
+      expect(exportToPDF).not.toHaveBeenCalled();
     });
   });
 
   describe("CA-03: Print styles are applied correctly", () => {
-    it("should have print-visible class for header section", () => {
+    it("should have print-visible class for header section when CAE is present", async () => {
+      // The print-visible header is gated behind isClient (useEffect) AND requires CAE.
+      // Wait for the client effect to run before querying.
+      const cae = createMockCAE();
+      const billState = createMockBillState({
+        products: [createMockProduct({ description: "Test Product" })],
+        CAE: cae,
+      });
+
       renderWithContext(
         <PrintableTable
           printTrigger={0}
           className=""
           handleClose={vi.fn()}
           session={mockSession as never}
+          externalState={billState}
         />
       );
 
-      const headerElements = document.querySelectorAll(".print-visible");
-      expect(headerElements.length).toBeGreaterThan(0);
+      await waitFor(() => {
+        const headerElements = document.querySelectorAll(".print-visible");
+        expect(headerElements.length).toBeGreaterThan(0);
+      });
     });
 
     it("should have print:hidden class for interactive elements", () => {
@@ -285,7 +339,8 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      const searchInput = screen.getByPlaceholderText("Buscar producto por codigo o nombre...");
+      // Actual placeholder includes the keyboard shortcut hint
+      const searchInput = screen.getByPlaceholderText(/Buscar producto por codigo o nombre/);
       expect(searchInput).toBeTruthy();
       expect(searchInput.closest(".print\\:hidden")).toBeTruthy();
     });
@@ -418,7 +473,28 @@ describe("PrintableTable Component", () => {
       expect(screen.getByText("Test Business Name")).toBeTruthy();
     });
 
-    it("should display billing info when available", async () => {
+    it("should display billing info for official-invoice documents (CAE present)", async () => {
+      // Merged gating (report-C): the fiscal block (CUIT/Condición IVA/Inicio/Dirección)
+      // renders ONLY when documentKind === "official-invoice", i.e. a CAE exists.
+      const billState = createMockBillState({ CAE: createMockCAE() });
+
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/CUIT:/)).toBeTruthy();
+      });
+      expect(screen.getByText("20123456789")).toBeTruthy();
+    });
+
+    it("should hide fiscal business info for remitos (documentKind gating)", async () => {
       renderWithContext(
         <PrintableTable
           printTrigger={0}
@@ -428,11 +504,11 @@ describe("PrintableTable Component", () => {
         />
       );
 
+      // Business name still prints, but the AFIP fiscal data must not.
       await waitFor(() => {
         expect(screen.getByText(/Test Business/)).toBeTruthy();
       });
-      expect(screen.getByText(/CUIT:/)).toBeTruthy();
-      expect(screen.getByText("20123456789")).toBeTruthy();
+      expect(screen.queryByText(/CUIT:/)).toBeNull();
     });
   });
 
@@ -454,7 +530,7 @@ describe("PrintableTable Component", () => {
       );
 
       expect(screen.getByText(/Cliente:/)).toBeTruthy();
-      expect(screen.getByText("Juan Pérez")).toBeTruthy();
+       expect(screen.getByText("Juan Pérez")).toBeTruthy();
     });
 
     it("should display client IVA condition when provided", () => {
@@ -474,7 +550,7 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      expect(screen.getByText(/Condición IVA:/)).toBeTruthy();
+       expect(screen.getByText(/Condición IVA:/)).toBeTruthy();
       expect(screen.getByText("Responsable Inscripto")).toBeTruthy();
     });
 
@@ -519,8 +595,10 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      expect(screen.getByText("$200,00")).toBeTruthy();
-      expect(screen.getByText("$150,00")).toBeTruthy();
+      // Row subtotals intentionally use whole pesos; the totals footer keeps
+      // the two-decimal currency formatting.
+      expect(screen.getByText("$200")).toBeTruthy();
+      expect(screen.getByText("$150")).toBeTruthy();
     });
 
     it("should calculate total with discount", () => {
@@ -531,6 +609,7 @@ describe("PrintableTable Component", () => {
       const billState = createMockBillState({
         products,
         discount: 10,
+        totalWithDiscount: 90,
       });
 
       renderWithContext(
@@ -543,8 +622,14 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      expect(screen.getByText(/Descuento/)).toBeTruthy();
-      expect(screen.getByText("$90,00")).toBeTruthy();
+      // Merged totals show BOTH the DiscountControl label ("Descuento") and the
+      // discount line ("Descuento (10 %)") — match all of them. Total row displays
+      // BillState.totalWithDiscount verbatim (reducer owns post-discount math).
+      expect(screen.getAllByText(/Descuento/).length).toBeGreaterThanOrEqual(2);
+      const totalsSection = within(
+        (screen.getByText("Total").closest(".w-72") as HTMLElement)
+      );
+      expect(totalsSection.getByText("$90,00")).toBeTruthy();
     });
 
     it("should display unit price formatted correctly", () => {
@@ -579,7 +664,8 @@ describe("PrintableTable Component", () => {
         />
       );
 
-      const searchInput = screen.getByPlaceholderText("Buscar producto por codigo o nombre...");
+      // Actual placeholder: "Buscar producto por codigo o nombre (Presiona '/' para buscar)..."
+      const searchInput = screen.getByPlaceholderText(/Buscar producto por codigo o nombre/);
       expect(searchInput).toBeTruthy();
     });
 
@@ -715,7 +801,7 @@ describe("PrintableTable Component", () => {
       );
 
       expect(screen.getByText(/Medio de Pago:/)).toBeTruthy();
-      expect(screen.getByText("Tarjeta de Crédito")).toBeTruthy();
+       expect(screen.getByText("Tarjeta de Crédito")).toBeTruthy();
     });
   });
 
@@ -743,9 +829,9 @@ describe("PrintableTable Component", () => {
   });
 
   describe("CA-12: Print page styles configuration", () => {
-    it("should call printElement with correct configuration when triggered", async () => {
-      const { printElement } = await import("@/lib/print");
-      (printElement as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    it("should call printThermalReceipt with receipt data when triggered (thermal mode)", async () => {
+      // Production uses printThermalReceipt (thermal) / exportToPDF (pdf), not printElement.
+      const { printThermalReceipt } = await import("@/lib/print");
 
       const billState = createMockBillState({
         products: [createMockProduct({ description: "Test Product" })],
@@ -761,6 +847,9 @@ describe("PrintableTable Component", () => {
         />
       );
 
+      // Let isClient become true
+      await waitFor(() => {});
+
       rerender(
         <BillContext.Provider value={{ ...mockContextValue, BillState: billState }}>
           <PrintableTable
@@ -774,16 +863,190 @@ describe("PrintableTable Component", () => {
       );
 
       await waitFor(() => {
-        expect(printElement).toHaveBeenCalled();
+        expect(printThermalReceipt).toHaveBeenCalled();
       });
 
-      const call = (printElement as ReturnType<typeof vi.fn>).mock.calls[0];
-      const options = call[1] as Record<string, unknown>;
-      expect(options).toHaveProperty("documentTitle");
-      expect(options).toHaveProperty("pageStyle");
-      expect(options.pageStyle).toContain("@page { size: auto; margin: 10mm; }");
-      expect(options.pageStyle).toContain("@media print");
-      expect(options.pageStyle).toContain("-webkit-print-color-adjust: exact");
+      const call = (printThermalReceipt as ReturnType<typeof vi.fn>).mock.calls[0];
+      const receiptData = call[0] as Record<string, unknown>;
+      // Verify receipt data has the expected shape
+      expect(receiptData).toHaveProperty("businessName");
+      expect(receiptData).toHaveProperty("products");
+      expect(receiptData).toHaveProperty("total");
+    });
+  });
+
+  describe("CA-14: Redundant search removed", () => {
+    it("should NOT show 'Búsqueda rápida de producto' button text", () => {
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+        />
+      );
+
+      // Currently: the button with this text IS rendered → queryByText returns element → assertion fails
+      // After removal: button is gone → queryByText returns null → assertion passes
+      expect(screen.queryByText("Búsqueda rápida de producto")).toBeNull();
+    });
+
+    it("should have exactly ONE product search input", () => {
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+        />
+      );
+
+      // Currently: clicking this toggle reveals a redundant ProductSearchSelect input,
+      // so getAllByPlaceholderText returns 2 matches → assertion fails
+      // After removal: toggle is gone → conditional skips click → 1 match → assertion passes
+      const toggleBtn = screen.queryByText("Búsqueda rápida de producto");
+      if (toggleBtn) {
+        fireEvent.click(toggleBtn);
+      }
+
+      // After removal, only ProductSearchBar's input matches /Buscar producto/
+      const searchInputs = screen.getAllByPlaceholderText(/Buscar producto/);
+      expect(searchInputs).toHaveLength(1);
+    });
+  });
+
+  describe("CA-13: Inline edit of units on double-click", () => {
+    it("renders a <span> (not an <input>) for 'unidades' products in display mode [AC-01]", () => {
+      const products = [
+        createMockProduct({ id: "1", description: "Prod Unit", amount: 5, unit: "unidades" }),
+      ];
+      const billState = createMockBillState({ products });
+
+      const { container } = renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />,
+      );
+
+      // Verify the product amount text is visible (screen + hidden print-only copy)
+      expect(screen.getAllByText("5").length).toBeGreaterThan(0);
+
+      // Verify a span contains the amount (not an input) in display mode
+      const amountSpan = container.querySelector("span.cursor-pointer");
+      expect(amountSpan).toBeTruthy();
+      expect(amountSpan?.textContent).toBe("5");
+
+      // No edit-mode numeric input inside the QUANTITY cell in display mode.
+      // (The DiscountControl footer input is type=number too, so an unscoped
+      // query would false-positive.)
+      const quantityCell = (amountSpan as HTMLElement).closest("td");
+      expect(quantityCell?.querySelector("input[type='number']")).toBeNull();
+    });
+
+    it("single click on the amount span switches to a numeric <input> pre-filled [merged inline editor]", () => {
+      const products = [
+        createMockProduct({ id: "1", description: "Prod Unit", amount: 7, unit: "unidades" }),
+      ];
+      const billState = createMockBillState({ products });
+
+      const { container } = renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />,
+      );
+
+      // The shared inline editor opens on double click and uses a text input
+      // with numeric input mode for locale-friendly quantity entry.
+      const amountElement = container.querySelector("span.cursor-pointer") as HTMLElement | null;
+      expect(amountElement).toBeTruthy();
+      expect(amountElement?.textContent).toBe("7");
+
+      // Capture the quantity cell BEFORE clicking: editing replaces the span node.
+      const quantityCell = amountElement!.closest("td");
+
+      fireEvent.doubleClick(amountElement);
+
+      const input = quantityCell?.querySelector("input[aria-label='Editar cantidad']") as HTMLInputElement;
+      expect(input).toBeTruthy();
+      expect(input.value).toBe("7");
+    });
+
+    it("− and + buttons still work for increment/decrement in display mode [AC-09]", () => {
+      const addItem = vi.fn();
+      const removeItem = vi.fn();
+
+      const products = [
+        createMockProduct({ id: "1", description: "Prod Unit", amount: 5, unit: "unidades" }),
+      ];
+      const billState = createMockBillState({ products });
+
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />,
+        { ...mockContextValue, addItem, removeItem, BillState: billState },
+      );
+
+      // Click the increase button (+)
+      const increaseButton = screen.getByLabelText("Aumentar cantidad");
+      fireEvent.click(increaseButton);
+
+      // Quantity controls update the existing row through the context reducer.
+      expect(mockContextValue.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "changeUnit",
+          payload: expect.objectContaining({ id: "1", amount: 6 }),
+        }),
+      );
+
+      // Click the decrease button (−)
+      const decreaseButton = screen.getByLabelText("Disminuir cantidad");
+      fireEvent.click(decreaseButton);
+
+      expect(mockContextValue.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "changeUnit",
+          payload: expect.objectContaining({ id: "1", amount: 4 }),
+        }),
+      );
+    });
+
+    it("InlineAmountInput renders the amount for 'unidades'/'unidad' products", () => {
+      const products = [
+        createMockProduct({ id: "1", description: "Unidades Prod", amount: 3, unit: "unidades" }),
+        createMockProduct({ id: "2", description: "Unidad Prod", amount: 4, unit: "unidad" }),
+      ];
+      const billState = createMockBillState({ products });
+
+      renderWithContext(
+        <PrintableTable
+          printTrigger={0}
+          className=""
+          handleClose={vi.fn()}
+          session={mockSession as never}
+          externalState={billState}
+        />,
+      );
+
+      // Verify both amounts are displayed in the table
+      expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("4").length).toBeGreaterThanOrEqual(1);
+
+      // Verify both products are rendered
+      expect(screen.getByText("Unidades Prod")).toBeTruthy();
+      expect(screen.getByText("Unidad Prod")).toBeTruthy();
     });
   });
 });

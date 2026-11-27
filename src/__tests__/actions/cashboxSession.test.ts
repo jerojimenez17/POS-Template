@@ -6,6 +6,7 @@ vi.mock("@/lib/db", () => ({
   db: {
     cashboxSession: {
       findFirst: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
       update: vi.fn(),
     },
@@ -33,11 +34,20 @@ vi.mock("../../../auth", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-gates", () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+  requireFeature: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 describe("Cashbox Sessions - Server Actions", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { db } = await import("@/lib/db");
+    (db.cashboxSession.count as any).mockResolvedValue(0);
+    (db.user.findUnique as any).mockResolvedValue({ cashboxId: "cashbox-1" });
   });
 
   describe("openSession", () => {

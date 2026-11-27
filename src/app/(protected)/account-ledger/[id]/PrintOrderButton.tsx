@@ -10,8 +10,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { printThermalReceipt, exportToPDF, buildPDFHTML, PDF_STYLES, type ThermalReceiptData } from "@/lib/print";
 import { getBusinessBillingInfoAction } from "@/actions/business";
+import { getBusinessPrintSettingsAction } from "@/actions/business-print-settings";
 import { useState, useEffect } from "react";
 import type { Session } from "next-auth";
+import type { ReceiptBusinessInfo } from "@/lib/print/receipt-data";
+import { buildReceiptBusinessInfo, normalizeHistoricalDocumentType } from "@/lib/print/receipt-data";
 
 interface OrderItem {
   id: string;
@@ -32,23 +35,36 @@ interface Props {
     discountAmount: number;
     seller: string | null;
     paidMethod: string | null;
+    clientIvaCondition: string | null;
+    clientDocumentType: string | null;
+    clientDocumentNumber: string | null;
     client: { name: string | null } | null;
     items: OrderItem[];
     status: string;
+    fiscalSnapshot?: { billType?: string | null; pointOfSale?: number | string | null };
+    pointOfSale?: number | string | null;
   };
   session: Session | null;
 }
 
 export default function PrintOrderButton({ order, session }: Props) {
-  const [billingInfo, setBillingInfo] = useState<Record<string, unknown> | null>(null);
+  const [qzTrayEnabled, setQzTrayEnabled] = useState(false);
+  const [billingInfo, setBillingInfo] = useState<ReceiptBusinessInfo | null>(null);
 
   useEffect(() => {
-    getBusinessBillingInfoAction().then(setBillingInfo);
+    Promise.all([getBusinessPrintSettingsAction(), getBusinessBillingInfoAction()]).then(([settings, info]) => {
+      if ("qzTray" in settings) setQzTrayEnabled(settings.qzTray);
+      setBillingInfo(info);
+    });
   }, []);
 
   const getPrintData = (): ThermalReceiptData => {
     const subtotal = order.items.reduce((sum, i) => sum + i.subTotal, 0);
-    const billType = order.status === "pendiente" ? "Presupuesto" : "Comprobante";
+    const billType = order.fiscalSnapshot?.billType || (order.status === "pendiente" ? "Presupuesto" : "Comprobante");
+    const clientDocumentNumber = order.clientDocumentNumber?.trim()
+      ? order.clientDocumentNumber
+      : undefined;
+    const documentType = normalizeHistoricalDocumentType(order.clientDocumentType, clientDocumentNumber);
     return {
       businessName: session?.user?.businessName || "Mi Comercio",
       businessInfo: billingInfo ? {
@@ -56,13 +72,16 @@ export default function PrintOrderButton({ order, session }: Props) {
         cuit: billingInfo.cuit as string,
         condicionIva: billingInfo.condicionIva as string,
         address: billingInfo.address as string,
+        inicioActividades: billingInfo.inicioActividades as Date | string | null | undefined,
       } : undefined,
       date: new Date(order.date),
-      documentType: "DNI",
+      documentType,
       billType,
       seller: order.seller || session?.user?.email || "",
       paidMethod: order.paidMethod || "Efectivo",
       client: order.client?.name || undefined,
+      clientIvaCondition: order.clientIvaCondition || undefined,
+      clientDocumentNumber,
       products: order.items.map(i => ({
         description: i.description || "Producto",
         amount: i.quantity,
@@ -73,11 +92,12 @@ export default function PrintOrderButton({ order, session }: Props) {
       discount: order.discountPercentage > 0 ? order.discountPercentage : undefined,
       discountAmount: order.discountAmount > 0 ? order.discountAmount : undefined,
       total: order.total,
+      pointOfSale: order.pointOfSale ?? order.fiscalSnapshot?.pointOfSale ?? undefined,
     };
   };
 
   const handlePrintThermal = async () => {
-    await printThermalReceipt(getPrintData());
+    await printThermalReceipt(getPrintData(), qzTrayEnabled);
   };
 
   const handlePrintPDF = async () => {
@@ -88,7 +108,10 @@ export default function PrintOrderButton({ order, session }: Props) {
 
     const receiptData = getPrintData();
     const content = document.createElement("div");
-    content.innerHTML = buildPDFHTML(receiptData, {});
+    content.innerHTML = buildPDFHTML(receiptData, {
+      pointOfSale: receiptData.pointOfSale,
+    });
+    content.style.cssText = "width:750px;margin:0 auto;background:#fff;";
     const styleEl = document.createElement("style");
     styleEl.textContent = PDF_STYLES;
     content.insertBefore(styleEl, content.firstChild);
@@ -99,6 +122,8 @@ export default function PrintOrderButton({ order, session }: Props) {
       await exportToPDF(content as HTMLElement, {
         documentTitle: filename,
         format: "a4",
+        orientation: "portrait",
+        margin: 10,
         filename: filename,
         targetWindow: targetWin,
       });
@@ -113,7 +138,8 @@ export default function PrintOrderButton({ order, session }: Props) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline"
+          className="w-full">
           <Printer className="h-4 w-4 mr-1" />
           Imprimir
         </Button>

@@ -1,0 +1,1 @@
+ALTER TABLE "Business" ADD COLUMN "qzTray" BOOLEAN NOT NULL DEFAULT false;

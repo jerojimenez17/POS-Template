@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { parsePlanError } from "@/lib/plan-error";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { useCashbox } from "@/context/CashboxContext";
 
 export const OpenSessionModal = ({ 
   isOpen, 
@@ -23,7 +26,9 @@ export const OpenSessionModal = ({
 }) => {
   const [initialBalance, setInitialBalance] = useState("");
   const [loading, setLoading] = useState(false);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
   const router = useRouter();
+  const { setHasActiveSession } = useCashbox();
 
   const handleOpenSession = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,9 +44,16 @@ export const OpenSessionModal = ({
     const result = await openSession(amount);
     
     if ('error' in result && result.error) {
-      toast.error(result.error as string);
+      const parsed = parsePlanError(result.error);
+      if (parsed.isPlanError) {
+        setPlanError(parsed);
+      } else {
+        toast.error(result.error);
+      }
     } else {
-      toast.success("Sesión de caja abierta exitosamente");
+      setHasActiveSession(true);
+      setInitialBalance("");
+      onClose();
       router.refresh();
     }
     
@@ -49,8 +61,9 @@ export const OpenSessionModal = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-[425px]">        <DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+        <DialogContent className="sm:max-w-[425px]">        <DialogHeader>
           <DialogTitle>Apertura de Caja</DialogTitle>
           <DialogDescription>
             Inicie una nueva sesión de caja ingresando el monto inicial en efectivo.
@@ -76,5 +89,15 @@ export const OpenSessionModal = ({
         </form>
       </DialogContent>
     </Dialog>
+
+      <FeatureBlockedModal
+        open={!!planError}
+        onOpenChange={(open) => { if (!open) setPlanError(null); }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
+      />
+    </>
   );
 };

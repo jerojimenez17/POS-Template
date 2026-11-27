@@ -1,44 +1,44 @@
 "use client";
 
-import * as React from "react";
+import { forwardRef, type InputHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-interface SwitchProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
+interface SwitchProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "checked" | "onChange" | "type"> {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
 }
 
-const Switch = React.forwardRef<HTMLInputElement, SwitchProps>(
+const Switch = forwardRef<HTMLInputElement, SwitchProps>(
   ({ className, checked, onCheckedChange, disabled, ...props }, ref) => {
     return (
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => !disabled && onCheckedChange(!checked)}
+      <span
         className={cn(
-          "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-250 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-          checked ? "bg-primary" : "bg-gray-300 dark:bg-slate-700",
-          className
+          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent bg-muted transition-colors motion-reduce:transition-none",
+          "has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2",
+          "has-[:checked]:bg-primary has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50",
+          className,
         )}
       >
+        <input
+          {...props}
+          ref={ref}
+          type="checkbox"
+          role="switch"
+          aria-checked={checked}
+          data-state={checked ? "checked" : "unchecked"}
+          checked={checked}
+          disabled={disabled}
+          onChange={(event) => onCheckedChange(event.target.checked)}
+          className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        />
         <span
+          aria-hidden="true"
           className={cn(
-            "pointer-events-none block h-5 w-5 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ease-in-out",
-            checked ? "translate-x-5" : "translate-x-0"
+            "pointer-events-none block h-5 w-5 translate-x-0 rounded-full bg-background shadow ring-0 transition-transform duration-200 ease-in-out motion-reduce:transition-none",
+            "peer-checked:translate-x-5",
           )}
         />
-        <input
-          type="checkbox"
-          ref={ref}
-          checked={checked}
-          onChange={(e) => onCheckedChange(e.target.checked)}
-          className="sr-only"
-          disabled={disabled}
-          {...props}
-        />
-      </button>
+      </span>
     );
   }
 );

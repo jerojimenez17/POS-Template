@@ -6,8 +6,15 @@ import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { pusherServer } from "@/lib/pusher-server";
 import { fail } from "@/lib/action-result";
+import { after } from "next/server";
+import { MovementType, Prisma } from "@prisma/client";
 import { OrderUpdateChanges } from "@/models/OrderUpdateChanges";
 import { OrderSnapshot } from "@/models/OrderSnapshot";
+import { processInBatches, bulkUpdateStock } from "@/lib/batch-utils";
+import { z } from "zod";
+import { consumeAuthorizedFiscalSnapshotGrant } from "@/lib/server/fiscal-snapshot-grant";
+import { requireFeature, assertWritePermission } from "@/lib/auth-gates";
+import { getDailyUsage, checkDailyLimit, incrementDailyUsage } from "@/lib/daily-limits";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -17,6 +24,19 @@ interface SaleProduct {
   price?: number;
   salePrice?: number;
   amount: number;
+}
+
+interface StockChange {
+  id: string;
+  change: number;
+}
+
+function aggregateStockChanges(changes: StockChange[]): StockChange[] {
+  const totals = new Map<string, number>();
+  for (const { id, change } of changes) {
+    totals.set(id, (totals.get(id) ?? 0) + change);
+  }
+  return Array.from(totals, ([id, change]) => ({ id, change }));
 }
 
 interface ProcessSaleInput {
@@ -32,20 +52,39 @@ interface ProcessSaleInput {
   products: SaleProduct[];
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
+  clientDocumentType?: "CUIT" | "DNI" | "";
   CAE?: {
     CAE: string;
     vencimiento: string;
-    nroComprobante: number;
+    nroComprobante: number | string;
     qrData: string;
+    ptoVenta?: number | string;
+    fiscalSnapshotToken?: string;
   };
+  billType?: string;
 }
 
 export const processSaleAction = async (billState: ProcessSaleInput) => {
-  const session = await auth();
-  const businessId = session?.user?.businessId;
-  if (!businessId) return { error: "No autorizado" };
-
   try {
+    const clientDocumentType = billState.clientDocumentType;
+    if (clientDocumentType !== undefined && clientDocumentType !== "" && clientDocumentType !== "CUIT" && clientDocumentType !== "DNI") {
+      return { error: "Tipo de documento inválido" };
+    }
+    const clientDocumentNumber = billState.clientDocumentNumber && billState.clientDocumentNumber.trim()
+      ? billState.clientDocumentNumber
+      : null;
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    if (!businessId) return { error: "No autorizado" };
+    const permission = await assertWritePermission();
+    if (!permission.success) return { error: permission.error };
+    if (billState.CAE?.CAE) {
+      const feature = await requireFeature("hasAfipBilling");
+      if (!feature.success) return { error: feature.error || "Esta funcionalidad no est? disponible en tu plan actual." };
+    }
+    const usage = await getDailyUsage(businessId);
+    const limit = await checkDailyLimit(businessId, "dailySalesLimit", usage.salesCount);
+    if (!limit.allowed) return { error: `Has superado el l?mite diario de ventas (${limit.limit}).` };
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
@@ -56,13 +95,51 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
 
     const total = billState.totalWithDiscount || billState.total;
     const discountAmount = billState.total * discountPercent * 0.01;
+    const caeForPersistence = billState.CAE
+      ? {
+        CAE: billState.CAE.CAE,
+        vencimiento: billState.CAE.vencimiento,
+        nroComprobante: billState.CAE.nroComprobante,
+        qrData: billState.CAE.qrData,
+        ...(billState.CAE.ptoVenta === undefined ? {} : { ptoVenta: billState.CAE.ptoVenta }),
+      }
+      : undefined;
     
     const result = await db.$transaction(async (tx) => {
       const activeSession = await tx.cashboxSession.findFirst({
-        where: { userId: session.user!.id, status: "OPEN" },
+        where: {
+          userId: session.user!.id,
+          businessId,
+          status: "OPEN",
+          cashbox: { businessId },
+        },
       });
       if (!activeSession) {
         throw new Error("No hay una sesión de caja abierta.");
+      }
+
+      let fiscalSnapshot;
+      if (billState.CAE?.fiscalSnapshotToken) {
+        const originalBillType = billState.billType;
+        const invoiceNumber = Number(billState.CAE.nroComprobante);
+        const pointOfSale = Number(billState.CAE.ptoVenta);
+        if ((originalBillType !== "Factura A" && originalBillType !== "Factura B" && originalBillType !== "Factura C")
+          || !Number.isSafeInteger(invoiceNumber) || invoiceNumber <= 0
+          || !Number.isSafeInteger(pointOfSale) || pointOfSale <= 0) {
+          throw new Error("Los datos de autorización fiscal no coinciden con la venta");
+        }
+        fiscalSnapshot = await consumeAuthorizedFiscalSnapshotGrant(tx, {
+          token: billState.CAE.fiscalSnapshotToken,
+          businessId,
+          cae: billState.CAE.CAE,
+          billType: originalBillType,
+          invoiceNumber,
+          pointOfSale,
+          total,
+        });
+      }
+      if (billState.CAE?.fiscalSnapshotToken && !fiscalSnapshot) {
+        throw new Error("La autorización fiscal de la factura expiró o no coincide con la venta");
       }
 
       const order = await tx.order.create({
@@ -79,8 +156,17 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           businessId: businessId,
           clientId: billState.clientId,
           clientIvaCondition: billState.clientIvaCondition,
-          clientDocumentNumber: billState.clientDocumentNumber,
-          CAE: billState.CAE,
+          clientDocumentNumber,
+          clientDocumentType: clientDocumentType || null,
+          ...(caeForPersistence ? { CAE: caeForPersistence } : {}),
+          billType: billState.billType,
+          afipVoucherType: billState.CAE ? (billState.billType === "Factura A" ? 1 : billState.billType === "Factura B" ? 6 : billState.billType === "Factura C" ? 11 : null) : null,
+          invoiceNumber: billState.CAE ? Number(billState.CAE.nroComprobante) : null,
+          invoicePointOfSale: billState.CAE?.ptoVenta === undefined ? null : Number(billState.CAE.ptoVenta),
+          invoiceIssuedAt: billState.CAE ? now : null,
+          ...(fiscalSnapshot ? {
+            fiscalSnapshot: JSON.parse(JSON.stringify(fiscalSnapshot)) as Prisma.InputJsonValue,
+          } : {}),
           cashboxSessionId: activeSession.id,
           items: {
             create: billState.products.map((p) => ({
@@ -88,55 +174,40 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
               code: p.code,
               description: p.description,
               costPrice: p.price || 0,
-              price: p.salePrice || p.price || 0,
+              price: p.salePrice ?? p.price ?? 0,
               quantity: p.amount,
-              subTotal: (p.salePrice || p.price || 0) * p.amount,
+              subTotal: (p.salePrice ?? p.price ?? 0) * p.amount,
             })),
           },
         },
-        include: { items: true },
       });
 
+      // 🚀 FASE 1+2: Bulk UPDATE (raw SQL) + Bulk INSERT (createMany)
+      // Antes: 2 ops × N productos = 2N queries
+      // Ahora: 1 bulk UPDATE + 1 bulk INSERT = 2 queries total
+      const stockMovements: {
+        type: MovementType;
+        quantity: number;
+        productId: string;
+        orderId: string;
+        businessId: string;
+        reason: string;
+      }[] = [];
       for (const item of billState.products) {
-        await tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            type: "SALE",
-            quantity: -item.amount,
-            productId: item.id,
-            orderId: order.id,
-            businessId: businessId,
-            reason: `Venta #${order.id}`,
-          },
-        });
-
-        await tx.productRanking.upsert({
-          where: {
-            productId_month_year_businessId: {
-              productId: item.id,
-              month,
-              year,
-              businessId,
-            },
-          },
-          update: {
-            totalSold: { increment: item.amount },
-            totalIncome: { increment: item.amount * (item.salePrice || item.price || 0) },
-          },
-          create: {
-            productId: item.id,
-            month,
-            year,
-            businessId,
-            totalSold: item.amount,
-            totalIncome: item.amount * (item.salePrice || item.price || 0),
-          },
+        stockMovements.push({
+          type: "SALE",
+          quantity: -item.amount,
+          productId: item.id,
+          orderId: order.id,
+          businessId: businessId,
+          reason: `Venta #${order.id}`,
         });
       }
+
+      await bulkUpdateStock(tx, aggregateStockChanges(
+        billState.products.map((p) => ({ id: p.id, change: -p.amount })),
+      ));
+      await tx.stockMovement.createMany({ data: stockMovements });
 
       let cashToIncrement = 0;
       if (billState.paidMethod === "Efectivo") {
@@ -148,7 +219,7 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
 
       if (cashToIncrement > 0) {
         await tx.cashBox.update({
-          where: { id: activeSession.cashboxId },
+          where: { id: activeSession.cashboxId, businessId },
           data: { total: { increment: cashToIncrement } },
         });
       }
@@ -197,19 +268,62 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
       }
 
       return { order, movements };
-    });
+    }, { maxWait: 10000, timeout: 60000 });
 
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+    // ⏰ Respuesta al cliente ya!
+    // El resto (ranking, pusher, cache) va en after() — no crítico para el usuario
+    try {
+      after(async () => {
+        try {
+        // Ranking de productos (eventual consistency — analytics no crítico)
+        await db.$transaction(async (tx) => {
+          await processInBatches(billState.products, 15, (item) => [
+            tx.productRanking.upsert({
+              where: {
+                productId_month_year_businessId: {
+                  productId: item.id,
+                  month,
+                  year,
+                  businessId,
+                },
+              },
+              update: {
+                totalSold: { increment: item.amount },
+                 totalIncome: { increment: item.amount * (item.salePrice ?? item.price ?? 0) },
+              },
+              create: {
+                productId: item.id,
+                month,
+                year,
+                businessId,
+                totalSold: item.amount,
+                 totalIncome: item.amount * (item.salePrice ?? item.price ?? 0),
+              },
+            }),
+          ]);
+        });
 
-    for (const movement of result.movements) {
-      await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+
+        for (const movement of result.movements) {
+          await pusherServer.trigger(`movements-${businessId}`, "new-movement", movement);
+        }
+
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CASHBOX, "max");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.SALES, "max");
+        } catch (bgError) {
+          console.error("Background after() error (non-critical):", bgError);
+        }
+      });
+    } catch (afterError: unknown) {
+      console.error("Could not schedule non-critical sale background work", {
+        errorType: afterError instanceof Error ? afterError.name : typeof afterError,
+      });
     }
 
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
+    await incrementDailyUsage(businessId, "salesCount");
     return { success: true, orderId: result.order.id };
   } catch (error) {
     console.error("Error processing sale:", error);
@@ -217,15 +331,109 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
   }
 };
 
-export const processReturnAction = async (data: { orderId: string; items: { productId: string; quantity: number; refundAmount: number }[]; reason: string }) => {
-  const session = await auth();
-  const businessId = session?.user?.businessId;
-  if (!businessId) return { error: "No autorizado" };
+const returnInputSchema = z.object({
+  orderId: z.string().min(1),
+  items: z.array(z.object({
+    productId: z.string().min(1),
+    quantity: z.number().finite().positive(),
+    refundAmount: z.number().finite().nonnegative(),
+  }).strict()).min(1),
+  reason: z.string().trim().min(1).max(500),
+}).strict();
 
+export const processReturnAction = async (data: unknown) => {
   try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    const userId = session?.user?.id;
+    if (!businessId || !userId) return { error: "No autorizado" };
+    const permission = await assertWritePermission();
+    if (!permission.success) return { error: permission.error, code: permission.code };
+    const parsed = returnInputSchema.safeParse(data);
+    if (!parsed.success) return { error: "Datos de devolución inválidos" };
+    const returnData = parsed.data;
     const result = await db.$transaction(async (tx) => {
+      // Serialize manual returns against credit-note reservations on the same
+      // tenant-scoped Order row. The lock is held through transaction commit.
+      await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Order" WHERE "id" = ${returnData.orderId} AND "businessId" = ${businessId} FOR UPDATE`;
+
+      // Re-read after acquiring the lock; the pre-lock snapshot is not a
+      // concurrency authority for return state.
+      const order = await tx.order.findFirst({
+        where: { id: returnData.orderId, businessId },
+        include: {
+          items: { include: { product: { select: { businessId: true } } } },
+          returns: { include: { items: true } },
+        },
+      });
+      if (!order) throw new Error("Venta no encontrada");
+      if (order.items.some((item) => item.product?.businessId !== businessId)) {
+        throw new Error("La venta contiene un producto de otro negocio");
+      }
+      if (order.returns.some((item) => item.kind === "CREDIT_NOTE"
+        && (item.status === "PENDING" || item.status === "AUTHORIZED"))) {
+        throw new Error("La venta tiene una Nota de Crédito pendiente o autorizada");
+      }
+
+      const requestedProductIds = new Set<string>();
+      for (const item of returnData.items) {
+        if (requestedProductIds.has(item.productId)) {
+          throw new Error("No se puede repetir un producto en la devolución");
+        }
+        requestedProductIds.add(item.productId);
+      }
+
+      const orderItems = order.items.filter((item) => item.productId !== null);
+      const orderItemByProduct = new Map(orderItems.map((item) => [item.productId as string, item]));
+      const returnedByOrderItem = new Map<string, { quantity: number; refundAmount: number }>();
+      for (const previousReturn of order.returns) {
+        if (previousReturn.status === "REJECTED") continue;
+        for (const previousItem of previousReturn.items) {
+          const current = returnedByOrderItem.get(previousItem.orderItemId) ?? { quantity: 0, refundAmount: 0 };
+          current.quantity += previousItem.quantity;
+          current.refundAmount += previousItem.refundAmount;
+          returnedByOrderItem.set(previousItem.orderItemId, current);
+        }
+      }
+
+      let totalRefund = 0;
+      for (const item of returnData.items) {
+        const orderItem = orderItemByProduct.get(item.productId);
+        if (!orderItem) throw new Error("El producto no pertenece a la venta");
+        const previous = returnedByOrderItem.get(orderItem.id) ?? { quantity: 0, refundAmount: 0 };
+        const availableQuantity = orderItem.quantity - previous.quantity;
+        const originalRefund = orderItem.subTotal > 0 ? orderItem.subTotal : orderItem.price * orderItem.quantity;
+        const availableRefund = originalRefund - previous.refundAmount;
+        const refundForRequestedQuantity = orderItem.quantity > 0
+          ? (originalRefund / orderItem.quantity) * item.quantity
+          : 0;
+        if (item.quantity > availableQuantity + Number.EPSILON) {
+          throw new Error("La cantidad supera la cantidad disponible para devolver");
+        }
+        if (item.refundAmount > Math.min(availableRefund, refundForRequestedQuantity) + Number.EPSILON) {
+          throw new Error("El reintegro supera el importe disponible para devolver");
+        }
+        totalRefund += item.refundAmount;
+      }
+      if (totalRefund <= 0) throw new Error("El importe de devolución debe ser mayor a 0");
+
+      const authorizedCreditNote = order.returns.some((item) => item.kind === "CREDIT_NOTE" && item.status === "AUTHORIZED");
+      const isFullOrderReturn = orderItems.length > 0 && orderItems.every((orderItem) => {
+        const requested = returnData.items.find((item) => item.productId === orderItem.productId);
+        const previous = returnedByOrderItem.get(orderItem.id) ?? { quantity: 0, refundAmount: 0 };
+        return requested !== undefined && requested.quantity + previous.quantity >= orderItem.quantity - Number.EPSILON;
+      });
+      if (authorizedCreditNote && isFullOrderReturn) {
+        throw new Error("La venta ya tiene una Nota de Crédito autorizada");
+      }
+
       const activeSession = await tx.cashboxSession.findFirst({
-        where: { userId: session.user!.id, status: "OPEN" },
+        where: {
+          userId,
+          businessId,
+          status: "OPEN",
+          cashbox: { businessId },
+        },
       });
       if (!activeSession) {
         throw new Error("No hay una sesión de caja abierta.");
@@ -233,52 +441,49 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
 
       const returnRecord = await tx.saleReturn.create({
         data: {
-          orderId: data.orderId,
+          orderId: returnData.orderId,
           businessId,
-          reason: data.reason,
-          total: data.items.reduce((acc, item) => acc + item.refundAmount, 0),
+          reason: returnData.reason,
+          kind: "MANUAL_RETURN",
+          total: totalRefund,
         },
       });
+      const orderItemMap = new Map(orderItems.map((oi) => [oi.productId, oi.id]));
 
-      for (const item of data.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { amount: { increment: item.quantity } },
-        });
+      // 🚀 FASE 1+2: Bulk UPDATE (raw SQL) + Bulk INSERT (createMany)
+      // Antes: 3 ops × N productos = 3N queries
+      // Ahora: 1 bulk UPDATE + 2× createMany = 3 queries total
+      {
+        const stockMovements: { type: MovementType; quantity: number; productId: string; businessId: string; reason: string }[] = [];
+        const returnItems: { returnId: string; orderItemId: string; productId: string; quantity: number; refundAmount: number }[] = [];
 
-        await tx.stockMovement.create({
-          data: {
+        for (const item of returnData.items) {
+          const orderItemId = orderItemMap.get(item.productId);
+          if (!orderItemId) throw new Error(`OrderItem not found for product ${item.productId}`);
+
+          stockMovements.push({
             type: "RETURN",
             quantity: item.quantity,
             productId: item.productId,
             businessId,
-            reason: `Devolución #${returnRecord.id} (Ref: Venta #${data.orderId})`,
-          },
-        });
-
-        const orderItem = await tx.orderItem.findFirst({
-          where: { 
-            orderId: data.orderId, 
-            productId: item.productId 
-          }
-        });
-
-        if (!orderItem) throw new Error("OrderItem not found");
-
-        await tx.saleReturnItem.create({
-          data: {
+            reason: `Devolución #${returnRecord.id} (Ref: Venta #${returnData.orderId})`,
+          });
+          returnItems.push({
             returnId: returnRecord.id,
-            orderItemId: orderItem.id,
+            orderItemId,
             productId: item.productId,
             quantity: item.quantity,
             refundAmount: item.refundAmount,
-          }
-        });
+          });
+        }
+
+        await bulkUpdateStock(tx, returnData.items.map(i => ({ id: i.productId, change: i.quantity })));
+        await tx.stockMovement.createMany({ data: stockMovements });
+        await tx.saleReturnItem.createMany({ data: returnItems });
       }
 
-      const totalRefund = data.items.reduce((acc, item) => acc + item.refundAmount, 0);
       await tx.cashBox.update({
-        where: { id: activeSession.cashboxId },
+        where: { id: activeSession.cashboxId, businessId },
         data: { total: { decrement: totalRefund } },
       });
 
@@ -294,14 +499,21 @@ export const processReturnAction = async (data: { orderId: string; items: { prod
       });
 
       return returnRecord;
+    }, { maxWait: 10000, timeout: 60000 });
+
+    // ⏰ Respuesta inmediata — non-critical en background
+    after(async () => {
+      try {
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CASHBOX, "max");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.SALES, "max");
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
     });
 
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
     return { success: true, returnId: result.id };
   } catch (error) {
     console.error("Error processing return:", error);
@@ -313,23 +525,30 @@ export const updateOrderAction = async (
   orderId: string,
   updatedData: ProcessSaleInput
 ) => {
-  const session = await auth();
-  const businessId = session?.user?.businessId;
-  const userId = session?.user?.id;
-  const userRole = session?.user?.role;
-
-  if (!businessId || !userId) return { error: "No autorizado" };
-  if (userRole !== "ADMIN")
-    return { error: "Solo los administradores pueden editar ventas" };
-
   try {
+    const session = await auth();
+    const businessId = session?.user?.businessId;
+    const userId = session?.user?.id;
+    const userRole = session?.user?.role;
+
+    if (!businessId || !userId) return { error: "No autorizado" };
+    const permission = await assertWritePermission();
+    if (!permission.success) return { error: permission.error, code: permission.code };
+    if (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN" && userRole !== "USER")
+      return fail("No tenés permisos para editar ventas", "FORBIDDEN");
     const result = await db.$transaction(async (tx) => {
       const existingOrder = await tx.order.findFirst({
         where: { id: orderId, businessId },
-        include: { items: true },
+        include: { items: { orderBy: [{ addedAt: "asc" }, { id: "asc" }] } },
       });
 
       if (!existingOrder) throw new Error("Orden no encontrada");
+
+      // Bloquear la edición de ventas ya facturadas (tienen CAE autorizado)
+      const orderCae = existingOrder.CAE as { CAE?: unknown } | null;
+      if (orderCae?.CAE) {
+        throw new Error("Esta venta ya fue facturada. No se puede editar. Genere una nota de crédito.");
+      }
 
       // 🔹 calcular versión
       const lastUpdate = await tx.orderUpdate.findFirst({
@@ -340,19 +559,169 @@ export const updateOrderAction = async (
       const version = (lastUpdate?.version ?? 0) + 1;
 
       // 🔹 calcular cambios
-      const changes: OrderUpdateChanges = {
-        type: "ITEMS_UPDATED",
-        items: updatedData.products.map((p) => ({
+      const oldItemsByProduct = new Map<string, typeof existingOrder.items>();
+      for (const item of existingOrder.items) {
+        if (item.productId === null) continue;
+        const items = oldItemsByProduct.get(item.productId) ?? [];
+        items.push(item);
+        oldItemsByProduct.set(item.productId, items);
+      }
+      const matchedLineCountByProduct = new Map<string, number>();
+      const getNextOldItem = (productId: string) => {
+        const matchedLineIndex = matchedLineCountByProduct.get(productId) ?? 0;
+        matchedLineCountByProduct.set(productId, matchedLineIndex + 1);
+        return oldItemsByProduct.get(productId)?.[matchedLineIndex] ?? null;
+      };
+
+      const itemChanges = updatedData.products.map((p) => {
+        const oldItem = getNextOldItem(p.id);
+        const newPrice = p.salePrice ?? p.price ?? 0;
+        return {
           productId: p.id,
           description: p.description,
           code: p.code,
           quantity: {
-            from:
-              existingOrder.items.find((i) => i.productId === p.id)?.quantity ??
-              0,
+            from: oldItem?.quantity ?? 0,
             to: p.amount,
           },
-        })),
+          ...(oldItem && oldItem.price !== newPrice
+            ? { price: { from: oldItem.price, to: newPrice } }
+            : {}),
+        };
+      });
+
+      // Productos que estaban en la venta y ya no vienen en la edición.
+      const consumedLineCountByProduct = new Map<string, number>();
+      const removedItems: {
+        productId: string | null;
+        description: string | null;
+        code: string | null;
+        quantity: number;
+      }[] = [];
+      for (const item of existingOrder.items) {
+        if (item.productId === null) {
+          removedItems.push({
+            productId: null,
+            description: item.description,
+            code: item.code,
+            quantity: item.quantity,
+          });
+          continue;
+        }
+        const lineIndex = consumedLineCountByProduct.get(item.productId) ?? 0;
+        consumedLineCountByProduct.set(item.productId, lineIndex + 1);
+        const matchedCount = matchedLineCountByProduct.get(item.productId) ?? 0;
+        if (lineIndex < matchedCount) continue;
+        removedItems.push({
+          productId: item.productId,
+          description: item.description,
+          code: item.code,
+          quantity: item.quantity,
+        });
+      }
+
+      const discountPercent = Number(updatedData.discount ?? existingOrder.discountPercentage) || 0;
+      const oldBillType = existingOrder.billType ?? null;
+      const newBillType = updatedData.billType ?? oldBillType;
+      const billTypeChanged = newBillType !== oldBillType;
+
+      const oldIvaCondition = existingOrder.clientIvaCondition ?? null;
+      const oldDocumentNumber = existingOrder.clientDocumentNumber ?? null;
+      const newIvaCondition = updatedData.clientIvaCondition ?? oldIvaCondition;
+      const newDocumentNumber = updatedData.clientDocumentNumber ?? oldDocumentNumber;
+      // null/"" y "Consumidor Final" son equivalentes; "0" equivale a sin documento.
+      const comparableIvaCondition = (value: string | null) => {
+        const trimmed = (value ?? "").trim();
+        return trimmed === "" ? "Consumidor Final" : trimmed;
+      };
+      const comparableDocumentNumber = (value: string | null) => {
+        const trimmed = (value ?? "").trim();
+        return trimmed === "" || trimmed === "0" ? null : trimmed;
+      };
+      const ivaChanged =
+        comparableIvaCondition(oldIvaCondition) !== comparableIvaCondition(newIvaCondition)
+        || comparableDocumentNumber(oldDocumentNumber) !== comparableDocumentNumber(newDocumentNumber);
+
+      // Si la condición efectiva no cambió, conservar el valor persistido original.
+      const persistedIvaCondition = ivaChanged ? newIvaCondition : oldIvaCondition;
+      const persistedDocumentNumber = ivaChanged ? newDocumentNumber : oldDocumentNumber;
+
+      const oldPaymentMethod = existingOrder.paymentMethod ?? null;
+      const newPaymentMethod = updatedData.paidMethod ?? oldPaymentMethod;
+      const oldTwoMethods = Boolean(existingOrder.paymentMethod2);
+      const newTwoMethods = updatedData.twoMethods ?? oldTwoMethods;
+      const oldSecondPaymentMethod = oldTwoMethods ? existingOrder.paymentMethod2 ?? null : null;
+      const newSecondPaymentMethod = newTwoMethods
+        ? updatedData.secondPaidMethod ?? oldSecondPaymentMethod
+        : null;
+      const oldSecondAmount = oldTwoMethods ? existingOrder.totalMethod2 ?? 0 : 0;
+      const newSecondAmount = newTwoMethods ? Number(updatedData.totalSecondMethod) || 0 : 0;
+      const newTotalForChanges = updatedData.totalWithDiscount || updatedData.total;
+      const paymentChanged =
+        newPaymentMethod !== oldPaymentMethod
+        || newTwoMethods !== oldTwoMethods
+        || newSecondPaymentMethod !== oldSecondPaymentMethod
+        // En pagos divididos, cambiar el monto del segundo método también es un cambio.
+        || (newTwoMethods && newSecondAmount !== oldSecondAmount);
+
+      const discountChanged = discountPercent !== existingOrder.discountPercentage;
+      const hasItemChanges = itemChanges.some(
+        (item) => item.quantity.from !== item.quantity.to || "price" in item,
+      );
+      const hasChanges = hasItemChanges
+        || removedItems.length > 0
+        || billTypeChanged
+        || ivaChanged
+        || paymentChanged
+        || discountChanged;
+
+      // Sin diferencias reales no se genera una versión de historial.
+      if (!hasChanges) return { success: true, unchanged: true };
+
+      const changes: OrderUpdateChanges = {
+        type: "ITEMS_UPDATED",
+        items: itemChanges,
+        ...(removedItems.length > 0 ? { removedItems } : {}),
+        ...(billTypeChanged
+          ? { billTypeChanged: { from: oldBillType, to: newBillType } }
+          : {}),
+        ...(ivaChanged
+          ? {
+              ivaChanged: {
+                from: {
+                  condition: oldIvaCondition,
+                  documentNumber: oldDocumentNumber,
+                },
+                to: {
+                  condition: newIvaCondition,
+                  documentNumber: newDocumentNumber,
+                },
+              },
+            }
+          : {}),
+        ...(paymentChanged
+          ? {
+              paymentChanged: {
+                from: {
+                  method: oldPaymentMethod,
+                  twoMethods: oldTwoMethods,
+                  secondMethod: oldSecondPaymentMethod,
+                  firstAmount: existingOrder.total - oldSecondAmount,
+                  secondAmount: oldSecondAmount,
+                },
+                to: {
+                  method: newPaymentMethod,
+                  twoMethods: newTwoMethods,
+                  secondMethod: newSecondPaymentMethod,
+                  firstAmount: newTotalForChanges - newSecondAmount,
+                  secondAmount: newSecondAmount,
+                },
+              },
+            }
+          : {}),
+        ...(discountChanged
+          ? { discountChanged: { from: existingOrder.discountPercentage, to: discountPercent } }
+          : {}),
       };
 
       // 🔹 snapshot cada 10 versiones
@@ -391,32 +760,30 @@ export const updateOrderAction = async (
         },
       });
 
-      // 🔹 revertir stock anterior
-      for (const item of existingOrder.items) {
-        if (item.productId) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { amount: { increment: item.quantity } },
-          });
-
-          await tx.stockMovement.create({
-            data: {
-              type: "ADJUSTMENT",
-              quantity: item.quantity,
-              productId: item.productId,
-              orderId,
-              businessId,
-              reason: `Reversión por edición de Venta #${orderId}`,
-            },
+      // 🚀 FASE 1+2: revertir stock anterior (bulk UPDATE + createMany)
+      {
+        const revertItems = existingOrder.items.filter((item) => item.productId);
+        const stockMovementsRevert: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string; reason: string }[] = [];
+        for (const item of revertItems) {
+          stockMovementsRevert.push({
+            type: "ADJUSTMENT",
+            quantity: item.quantity,
+            productId: item.productId!,
+            orderId,
+            businessId,
+            reason: `Reversión por edición de Venta #${orderId}`,
           });
         }
+        await bulkUpdateStock(tx, aggregateStockChanges(
+          revertItems.map((i) => ({ id: i.productId!, change: i.quantity })),
+        ));
+        await tx.stockMovement.createMany({ data: stockMovementsRevert });
       }
 
       // 🔹 recalcular totales
-      const discountPercent = Number(updatedData.discount) || 0;
       const total = updatedData.totalWithDiscount || updatedData.total;
       const discountAmount = updatedData.total * discountPercent * 0.01;
-      const isTwoMethodsUpdate = !!updatedData.twoMethods;
+      const isTwoMethodsUpdate = newTwoMethods;
       const totalSecondMethodParsedUpdate = isTwoMethodsUpdate ? (Number(updatedData.totalSecondMethod) || 0) : 0;
 
       // 🔹 actualizar orden
@@ -425,12 +792,15 @@ export const updateOrderAction = async (
         data: {
           total,
           seller: updatedData.seller,
-          paymentMethod: updatedData.paidMethod || "Efectivo",
-          paymentMethod2: isTwoMethodsUpdate ? updatedData.secondPaidMethod : null,
+          paymentMethod: newPaymentMethod ?? "Efectivo",
+          paymentMethod2: isTwoMethodsUpdate ? newSecondPaymentMethod : null,
           totalMethod2: isTwoMethodsUpdate ? totalSecondMethodParsedUpdate : null,
           discountPercentage: discountPercent,
           discountAmount,
           clientId: updatedData.clientId,
+          billType: newBillType,
+          clientIvaCondition: persistedIvaCondition,
+          clientDocumentNumber: persistedDocumentNumber,
           items: {
             deleteMany: {},
             create: updatedData.products.map((p) => ({
@@ -438,48 +808,170 @@ export const updateOrderAction = async (
               code: p.code,
               description: p.description,
               costPrice: p.price || 0,
-              price: p.salePrice || p.price || 0,
+              price: p.salePrice ?? p.price ?? 0,
               quantity: p.amount,
-              subTotal: (p.salePrice || p.price || 0) * p.amount,
+              subTotal: (p.salePrice ?? p.price ?? 0) * p.amount,
             })),
           },
         },
       });
 
-      // 🔹 descontar stock nuevo
-      for (const item of updatedData.products) {
-        await tx.product.update({
-          where: { id: item.id },
-          data: { amount: { decrement: item.amount } },
-        });
+      const oldTotal = existingOrder.total;
+      const totalDiff = total - oldTotal;
+      const oldClientId = existingOrder.clientId;
+      const newClientId = updatedData.clientId;
+      if (oldClientId !== newClientId) {
+        if (oldClientId) {
+          await tx.client.update({ where: { id: oldClientId }, data: { balance: { decrement: oldTotal } } });
+        }
+        if (newClientId) {
+          await tx.client.update({ where: { id: newClientId }, data: { balance: { increment: total } } });
+        }
+      } else if (oldClientId && totalDiff !== 0) {
+        await tx.client.update({ where: { id: oldClientId }, data: { balance: { increment: totalDiff } } });
+      }
 
-        await tx.stockMovement.create({
-          data: {
+      // 🚀 FASE 1+2: descontar stock nuevo (bulk UPDATE + createMany)
+      {
+        const stockMovementsApply: { type: MovementType; quantity: number; productId: string; orderId: string; businessId: string; reason: string }[] = [];
+        for (const item of updatedData.products) {
+          stockMovementsApply.push({
             type: "SALE",
             quantity: -item.amount,
             productId: item.id,
             orderId,
             businessId,
             reason: `Actualización por edición de Venta #${orderId}`,
+          });
+        }
+        await bulkUpdateStock(tx, aggregateStockChanges(
+          updatedData.products.map((p) => ({ id: p.id, change: -p.amount })),
+        ));
+        await tx.stockMovement.createMany({ data: stockMovementsApply });
+      // 🔹 ajustar CashMovements y CashBox por edición (Fix 7C)
+      const oldCashMovements = await tx.cashMovement.findMany({
+        where: { orderId, businessId },
+      });
+
+      const oldCashTotal = oldCashMovements.reduce((sum, m) => sum + m.total, 0);
+
+      // Calcular nuevo total en efectivo según medios de pago actualizados
+      const isTwoMethodsEdit = newTwoMethods;
+      const totalSecondMethodEdit = isTwoMethodsEdit ? (Number(updatedData.totalSecondMethod) || 0) : 0;
+      const totalEdit = updatedData.totalWithDiscount || updatedData.total;
+
+      let newCashTotal = 0;
+      if (newPaymentMethod === "Efectivo") {
+        newCashTotal += totalEdit - totalSecondMethodEdit;
+      }
+      if (isTwoMethodsEdit && newSecondPaymentMethod === "Efectivo") {
+        newCashTotal += totalSecondMethodEdit;
+      }
+
+      const cashDelta = newCashTotal - oldCashTotal;
+
+      // La edición de una venta no exige una caja abierta. Si hay una sesión
+      // activa se sincroniza el CashBox; si no, se conservan los movimientos
+      // con su sesión histórica para no bloquear la edición de productos.
+      if (cashDelta !== 0 || oldCashMovements.length > 0 || newCashTotal > 0) {
+        // Buscar sesión activa del usuario que edita (opcional)
+        const activeSession = await tx.cashboxSession.findFirst({
+          where: {
+            userId,
+            businessId,
+            status: "OPEN",
+            cashbox: { businessId },
           },
         });
+
+        // Ajustar CashBox por el delta solo si hay una sesión abierta
+        if (activeSession && cashDelta !== 0) {
+          await tx.cashBox.update({
+            where: { id: activeSession.cashboxId, businessId },
+            data: { total: { increment: cashDelta } },
+          });
+        }
+
+        // Conservar la sesión original del movimiento si no hay una activa
+        const cashboxSessionId =
+          activeSession?.id ?? oldCashMovements[0]?.cashboxSessionId ?? null;
+
+        // Eliminar movimientos viejos (son reemplazados por los nuevos)
+        if (oldCashMovements.length > 0) {
+          await tx.cashMovement.deleteMany({
+            where: { orderId, businessId },
+          });
+        }
+
+        // Crear nuevos movimientos si hay efectivo involucrado
+        if (newCashTotal > 0) {
+          if (isTwoMethodsEdit) {
+            if (totalEdit - totalSecondMethodEdit > 0 && newPaymentMethod === "Efectivo") {
+              await tx.cashMovement.create({
+                data: {
+                  total: totalEdit - totalSecondMethodEdit,
+                  seller: updatedData.seller,
+                  paidMethod: newPaymentMethod || "Efectivo",
+                  businessId,
+                  cashboxSessionId,
+                  orderId,
+                  date: new Date(),
+                },
+              });
+            }
+            if (totalSecondMethodEdit > 0 && newSecondPaymentMethod === "Efectivo") {
+              await tx.cashMovement.create({
+                data: {
+                  total: totalSecondMethodEdit,
+                  seller: updatedData.seller,
+                  paidMethod: newSecondPaymentMethod || "Efectivo",
+                  businessId,
+                  cashboxSessionId,
+                  orderId,
+                  date: new Date(),
+                },
+              });
+            }
+          } else if (newPaymentMethod === "Efectivo") {
+            await tx.cashMovement.create({
+              data: {
+                total: totalEdit,
+                seller: updatedData.seller,
+                paidMethod: newPaymentMethod || "Efectivo",
+                businessId,
+                cashboxSessionId,
+                orderId,
+                date: new Date(),
+              },
+            });
+          }
+        }
+      }
       }
 
       return { success: true };
+    }, { maxWait: 10000, timeout: 60000 });
+
+    // ⏰ Respuesta inmediata — non-critical en background
+    after(async () => {
+      try {
+        await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
+        revalidateTag(CACHE_TAGS.STOCK, "max");
+        revalidateTag(CACHE_TAGS.CASHBOX, "max");
+        revalidateTag(CACHE_TAGS.ORDERS, "max");
+        revalidateTag(CACHE_TAGS.SALES, "max");
+      } catch (bgError) {
+        console.error("Background after() error (non-critical):", bgError);
+      }
     });
-
-    await pusherServer.trigger(`orders-${businessId}`, "orders-update", {});
-
-    revalidateTag(CACHE_TAGS.STOCK, "max");
-    revalidateTag(CACHE_TAGS.CASHBOX, "max");
-    revalidateTag(CACHE_TAGS.ORDERS, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
-    revalidateTag(CACHE_TAGS.SALES, "max");
 
     return result;
   } catch (error) {
     console.error("Error updating sale:", error);
+    // Preservar el mensaje específico del bloqueo de ventas facturadas
+    if (error instanceof Error && error.message.includes("ya fue facturada")) {
+      return fail(error.message);
+    }
     return fail("Error al actualizar la venta");
   }
 };

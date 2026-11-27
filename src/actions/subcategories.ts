@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { auth } from "../../auth";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { assertWritePermission } from "@/lib/auth-gates";
 
 export const getSubcategories = async (categoryId?: string) => {
   const session = await auth();
@@ -26,6 +27,9 @@ export const getSubcategories = async (categoryId?: string) => {
 export const createSubcategory = async (name: string, categoryId: string) => {
   const session = await auth();
   if (!session?.user?.businessId) return { error: "No autorizado" };
+
+  const permission = await assertWritePermission();
+  if (!permission.success) return { error: permission.error, code: permission.code };
 
   try {
     const subcategory = await db.subcategory.create({

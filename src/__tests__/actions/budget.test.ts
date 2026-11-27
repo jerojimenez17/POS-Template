@@ -3,6 +3,33 @@ import { createBudgetAction } from "@/actions/budget";
 
 vi.mock("@/lib/db", () => ({
   db: {
+    business: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "business-123",
+        trialEndsAt: null,
+        planDefinition: {
+          id: "plan_pro",
+          name: "PRO",
+          features: {
+            hasAfipBilling: true,
+            hasPublicCatalog: true,
+            hasClientLedger: true,
+            hasMultiCashbox: true,
+            hasSupplierFilter: true,
+            hasBudget: true,
+          },
+          limits: {
+            maxUsers: 5,
+            maxProducts: 1000,
+            maxCashboxes: 3,
+            maxClients: 500,
+            dailySalesLimit: 999999,
+            dailyProductsLimit: 999999,
+            dailyClientsLimit: 999999,
+          },
+        },
+      }),
+    },
     order: {
       create: vi.fn().mockResolvedValue({ id: "budget-order-1" }),
     },
@@ -11,6 +38,29 @@ vi.mock("@/lib/db", () => ({
     },
     cashMovement: {
       create: vi.fn(),
+    },
+    planDefinition: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "plan_pro",
+        name: "PRO",
+        features: {
+          hasAfipBilling: true,
+          hasPublicCatalog: true,
+          hasClientLedger: true,
+          hasMultiCashbox: true,
+          hasSupplierFilter: true,
+          hasBudget: true,
+        },
+        limits: {
+          maxUsers: 5,
+          maxProducts: 1000,
+          maxCashboxes: 3,
+          maxClients: 500,
+          dailySalesLimit: 999999,
+          dailyProductsLimit: 999999,
+          dailyClientsLimit: 999999,
+        },
+      }),
     },
   },
 }));
@@ -21,6 +71,7 @@ vi.mock("../../../auth", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
 }));
 
 vi.mock("@/lib/pusher-server", () => ({
@@ -96,8 +147,9 @@ describe("createBudgetAction", () => {
             create: expect.arrayContaining([
               expect.objectContaining({
                 productId: "product-1",
-                amount: 2,
-                unitPrice: 100,
+                quantity: 2,
+                price: 100,
+                subTotal: 200,
               }),
             ]),
           }),
@@ -131,11 +183,11 @@ describe("createBudgetAction", () => {
   });
 
   it("should trigger revalidation after creating the budget", async () => {
-    const { revalidatePath } = await import("next/cache");
+    const { revalidateTag } = await import("next/cache");
 
     await createBudgetAction(baseInput);
 
-    expect(revalidatePath).toHaveBeenCalled();
+    expect(revalidateTag).toHaveBeenCalled();
   });
 
   it("should return the created order on success", async () => {
@@ -150,7 +202,8 @@ describe("createBudgetAction", () => {
 
     expect(result).toEqual(
       expect.objectContaining({
-        id: "budget-order-1",
+        success: true,
+        orderId: "budget-order-1",
       }),
     );
   });
@@ -161,7 +214,7 @@ describe("createBudgetAction", () => {
     await createBudgetAction(baseInput);
 
     const createCall = (db.order.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(createCall.data.clientId).toBeUndefined();
+    expect(createCall.data.clientId).toBeNull();
   });
 
   it("should accept input with a clientId", async () => {

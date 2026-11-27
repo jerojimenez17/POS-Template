@@ -1,7 +1,7 @@
 "use client";
 import MenuCard from "./MenuCard";
 import { useSession } from "next-auth/react";
-import { LayoutGrid, FileText, Search, Package, BookOpen, Calculator, BarChart3, Users, Box, Settings } from "lucide-react";
+import { LayoutGrid, FileText, Package, BookOpen, Calculator, BarChart3, Users, Box, Settings } from "lucide-react";
 
 const RootMenu = () => {
   const { data: session } = useSession();
@@ -12,12 +12,8 @@ const RootMenu = () => {
     <div className="min-h-screen bg-slate-100 dark:bg-gray-900 flex items-center justify-center">
       <div className="w-full max-w-6xl px-4 py-8">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          <MenuCard url="/newBill" title="Facturar">
+          <MenuCard url="/newBill" title="Vender">
             <FileText className="w-16 h-16" strokeWidth={1.5} />
-          </MenuCard>
-          
-          <MenuCard url="/searchBill" title="Consultar">
-            <Search className="w-16 h-16" strokeWidth={1.5} />
           </MenuCard>
           
           <MenuCard url="/stock/productDashboard" title="Stock">
@@ -26,6 +22,10 @@ const RootMenu = () => {
           
           <MenuCard url="/account-ledger" title="Fichero">
             <BookOpen className="w-16 h-16" strokeWidth={1.5} />
+          </MenuCard>
+
+          <MenuCard url="/clients" title="Clientes">
+            <Users className="w-16 h-16" strokeWidth={1.5} />
           </MenuCard>
           
           <MenuCard url="/cashRegister" title="Caja">
@@ -36,30 +36,28 @@ const RootMenu = () => {
             <BarChart3 className="w-16 h-16" strokeWidth={1.5} />
           </MenuCard>
 
-          {businessSlug && (
-            <MenuCard url={`/${businessSlug}/catalogo`} title="Catálogo">
-              <LayoutGrid className="w-16 h-16" strokeWidth={1.5} />
-            </MenuCard>
-          ) || (
-            // Fallback if businessSlug is not loaded yet or unavailable
-             <MenuCard url="#" title="Catálogo">
-              <LayoutGrid className="w-16 h-16 opacity-50" strokeWidth={1.5} />
-            </MenuCard>
-          )}
+          <MenuCard
+            url={businessSlug ? `/${businessSlug}/catalogo` : undefined}
+            title="Catálogo"
+            disabled={!businessSlug}
+            loading={!businessSlug}
+          >
+            <LayoutGrid className="w-16 h-16" strokeWidth={1.5} />
+          </MenuCard>
           
-          {role === 'ADMIN' && (
+          {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
             <MenuCard url="/admin/users" title="Usuarios">
               <Users className="w-16 h-16" strokeWidth={1.5} />
             </MenuCard>
           )}
 
-          {role === 'ADMIN' && (
+          {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
             <MenuCard url="/admin/cashboxes" title="Cajas">
               <Box className="w-16 h-16" strokeWidth={1.5} />
             </MenuCard>
           )}
 
-          {role === 'ADMIN' && (
+          {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
             <MenuCard url="/admin/settings" title="Configuración">
               <Settings className="w-16 h-16" strokeWidth={1.5} />
             </MenuCard>

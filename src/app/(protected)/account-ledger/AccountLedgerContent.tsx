@@ -1,0 +1,559 @@
+"use client";
+
+import { useEffect, useState, useCallback, useRef, useMemo, Fragment } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { getUnpaidOrders, type AccountLedgerOrder, type AccountLedgerPage } from "@/actions/unpaid-orders";
+import { getBusinessBillingInfoAction } from "@/actions/business";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  User,
+  Loader2,
+  CreditCard,
+  XCircle,
+} from "lucide-react";
+import { LocalDate } from "@/components/ui/LocalDate";
+import { pusherClient } from "@/lib/pusher-client";
+import { cn } from "@/lib/utils";
+import PrintRowButton from "./PrintRowButton";
+import ConfirmOrderButton from "./ConfirmOrderButton";
+
+type StatusFilter = "all" | "inpago" | "pago" | "pendiente";
+
+interface OrderWithClient {
+  id: string;
+  date: Date;
+  total: number;
+  status: string;
+  paidStatus: string;
+  clientId: string | null;
+  client: { id: string; name: string | null } | null;
+}
+
+const ITEMS_PER_PAGE = 25;
+// Paid orders are the unbounded, ever-growing set, so that tab uses cursor
+// continuation (append). "pendiente"/"inpago" are operational queues served as
+// fixed-size windows navigated with a cursor stack (upstream #111/#116 model).
+const INFINITE_TABS: StatusFilter[] = ["pago"];
+const INFINITE_LIMIT = 50;
+
+const TABS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "pendiente", label: "Por Confirmar" },
+  { value: "inpago", label: "Pendientes" },
+  { value: "pago", label: "Pagados" },
+];
+
+const isPage = (value: unknown): value is AccountLedgerPage => {
+  if (typeof value !== "object" || value === null) return false;
+  const page = value as Partial<AccountLedgerPage>;
+  return Array.isArray(page.orders) && (typeof page.nextCursor === "string" || page.nextCursor === null);
+};
+
+export default function AccountLedgerContent({
+  businessId,
+}: {
+  businessId: string;
+}) {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<StatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [refreshToggle, setRefreshToggle] = useState(0);
+  const [billingInfo, setBillingInfo] = useState<Record<string, unknown> | null>(null);
+
+  // Server-side paginated state for status tabs (upstream #111/#116 data flow,
+  // rendered with our existing visual language).
+  const [pageData, setPageData] = useState<AccountLedgerPage | null>(null);
+  const [serverLoading, setServerLoading] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
+  const generationRef = useRef(0);
+  const queryKeyRef = useRef(`${activeTab}\u0000${debouncedSearch}`);
+  const failedRequestRef = useRef<{ cursor: string | null; append: boolean } | null>(null);
+
+  const isAllTab = activeTab === "all";
+  const isInfinite = INFINITE_TABS.includes(activeTab);
+
+  // Fetch billing info once
+  useEffect(() => {
+    getBusinessBillingInfoAction().then(setBillingInfo);
+  }, []);
+
+  // Pusher listener for real-time updates
+  useEffect(() => {
+    if (!businessId) return;
+    const channelName = `orders-${businessId}`;
+    const channel = pusherClient.subscribe(channelName);
+
+    const handleUpdate = () => {
+      setRefreshToggle((prev) => prev + 1);
+    };
+
+    channel.bind("orders-update", handleUpdate);
+    return () => {
+      channel.unbind("orders-update", handleUpdate);
+      pusherClient.unsubscribe(channelName);
+    };
+  }, [businessId]);
+
+  // Optimistic UI update when an order is confirmed (applies to both data paths)
+  const handleOrderConfirmed = useCallback((orderId: string) => {
+    setPageData((prev) =>
+      prev
+        ? {
+            ...prev,
+            orders: prev.orders.map((o) =>
+              o.id === orderId ? { ...o, status: "confirmado" } : o
+            ),
+          }
+        : prev
+    );
+  }, []);
+
+  // Debounce search + reset page
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const load = useCallback(async (cursor: string | null, append: boolean) => {
+    if (loadingRef.current) return;
+    const generation = generationRef.current;
+    const queryKey = queryKeyRef.current;
+    loadingRef.current = true;
+    setServerLoading(true);
+    setServerError(null);
+    try {
+      const result = await getUnpaidOrders({
+        businessId,
+        status: activeTab,
+        search: debouncedSearch,
+        limit: isInfinite ? INFINITE_LIMIT : ITEMS_PER_PAGE,
+        cursor,
+      });
+      if (generation !== generationRef.current || queryKey !== queryKeyRef.current) return;
+      if (!result.success) {
+        throw new Error(result.error || "No se pudieron cargar las órdenes");
+      }
+      // Keep the UI compatible with older deployments that still return the
+      // legacy raw array for Todos while the current action returns a cursor page.
+      const pageResult: AccountLedgerPage = isPage(result.data)
+        ? result.data
+        : activeTab === "all" && Array.isArray(result.data)
+          ? { orders: result.data as AccountLedgerOrder[], nextCursor: null, hasMore: false }
+          : (() => { throw new Error("No se pudieron cargar las órdenes"); })();
+      if (append) {
+        setPageData((previous) => ({
+          ...pageResult,
+          orders: [...(previous?.orders ?? []), ...pageResult.orders],
+        }));
+      } else {
+        setPageData(pageResult);
+      }
+      failedRequestRef.current = null;
+    } catch (cause) {
+      if (generation !== generationRef.current || queryKey !== queryKeyRef.current) return;
+      console.error("Error loading account ledger page:", cause);
+      failedRequestRef.current = { cursor, append };
+      setServerError(append ? "No se pudieron cargar más órdenes" : "No se pudieron cargar las órdenes");
+    } finally {
+      if (generation === generationRef.current && queryKey === queryKeyRef.current) {
+        loadingRef.current = false;
+        setServerLoading(false);
+      }
+    }
+  }, [activeTab, businessId, debouncedSearch, isInfinite]);
+
+  // Tab/search/realtime changes provide a new first-page snapshot.
+  useEffect(() => {
+    generationRef.current += 1;
+    queryKeyRef.current = `${activeTab}\u0000${debouncedSearch}`;
+    loadingRef.current = false;
+    failedRequestRef.current = null;
+    // Snapshot reset for a new query key — same sanctioned pattern as
+    // AccountLedgerList.tsx (server cursor pagination orchestration).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setServerLoading(false);
+    setPageData(null);
+    setCurrentPage(1);
+    setPageCursors([null]);
+    setServerError(null);
+    void load(null, false);
+  }, [activeTab, debouncedSearch, refreshToggle, load]);
+
+  const loadMore = useCallback(() => {
+    if (!isInfinite || !pageData?.nextCursor || serverLoading) return;
+    void load(pageData.nextCursor, true);
+  }, [isInfinite, load, pageData, serverLoading]);
+
+  useEffect(() => {
+    if (!isInfinite || !sentinelRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) loadMore();
+    }, { rootMargin: "240px" });
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [isInfinite, loadMore]);
+
+  const goNextWindow = () => {
+    if (isInfinite || !pageData?.nextCursor || serverLoading) return;
+    const nextWindow = currentPage + 1;
+    setPageCursors((previous) => [...previous.slice(0, nextWindow - 1), pageData.nextCursor]);
+    setCurrentPage(nextWindow);
+    void load(pageData.nextCursor, false);
+  };
+
+  const goPrevWindow = () => {
+    if (currentPage === 1 || serverLoading) return;
+    const prevWindow = currentPage - 1;
+    setCurrentPage(prevWindow);
+    void load(pageCursors[prevWindow - 1] ?? null, false);
+  };
+
+  const rows = useMemo<(OrderWithClient | AccountLedgerOrder)[]>(() => pageData?.orders ?? [], [pageData?.orders]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, { key: string; clientName: string; balance: number | null; orders: AccountLedgerOrder[] }>();
+    for (const order of rows as AccountLedgerOrder[]) {
+      const key = order.client?.id ?? order.clientId ?? "sin-cliente";
+      const existing = map.get(key);
+      if (existing) {
+        existing.orders.push(order);
+      } else {
+        map.set(key, {
+          key,
+          clientName: order.client?.name || "Sin cliente",
+          balance: order.client?.balance ?? null,
+          orders: [order],
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [rows]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Status pill component
+  const StatusPill = ({
+    status,
+    paidStatus,
+  }: {
+    status: string;
+    paidStatus: string;
+  }) => {
+    if (status === "pendiente") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+          Por Confirmar
+        </span>
+      );
+    }
+    switch (paidStatus) {
+      case "inpago":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+            Pendiente
+          </span>
+        );
+      case "pago":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border border-green-200 dark:border-green-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            Pagado
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+            {paidStatus}
+          </span>
+        );
+    }
+  };
+
+  return (
+    <>
+      {/* Search + Tabs row */}
+      <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
+        <div className="relative w-full md:w-60">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            type="search"
+            placeholder="Buscar por cliente..."
+            className="pl-10 h-9 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg text-sm"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="inline-flex items-center p-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg gap-0.5">
+          {TABS.map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => {
+                setActiveTab(tab.value);
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 whitespace-nowrap",
+                activeTab === tab.value
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="mt-4">
+        {pageData === null && serverLoading && !serverError ? (
+          <div className="flex items-center justify-center py-12 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : serverError && rows.length === 0 ? (
+          <div className="flex items-center justify-center gap-3 py-12 text-sm text-red-500 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+            {serverError}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const failed = failedRequestRef.current;
+                if (failed) void load(failed.cursor, failed.append);
+              }}
+            >
+              Reintentar
+            </Button>
+          </div>
+        ) : rows.length === 0 && !serverLoading ? (
+          <div className="text-center py-12 text-muted-foreground bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+            {debouncedSearch
+              ? "No se encontraron órdenes para este cliente"
+              : isAllTab
+                ? "No hay cuentas pendientes"
+                : "No hay órdenes en esta categoría"}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                  <TableHead className="font-semibold text-gray-700 dark:text-gray-200 h-12">
+                    Orden
+                  </TableHead>
+                  <TableHead className="font-semibold text-gray-700 dark:text-gray-200 h-12">
+                    Total
+                  </TableHead>
+                  <TableHead className="font-semibold text-gray-700 dark:text-gray-200 h-12">
+                    Fecha
+                  </TableHead>
+                  <TableHead className="font-semibold text-gray-700 dark:text-gray-200 h-12">
+                    Estado
+                  </TableHead>
+                  <TableHead className="font-semibold text-gray-700 dark:text-gray-200 h-12 text-right">
+                    Acciones
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.map((group) => (
+                  <Fragment key={group.key}>
+                    <TableRow
+                      className="cursor-pointer border-b border-gray-100 bg-gray-50/70 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-800/40 dark:hover:bg-gray-800/60"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expandedGroups.has(group.key)}
+                      onClick={() => toggleGroup(group.key)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleGroup(group.key);
+                        }
+                      }}
+                    >
+                      <TableCell colSpan={5} className="py-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <ChevronRight
+                              aria-hidden="true"
+                              className={cn("h-4 w-4 shrink-0 text-gray-400 transition-transform", expandedGroups.has(group.key) && "rotate-90")}
+                            />
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
+                              <User className="h-4 w-4" />
+                            </span>
+                            <span className="truncate font-semibold text-gray-900 dark:text-gray-100">{group.clientName}</span>
+                            <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+                              {group.orders.length} orden{group.orders.length === 1 ? "" : "es"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Saldo de cuenta</span>
+                            <span
+                              className={cn(
+                                "rounded-full border px-3 py-1 text-sm font-bold tabular-nums",
+                                group.balance === null
+                                  ? "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400"
+                                  : group.balance > 0
+                                    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                                    : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              )}
+                            >
+                              {group.balance === null ? "—" : `${group.balance < 0 ? "-" : ""}$${Math.abs(group.balance).toLocaleString("es-AR")}`}
+                            </span>
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {expandedGroups.has(group.key) && group.orders.map((order) => (
+                      <TableRow
+                        key={order.id}
+                        className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer"
+                        onClick={() => router.push(`/account-ledger/${order.id}`)}
+                      >
+                        <TableCell className="py-3">
+                          <div className="pl-9 text-sm font-medium text-gray-900 dark:text-gray-100">
+                            #{order.id.slice(-6).toUpperCase()}
+                          </div>
+                          {order.notes && (
+                            <p className="mt-0.5 line-clamp-2 pl-9 text-xs text-muted-foreground" title={order.notes}>
+                              {order.notes}
+                            </p>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono font-medium">
+                            ${order.total.toLocaleString("es-AR")}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <LocalDate date={order.date} />
+                        </TableCell>
+                        <TableCell>
+                          <StatusPill
+                            status={order.status}
+                            paidStatus={order.paidStatus}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div
+                            className="flex items-center justify-end gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {order.status === "pendiente" ? (
+                              <ConfirmOrderButton
+                                orderId={order.id}
+                                onConfirmed={handleOrderConfirmed}
+                              />
+                            ) : order.paidStatus !== "pago" ? (
+                              <>
+                                <Button variant="outline" size="sm" asChild className="gap-1">
+                                  <Link href={`/account-ledger/${order.id}?action=payment`}>
+                                    <CreditCard className="h-4 w-4" />
+                                    Pagar
+                                  </Link>
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  asChild
+                                  className="gap-1 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+                                >
+                                  <Link href={`/account-ledger/${order.id}?action=cancel`}>
+                                    <XCircle className="h-4 w-4" />
+                                    Cancelar
+                                  </Link>
+                                </Button>
+                              </>
+                            ) : null}
+                            <PrintRowButton
+                              orderId={order.id}
+                              billingInfo={billingInfo}
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                ))}
+              </TableBody>
+            </Table>
+
+            {/* Infinite-scroll sentinel (Pagados) */}
+            {isInfinite && (
+              <div
+                ref={sentinelRef}
+                aria-label="Cargar más órdenes"
+                className="flex min-h-10 items-center justify-center gap-2 border-t border-gray-200 dark:border-gray-700 py-3 text-sm text-gray-500 dark:text-gray-400"
+              >
+                {serverError ? (
+                  <>
+                    <span className="text-red-500">{serverError}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const failed = failedRequestRef.current;
+                        if (failed) void load(failed.cursor, failed.append);
+                      }}
+                    >
+                      Reintentar
+                    </Button>
+                  </>
+                ) : serverLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Cargando más…
+                  </>
+                ) : null}
+              </div>
+            )}
+
+            {/* Fixed-window navigation (Por Confirmar / Pendientes) */}
+            {!isInfinite && (
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                <span className="text-sm text-gray-500 dark:text-gray-400">{rows.length} en esta página</span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage <= 1 || serverLoading} onClick={goPrevWindow}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm text-gray-500 dark:text-gray-400 px-2 min-w-[60px] text-center">Página {currentPage}</span>
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={!pageData?.hasMore || serverLoading} onClick={goNextWindow}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}

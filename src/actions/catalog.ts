@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { getEffectivePlan } from "@/lib/plan-resolver";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limiter";
 
 export interface PublicProduct {
@@ -25,11 +26,9 @@ export const getPublicProductsByBusinessId = async (businessId: string): Promise
     return [];
   }
 
-  const features = await db.businessFeatures.findUnique({
-    where: { businessId: businessId },
-  });
+  const effectivePlan = await getEffectivePlan(businessId);
 
-  if (!features || !features.hasPublicCatalog) {
+  if (!effectivePlan.hasPublicCatalog) {
     throw new Error("El catálogo público no está habilitado para este negocio.");
   }
 

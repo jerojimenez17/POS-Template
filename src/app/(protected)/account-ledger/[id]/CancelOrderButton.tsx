@@ -41,7 +41,7 @@ export default function CancelOrderButton({
     }
   };
 
-  if (!showButton && !isOpen) {
+  if (!isOpen) {
     return (
       <Button
         variant="destructive"

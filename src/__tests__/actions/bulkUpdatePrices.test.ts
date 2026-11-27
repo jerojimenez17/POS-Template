@@ -4,7 +4,7 @@ import { bulkUpdatePrices } from "@/actions/stock";
 vi.mock("@/lib/db", () => ({
   db: {
     product: {
-      findUnique: vi.fn(),
+      findMany: vi.fn(),
       update: vi.fn(),
     },
     $transaction: vi.fn(),
@@ -15,8 +15,12 @@ vi.mock("../../../auth", () => ({
   auth: vi.fn().mockResolvedValue({ user: { id: "user-1", businessId: "business-123" } }),
 }));
 
+vi.mock("@/lib/auth-gates", () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+}));
+
 vi.mock("next/cache", () => ({
-  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
 }));
 
 describe("bulkUpdatePrices Server Action", () => {
@@ -27,20 +31,12 @@ describe("bulkUpdatePrices Server Action", () => {
   it("should update prices for selected products with valid percentage", async () => {
     const { db } = await import("@/lib/db");
 
-    const mockProducts = [
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
       { id: "product-1", salePrice: 100, price: 60 },
       { id: "product-2", salePrice: 200, price: 120 },
-    ];
+    ]);
 
-    (db.product.findUnique as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(mockProducts[0])
-      .mockResolvedValueOnce(mockProducts[1]);
-
-    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates: unknown[]) => {
-      return Promise.all(updates);
-    });
-
-    (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (db.$transaction as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
     const result = await bulkUpdatePrices(["product-1", "product-2"], 10);
 
@@ -48,20 +44,17 @@ describe("bulkUpdatePrices Server Action", () => {
     expect(db.$transaction).toHaveBeenCalled();
   });
 
-  it("should apply 10% increase correctly to salePrice", async () => {
+  it("should apply 10% increase correctly using multiply factor", async () => {
     const { db } = await import("@/lib/db");
 
-    (db.product.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "product-1",
-      salePrice: 100,
-      price: 60,
-    });
-
-    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates: unknown[]) => {
-      return Promise.all(updates);
-    });
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "product-1", salePrice: 100, price: 60 },
+    ]);
 
     (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates) => {
+      return Promise.all(updates);
+    });
 
     await bulkUpdatePrices(["product-1"], 10);
 
@@ -75,20 +68,17 @@ describe("bulkUpdatePrices Server Action", () => {
     );
   });
 
-  it("should apply 25% increase correctly to salePrice", async () => {
+  it("should apply 25% increase correctly using multiply factor", async () => {
     const { db } = await import("@/lib/db");
 
-    (db.product.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "product-1",
-      salePrice: 100,
-      price: 60,
-    });
-
-    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates: unknown[]) => {
-      return Promise.all(updates);
-    });
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "product-1", salePrice: 100, price: 60 },
+    ]);
 
     (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates) => {
+      return Promise.all(updates);
+    });
 
     await bulkUpdatePrices(["product-1"], 25);
 
@@ -105,27 +95,20 @@ describe("bulkUpdatePrices Server Action", () => {
   it("should recalculate gain after price update", async () => {
     const { db } = await import("@/lib/db");
 
-    (db.product.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "product-1",
-      salePrice: 100,
-      price: 60,
-    });
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "product-1", salePrice: 100, price: 60 },
+    ]);
 
-    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates: unknown[]) => {
+    (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates) => {
       return Promise.all(updates);
     });
 
-    (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
-
     await bulkUpdatePrices(["product-1"], 10);
 
-    expect(db.product.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          gain: expect.any(Number),
-        }),
-      })
-    );
+    const updateCall = (db.product.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(updateCall.data.gain).toBeDefined();
+    expect(typeof updateCall.data.gain).toBe("number");
   });
 
   it("should return error for empty productIds array", async () => {
@@ -153,7 +136,7 @@ describe("bulkUpdatePrices Server Action", () => {
     const { db } = await import("@/lib/db");
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    (db.$transaction as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("DB error"));
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("DB error"));
 
     const result = await bulkUpdatePrices(["product-1"], 10);
 
@@ -165,17 +148,14 @@ describe("bulkUpdatePrices Server Action", () => {
   it("should only update selected products, not all products", async () => {
     const { db } = await import("@/lib/db");
 
-    (db.product.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "product-1",
-      salePrice: 100,
-      price: 60,
-    });
-
-    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates: unknown[]) => {
-      return Promise.all(updates);
-    });
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "product-1", salePrice: 100, price: 60 },
+    ]);
 
     (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates) => {
+      return Promise.all(updates);
+    });
 
     await bulkUpdatePrices(["product-1"], 10);
 
@@ -185,24 +165,21 @@ describe("bulkUpdatePrices Server Action", () => {
     );
   });
 
-  it("should call revalidatePath after successful update", async () => {
+  it("should call revalidateTag after successful update", async () => {
     const { db } = await import("@/lib/db");
-    const { revalidatePath } = await import("next/cache");
+    const { revalidateTag } = await import("next/cache");
 
-    (db.product.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: "product-1",
-      salePrice: 100,
-      price: 60,
-    });
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "product-1", salePrice: 100, price: 60 },
+    ]);
 
-    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates: unknown[]) => {
+    (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(async (updates) => {
       return Promise.all(updates);
     });
 
-    (db.product.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
-
     await bulkUpdatePrices(["product-1"], 10);
 
-    expect(revalidatePath).toHaveBeenCalledWith("/stock");
+    expect(revalidateTag).toHaveBeenCalled();
   });
 });

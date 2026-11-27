@@ -32,15 +32,27 @@ export const login = async (
   }
 
   try {
-    await signIn("credentials", {
+    const result = await signIn("credentials", {
       email,
       password,
       redirect: false,
     });
-  } catch (error) {
-    if (!(error instanceof AuthError)) {
-      throw error;
+
+    // signIn returns the redirect URL on both success and failure.
+    // If it includes "error", the authentication failed (e.g. user not found,
+    // JWT callback rejected, or adapter error).
+    if (typeof result === "string" && (
+      result.includes("error") || result.includes("/auth/error")
+    )) {
+      console.error("signIn failed, redirect URL:", result);
+      return { error: "Error al iniciar sesión. Verificá tus credenciales." };
     }
+  } catch (error) {
+    if (error instanceof AuthError) {
+      console.error("AuthError:", error.type, error.message);
+      return { error: "Error al iniciar sesión. Verificá tus credenciales." };
+    }
+    throw error;
   }
 
   return { success: true, redirectTo: callbackUrl || DEFAULT_LOGIN_REDIRECT };

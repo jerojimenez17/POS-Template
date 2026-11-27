@@ -10,13 +10,14 @@ import Spinner from "@/components/ui/Spinner";
 export default async function EditSalePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
-  const isAdmin = session?.user?.role === "ADMIN";
+  const role = session?.user?.role;
+  const canEditSales = role === "USER" || role === "ADMIN" || role === "SUPER_ADMIN";
 
-  if (!isAdmin) {
+  if (!canEditSales) {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] space-y-4">
         <h2 className="text-2xl font-bold text-red-500">Acceso Denegado</h2>
-        <p>Solo los administradores pueden editar ventas.</p>
+        <p>No tenés permisos para editar ventas.</p>
         <Link href={`/sales/${id}`} className="text-blue-500 hover:underline flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Volver a la venta
         </Link>
@@ -37,9 +38,23 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
     );
   }
 
+  if (sale.CAE?.CAE) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[50vh] space-y-4">
+        <h2 className="text-2xl font-bold text-red-500">Venta facturada</h2>
+        <p className="text-center text-muted-foreground">
+          Esta venta ya fue facturada. No se puede editar. Genere una nota de crédito.
+        </p>
+        <Link href={`/sales/${id}`} className="text-blue-500 hover:underline flex items-center gap-1">
+          <ArrowLeft className="h-4 w-4" /> Volver a la venta
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-6 md:py-8 max-w-7xl h-full flex flex-col">
-      <Link href={`/sales/${id}`} className="text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors w-fit mb-4 text-sm font-medium">
+      <Link href={`/sales/${id}`} className="text-red-500/70 hover:text-red-600 dark:text-red-400/70 dark:hover:text-red-400 flex items-center gap-1 transition-colors w-fit mb-4 text-sm font-medium">
         <ArrowLeft className="h-4 w-4" /> Cancelar Edición
       </Link>
       <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-4 md:p-6 overflow-hidden">

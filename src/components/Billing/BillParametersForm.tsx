@@ -15,30 +15,51 @@ import {
 } from "../ui/select";
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
-import { Button } from "../ui/button";
-import { useContext, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { BillContext } from "@/context/BillContext";
 import BillTypes from "@/models/billType";
 import { getVoucherNumberAction } from "@/actions/voucher";
+import { cn } from "@/lib/utils";
+import { Settings2, X, FileText, Receipt } from "lucide-react";
+import { getDefaultBillType } from "@/utils/billing";
+import { getBusinessBillingInfoAction } from "@/actions/business";
+import { formatAfipPointSaleErrorForUser, type AfipPointSaleError } from "@/services/afip/point-sale-validation";
+
+/** AFIP comprobante codes: A=1, B=6, C=11 (Jero f485810/5cefac7). */
+const getVoucherTypeCode = (billType: string): 1 | 6 | 11 => {
+  if (billType === BillTypes.A) return 1;
+  if (billType === BillTypes.B) return 6;
+  return 11;
+};
 
 interface BillParametersFormProps {
   ptoVentas?: number[];
+  initialBillType?: string;
+  layout?: "compact" | "cards";
 }
 
-const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
-  const [editParamters, setEditParameters] = useState(false);
+const BillParametersForm = ({ ptoVentas = [], initialBillType, layout = "compact" }: BillParametersFormProps) => {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [lastVoucherNum, setLastVoucherNum] = useState<number | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(false);
-  const { dispatch, BillState, onOrderResetRef } = useContext(BillContext);
+  const [voucherError, setVoucherError] = useState<AfipPointSaleError | string | null>(null);
+  const requestSequence = useRef(0);
+  const { dispatch, BillState, onOrderResetRef, billTypeRef, initialBillType: contextBillType } = useContext(BillContext);
+
+  // Jero (5cefac7): default comprobante type derives from the business IVA
+  // condition (Factura B for Responsable Inscripto) provided via context;
+  // getDefaultBillType() falls back to Factura C.
+  const defaultBillType = initialBillType ?? contextBillType ?? getDefaultBillType();
 
   const form = useForm<z.infer<typeof BillParametersSchema>>({
     resolver: zodResolver(BillParametersSchema),
     defaultValues: {
       paidMethod: PaidMethods.EFECTIVO,
       clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+      clientDocumentType: "",
       discount: 0,
       twoMethods: false,
-      billType: BillTypes.C,
+      billType: defaultBillType,
       totalSecondMethod: 0,
       secondPaidMethod: PaidMethods.DEBITO,
       ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
@@ -47,136 +68,241 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
 
   const watchBillType = form.watch("billType");
   const watchPtoVenta = form.watch("ptoVenta");
+  const watchClientCondition = form.watch("clientCondition");
+  const watchTwoMethods = form.watch("twoMethods");
+  const watchPaidMethod = form.watch("paidMethod");
+
+  // Jero (5cefac7): standalone path fallback — when no default was supplied
+  // server-side/context, resolve the business IVA condition in the browser and
+  // correct the comprobante type once.
+  useEffect(() => {
+    if (initialBillType !== undefined || contextBillType !== undefined) return;
+
+    let cancelled = false;
+    void Promise.resolve(getBusinessBillingInfoAction())
+      .then((info) => {
+        if (cancelled) return;
+        const nextBillType = getDefaultBillType(info?.condicionIva);
+        form.setValue("billType", nextBillType);
+        dispatch({ type: "billType", payload: nextBillType });
+        if (billTypeRef) billTypeRef.current = nextBillType;
+      })
+      .catch(() => {
+        // getDefaultBillType() already provides the required Factura C fallback.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialBillType, contextBillType, form, dispatch, billTypeRef]);
+
+  // Keep billTypeRef (consumed by the checkout snapshot sent to AFIP) always
+  // mirroring the authoritative form value.
+  useEffect(() => {
+    if (billTypeRef) billTypeRef.current = watchBillType;
+  }, [billTypeRef, watchBillType]);
 
   useEffect(() => {
-    const fetchVoucher = async () => {
-      if (!watchPtoVenta) return;
-      setLoadingVoucher(true);
-      
-      let tipoFactura = 11;
-      const billTypeStr = String(watchBillType).toLowerCase();
-      if (billTypeStr.includes("factura a")) {
-        tipoFactura = 1; // Simplificado para comprobante normal
-      } else if (billTypeStr.includes("factura b")) {
-        tipoFactura = 6;
-      }
+    const requestId = ++requestSequence.current;
+    setLastVoucherNum(null);
+    setVoucherError(null);
 
-      const res = await getVoucherNumberAction(watchPtoVenta, tipoFactura);
-      if (res.success !== undefined) {
-        setLastVoucherNum(res.success);
-      } else {
-        setLastVoucherNum(null);
-      }
+    if (!watchPtoVenta) {
+      setVoucherError(
+        ptoVentas.length === 0
+          ? "No hay un punto de venta configurado para consultar la numeración. Revise la configuración del negocio."
+          : "Seleccione un punto de venta configurado para consultar la numeración.",
+      );
       setLoadingVoucher(false);
-    };
+      return;
+    }
 
+    const fetchVoucher = async () => {
+      setLoadingVoucher(true);
+      try {
+        const res = await getVoucherNumberAction(watchPtoVenta, getVoucherTypeCode(watchBillType));
+        if (requestId !== requestSequence.current) return;
+        if (typeof res.success === "number") {
+          setLastVoucherNum(res.success);
+          setVoucherError(null);
+        } else {
+          setVoucherError(res.errorDetails ?? res.error ?? "No se pudo obtener la numeración");
+        }
+      } catch {
+        if (requestId === requestSequence.current) {
+          setVoucherError("No se pudo consultar la numeración del comprobante. Verifique el punto de venta y el tipo.");
+        }
+      } finally {
+        if (requestId === requestSequence.current) setLoadingVoucher(false);
+      }
+    };
     fetchVoucher();
-  }, [watchBillType, watchPtoVenta]);
+  }, [ptoVentas, watchBillType, watchPtoVenta]);
 
   useEffect(() => {
     onOrderResetRef.current = () => {
       form.reset({
         paidMethod: PaidMethods.EFECTIVO,
         clientCondition: ClientConditions.CONSUMIDOR_FINAL,
+        clientDocumentType: "",
         discount: 0,
         twoMethods: false,
-        billType: BillTypes.C,
+        // Jero fix: reset to the business default comprobante type, not a
+        // hardcoded Factura C.
+        billType: defaultBillType,
         totalSecondMethod: 0,
         secondPaidMethod: PaidMethods.DEBITO,
         ptoVenta: ptoVentas.length > 0 ? ptoVentas[0] : undefined,
       });
-      setEditParameters(false);
+      dispatch({ type: "billType", payload: defaultBillType });
+      if (billTypeRef) billTypeRef.current = defaultBillType;
     };
-  }, [form, onOrderResetRef]);
+  }, [form, onOrderResetRef, defaultBillType, dispatch, billTypeRef, ptoVentas]);
+
+  // Sync form from BillContext when in cards layout (edit mode)
+  const syncKey = `${BillState.IVACondition}-${BillState.documentNumber}-${BillState.paidMethod}`;
+  useEffect(() => {
+    if (layout === "cards" && BillState.IVACondition) {
+      form.reset({
+        paidMethod: BillState.paidMethod || PaidMethods.EFECTIVO,
+        clientCondition: (BillState.IVACondition || ClientConditions.CONSUMIDOR_FINAL) as z.infer<typeof BillParametersSchema>["clientCondition"],
+        discount: BillState.discount || 0,
+        twoMethods: BillState.twoMethods || false,
+        billType: BillState.billType || BillTypes.C,
+        totalSecondMethod: BillState.totalSecondMethod || 0,
+        secondPaidMethod: BillState.secondPaidMethod || PaidMethods.DEBITO,
+        ptoVenta: BillState.ptoVenta || (ptoVentas.length > 0 ? ptoVentas[0] : undefined),
+        // BillParametersSchema and BillState use the numeric document contract.
+        // Keep the form value numeric rather than widening the schema contract
+        // just for the cards-layout reset path.
+        documentNumber: BillState.documentNumber || 0,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncKey, layout, form]);
 
   const currentDate = useMemo(() => new Date(), []);
+  const billStateRef = useRef(BillState);
+  billStateRef.current = BillState;
 
-  const onSubmit = () => {
-    const clientCondition = form.getValues().clientCondition;
-    const documentNumber = form.getValues().documentNumber ?? 0;
-    
+  // Jero (f485810): surface AFIP/ARCA voucher-number failures to the user.
+  const voucherErrorMessage = typeof voucherError === "string"
+    ? voucherError
+    : voucherError
+      ? formatAfipPointSaleErrorForUser(voucherError)
+      : null;
+  const structuredVoucherError = voucherError && typeof voucherError !== "string" ? voucherError : null;
+
+  const pushToContext = useCallback(() => {
+    const values = form.getValues();
+    const clientCondition = values.clientCondition;
+    const documentNumber = values.documentNumber ?? 0;
+    const bs = billStateRef.current;
     dispatch({
       type: "setState",
       payload: {
-        ...form.getValues(),
-        id: "",
-        products: BillState.products,
-        total: BillState.total,
-        totalWithDiscount: BillState.totalWithDiscount,
-        seller: BillState.seller,
-        billType: form.getValues().billType,
+        ...values,
+        // Discount is owned by DiscountControl in the totals section — this
+        // form must never clobber it (Jero bca1230/0c30043).
+        discount: bs.discount ?? 0,
+        id: bs.id || "",
+        products: bs.products,
+        total: bs.total,
+        totalWithDiscount: bs.totalWithDiscount,
+        seller: bs.seller,
         date: currentDate,
         typeDocument: clientCondition,
         documentNumber,
         IVACondition: clientCondition,
         clientIvaCondition: clientCondition,
         clientDocumentNumber: String(documentNumber),
-        ptoVenta: form.getValues().ptoVenta,
+        ptoVenta: values.ptoVenta,
       },
     });
-    
-    setEditParameters(false);
-  };
-  return editParamters ? (
+  }, [dispatch, currentDate, form]);
+
+  const watchDocumentNumber = form.watch("documentNumber");
+  const watchBillTypeField = form.watch("billType");
+  const watchTotalSecondMethod = form.watch("totalSecondMethod");
+  const watchSecondPaidMethod = form.watch("secondPaidMethod");
+  const watchPtoVentaField = form.watch("ptoVenta");
+
+  useEffect(() => {
+    const timer = setTimeout(pushToContext, 150);
+    return () => clearTimeout(timer);
+  }, [watchPaidMethod, watchClientCondition, watchTwoMethods,
+      watchBillTypeField, watchTotalSecondMethod, watchSecondPaidMethod,
+      watchPtoVentaField, watchDocumentNumber, pushToContext]);
+
+  // Shared: document number input (appears on non-CF conditions)
+  const showDocInput = watchClientCondition !== ClientConditions.CONSUMIDOR_FINAL;
+
+  // Shared: split payment fields
+  const showSplit = watchTwoMethods;
+
+  const voucherErrorAlert = voucherErrorMessage ? (
+    <div role="alert" className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+      <p className="font-semibold">No se pudo obtener la numeración de ARCA</p>
+      <p className="mt-1">{voucherErrorMessage}</p>
+      {structuredVoucherError?.code === "11002" && (
+        <ol className="mt-2 list-decimal space-y-1 pl-4">
+          <li>Verifique que el punto esté habilitado para WSFE/WSFEv1 en ARCA.</li>
+          <li>Confirme el CUIT y el ambiente del certificado.</li>
+          <li>Seleccione un punto habilitado o revise la configuración e intente nuevamente.</li>
+        </ol>
+      )}
+    </div>
+  ) : null;
+
+  const formContent = (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Grid de 3 columnas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Comprobante */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-              </svg>
-              Comprobante
-            </div>
-            
-            <div className="space-y-3">
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* COL 1: Comprobante */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 flex-wrap">
               <FormField
                 control={form.control}
-                name={"billType"}
+                name="billType"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Tipo</FormLabel>
-                    <Select {...field} onValueChange={field.onChange}>
-                      <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                        <SelectValue placeholder={field.value} />
+                  <FormItem className="min-w-[140px]">
+                    <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo</FormLabel>
+                    <Select {...field} onValueChange={(value) => {
+                      field.onChange(value);
+                      // Immediate context sync so AFIP calls use the chosen type
+                      dispatch({ type: "billType", payload: value });
+                    }}>
+                      <SelectTrigger className="h-8 text-sm rounded-md">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.values(BillTypes).map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
+                        {Object.values(BillTypes).map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </FormItem>
                 )}
               />
-
               {ptoVentas.length > 0 && (
                 <FormField
                   control={form.control}
                   name="ptoVenta"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Pto. Venta</FormLabel>
-                      <Select 
-                        value={field.value ? String(field.value) : undefined} 
-                        onValueChange={(val) => field.onChange(Number(val))}
-                      >
-                        <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                          <SelectValue placeholder="Seleccione" />
+                    <FormItem className="min-w-[90px]">
+                      <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pto.</FormLabel>
+                      <Select value={field.value ? String(field.value) : undefined} onValueChange={(val) => {
+                        const point = Number(val);
+                        field.onChange(point);
+                        // Immediate context sync (Jero): checkout uses this point of sale
+                        dispatch({ type: "setState", payload: { ...billStateRef.current, ptoVenta: point, billType: watchBillTypeField } });
+                      }}>
+                        <SelectTrigger className="h-8 text-sm rounded-md">
+                          <SelectValue placeholder="-" />
                         </SelectTrigger>
                         <SelectContent>
-                          {ptoVentas.map((pto) => (
-                            <SelectItem key={pto} value={String(pto)}>
-                              {String(pto).padStart(3, '0')}
-                            </SelectItem>
+                          {ptoVentas.map((p) => (
+                            <SelectItem key={p} value={String(p)}>{String(p).padStart(3, '0')}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -184,42 +310,262 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
                   )}
                 />
               )}
-
+              {watchPtoVenta && (
+                <div className="self-end pb-1.5">
+                  <span
+                    className={cn(
+                      "text-[11px] font-mono text-gray-400",
+                      !loadingVoucher && lastVoucherNum === null && "text-red-400"
+                    )}
+                    title={voucherErrorMessage ?? undefined}
+                  >
+                    {loadingVoucher
+                      ? "..."
+                      : lastVoucherNum !== null
+                        ? `${String(watchPtoVenta).padStart(3, '0')}-${String(lastVoucherNum + 1).padStart(4, '0')}`
+                        : "Error"}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
               <FormField
                 control={form.control}
-                name={"clientCondition"}
+                name="clientCondition"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Condición IVA</FormLabel>
+                  <FormItem className="min-w-[150px]">
+                    <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cond. IVA</FormLabel>
                     <Select {...field} onValueChange={field.onChange}>
-                      <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                        <SelectValue placeholder={field.value} />
+                      <SelectTrigger className="h-8 text-sm rounded-md">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.values(ClientConditions).map((condition) => (
-                          <SelectItem key={condition} value={condition}>
-                            {condition}
-                          </SelectItem>
+                        {Object.values(ClientConditions).map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </FormItem>
                 )}
               />
+              {showDocInput && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="clientDocumentType"
+                    render={({ field }) => (
+                      <FormItem className="min-w-[100px]">
+                        <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo doc.</FormLabel>
+                        <Select value={field.value || undefined} onValueChange={field.onChange}>
+                          <SelectTrigger className="h-8 text-sm rounded-md"><SelectValue placeholder="DNI" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DNI">DNI</SelectItem>
+                            <SelectItem value="CUIT">CUIT</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="documentNumber"
+                    render={({ field }) => (
+                      <FormItem className="min-w-[130px]">
+                        <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                          {form.watch("clientDocumentType") === "CUIT" ? "CUIT" : "DNI"}
+                        </FormLabel>
+                        <Input
+                          className="h-8 text-sm rounded-md"
+                          type="number"
+                          name={field.name}
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                          onBlur={field.onBlur}
+                          ref={field.ref}
+                        />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+            </div>
+          </div>
 
-              {form.watch("clientCondition") !== ClientConditions.CONSUMIDOR_FINAL && (
+          {/* COL 2: Pago */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <FormField
+                control={form.control}
+                name="paidMethod"
+                render={({ field }) => (
+                  <FormItem className="min-w-[140px]">
+                    <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pago</FormLabel>
+                    <Select {...field} onValueChange={field.onChange}>
+                      <SelectTrigger className="h-8 text-sm rounded-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(PaidMethods).map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="twoMethods"
+                render={({ field }) => (
+                  <FormItem className="self-end pb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Checkbox
+                        id="twoMethods"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        className="h-3.5 w-3.5"
+                      />
+                      <label htmlFor="twoMethods" className="text-[11px] font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                        Dividir
+                      </label>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            </div>
+            {showSplit && (
+              <div className="flex items-center gap-3 flex-wrap pl-1 border-l-2 border-gray-200 dark:border-gray-700">
+                <FormField
+                  control={form.control}
+                  name="secondPaidMethod"
+                  render={({ field }) => (
+                    <FormItem className="min-w-[130px]">
+                      <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">2do medio</FormLabel>
+                      <Select {...field} onValueChange={field.onChange}>
+                        <SelectTrigger className="h-8 text-sm rounded-md">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.values(PaidMethods).map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="totalSecondMethod"
+                  render={({ field }) => (
+                    <FormItem className="min-w-[100px]">
+                      <FormLabel className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Monto</FormLabel>
+                      <Input
+                        className="h-8 text-sm rounded-md"
+                        placeholder="0"
+                        {...field}
+                        onChange={field.onChange}
+                      />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </Form>
+  );
+
+  if (layout === "cards") {
+    // ──── CARD LAYOUT (edit page) ────
+    return (
+      <Form {...form}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* ──── DATOS DEL COMPROBANTE ──── */}
+          <section className="bg-card border rounded-xl p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Datos del comprobante
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <FormField
+                control={form.control}
+                name="billType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Tipo</FormLabel>
+                    <Select {...field} onValueChange={(value) => {
+                      field.onChange(value);
+                      dispatch({ type: "billType", payload: value });
+                    }}>
+                      <SelectTrigger className="h-9 text-sm rounded-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(BillTypes).map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+              {ptoVentas.length > 0 && (
+                <FormField
+                  control={form.control}
+                  name="ptoVenta"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Pto. Venta</FormLabel>
+                      <Select value={field.value ? String(field.value) : undefined} onValueChange={(v) => {
+                        const point = Number(v);
+                        field.onChange(point);
+                        dispatch({ type: "setState", payload: { ...billStateRef.current, ptoVenta: point, billType: watchBillTypeField } });
+                      }}>
+                        <SelectTrigger className="h-9 text-sm rounded-md">
+                          <SelectValue placeholder="-" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ptoVentas.map((p) => (
+                            <SelectItem key={p} value={String(p)}>{String(p).padStart(3, '0')}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+              )}
+              <FormField
+                control={form.control}
+                name="clientCondition"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Cond. IVA</FormLabel>
+                    <Select {...field} onValueChange={field.onChange}>
+                      <SelectTrigger className="h-9 text-sm rounded-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(ClientConditions).map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+              {showDocInput ? (
                 <FormField
                   control={form.control}
                   name="documentNumber"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm text-gray-600 dark:text-gray-300">
-                        {form.watch("clientCondition") === ClientConditions.CUIT
-                          ? "CUIT"
-                          : "DNI"}
+                      <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                         {BillState.clientDocumentType === "CUIT" ? "CUIT" : "DNI"}
                       </FormLabel>
                       <Input
-                        className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
+                        className="h-9 text-sm rounded-md"
                         type="number"
                         name={field.name}
                         value={field.value || ""}
@@ -230,76 +576,90 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
                     </FormItem>
                   )}
                 />
+              ) : (
+                <div className="flex items-end pb-1">
+                  <span className="text-xs text-muted-foreground/60 italic">
+                    Consumidor Final — no requiere documento
+                  </span>
+                </div>
               )}
             </div>
-          </div>
+            {watchPtoVenta && (
+              <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground font-mono">
+                Próximo:{" "}
+                {loadingVoucher
+                  ? "..."
+                  : lastVoucherNum !== null
+                    ? `${String(watchPtoVenta).padStart(3, '0')}-${String(lastVoucherNum + 1).padStart(4, '0')}`
+                    : "—"}
+              </div>
+            )}
+          </section>
 
-          {/* Pago */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-500">
-                <rect width="20" height="14" x="2" y="5" rx="2"/>
-                <line x1="2" y1="10" x2="22" y2="10"/>
-              </svg>
+          {/* ──── PAGO ──── */}
+          <section className="bg-card border rounded-xl p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-muted-foreground" />
               Pago
-            </div>
-            
-            <div className="space-y-3">
-              <FormField
-                control={form.control}
-                name={"paidMethod"}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Medio</FormLabel>
-                    <Select {...field} onValueChange={field.onChange}>
-                      <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                        <SelectValue placeholder={field.value} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.values(PaidMethods).map((method) => (
-                          <SelectItem key={method} value={method}>
-                            {method}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name={"twoMethods"}
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
-                      Dividir pago
-                    </FormLabel>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormItem>
-                )}
-              />
-
-              {form.watch("twoMethods") && (
-                <div className="space-y-3 pl-2 border-l-2 border-gray-200 dark:border-gray-600">
+            </h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+                <FormField
+                  control={form.control}
+                  name="paidMethod"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Medio de pago</FormLabel>
+                      <Select {...field} onValueChange={field.onChange}>
+                        <SelectTrigger className="h-9 text-sm rounded-md">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.values(PaidMethods).map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                <div className="flex items-end pb-1">
                   <FormField
                     control={form.control}
-                    name={"secondPaidMethod"}
+                    name="twoMethods"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Segundo medio</FormLabel>
+                        <div className="flex items-center gap-2.5 cursor-pointer select-none">
+                          <Checkbox
+                            id="twoMethods-edit"
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            className="h-4 w-4"
+                          />
+                          <label htmlFor="twoMethods-edit" className="text-sm font-medium cursor-pointer">
+                            Dividir pago
+                          </label>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+              {showSplit && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3 pl-5 border-l-2 border-border">
+                  <FormField
+                    control={form.control}
+                    name="secondPaidMethod"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">2do medio</FormLabel>
                         <Select {...field} onValueChange={field.onChange}>
-                          <SelectTrigger className="h-10 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                            <SelectValue placeholder={field.value} />
+                          <SelectTrigger className="h-9 text-sm rounded-md">
+                            <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.values(PaidMethods).map((method) => (
-                              <SelectItem key={method} value={method}>
-                                {method}
-                              </SelectItem>
+                            {Object.values(PaidMethods).map((m) => (
+                              <SelectItem key={m} value={m}>{m}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -311,9 +671,9 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
                     name="totalSecondMethod"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Monto</FormLabel>
+                        <FormLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Monto 2do medio</FormLabel>
                         <Input
-                          className="h-10 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
+                          className="h-9 text-sm rounded-md"
                           placeholder="0"
                           {...field}
                           onChange={field.onChange}
@@ -323,157 +683,59 @@ const BillParametersForm = ({ ptoVentas = [] }: BillParametersFormProps) => {
                   />
                 </div>
               )}
-            </div>
-          </div>
 
-          {/* Descuento */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-              </svg>
-              Descuento
+              {/* Descuento: se edita desde DiscountControl en la sección de Totales (Jero bca1230/0c30043) */}
             </div>
-            
-            <div className="space-y-3">
-              <FormField
-                control={form.control}
-                name="discount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-gray-600 dark:text-gray-300">Porcentaje (%)</FormLabel>
-                    <div className="relative">
-                      <Input
-                        className="h-11 rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 pr-10"
-                        {...field}
-                        value={field.value === 0 ? "" : field.value}
-                        placeholder="0"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
-                    </div>
-                  </FormItem>
-                )}
-              />
-
-              {/* Preview del descuento */}
-              {form.watch("discount") > 0 && (
-                <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500">
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="12" y1="8" x2="12" y2="12"/>
-                      <line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
-                    <span className="text-orange-700 dark:text-orange-400 font-medium">
-                      -{form.watch("discount")}% de descuento aplicado
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          </section>
         </div>
+      </Form>
+    );
+  }
 
-        {/* Botones de acción */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <Button
-            type="button"
-            className="h-10 rounded-lg font-medium px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 dark:border-gray-600"
-            onClick={() => setEditParameters(false)}
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            className="h-10 rounded-lg font-medium px-6 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-          >
-            Guardar cambios
-          </Button>
+  // ──── COMPACT LAYOUT (default) ────
+  return (
+    <>
+      {/* Desktop: always visible */}
+      <div className="hidden md:block bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 md:px-6 py-3">
+        <div className="max-w-7xl mx-auto">
+          {formContent}
+          {voucherErrorAlert}
         </div>
-      </form>
-    </Form>
-  ) : (
-    <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm">
-      {/* Comprobante y Pto Venta */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => setEditParameters(true)}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <span className="font-semibold text-gray-700 dark:text-gray-300">
-            {form.getValues().billType}
-          </span>
-          {form.getValues().ptoVenta && (
-            <span className="ml-1 text-gray-600 dark:text-gray-400 font-mono text-xs">
-              | {String(form.getValues().ptoVenta).padStart(3, '0')}-
-              {loadingVoucher ? "..." : String((lastVoucherNum || 0) + 1).padStart(4, '0')}
-            </span>
+      </div>
+
+      {/* Mobile: toggle button */}
+      <div className="md:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors w-full",
+            mobileOpen
+              ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+              : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
           )}
-        </div>
+        >
+          {mobileOpen ? <X className="h-4 w-4" /> : <Settings2 className="h-4 w-4" />}
+          <span>Parámetros de venta</span>
+          <div className="ml-auto flex items-center gap-2 text-[11px] text-gray-400">
+            <span>{watchBillTypeField}</span>
+            <span>·</span>
+            <span>{watchPaidMethod}</span>
+            {BillState.discount > 0 && (
+              <>
+                <span>·</span>
+                <span>-{BillState.discount}%</span>
+              </>
+            )}
+          </div>
+        </button>
+        {mobileOpen && (
+          <div className="pt-3 pb-1">
+            {formContent}
+            {voucherErrorAlert}
+          </div>
+        )}
       </div>
-
-      {/* Condición IVA */}
-      <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-        <span>IVA:</span>
-        <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().clientCondition}</span>
-      </div>
-
-      {/* CUIT/DNI */}
-      {form.watch("clientCondition") === ClientConditions.CUIT && form.getValues().documentNumber > 0 && (
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-          <span>CUIT:</span>
-          <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>
-        </div>
-      )}
-
-      {form.watch("clientCondition") === ClientConditions.DNI && form.getValues().documentNumber > 0 && (
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-          <span>DNI:</span>
-          <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().documentNumber}</span>
-        </div>
-      )}
-
-      {/* Pago */}
-      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-50 dark:bg-green-900/20">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-600 dark:text-green-400">
-          <rect width="20" height="14" x="2" y="5" rx="2"/>
-          <line x1="2" y1="10" x2="22" y2="10"/>
-        </svg>
-        <span className="font-medium text-gray-900 dark:text-gray-200">{form.getValues().paidMethod}</span>
-      </div>
-
-      {/* Segundo medio */}
-      {form.getValues().twoMethods && (
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-          <span>+</span>
-          <span className="font-medium">{form.getValues().secondPaidMethod}</span>
-        </div>
-      )}
-
-      {/* Descuento */}
-      {form.getValues().discount > 0 && (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-50 dark:bg-orange-900/20">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500">
-            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-          <span className="font-semibold text-orange-600 dark:text-orange-400">-{form.getValues().discount}%</span>
-        </div>
-      )}
-
-      {/* Botón editar */}
-      <Button 
-        variant="outline" 
-        size="sm" 
-        onClick={() => setEditParameters(true)} 
-        className="ml-2 rounded-lg h-8 px-3 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-        </svg>
-        Editar
-      </Button>
-    </div>
+    </>
   );
 };
 

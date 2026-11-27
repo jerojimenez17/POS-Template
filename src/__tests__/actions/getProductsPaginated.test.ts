@@ -74,6 +74,28 @@ describe("getProductsPaginated Server Action", () => {
     );
   });
 
+  it("should use the same tenant-scoped filter for count and page data", async () => {
+    const { db } = await import("@/lib/db");
+    (db.$transaction as ReturnType<typeof vi.fn>).mockImplementation(
+      (queries: Promise<unknown>[]) => Promise.all(queries)
+    );
+    (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (db.product.count as ReturnType<typeof vi.fn>).mockResolvedValue(0);
+
+    await getProductsPaginated({ categoryId: "category-1", brandId: "brand-1", unit: "kg", page: 2, pageSize: 10 });
+
+    const findManyWhere = (db.product.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where;
+    const countWhere = (db.product.count as ReturnType<typeof vi.fn>).mock.calls[0][0].where;
+    expect(findManyWhere).toEqual({
+      businessId: "business-123",
+      categoryId: "category-1",
+      brandId: "brand-1",
+      unit: "kg",
+    });
+    expect(countWhere).toEqual(findManyWhere);
+    expect(db.product.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 10, take: 10 }));
+  });
+
   it("should cap pageSize at 100", async () => {
     const { db } = await import("@/lib/db");
 
@@ -115,15 +137,17 @@ describe("getProductsPaginated Server Action", () => {
     (db.product.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
     (db.product.count as ReturnType<typeof vi.fn>).mockResolvedValue(0);
 
-    await getProductsPaginated({ search: "Manzana" });
+await getProductsPaginated({ search: "Manzana" });
 
     expect(db.product.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          OR: [
+          businessId: "business-123",
+          OR: expect.arrayContaining([
             { code: { contains: "Manzana", mode: "insensitive" } },
+            { codebar: { contains: "Manzana", mode: "insensitive" } },
             { description: { contains: "Manzana", mode: "insensitive" } },
-          ],
+          ]),
         }),
       })
     );

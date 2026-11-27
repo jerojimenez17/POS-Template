@@ -5,9 +5,13 @@ import { FiltersReducer } from "./FiltersReducer";
 import { FiltersContext } from "./FiltersContext";
 import FilterField from "@/models/FilterField";
 
+const today = new Date();
+const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+const startOfTomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
 const INITIAL_STATE: FilterState = {
   Remito: {
-    active: true,
+    active: false,
     filter: "remito",
   } as FilterField,
   Seller: {
@@ -39,7 +43,7 @@ const INITIAL_STATE: FilterState = {
     filter: "transferencia",
   } as FilterField,
   Efectivo: {
-    active: true,
+    active: false,
     filter: "efectivo",
   } as FilterField,
   CuentaDNI: {
@@ -48,11 +52,11 @@ const INITIAL_STATE: FilterState = {
   } as FilterField,
   startDate: {
     active: false,
-    date: new Date(),
+    date: startOfToday,
   },
   endDate: {
     active: false,
-    date: new Date(),
+    date: startOfTomorrow,
   },
 };
 
@@ -153,6 +157,14 @@ const FiltersProvider = ({ children }: props) => {
       payload: null,
     });
   }, []);
+
+  const resetFilters = useCallback(() => {
+    dispatch({ type: "reset", payload: null });
+  }, []);
+
+  const initFromUrl = useCallback((params: { startDate?: Date; endDate?: Date; showAll?: boolean; directVisit?: boolean }) => {
+    dispatch({ type: "initFromUrl", payload: params });
+  }, []);
   
   const values = useMemo(() => ({
     filtersState: filtersState,
@@ -171,11 +183,13 @@ const FiltersProvider = ({ children }: props) => {
     disableStartDate: disableStartDate,
     seller: seller,
     disableSeller: disableSeller,
+    resetFilters: resetFilters,
+    initFromUrl: initFromUrl,
   }), [
-    filtersState, switchRemito, switchFacturaC, switchDebito, switchEfectivo, 
-    switchUnPago, switchAhora3, switchAhora6, switchCuentaDNI, 
-    switchTransferencia, startDate, endDate, disableEndDate, 
-    disableStartDate, seller, disableSeller
+    filtersState, switchRemito, switchFacturaC, switchDebito, switchEfectivo,
+    switchUnPago, switchAhora3, switchAhora6, switchCuentaDNI,
+    switchTransferencia, startDate, endDate, disableEndDate,
+    disableStartDate, seller, disableSeller, resetFilters, initFromUrl
   ]);
 
   return (

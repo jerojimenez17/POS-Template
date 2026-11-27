@@ -29,13 +29,27 @@ export const register = async (values: z.infer<typeof RegisterSchema>) => {
     .replace(/^-+|-+$/g, "") + "-" + Date.now().toString().slice(-4);
 
   try {
+    // Find DEMO PlanDefinition (fallback: first default plan)
+    const demoPlan = await db.planDefinition.findFirst({
+      where: { name: "DEMO", isActive: true },
+    });
+
+    if (!demoPlan) {
+      return { error: "Error de configuración: no hay plan DEMO disponible. Contacta al administrador." };
+    }
+
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 30);
+
      // Transaction to ensure both Business and User are created or neither
     await db.$transaction(async (tx) => {
-      // 1. Create Business
+      // 1. Create Business with DEMO plan and trial tracking
       const business = await tx.business.create({
         data: {
           name: businessName,
           slug: slug,
+          trialEndsAt: trialEndsAt,
+          planDefinitionId: demoPlan.id,
         },
       });
 

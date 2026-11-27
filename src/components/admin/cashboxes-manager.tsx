@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -11,10 +11,12 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Edit2, Trash2, Plus, Box, History } from "lucide-react";
+import { Edit2, Trash2, Plus, Box } from "lucide-react";
 import { createCashbox, updateCashbox, deleteCashbox } from "@/actions/cashbox";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { FeatureBlockedModal } from "@/components/ui/feature-blocked-modal";
+import { parsePlanError } from "@/lib/plan-error";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +35,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 
 interface CashboxType {
   id: string;
@@ -56,6 +59,25 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [cashboxToDelete, setCashboxToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [planError, setPlanError] = useState<ReturnType<typeof parsePlanError> | null>(null);
+  const [cashboxPage, setCashboxPage] = useState(1);
+  const [cashboxPageSize, setCashboxPageSize] = useState(10);
+
+  const paginatedCashboxes = useMemo(() => {
+    const start = (cashboxPage - 1) * cashboxPageSize;
+    return cashboxes.slice(start, start + cashboxPageSize);
+  }, [cashboxes, cashboxPage, cashboxPageSize]);
+
+  const totalCashboxPages = Math.max(1, Math.ceil(cashboxes.length / cashboxPageSize));
+
+  // Reset page when data changes
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (cashboxPage > totalCashboxPages) {
+      setCashboxPage(totalCashboxPages);
+    }
+  }, [cashboxes.length, cashboxPage, totalCashboxPages]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleCreate = () => {
     setEditingCashbox(null);
@@ -111,7 +133,12 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
     } else {
       const result = await createCashbox(cashboxName.trim());
       if ('error' in result && result.error) {
-        toast.error(result.error as string);
+        const parsed = parsePlanError(result.error as string);
+        if (parsed.isPlanError) {
+          setPlanError(parsed);
+        } else {
+          toast.error(result.error as string);
+        }
       } else {
         toast.success("Caja creada");
         setIsModalOpen(false);
@@ -130,8 +157,7 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex justify-between items-center w-full">
-        <h2 className="text-2xl font-bold tracking-tight">Administración de Cajas</h2>
+      <div className="flex justify-end items-center w-full mb-4">
         <Button onClick={handleCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Nueva Caja
@@ -155,7 +181,7 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
                 </TableCell>
               </TableRow>
             ) : (
-              cashboxes.map((cashbox) => (
+              paginatedCashboxes.map((cashbox) => (
                 <TableRow 
                   key={cashbox.id} 
                   className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer"
@@ -173,15 +199,6 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right space-x-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => router.push(`/admin/cashboxes/${cashbox.id}`)}
-                      className="h-8 w-8 text-slate-500 hover:text-blue-600"
-                      title="Ver historial"
-                    >
-                      <History className="h-4 w-4" />
-                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -204,6 +221,21 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
             )}
           </TableBody>
         </Table>
+
+        {/* Pagination */}
+        <PaginationControls
+          currentPage={cashboxPage}
+          totalPages={totalCashboxPages}
+          totalItems={cashboxes.length}
+          pageSize={cashboxPageSize}
+          onPageChange={setCashboxPage}
+          onPageSizeChange={(size) => {
+            setCashboxPageSize(size);
+            setCashboxPage(1);
+          }}
+          pageSizeOptions={[10, 20, 50]}
+          itemLabel="cajas"
+        />
       </div>
 
       {/* Create/Edit Modal */}
@@ -256,6 +288,15 @@ export const CashboxesManager = ({ cashboxes }: CashboxesManagerProps) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <FeatureBlockedModal
+        open={!!planError}
+        onOpenChange={(open) => { if (!open) setPlanError(null); }}
+        variant={planError?.variant ?? "feature"}
+        feature={planError?.feature}
+        resource={planError?.resource}
+        limitValue={planError?.limitValue}
+      />
     </div>
   );
 };

@@ -36,7 +36,7 @@ const Select = ({
       )}
 
       {options.map((option) => (
-        <option key={Math.random()} value={option} className="p-2">
+        <option key={option} value={option} className="p-2">
           {option}
         </option>
       ))}

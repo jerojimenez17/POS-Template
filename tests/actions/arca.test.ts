@@ -9,16 +9,63 @@ vi.mock('@/lib/db', () => ({
   db: {
     business: {
       update: vi.fn(),
+      findUnique: vi.fn().mockResolvedValue({
+        id: 'b1',
+        planDefinition: {
+          id: 'plan_pro',
+          name: 'PRO',
+          features: {
+            hasAfipBilling: true,
+            hasPublicCatalog: true,
+            hasClientLedger: true,
+            hasMultiCashbox: true,
+            hasSupplierFilter: true,
+            hasBudget: true,
+          },
+          limits: {
+            maxUsers: 5,
+            maxProducts: 1000,
+            maxCashboxes: 3,
+            maxClients: 500,
+            dailySalesLimit: 999999,
+            dailyProductsLimit: 999999,
+            dailyClientsLimit: 999999,
+          },
+        },
+      }),
+    },
+    planDefinition: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: 'plan_pro',
+        name: 'PRO',
+        features: {
+          hasAfipBilling: true,
+          hasPublicCatalog: true,
+          hasClientLedger: true,
+          hasMultiCashbox: true,
+          hasSupplierFilter: true,
+          hasBudget: true,
+        },
+        limits: {
+          maxUsers: 5,
+          maxProducts: 1000,
+          maxCashboxes: 3,
+          maxClients: 500,
+          dailySalesLimit: 999999,
+          dailyProductsLimit: 999999,
+          dailyClientsLimit: 999999,
+        },
+      }),
     },
   },
 }));
 
-vi.mock('../../../auth', () => ({
+vi.mock('../../auth', () => ({
   auth: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({
-  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
 }));
 
 describe('updateBusinessArcaData Action', () => {
@@ -33,7 +80,7 @@ describe('updateBusinessArcaData Action', () => {
     });
 
     const inputData = {
-      cuit: '20123456789',
+      cuit: '20123456786',
       razonSocial: 'Test S.A.',
       inicioActividades: new Date(),
       condicionIva: 'MONOTRIBUTO' as const,
@@ -63,7 +110,7 @@ describe('updateBusinessArcaData Action', () => {
     });
 
     const inputData = {
-      cuit: '20123456789',
+      cuit: '20123456786',
       razonSocial: 'Admin Business S.A.',
       inicioActividades: new Date(),
       condicionIva: 'MONOTRIBUTO' as const,

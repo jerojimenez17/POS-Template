@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -6,12 +5,15 @@ import { ProductDetail } from "@/components/catalog/ProductDetail";
 import { CartContext } from "@/components/catalog/context/CartContext";
 import { PublicProduct } from "@/actions/catalog";
 
+/* eslint-disable @next/next/no-img-element */
 vi.mock("next/image", () => ({
   default: (props: Record<string, unknown>) => {
-    const { priority, ...rest } = props;
-    return <img {...rest} />;
+    const rest = { ...props };
+    delete rest.priority;
+    return <img alt="" {...rest} />;
   },
 }));
+/* eslint-enable @next/next/no-img-element */
 
 vi.mock("next/link", () => ({
   default: ({
@@ -23,14 +25,10 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("../../../../public/no-image.svg", () => ({
-  default: "/no-image.svg",
-}));
-
 const mockCartContext = {
   cartState: {
     id: "",
-    items: [],
+    products: [],
     total: 0,
     date: new Date(),
     status: "pendiente" as const,
@@ -89,14 +87,9 @@ describe("ProductDetail — multi-image carousel", () => {
 
     renderWithCart(<ProductDetail product={product} businessSlug="test-shop" />);
 
-    const prevButton = screen.getByLabelText("Imagen anterior");
-    const nextButton = screen.getByLabelText("Siguiente imagen");
-
-    expect(prevButton).toBeInTheDocument();
-    expect(nextButton).toBeInTheDocument();
-
-    const dots = screen.getAllByLabelText(/^Imagen \d+$/);
-    expect(dots).toHaveLength(3);
+    expect(screen.getByLabelText("Imagen anterior")).toBeInTheDocument();
+    expect(screen.getByLabelText("Siguiente imagen")).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/^Imagen \d+$/)).toHaveLength(3);
   });
 
   it("should update current image when clicking next arrow", () => {
@@ -110,12 +103,11 @@ describe("ProductDetail — multi-image carousel", () => {
 
     renderWithCart(<ProductDetail product={product} businessSlug="test-shop" />);
 
-    const nextButton = screen.getByLabelText("Siguiente imagen");
-    fireEvent.click(nextButton);
+    fireEvent.click(screen.getByLabelText("Siguiente imagen"));
 
     const dots = screen.getAllByLabelText(/^Imagen \d+$/);
-    expect(dots[1].className).toContain("bg-white");
-    expect(dots[1].className).not.toContain("bg-white/50");
+    expect(dots[1].className).toContain("bg-primary");
+    expect(dots[1].className).not.toContain("bg-background/80");
   });
 
   it("should show single legacy image without carousel arrows", () => {
@@ -132,7 +124,7 @@ describe("ProductDetail — multi-image carousel", () => {
     expect(screen.queryAllByLabelText(/^Imagen \d+$/)).toHaveLength(0);
   });
 
-  it("should show no-image placeholder when no images are available", () => {
+  it("should show the accessible placeholder when no images are available", () => {
     const product: PublicProduct = {
       ...baseProduct,
       image: null,
@@ -141,8 +133,7 @@ describe("ProductDetail — multi-image carousel", () => {
 
     renderWithCart(<ProductDetail product={product} businessSlug="test-shop" />);
 
-    const placeholder = screen.getByAltText("Imagen no disponible");
-    expect(placeholder).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Imagen no disponible" })).toBeInTheDocument();
   });
 
   it("should fall back to legacy image when images array is empty but image field is set", () => {
@@ -158,37 +149,47 @@ describe("ProductDetail — multi-image carousel", () => {
     expect(mainImage).toHaveAttribute("src", "https://example.com/fallback.jpg");
   });
 
-  it("should disable add-to-cart button when quantity is 0", () => {
+  it("inicia con cantidad 1 y permite agregar al carrito", () => {
     renderWithCart(<ProductDetail product={baseProduct} businessSlug="test-shop" />);
 
-    const addButton = screen.getByRole("button", {
-      name: /agregar al pedido/i,
-    });
-    expect(addButton).toBeDisabled();
-  });
+    const input = screen.getByLabelText("Cantidad del producto") as HTMLInputElement;
+    expect(input.value).toBe("1");
 
-  it("should enable add-to-cart button when quantity is greater than 0", () => {
-    renderWithCart(<ProductDetail product={baseProduct} businessSlug="test-shop" />);
-
-    const increaseButton = screen.getByLabelText("Aumentar cantidad");
-    fireEvent.click(increaseButton);
-
-    const addButton = screen.getByRole("button", {
-      name: /agregar al pedido/i,
-    });
+    const addButton = screen.getByRole("button", { name: /agregar al carrito/i });
     expect(addButton).toBeEnabled();
+    fireEvent.click(addButton);
+
+    expect(mockCartContext.addItem).toHaveBeenCalledTimes(1);
   });
 
-  it("should increase and decrease quantity with the +/- controls", () => {
+  it("deshabilita la compra cuando la cantidad vuelve a 0", () => {
+    renderWithCart(<ProductDetail product={baseProduct} businessSlug="test-shop" />);
+
+    fireEvent.click(screen.getByLabelText("Disminuir cantidad"));
+
+    const input = screen.getByLabelText("Cantidad del producto") as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(screen.getByRole("button", { name: /elegí una cantidad/i })).toBeDisabled();
+  });
+
+  it("deshabilita la compra cuando no hay stock", () => {
+    renderWithCart(
+      <ProductDetail
+        product={{ ...baseProduct, amount: 0 }}
+        businessSlug="test-shop"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /sin stock/i })).toBeDisabled();
+  });
+
+  it("aumenta y disminuye la cantidad con los controles +/-", () => {
     renderWithCart(<ProductDetail product={baseProduct} businessSlug="test-shop" />);
 
     const increaseButton = screen.getByLabelText("Aumentar cantidad");
     const decreaseButton = screen.getByLabelText("Disminuir cantidad");
     const input = screen.getByLabelText("Cantidad del producto") as HTMLInputElement;
 
-    expect(input.value).toBe("");
-
-    fireEvent.click(increaseButton);
     expect(input.value).toBe("1");
 
     fireEvent.click(increaseButton);

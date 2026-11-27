@@ -1,25 +1,66 @@
-import { Eye } from "lucide-react";
-import Link from "next/link";
-import BillState from "@/models/BillState";
-import BillingModal from "./BillingModal";
+"use client";
 import React, { useState } from "react";
+import BillState from "@/models/BillState";
+import InvoiceModal from "./InvoiceModal";
 import PrintOptionsPopover from "./PrintOptionsPopover";
 import { deleteOrderAction } from "@/actions/sales/update";
-import DeleteButton from "../DeleteButton";
-import Modal from "../Modal";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { Session } from "next-auth";
 import { formatLocalDate } from "@/utils/date";
 import { toast } from "sonner";
+import { Ban, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import CreditNoteButton from "./CreditNoteButton";
+import { createCreditNoteAction } from "@/actions/sales/credit-note";
+import { formatInvoiceNumberFull } from "@/lib/utils/bill-type";
+import { hasValidSalesPresentationCae } from "@/services/sales-document-classification";
 
 interface props {
   sale: BillState;
   session: Session | null;
+  qzTrayEnabled?: boolean;
 }
-const SaleAccordion = ({ sale, session }: props) => {
+
+const SaleAccordion = ({ sale, session, qzTrayEnabled }: props) => {
+  const router = useRouter();
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteSale, setDeleteSale] = useState<BillState>();
   const [openBilling, setOpenBilling] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const isAdmin = session?.user?.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  const canIssueCreditNote = session?.user?.role === "USER"
+    || session?.user?.role === "ADMIN"
+    || session?.user?.role === "SUPER_ADMIN";
+  const isInvoiced = hasValidSalesPresentationCae(sale.CAE);
+  const openDetail = () => router.push(`/sales/${sale.id}`);
+  const ncSale = sale.fiscalContext ?? sale.creditNoteRecovery;
+  const ncStatus = sale.creditNote?.status ?? sale.fiscalContext?.creditNote?.status ?? sale.creditNoteRecovery?.creditNoteStatus;
+  const ncEligible = Boolean(
+    sale.fiscalContext?.eligibleForFullCreditNote === true
+    || (Array.isArray(sale.creditNoteRecovery?.missingFields) && sale.creditNoteRecovery.missingFields.length > 0),
+  );
+  const ncBlockedReason = !canIssueCreditNote
+    ? "Tu usuario no tiene permisos para emitir Notas de Crédito."
+    : ncStatus === "AUTHORIZED"
+      ? "La venta ya tiene una Nota de Crédito autorizada."
+      : ncStatus === "PENDING"
+        ? "Hay una Nota de Crédito pendiente de finalizar."
+        : !ncSale
+          ? "La venta no tiene el desglose fiscal necesario para una Nota de Crédito."
+          : !ncEligible
+            ? "La venta no es elegible para una Nota de Crédito."
+            : null;
 
   const handleDelete = async () => {
     if (!deleteSale) return;
@@ -35,23 +76,44 @@ const SaleAccordion = ({ sale, session }: props) => {
   };
 
   return (
-    <div className="rounded p-4 bg-white shadow-sm hover:shadow-md transition-shadow m-1 border border-gray-100 dark:border-gray-800 text-xs sm:text-sm md:text-base w-175 sm:w-full min-w-max">
-      <div className="grid grid-cols-[2fr_2fr_2fr_3fr_2fr_40px_40px_40px] items-center gap-4 text-gray-700 dark:text-gray-300">
+    <>
+      <div
+        onClick={openDetail}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openDetail();
+          }
+        }}
+        role="link"
+        tabIndex={0}
+        className={cn(
+          "grid grid-cols-[2fr_2fr_2fr_3fr_2fr_90px] items-center gap-4",
+          "px-5 py-3.5 w-[700px] sm:w-full min-w-max cursor-pointer",
+        "transition-colors duration-100",
+          "hover:bg-gray-50 dark:hover:bg-gray-800/30",
+          "text-sm text-gray-700 dark:text-gray-300",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        )}
+      >
         {/* Date */}
-        <div className="font-medium text-gray-900 dark:text-gray-100">
+        <span className="font-medium text-gray-900 dark:text-gray-100">
           {sale.date ? formatLocalDate(sale.date) : ""}
-        </div>
+        </span>
 
         {/* Invoice / CAE */}
         <div>
-          {sale.CAE?.CAE && sale.CAE.CAE !== "" ? (
+          {hasValidSalesPresentationCae(sale.CAE) ? (
             <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">
-              {sale.CAE.CAE}
+              {formatInvoiceNumberFull(sale.CAE?.nroComprobante, sale.ptoVenta ?? sale.CAE?.ptoVenta)}
             </span>
           ) : (
             <button
-              onClick={() => setOpenBilling(true)}
-              className="px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors text-xs font-semibold whitespace-nowrap"
+              onClick={(event) => {
+                event.stopPropagation();
+                setOpenBilling(true);
+              }}
+              className="px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-800 dark:hover:text-blue-100 transition-colors text-xs font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               Facturar
             </button>
@@ -59,17 +121,17 @@ const SaleAccordion = ({ sale, session }: props) => {
         </div>
 
         {/* Payment Method */}
-        <div className="text-gray-600 dark:text-gray-400 capitalize">
+        <span className="text-gray-600 dark:text-gray-400 capitalize">
           {sale.paidMethod}
-        </div>
+        </span>
 
         {/* Seller */}
-        <div className="truncate text-gray-600 dark:text-gray-400">
+        <span className="truncate text-gray-600 dark:text-gray-400">
           {sale.seller.split("@")[0]}
-        </div>
+        </span>
 
         {/* Total Price */}
-        <div className="font-semibold text-gray-900 dark:text-gray-100 text-right pr-2">
+        <span className="font-semibold text-gray-900 dark:text-gray-100 text-right pr-2">
           $
           {sale.totalWithDiscount
             ? sale.totalWithDiscount.toLocaleString("es-AR", {
@@ -77,56 +139,75 @@ const SaleAccordion = ({ sale, session }: props) => {
                 maximumFractionDigits: 2,
               })
             : sale.total}
-        </div>
+        </span>
 
-        {/* Action: Detail */}
-        <Link
-          href={`/sales/${sale.id}`}
-          className="flex justify-center items-center cursor-pointer p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-          title="Ver Detalle"
+        {/* Actions */}
+        <div
+          className="flex items-center justify-center gap-0.5"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
         >
-          <Eye className="h-4 w-4 text-gray-500" />
-        </Link>
+          <PrintOptionsPopover sale={sale} session={session} qzTrayEnabled={qzTrayEnabled} />
 
-        {/* Action: Print */}
-        <div className="flex justify-center items-center">
-          <PrintOptionsPopover sale={sale} session={session} />
-        </div>
-
-        {/* Action: Delete */}
-        <div className="flex justify-center items-center p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
-          <DeleteButton
-            disable={session?.user?.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL}
-            onClick={(e) => {
-              e.stopPropagation();
-              setDeleteSale(sale);
-              setOpenDelete(true);
-            }}
-          />
+          {isInvoiced ? (
+            ncBlockedReason ? (
+              <button
+                type="button"
+                disabled
+                title={ncBlockedReason}
+                aria-label={ncBlockedReason}
+                className="cursor-not-allowed p-1.5 rounded-md text-gray-300 dark:text-gray-600"
+              >
+                <Ban className="h-4 w-4" />
+              </button>
+            ) : (
+              <CreditNoteButton
+                variant="icon"
+                sale={ncSale!}
+                createCreditNote={createCreditNoteAction}
+              />
+            )
+          ) : (
+            <button
+              disabled={!isAdmin}
+              onClick={(event) => {
+                event.stopPropagation();
+                setDeleteSale(sale);
+                setOpenDelete(true);
+              }}
+              className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Eliminar venta"
+              aria-label={`Eliminar venta ${sale.id}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
-      <Modal
-        message="Desea eliminar la venta?"
-        onCancel={() => {
-          setOpenDelete(false);
-        }}
-        onAcept={handleDelete}
-        blockButton={deleting}
-        onClose={() => {
-          setOpenDelete(false);
-        }}
-        visible={openDelete}
-      />
 
-      <BillingModal
+      <AlertDialog open={openDelete} onOpenChange={setOpenDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar venta</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar esta venta? Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Eliminando..." : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <InvoiceModal
         open={openBilling}
         onOpenChange={setOpenBilling}
         sale={sale}
-        onSuccess={() => {
-          setOpenBilling(false);
-        }}
       />
-    </div>
+    </>
   );
 };
 

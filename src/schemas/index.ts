@@ -112,8 +112,48 @@ export const ClientSchema = z.object({
   balance: z.coerce.number(),
 });
 
+const optionalClientText = (max: number) => z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().max(max).optional(),
+);
+
+export const clientFormSchema = z.object({
+  name: z.string().trim().min(1, "El nombre es obligatorio").max(100, "El nombre no puede superar los 100 caracteres"),
+  address: optionalClientText(200),
+  cellPhone: optionalClientText(50),
+  cuit: optionalClientText(20),
+  ivaCondition: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.enum(["Consumidor Final", "Responsable Inscripto", "Monotributista", "Exento"], { errorMap: () => ({ message: "La condición de IVA no es válida" }) }).optional(),
+  ),
+  email: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().trim().toLowerCase().email("El email no es válido").max(254).optional(),
+  ),
+}).strict();
+
+const clientFiscalIdentitySchema = z.object({
+  fiscalDocumentType: z.preprocess((value) => value === "" ? null : value, z.enum(["CUIT", "DNI"]).nullable()).optional(),
+  // Keep document identifiers as text so leading zeroes are preserved.
+  fiscalDocumentNumber: z.preprocess((value) => typeof value === "string" && value.trim() === "" ? null : value, z.string().trim().max(30).nullable()).optional(),
+}).strict();
+
+export const updateClientSchema = clientFormSchema
+  .merge(clientFiscalIdentitySchema)
+  .extend({ id: z.string().trim().min(1, "El cliente es obligatorio") })
+  .strict()
+  .superRefine((identity, context) => {
+  const hasType = identity.fiscalDocumentType !== undefined && identity.fiscalDocumentType !== null;
+  const hasNumber = identity.fiscalDocumentNumber !== undefined && identity.fiscalDocumentNumber !== null && identity.fiscalDocumentNumber !== "";
+  if (hasType !== hasNumber) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "El tipo y número de documento deben informarse juntos", path: [hasType ? "fiscalDocumentNumber" : "fiscalDocumentType"] });
+  }
+});
+export const deleteClientSchema = z.object({ id: z.string().trim().min(1, "El cliente es obligatorio") }).strict();
+
 export const BillParametersSchema = z.object({
-  clientCondition: z.string(),
+  clientCondition: z.enum(["Consumidor Final", "Responsable Inscripto", "Monotributista", "Exento"]),
+  clientDocumentType: z.enum(["", "CUIT", "DNI"]).default(""),
   paidMethod: z.string(),
   twoMethods: z.boolean(),
   discount: z.coerce.number(),
@@ -122,6 +162,10 @@ export const BillParametersSchema = z.object({
   secondPaidMethod: z.string().optional(),
   totalSecondMethod: z.coerce.number().optional(),
   ptoVenta: z.coerce.number().optional(),
+}).superRefine((data, ctx) => {
+    if (data.clientCondition !== "Consumidor Final" && data.documentNumber <= 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["documentNumber"], message: "Documento requerido para esta condición IVA" });
+  }
 });
 export const AccountSchema = z
   .object({
@@ -144,9 +188,50 @@ export const AccountSchema = z
     path: ["clientEmail"],
   });
 
+/**
+ * Valida un CUIT/CUIL argentino usando el algoritmo de módulo 11.
+ * Acepta formatos con o sin guiones (20-12345678-9 o 20123456789).
+ */
+function isValidCuit(value: string): boolean {
+  const cleaned = value.replace(/\D/g, "");
+  if (cleaned.length !== 11) return false;
+
+  // Los primeros 2 dígitos identifican el tipo (persona/empresa)
+  const type = parseInt(cleaned.substring(0, 2), 10);
+  const validTypes = [20, 23, 24, 27, 30, 33, 34];
+  if (!validTypes.includes(type)) return false;
+
+  // Algoritmo de módulo 11 de AFIP
+  const multipliers = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    sum += parseInt(cleaned[i], 10) * multipliers[i];
+  }
+
+  const mod = 11 - (sum % 11);
+  const checkDigit = mod === 11 ? 0 : mod === 10 ? 9 : mod;
+
+  return checkDigit === parseInt(cleaned[10], 10);
+}
+
+/**
+ * Esquema de validación para los campos de ARCA/AFIP.
+ * CUIT se valida con regex de formato + algoritmo de módulo 11.
+ */
+export const ShortcutKeyEnum = z.enum(["F1", "F2", "F3"]);
+
+export const SaveShortcutConfigSchema = z.object({
+  key: ShortcutKeyEnum,
+  productId: z.string().min(1, "Producto es obligatorio"),
+});
+
 export const ArcaFieldsSchema = z.object({
-  cuit: z.string().min(1, { message: "CUIT es obligatorio" }),
-  razonSocial: z.string().min(1, { message: "Razón Social es obligatoria" }),
+  cuit: z
+    .string()
+    .min(1, "CUIT es obligatorio")
+    .regex(/^\d{2}-?\d{8}-?\d$/, "Formato inválido. Usá 20-12345678-9 o 20123456789")
+    .refine(isValidCuit, "CUIT inválido. El dígito verificador no coincide."),
+  razonSocial: z.string().min(1, "Razón Social es obligatoria"),
   inicioActividades: z.date({
     required_error: "Inicio de actividades es obligatorio",
   }),

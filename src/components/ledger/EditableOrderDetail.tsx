@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useOptimistic, startTransition } from "react";
+import { useState, useEffect, useRef, useOptimistic, startTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,10 +13,10 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Search, Edit3 } from "lucide-react";
+import { Loader2, Plus, Search, Edit3, Trash2 } from "lucide-react";
 import OrderItemsTable from "./OrderItemsTable";
-import { addItemsToOrder, updateOrderItem, removeOrderItem } from "@/actions/unpaid-orders";
-import { getProducts } from "@/actions/stock";
+import { addItemsToOrder, updateOrderItem, removeOrderItem, updateOrderDiscount } from "@/actions/unpaid-orders";
+import { getProductsBySearch, getProductCurrentPrice, getProductsCurrentPrices } from "@/actions/stock";
 
 interface OrderItemFromDB {
   id: string;
@@ -60,14 +60,20 @@ interface EditableOrderDetailProps {
   order: Order;
   businessId: string;
   onOrderUpdated?: () => void;
+  discountPercentage?: number;
+  discountAmount?: number;
 }
 
 export default function EditableOrderDetail({
   order,
   businessId,
   onOrderUpdated,
+  discountPercentage = 0,
+  discountAmount = 0,
 }: EditableOrderDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [discountEditValue, setDiscountEditValue] = useState(String(discountPercentage));
   const [items, setItems] = useState<OrderItem[]>(
     order.items.map((item) => ({
       ...item,
@@ -78,25 +84,37 @@ export default function EditableOrderDetail({
   const [isLoading, setIsLoading] = useState(false);
 
   type OptimisticAction =
-    | { type: "add"; item: OrderItem }
     | { type: "remove"; itemId: string };
 
   const [optimisticItems, addOptimisticAction] = useOptimistic(
     items,
     (state, action: OptimisticAction) => {
-      if (action.type === "add") return [...state, action.item];
       if (action.type === "remove") return state.filter((item) => item.id !== action.itemId);
       return state;
     }
   );
+  const [itemToRemove, setItemToRemove] = useState<string | null>(null);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [searchProduct, setSearchProduct] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState("1");
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
-  useEffect(() => {
+  // ──── Prop-sync (no useEffect) ────
+  // EditableOrderDetailWrapper remounts only when order.id changes, so after a
+  // same-id router.refresh() the refreshed props MUST be folded back into this
+  // local editable state or the UI desyncs from server truth after an edit
+  // (contract documented in sdd/merge-upstream-aug26/report-D.md).
+  // React's sanctioned pattern for resetting state when a tracked prop changes
+  // is adjusting state during render behind a value-changed guard — this avoids
+  // set-state-in-effect (React Compiler rule) with identical semantics: local
+  // edits survive until the prop identity/value actually changes.
+  const [lastSyncedItems, setLastSyncedItems] = useState(order.items);
+  if (lastSyncedItems !== order.items) {
+    setLastSyncedItems(order.items);
     setItems(
       order.items.map((item) => ({
         ...item,
@@ -104,58 +122,82 @@ export default function EditableOrderDetail({
         description: item.description || "Producto",
       }))
     );
-  }, [order.items]);
+  }
 
-  useEffect(() => {
-    if (searchProduct) {
-      const filtered = products.filter(
-        (p) =>
-          p.description?.toLowerCase().includes(searchProduct.toLowerCase()) ||
-          p.code?.toLowerCase().includes(searchProduct.toLowerCase())
-      );
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts(products);
-    }
-  }, [searchProduct, products]);
+  const [lastSyncedDiscountPercentage, setLastSyncedDiscountPercentage] = useState(
+    discountPercentage
+  );
+  if (lastSyncedDiscountPercentage !== discountPercentage) {
+    setLastSyncedDiscountPercentage(discountPercentage);
+    setDiscountEditValue(String(discountPercentage));
+  }
 
-  const fetchProducts = async () => {
+  const loadProducts = async (query: string) => {
+    setIsLoadingProducts(true);
     try {
-      const data = await getProducts();
+      const data = await getProductsBySearch(query, undefined);
       setProducts(data || []);
-      setFilteredProducts(data || []);
     } catch (error) {
-      console.error("Error fetching products:", error);
+      console.error("Error loading products:", error);
       toast.error("Error al cargar productos");
+      setProducts([]);
+    } finally {
+      setIsLoadingProducts(false);
     }
   };
 
-  const handleOpenAddProduct = async () => {
-    await fetchProducts();
+  // Debounced server-side search triggered by typing. The very first run
+  // (mount, searchProduct === "") is a no-op because the initial load is kicked
+  // off directly from handleOpenAddProduct — avoiding a double load on open.
+  useEffect(() => {
+    if (!initialLoadDoneRef.current) {
+      initialLoadDoneRef.current = true;
+      return;
+    }
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      loadProducts(searchProduct);
+    }, 400);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
+      }
+    };
+  }, [searchProduct]);
+
+  const handleOpenAddProduct = () => {
     setSelectedProduct(null);
-    setQuantity(1);
+    setQuantity("1");
     setSearchProduct("");
     setIsAddProductOpen(true);
+    loadProducts("");
   };
 
   const handleUpdateQuantity = async (itemId: string, newQuantity: number) => {
+    const safeQuantity = Math.max(1, Number.isFinite(newQuantity) ? newQuantity : 1);
     setIsLoading(true);
     try {
       const result = await updateOrderItem({
         itemId,
         orderId: order.id,
-        quantity: newQuantity,
+        quantity: safeQuantity,
       });
 
       if (result.success) {
         setItems((prev) =>
           prev.map((item) =>
             item.id === itemId
-              ? { ...item, quantity: newQuantity, subTotal: newQuantity * item.price }
+              ? { ...item, quantity: safeQuantity, subTotal: safeQuantity * item.price }
               : item
           )
         );
         toast.success("Cantidad actualizada");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al actualizar cantidad");
@@ -186,6 +228,7 @@ export default function EditableOrderDetail({
           )
         );
         toast.success("Precio actualizado");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al actualizar precio");
@@ -198,7 +241,16 @@ export default function EditableOrderDetail({
     }
   };
 
-  const handleRemoveItem = async (itemId: string) => {
+  const handleRemoveItem = (itemId: string) => {
+    setItemToRemove(itemId);
+  };
+
+  const confirmRemoveItem = async () => {
+    if (!itemToRemove) return;
+
+    const itemId = itemToRemove;
+    setItemToRemove(null);
+
     startTransition(() => {
       addOptimisticAction({ type: "remove", itemId });
     });
@@ -213,6 +265,7 @@ export default function EditableOrderDetail({
       if (result.success) {
         setItems((prev) => prev.filter((item) => item.id !== itemId));
         toast.success("Item eliminado");
+        setHasChanges(true);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al eliminar item");
@@ -233,25 +286,11 @@ export default function EditableOrderDetail({
       return;
     }
 
-    if (quantity <= 0) {
-      toast.error("La cantidad debe ser mayor a 0");
+    const quantityNum = parseFloat(quantity);
+    if (!Number.isFinite(quantityNum) || quantityNum < 1) {
+      toast.error("La cantidad mínima es 1");
       return;
     }
-
-    const newItem: OrderItem = {
-      id: Date.now().toString(),
-      productId: selectedProduct.id,
-      description: selectedProduct.description || "Producto",
-      code: selectedProduct.code,
-      price: selectedProduct.salePrice,
-      quantity: quantity,
-      subTotal: selectedProduct.salePrice * quantity,
-      addedAt: new Date(),
-    };
-
-    startTransition(() => {
-      addOptimisticAction({ type: "add", item: newItem });
-    });
 
     setIsLoading(true);
     try {
@@ -264,25 +303,134 @@ export default function EditableOrderDetail({
             code: selectedProduct.code || undefined,
             description: selectedProduct.description || undefined,
             price: selectedProduct.salePrice,
-            quantity: quantity,
-            subTotal: selectedProduct.salePrice * quantity,
+            quantity: quantityNum,
+            subTotal: selectedProduct.salePrice * quantityNum,
           },
         ],
       });
 
       if (result.success) {
         toast.success("Producto agregado");
-        setItems((prev) => [...prev, newItem]);
+        setHasChanges(true);
         setIsAddProductOpen(false);
         onOrderUpdated?.();
       } else {
         toast.error(result.error || "Error al agregar producto");
-        setItems((prev) => [...prev]);
       }
     } catch (error) {
       console.error("Error adding product:", error);
       toast.error("Error al agregar producto");
-      setItems((prev) => [...prev]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateDiscount = async () => {
+    const parsed = Number(discountEditValue);
+    let clamped = isNaN(parsed) ? 0 : parsed;
+    if (clamped < 0) clamped = 0;
+    if (clamped > 100) clamped = 100;
+
+    setIsLoading(true);
+    try {
+      const result = await updateOrderDiscount({
+        orderId: order.id,
+        discountPercentage: clamped,
+        businessId,
+      });
+
+      if (result.success) {
+        toast.success("Descuento actualizado");
+        setHasChanges(true);
+        onOrderUpdated?.();
+      } else {
+        toast.error(result.error || "Error al actualizar descuento");
+        setDiscountEditValue(String(discountPercentage));
+      }
+    } catch (error) {
+      console.error("Error updating discount:", error);
+      toast.error("Error al actualizar descuento");
+      setDiscountEditValue(String(discountPercentage));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDiscountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleUpdateDiscount();
+    }
+    if (e.key === "Escape") {
+      setDiscountEditValue(String(discountPercentage));
+    }
+  };
+
+  const handleRefreshPrice = async (itemId: string) => {
+    const item = items.find((i) => i.id === itemId);
+    if (!item?.productId) {
+      toast.error("Este item no tiene un producto asociado en el catálogo");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await getProductCurrentPrice(item.productId);
+      if (!result) {
+        toast.error("No se encontró el producto en el catálogo");
+        return;
+      }
+
+      await handleUpdatePrice(itemId, result.salePrice);
+    } catch (error) {
+      console.error("Error refreshing price:", error);
+      toast.error("Error al obtener el precio actual");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefreshAllPrices = async () => {
+    const itemsWithProduct = items.filter((item) => item.productId);
+    if (itemsWithProduct.length === 0) {
+      toast.error("No hay items con productos asociados en el catálogo");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const productIds = itemsWithProduct.map((item) => item.productId!);
+      const pricesMap = await getProductsCurrentPrices(productIds);
+
+      let updatedCount = 0;
+      for (const item of itemsWithProduct) {
+        const currentPrice = pricesMap[item.productId!];
+        if (currentPrice !== undefined && currentPrice !== item.price) {
+          await updateOrderItem({
+            itemId: item.id,
+            orderId: order.id,
+            price: currentPrice,
+          });
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === item.id
+                ? { ...i, price: currentPrice, subTotal: i.quantity * currentPrice }
+                : i
+            )
+          );
+          updatedCount++;
+        }
+      }
+
+      if (updatedCount > 0) {
+        toast.success(`Precios actualizados: ${updatedCount} productos`);
+        onOrderUpdated?.();
+      } else {
+        toast.info("Todos los precios ya están actualizados");
+      }
+    } catch (error) {
+      console.error("Error refreshing all prices:", error);
+      toast.error("Error al actualizar precios");
     } finally {
       setIsLoading(false);
     }
@@ -294,10 +442,68 @@ export default function EditableOrderDetail({
 
   return (
     <>
-      <div className="flex justify-end mb-4">
-        <Button variant="outline" onClick={() => setIsEditing(!isEditing)}>
+      <div className="flex justify-between items-center mb-4">
+        {/* Discount display/input */}
+        <div className="flex items-center gap-2">
+          {isEditing ? (
+            <>
+              <label
+                htmlFor="discount-input-edit"
+                className="text-sm text-muted-foreground"
+              >
+                Descuento
+              </label>
+              <div className="relative">
+                <input
+                  id="discount-input-edit"
+                  type="number"
+                  aria-label="Porcentaje de descuento"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className="h-8 w-20 rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 text-right text-sm tabular-nums focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  value={discountEditValue}
+                  onChange={(e) => setDiscountEditValue(e.target.value)}
+                  onKeyDown={handleDiscountKeyDown}
+                  onBlur={handleUpdateDiscount}
+                  disabled={isLoading}
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                  %
+                </span>
+              </div>
+              {Number(discountEditValue) > 0 && (
+                <span className="text-sm text-red-600">
+                  (-${Math.round(
+                    order.items.reduce((sum, item) => sum + item.subTotal, 0) *
+                    Number(discountEditValue) * 0.01
+                  ).toLocaleString("es-AR")})
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              Descuento: {discountPercentage > 0 ? `${discountPercentage}%` : "0%"}
+              {discountPercentage > 0 && (
+                <span className="text-red-600 ml-1">
+                  (-${Math.round(discountAmount).toLocaleString("es-AR")})
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+
+        <Button variant="outline" onClick={() => {
+          if (isEditing) {
+            // Exiting edit mode
+            setIsEditing(false);
+          } else {
+            // Entering edit mode — reset changes tracking
+            setHasChanges(false);
+            setIsEditing(true);
+          }
+        }}>
           <Edit3 className="h-4 w-4 mr-2" />
-          {isEditing ? "Cancelar edición" : "Editar items"}
+          {isEditing ? (hasChanges ? "Terminar edición" : "Cancelar edición") : "Editar items"}
         </Button>
       </div>
 
@@ -306,12 +512,14 @@ export default function EditableOrderDetail({
         isEditable={isEditing}
         onUpdateQuantity={isEditing ? handleUpdateQuantity : undefined}
         onUpdatePrice={isEditing ? handleUpdatePrice : undefined}
+        onRefreshPrice={isEditing ? handleRefreshPrice : undefined}
+        onRefreshAllPrices={isEditing ? handleRefreshAllPrices : undefined}
         onRemoveItem={isEditing ? handleRemoveItem : undefined}
         onAddItem={isEditing ? handleOpenAddProduct : undefined}
       />
 
       <Dialog open={isAddProductOpen} onOpenChange={setIsAddProductOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Agregar Producto</DialogTitle>
             <DialogDescription>
@@ -331,12 +539,16 @@ export default function EditableOrderDetail({
             </div>
 
             <div className="max-h-[250px] overflow-y-auto border rounded-lg">
-              {filteredProducts.length === 0 ? (
+              {isLoadingProducts ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : products.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   No se encontraron productos
                 </div>
               ) : (
-                filteredProducts.map((product) => (
+                products.map((product) => (
                   <div
                     key={product.id}
                     onClick={() => setSelectedProduct(product)}
@@ -378,9 +590,11 @@ export default function EditableOrderDetail({
                   <Input
                     type="number"
                     min={1}
+                    step="0.01"
                     max={selectedProduct.amount}
                     value={quantity}
-                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    placeholder="1"
                   />
                 </div>
                 <div className="flex-1 text-right">
@@ -388,7 +602,7 @@ export default function EditableOrderDetail({
                   <p className="text-lg font-bold">
                     $
                     {(
-                      selectedProduct.salePrice * quantity
+                      selectedProduct.salePrice * (parseFloat(quantity) || 0)
                     ).toLocaleString("es-AR")}
                   </p>
                 </div>
@@ -412,6 +626,37 @@ export default function EditableOrderDetail({
                 <Plus className="h-4 w-4 mr-2" />
               )}
               Agregar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmación para eliminar item */}
+      <Dialog open={itemToRemove !== null} onOpenChange={(open) => { if (!open) setItemToRemove(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Eliminar item</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que querés eliminar este item de la orden? Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isLoading}>
+                Cancelar
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={confirmRemoveItem}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Eliminar
             </Button>
           </DialogFooter>
         </DialogContent>

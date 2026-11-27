@@ -5,13 +5,35 @@ import { PublicProduct } from "@/actions/catalog";
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
 }));
 
-vi.mock("@/lib/db", () => ({
-  db: {
+vi.mock("@/lib/auth-gates", () => ({
+  assertLimit: vi.fn().mockResolvedValue({ success: true }),
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/lib/daily-limits", () => ({
+  getDailyUsage: vi.fn().mockResolvedValue({ productsCreated: 0 }),
+  checkDailyLimit: vi.fn().mockResolvedValue({ allowed: true, limit: 999999 }),
+  incrementDailyUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/pusher-server", () => ({
+  pusherServer: {
+    trigger: vi.fn().mockResolvedValue({}),
+  },
+}));
+
+vi.mock("@/lib/db", () => {
+  const dbMock = {
     product: {
+      count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockResolvedValue({ id: "product-1" }),
       update: vi.fn().mockResolvedValue({ id: "product-1" }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    supplier: {
       findUnique: vi.fn().mockResolvedValue(null),
     },
     productImage: {
@@ -19,8 +41,17 @@ vi.mock("@/lib/db", () => ({
       createMany: vi.fn().mockResolvedValue({ count: 2 }),
       deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
-  },
-}));
+    stockMovement: { create: vi.fn().mockResolvedValue({ id: "sm-1" }) },
+    // Callback-form $transaction used by updateProduct (and other barrel
+    // actions). Pass the same db mock as the `tx` so the same vi.fns back the
+    // calls.
+    $transaction: vi.fn().mockImplementation(async (x: unknown) => {
+      if (Array.isArray(x)) return Promise.all(x);
+      return typeof x === "function" ? x(dbMock) : x;
+    }),
+  };
+  return { db: dbMock };
+});
 
 describe("newProduct — multi-image support", () => {
   beforeEach(() => {

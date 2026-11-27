@@ -8,19 +8,28 @@ vi.mock('../src/lib/db', () => ({
     },
     cashBox: {
       findUnique: vi.fn().mockResolvedValue(null),
-      upsert: vi.fn().mockResolvedValue({ id: 'cashbox-1', businessId: 'business-123', total: 0 }),
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({ id: 'cashbox-1', businessId: 'business-123', total: 0 }),
+      create: vi.fn().mockResolvedValue({ id: 'cashbox-1', businessId: 'business-123', total: 0 }),
+    },
+    cashboxSession: {
+      findFirst: vi.fn().mockResolvedValue(null),
     },
   },
 }));
 
 vi.mock('../auth', () => ({
   auth: vi.fn().mockResolvedValue({
-    user: { businessId: 'business-123', name: 'seller-1' }
+    user: { businessId: 'business-123', name: 'seller-1', id: 'user-1' }
   }),
 }));
 
-vi.mock('next/server', () => ({
-  revalidatePath: vi.fn(),
+vi.mock('../src/lib/auth-gates', () => ({
+  assertWritePermission: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
 }));
 
 describe('CashBox Balance Integration', () => {
@@ -184,15 +193,17 @@ describe('CashBox Balance Integration', () => {
   });
 
   describe('updateBusinessBalance Function', () => {
-    it('UPDATE-1: Should upsert CashBox with increment', async () => {
+    it('UPDATE-1: Should create CashBox when none exists', async () => {
       const { db } = await import('../src/lib/db');
 
       await updateBusinessBalance(150);
 
-      expect(db.cashBox.upsert).toHaveBeenCalledWith({
-        where: { businessId: 'business-123' },
-        update: { total: { increment: 150 } },
-        create: { businessId: 'business-123', total: 150 },
+      expect(db.cashBox.create).toHaveBeenCalledWith({
+        data: {
+          businessId: 'business-123',
+          total: 150,
+          name: 'Caja Principal',
+        },
       });
     });
 
