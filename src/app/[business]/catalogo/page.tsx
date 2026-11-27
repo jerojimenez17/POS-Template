@@ -75,9 +75,9 @@ export default async function PublicCatalogPage({ params }: Props) {
   return (
     <>
     <ProductSelector
-      variant="public-catalog"
       products={products}
       business={{ name: business.name, logo: business.logo }}
+      businessSlug={businessSlug}
     />
     <PublicCart businessId={business.id} />
     </>

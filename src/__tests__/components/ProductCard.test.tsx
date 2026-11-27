@@ -1,52 +1,51 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ProductCard from "@/components/catalog/ProductCard";
 import { PublicProduct } from "@/actions/catalog";
 
+vi.mock("next/link", () => ({
+  default: ({
+    children,
+    href,
+    className,
+    ...rest
+  }: {
+    children: React.ReactNode;
+    href: string;
+    className?: string;
+  } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} className={className} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 /* eslint-disable @next/next/no-img-element */
 vi.mock("next/image", () => ({
-  default: (props: Record<string, unknown>) => {
-    const { ...imgProps } = props;
-    return <img alt="" {...imgProps} />;
-  },
+  default: (props: Record<string, unknown>) => <img alt="" {...props} />,
 }));
 /* eslint-enable @next/next/no-img-element */
-
-vi.mock("../../../public/no-image.svg", () => ({
-  default: "/no-image.svg",
-}));
 
 const mockProduct: PublicProduct = {
   id: "prod-1",
   code: "P001",
-  description: "Producto de prueba",
-  brand: "Marca Test",
-  category: "Categoría Test",
-  salePrice: 150.5,
-  unit: "un",
-  image: "https://example.com/img.jpg",
+  description: "Jamón cocido natural 250 g",
+  brand: "Cagnoli",
+  category: "Fiambres y Quesos",
+  salePrice: 6450,
+  unit: "unidad",
+  image: null,
   images: [],
   amount: 10,
-  details: "Detalles del producto",
+  details: "Fiambre para picadas.",
 };
-
-const MockProductModal = ({
-  product: _product,
-  children,
-}: {
-  product: PublicProduct;
-  children: React.ReactNode;
-}) => <div data-testid="product-modal">{children}</div>;
 
 const defaultProps = {
   product: mockProduct,
-  isCatalog: true,
-  unitsToOrder: { id: "", amount: 0 },
-  onQuantityChange: vi.fn(),
+  cartQuantity: 0,
   onAddToCart: vi.fn(),
-  ProductModal: MockProductModal,
+  businessSlug: "mi-negocio",
 };
 
 describe("ProductCard", () => {
@@ -54,79 +53,87 @@ describe("ProductCard", () => {
     vi.clearAllMocks();
   });
 
-  describe("Image aspect ratio - 4:3", () => {
-    it("should use aspect-[4/3] class instead of aspect-square", () => {
-      const { container } = render(<ProductCard {...defaultProps} />);
-      const imageContainer = container.querySelector("div.relative");
-      expect(imageContainer?.className).toContain("aspect-[4/3]");
-    });
+  it("muestra la información relevante del producto y no expone el código", () => {
+    render(<ProductCard {...defaultProps} />);
+
+    expect(screen.getByText("Jamón cocido natural 250 g")).toBeInTheDocument();
+    expect(screen.getByText("Cagnoli")).toBeInTheDocument();
+    expect(screen.getByText("Fiambres y Quesos")).toBeInTheDocument();
+    expect(screen.getAllByText(/\$\s?6\.450/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/P001/)).not.toBeInTheDocument();
   });
 
-  describe("Image uses fill prop", () => {
-    it("should render product Image with fill prop to avoid CLS", () => {
-      render(<ProductCard {...defaultProps} />);
-      const img = screen.getByAltText(/Imagen de Producto de prueba/);
-      expect(img).toHaveAttribute("alt");
-      expect(img.closest(".relative")).toBeTruthy();
-    });
+  it("agrega una unidad al carrito desde la card", () => {
+    render(<ProductCard {...defaultProps} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /agregar.*al carrito/i }));
+
+    expect(defaultProps.onAddToCart).toHaveBeenCalledWith(mockProduct, 1);
+    expect(defaultProps.onAddToCart).toHaveBeenCalledTimes(1);
   });
 
-  describe("motion-safe animation classes", () => {
-    it("should use motion-safe:transition-shadow on the Card", () => {
-      const { container } = render(<ProductCard {...defaultProps} />);
-      const card = container.querySelector(
-        "[class*='motion-safe:transition-shadow']",
-      );
-      expect(card).toBeTruthy();
-    });
+  it("permite agregar más de una unidad desde la card", () => {
+    render(<ProductCard {...defaultProps} />);
 
-    it("should use motion-safe:transition-colors on the add-to-cart button", () => {
-      render(<ProductCard {...defaultProps} />);
-      const addButton = screen.getByRole("button", {
-        name: /agregar.*al carrito/i,
-      });
-      expect(addButton.className).toContain("motion-safe:transition-colors");
-    });
+    fireEvent.click(screen.getByLabelText("Aumentar cantidad de Jamón cocido natural 250 g"));
+    fireEvent.click(screen.getByLabelText("Aumentar cantidad de Jamón cocido natural 250 g"));
+    fireEvent.click(screen.getByRole("button", { name: /agregar.*al carrito/i }));
 
-    it("should use motion-safe:transition-transform on the product image", () => {
-      render(<ProductCard {...defaultProps} />);
-      const img = screen.getByAltText(/Imagen de Producto de prueba/);
-      expect(img.className).toContain("motion-safe:transition-transform");
-      expect(img.className).toContain("motion-safe:duration-500");
-    });
+    expect(defaultProps.onAddToCart).toHaveBeenCalledWith(mockProduct, 3);
   });
 
-  describe("Accessibility - aria-label", () => {
-    it("should have aria-label on the Card wrapper", () => {
-      const { container } = render(<ProductCard {...defaultProps} />);
-      const card = container.querySelector("[class*='rounded-2xl']");
-      expect(card).toHaveAttribute("aria-label");
-    });
+  it("navega al detalle al tocar la card, sin botón de detalle aparte", () => {
+    render(<ProductCard {...defaultProps} />);
+
+    const detailLink = screen.getByRole("link", { name: /ver detalle de/i });
+    expect(detailLink).toHaveAttribute("href", "/mi-negocio/catalogo/prod-1");
+    expect(screen.queryByRole("button", { name: /^detalle$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^detalle$/i })).not.toBeInTheDocument();
   });
 
-  describe("Quantity input attributes", () => {
-    it("should have autoComplete off on the quantity input", () => {
-      render(<ProductCard {...defaultProps} />);
-      const input = screen.getByRole("spinbutton");
-      expect(input).toHaveAttribute("autoComplete", "off");
-    });
+  it("muestra el estado sin stock y deshabilita la compra", () => {
+    render(
+      <ProductCard
+        {...defaultProps}
+        product={{ ...mockProduct, amount: 0 }}
+      />,
+    );
+
+    expect(screen.getAllByText("Sin stock").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /agregar.*al carrito/i })).toBeDisabled();
   });
 
-  describe("Transition class specificity", () => {
-    it("should use transition-shadow instead of transition-all on the Card", () => {
-      const { container } = render(<ProductCard {...defaultProps} />);
-      const card = container.querySelector("[class*='rounded-2xl']");
-      expect(card?.className).toContain("transition-shadow");
-      expect(card?.className).not.toContain("transition-all");
-    });
+  it("muestra la cantidad en carrito y permite agregar otro", () => {
+    render(<ProductCard {...defaultProps} cartQuantity={2} />);
 
-    it("should use transition-colors instead of transition-all on the add-to-cart button", () => {
-      render(<ProductCard {...defaultProps} />);
-      const addButton = screen.getByRole("button", {
-        name: /agregar.*al carrito/i,
-      });
-      expect(addButton.className).toContain("transition-colors");
-      expect(addButton.className).not.toContain("transition-all");
-    });
+    expect(screen.getByText("2 en carrito")).toBeInTheDocument();
+    const addButton = screen.getByRole("button", { name: /agregar.*al carrito/i });
+    expect(addButton).toBeEnabled();
+    expect(addButton).toHaveTextContent("Agregar");
+  });
+
+  it("deshabilita la compra cuando ya se alcanzó el stock disponible", () => {
+    render(<ProductCard {...defaultProps} cartQuantity={10} />);
+
+    expect(screen.getByRole("button", { name: /agregar.*al carrito/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /agregar.*al carrito/i })).toHaveTextContent("Máximo");
+  });
+
+  it("usa un fallback accesible cuando el producto no tiene imagen", () => {
+    render(<ProductCard {...defaultProps} />);
+
+    expect(screen.getByRole("img", { name: "Imagen no disponible" })).toBeInTheDocument();
+  });
+
+  it("mantiene foco visible y transiciones explícitas", () => {
+    const { container } = render(<ProductCard {...defaultProps} />);
+    const article = container.querySelector("article");
+    const addButton = screen.getByRole("button", { name: /agregar.*al carrito/i });
+
+    expect(article?.className).toContain("focus-within:ring-2");
+    expect(article?.className).toContain("motion-safe:transition-[transform,box-shadow]");
+    expect(article?.className).not.toContain("transition-all");
+    expect(addButton.className).toContain("motion-safe:transition-colors");
+    expect(addButton.className).not.toContain("transition-all");
   });
 });
