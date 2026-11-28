@@ -1,3 +1,4 @@
+import QRCode from "qrcode";
 import { describe, expect, it, vi } from "vitest";
 
 declare global {
@@ -30,7 +31,7 @@ interface Payment {
     };
   };
   total: number;
-  business?: { ptoVenta?: number[] };
+  business?: { cuit?: string; ptoVenta?: number[] };
 }
 
 interface VoucherDependencies {
@@ -289,6 +290,71 @@ describe("payment voucher amount, mapping, and DTO contract", () => {
 
     expect(printDto).toMatchObject({ invoiceNumber: 42, pointOfSale: 7 });
     expect(printDto).not.toMatchObject({ invoiceNumber: 1, pointOfSale: 1 });
+  });
+
+  it("prints a partial-payment QR from a visually formatted Business CUIT as numeric ARCA payload", async () => {
+    const sourcePayment = payment({
+      business: { cuit: "30-71234567-8", ptoVenta: [3] },
+    });
+    const { deps, mocks } = dependencies();
+    mocks.findPayment.mockResolvedValue(sourcePayment);
+    mocks.getVoucher.mockResolvedValue({
+      status: "AUTHORIZED",
+      billType: "Factura A",
+      afipVoucherType: 1,
+      amount: 123,
+      total: 123,
+      cae: "12345678901234",
+      invoiceNumber: 77,
+      pointOfSale: 3,
+      issuedAt: new Date("2026-10-01T12:00:00.000Z"),
+      requestDate: "2026-10-01",
+      fiscalSnapshot: {
+        recipient: {
+          name: "Recipient at issuance",
+          ivaCondition: "Consumidor Final",
+          documentType: null,
+          documentNumber: null,
+        },
+      },
+    });
+    const service = await createService(deps);
+
+    const printableDto = await service.print({ cashMovementId: "movement-1" });
+
+    expect(printableDto.qrUrl).toBeTruthy();
+    if (typeof printableDto.qrUrl !== "string") {
+      throw new Error("Expected the partial-payment print DTO to contain a QR URL");
+    }
+    expect(printableDto).toMatchObject({
+      status: "AUTHORIZED",
+      recipient: { documentType: null, documentNumber: null },
+    });
+    const qrUrl = printableDto.qrUrl;
+    expect(qrUrl).toMatch(/^https:\/\/www\.afip\.gob\.ar\/fe\/qr\/\?p=/);
+    const encodedPayload = new URL(qrUrl).searchParams.get("p");
+    if (!encodedPayload) throw new Error("Expected the verified partial-payment QR URL payload");
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64").toString("utf8")) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      ver: 1,
+      fecha: "2026-10-01",
+      cuit: 30712345678,
+      ptoVta: 3,
+      tipoCmp: 1,
+      nroCmp: 77,
+      tipoDocRec: 99,
+      nroDocRec: 0,
+    });
+    expect(typeof payload.cuit).toBe("number");
+    expect(Object.keys(payload)).toHaveLength(13);
+
+    const pngDataUrl = await QRCode.toDataURL(qrUrl, { type: "image/png", margin: 0 });
+    const pngBase64 = pngDataUrl.match(/^data:image\/png;base64,([A-Za-z0-9+/]+=*)$/)?.[1];
+    expect(pngBase64).toBeTruthy();
+    expect([...Buffer.from(pngBase64 ?? "", "base64").subarray(0, 8)])
+      .toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+    expect(mocks.issue).not.toHaveBeenCalled();
+    expect(mocks.persistAuthorized).not.toHaveBeenCalled();
   });
 });
 

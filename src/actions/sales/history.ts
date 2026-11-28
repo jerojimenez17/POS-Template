@@ -27,6 +27,7 @@ export function mapOrderToBillState(order: OrderWithItems & Record<string, unkno
   const legacyDocument = order.clientDocumentNumber || "";
   // Legacy rows did not store the selected type: retain the documented length fallback.
   const clientDocumentType = normalizeHistoricalDocumentType(order.clientDocumentType, legacyDocument) || undefined;
+  const parsedCae = parseCAE(order.CAE);
   const persistedOrder = order as unknown as Record<string, unknown>;
   const fiscalInput: Record<string, unknown> = { cae: order.CAE };
   for (const field of ["billType", "afipVoucherType", "invoiceNumber", "invoicePointOfSale"] as const) {
@@ -137,7 +138,15 @@ export function mapOrderToBillState(order: OrderWithItems & Record<string, unkno
     clientIvaCondition: order.clientIvaCondition || undefined,
     clientDocumentNumber: order.clientDocumentNumber || undefined,
     clientDocumentType,
-    CAE: parseCAE(order.CAE),
+    // QR claims are resolved separately from persisted order/grant data at
+    // print time; do not serialize raw legacy or client-shaped QR fields into history props.
+    CAE: parsedCae ? {
+      CAE: parsedCae.CAE,
+      vencimiento: parsedCae.vencimiento,
+      nroComprobante: parsedCae.nroComprobante,
+      qrData: "",
+      ...(parsedCae.ptoVenta === undefined ? {} : { ptoVenta: parsedCae.ptoVenta }),
+    } : undefined,
     ptoVenta: normalizedFiscal?.invoicePointOfSale,
     billType: resolvedBillType,
     originalVoucher: normalizedFiscal

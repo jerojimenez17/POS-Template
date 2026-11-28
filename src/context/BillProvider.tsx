@@ -21,6 +21,7 @@ const INITIAL_STATE: BillState = {
   typeDocument: "",
   documentNumber: 0,
   IVACondition: "Consumidor Final",
+  clientIvaCondition: "Consumidor Final",
   paidMethod: "Efectivo",
   nroAsociado: 0,
   billType: BillTypes.B,

@@ -2,7 +2,7 @@
 "use client";
 import { Session } from "next-auth";
 import { Button } from "../ui/button";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { BillContext } from "@/context/BillContext";
 import BillTypes from "@/models/billType";
 import Modal from "../Modal";
@@ -78,6 +78,7 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
   const businessId = (session?.user as { businessId?: string })?.businessId;
   const defaultBillType = initialBillType ?? BillTypes.B;
   const confirmationLock = useRef(false);
+  const persistedOrderIdRef = useRef<string | null>(null);
   const [shortcutMap, setShortcutMap] = useState<ShortcutMap>({});
   const shortcutMapRef = useRef(shortcutMap);
   // Sync ref with state after render
@@ -85,14 +86,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
     shortcutMapRef.current = shortcutMap;
   }, [shortcutMap]);
 
-  const checkSession = () => {
+  const checkSession = useCallback(() => {
     if (!hasActiveSession) {
       toast.error("Debe abrir una sesión de caja antes de realizar esta operación");
       setIsOpeningModalOpen(true);
       return false;
     }
     return true;
-  };
+  }, [hasActiveSession, setIsOpeningModalOpen]);
 
   // Fetch shortcut configs on mount
   useEffect(() => {
@@ -245,8 +246,9 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
           CAE: caeString,
           vencimiento: rawData.vencimiento,
           nroComprobante: rawData.nroComprobante,
-          qrData: rawData.qrData,
+          qrData: "",
           ptoVenta: rawData.ptoVenta ?? checkout.ptoVenta,
+          ...(rawData.qrAttestationToken ? { qrAttestationToken: rawData.qrAttestationToken } : {}),
           ...(typeof rawData?.fiscalSnapshotToken === "string"
             ? { fiscalSnapshotToken: rawData.fiscalSnapshotToken }
             : {}),
@@ -285,8 +287,8 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
       amount: p.amount,
     }));
 
-  const handleSaveSale = async (billState: typeBillState): Promise<boolean> => {
-    if (!checkConnection()) return false;
+  const handleSaveSale = async (billState: typeBillState): Promise<string | null> => {
+    if (!checkConnection()) return null;
     try {
       // Send only minimal product data to reduce Server Action payload
       const result = await processSaleAction({
@@ -296,10 +298,10 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
       if ('error' in result && result.error) {
         toast.error(result.error as string);
         setSaveError(true);
-        return false;
+        return null;
       } else {
         setSaveError(false);
-        return true;
+        return "orderId" in result && typeof result.orderId === "string" ? result.orderId : null;
       }
     } catch (err) {
       console.error(err);
@@ -308,13 +310,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
         "Error al guardar la venta: " +
           (err instanceof Error ? err.message : "Error inesperado"),
       );
-      return false;
+      return null;
     }
   };
 
   const createSale = async (afip: boolean, isUpdate: boolean = false): Promise<CAE | undefined> => {
     if (!checkConnection()) return undefined;
     try {
+      persistedOrderIdRef.current = null;
       setBlockButton(true);
       setOpenRemitoModal(false);
       setOpenEditModal(false);
@@ -379,12 +382,14 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
         router.push(`/sales/${orderId}`);
       } else {
         const caeForSave: CAE = caeData ?? EMPTY_CAE;
-        const saveSuccess = await handleSaveSale({
+        const savedOrderId = await handleSaveSale({
           ...checkout,
           CAE: caeForSave,
           totalWithDiscount: totalAmount,
         });
-        if (saveSuccess) {
+        if (savedOrderId) {
+          persistedOrderIdRef.current = savedOrderId;
+          checkout.id = savedOrderId;
           toast.success(afip ? "Factura guardada correctamente" : "Venta guardada correctamente");
           setBlockButton(false);
         } else {
@@ -653,10 +658,16 @@ const BillButtonsDefault = ({ session, handlePrint, isEditing, orderId, onSaleCr
                     if (!caeResult) {
                       if (targetWin) targetWin.close();
                        return;
-                     }
-                     if (BillState.total > 0) {
-                        const snapshot = createBillStateSnapshot({ ...BillState, CAE: caeResult }, billTypeRef?.current);
-                        handlePrint(caeResult, targetWin, snapshot);
+                      }
+                      if (BillState.total > 0) {
+                         const { qrAttestationToken: _qrAttestationToken, ...printCae } = caeResult;
+                         printCae.qrData = "";
+                         const snapshot = createBillStateSnapshot({
+                           ...BillState,
+                           id: persistedOrderIdRef.current ?? BillState.id,
+                           CAE: printCae,
+                         }, billTypeRef?.current);
+                         handlePrint(printCae, targetWin, snapshot);
                         resetCheckout();
                         setOpenFacturaModal(false);
                         onSaleCreated?.();

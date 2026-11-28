@@ -13,6 +13,8 @@ import { OrderSnapshot } from "@/models/OrderSnapshot";
 import { processInBatches, bulkUpdateStock } from "@/lib/batch-utils";
 import { z } from "zod";
 import { consumeAuthorizedFiscalSnapshotGrant } from "@/lib/server/fiscal-snapshot-grant";
+import { consumeAuthorizedArcaQrGrant, getTenantIssuerCuit } from "@/lib/server/authorized-arca-qr-grant";
+import { logQrTelemetry } from "@/lib/server/qr-telemetry";
 
 // Interfaces para tipado fuerte
 interface SaleProduct {
@@ -48,6 +50,7 @@ interface ProcessSaleInput {
   clientId?: string;
   twoMethods?: boolean;
   products: SaleProduct[];
+  IVACondition?: string;
   clientIvaCondition?: string;
   clientDocumentNumber?: string;
   clientDocumentType?: "CUIT" | "DNI" | "";
@@ -55,8 +58,11 @@ interface ProcessSaleInput {
     CAE: string;
     vencimiento: string;
     nroComprobante: number | string;
-    qrData: string;
+    qrData?: string;
+    requestDate?: string;
+    qrUrl?: string | null;
     ptoVenta?: number | string;
+    qrAttestationToken?: string;
     fiscalSnapshotToken?: string;
   };
   billType?: string;
@@ -84,16 +90,6 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
 
     const total = billState.totalWithDiscount || billState.total;
     const discountAmount = billState.total * discountPercent * 0.01;
-    const caeForPersistence = billState.CAE
-      ? {
-        CAE: billState.CAE.CAE,
-        vencimiento: billState.CAE.vencimiento,
-        nroComprobante: billState.CAE.nroComprobante,
-        qrData: billState.CAE.qrData,
-        ...(billState.CAE.ptoVenta === undefined ? {} : { ptoVenta: billState.CAE.ptoVenta }),
-      }
-      : undefined;
-    
     const result = await db.$transaction(async (tx) => {
       const activeSession = await tx.cashboxSession.findFirst({
         where: { userId: session.user!.id, status: "OPEN" },
@@ -126,6 +122,46 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         throw new Error("La autorización fiscal de la factura expiró o no coincide con la venta");
       }
 
+      let qrGrantId: string | undefined;
+      if (billState.CAE?.qrAttestationToken) {
+        const issuerCuit = await getTenantIssuerCuit(tx, businessId);
+        const billType = billState.billType;
+        const invoiceNumber = Number(billState.CAE.nroComprobante);
+        const pointOfSale = Number(billState.CAE.ptoVenta);
+        const afipVoucherType = billType === "Factura A" ? 1 : billType === "Factura B" ? 6 : billType === "Factura C" ? 11 : undefined;
+        if (issuerCuit !== null && afipVoucherType && Number.isSafeInteger(invoiceNumber) && invoiceNumber > 0
+          && Number.isSafeInteger(pointOfSale) && pointOfSale > 0 && Number.isFinite(total) && total > 0) {
+          const grant = await consumeAuthorizedArcaQrGrant(tx, billState.CAE.qrAttestationToken, {
+            businessId,
+            cae: billState.CAE.CAE,
+            billType,
+            afipVoucherType,
+            invoiceNumber,
+            pointOfSale,
+            fiscalAmount: total.toFixed(2),
+            ...(issuerCuit === undefined ? {} : { issuerCuit }),
+            recipientIvaCondition: billState.clientIvaCondition?.trim() || billState.IVACondition?.trim() || "",
+            recipientDocumentType: billState.clientDocumentType === "CUIT" || billState.clientDocumentType === "DNI"
+              ? billState.clientDocumentType : null,
+            recipientDocumentNumber: clientDocumentNumber,
+          });
+          qrGrantId = grant?.id;
+        } else {
+          logQrTelemetry({ stage: "save-consume-ref", outcome: "rejected", reason: "binding-mismatch" });
+        }
+      } else if (billState.CAE) {
+        logQrTelemetry({ stage: "save-consume-ref", outcome: "rejected", reason: "token-absent" });
+      }
+      const caeForPersistence = billState.CAE
+        ? {
+          CAE: billState.CAE.CAE,
+          vencimiento: billState.CAE.vencimiento,
+          nroComprobante: billState.CAE.nroComprobante,
+          ...(billState.CAE.ptoVenta === undefined ? {} : { ptoVenta: billState.CAE.ptoVenta }),
+          ...(qrGrantId ? { qrAttestationId: qrGrantId } : {}),
+        }
+        : undefined;
+
       const order = await tx.order.create({
         data: {
           total: total,
@@ -139,10 +175,11 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           discountAmount: discountAmount,
           businessId: businessId,
           clientId: billState.clientId,
-          clientIvaCondition: billState.clientIvaCondition,
+          clientIvaCondition: billState.clientIvaCondition?.trim() || billState.IVACondition?.trim() || undefined,
           clientDocumentNumber,
           clientDocumentType: clientDocumentType || null,
           ...(caeForPersistence ? { CAE: caeForPersistence } : {}),
+          ...(billState.CAE ? { qrDataPolicyVersion: 1 } : {}),
           billType: billState.billType,
           afipVoucherType: billState.CAE ? (billState.billType === "Factura A" ? 1 : billState.billType === "Factura B" ? 6 : billState.billType === "Factura C" ? 11 : null) : null,
           invoiceNumber: billState.CAE ? Number(billState.CAE.nroComprobante) : null,
@@ -165,6 +202,16 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
           },
         },
       });
+      if (qrGrantId) {
+        const grantLink = tx.authorizedArcaQrGrant?.updateMany;
+        if (typeof grantLink === "function") {
+          const linked = await grantLink.call(tx.authorizedArcaQrGrant, {
+            where: { id: qrGrantId, orderId: null },
+            data: { orderId: order.id },
+          });
+          if (linked.count !== 1) throw new Error("QR grant association failed");
+        }
+      }
 
       // 🚀 FASE 1+2: Bulk UPDATE (raw SQL) + Bulk INSERT (createMany)
       // Antes: 2 ops × N productos = 2N queries
@@ -251,8 +298,12 @@ export const processSaleAction = async (billState: ProcessSaleInput) => {
         movements.push(m);
       }
 
-      return { order, movements };
+      return { order, movements, qrReferencePersisted: Boolean(qrGrantId) };
     }, { maxWait: 10000, timeout: 60000 });
+
+    if (result.qrReferencePersisted) {
+      logQrTelemetry({ stage: "save-consume-ref", outcome: "reference-persisted" });
+    }
 
     // ⏰ Respuesta al cliente ya!
     // El resto (ranking, pusher, cache) va en after() — no crítico para el usuario

@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/afip-voucher";
 import { MAX_WHOLE_PESO_AMOUNT, toPositiveWholePesos } from "@/lib/money";
 import { PaymentVoucherIssueError, paymentVoucherIssueFailureOutcome } from "@/lib/server/payment-voucher-outcome";
+import { buildArcaQrUrl, normalizeArcaIssuerCuit } from "@/services/afip/qr-payload";
 
 export { PaymentVoucherIssueError, paymentVoucherIssueFailureOutcome } from "@/lib/server/payment-voucher-outcome";
 export type { PaymentVoucherIssueFailureOutcome } from "@/lib/server/payment-voucher-outcome";
@@ -46,6 +47,7 @@ export interface PaymentVoucherPayment {
   };
   business?: {
     name?: string;
+    cuit?: string | null;
     ptoVenta?: number[];
     condicionIva?: string;
   };
@@ -70,7 +72,8 @@ export interface PaymentVoucherDependencies {
       amount: number;
       ptoVenta: number;
       recipientSnapshot: RecipientSnapshot;
-    }) => Promise<{ status: string; attempt: number; acquired: boolean }>;
+      requestDate: string;
+    }) => Promise<{ status: string; attempt: number; acquired: boolean; requestDate?: string }>;
     markDispatched?: (input: { paymentId: string; businessId: string; attempt: number }) => Promise<void>;
     failPreparing?: (input: { paymentId: string; businessId: string; attempt: number }) => Promise<void>;
     persistAuthorized: (input: Record<string, unknown>) => Promise<void>;
@@ -330,7 +333,14 @@ function validateAuthorizedPrintRecord(
     throw new Error("El comprobante de este pago no está autorizado para impresión");
   }
 
-  const fiscalSnapshot = validatedPrintFiscalSnapshot(value.fiscalSnapshot, billType);
+  const authorizedAttemptRecipient = isRecord(value.currentRecipientSnapshot)
+    ? value.currentRecipientSnapshot
+    : null;
+  const fiscalSnapshot = validatedPrintFiscalSnapshot(
+    authorizedAttemptRecipient ? { recipient: authorizedAttemptRecipient } : value.fiscalSnapshot,
+    billType,
+  );
+  const requestDate = civilDateFromStored(value.currentAttemptRequestDate ?? value.requestDate);
 
   return {
     status: "AUTHORIZED",
@@ -344,6 +354,7 @@ function validateAuthorizedPrintRecord(
     invoicePointOfSale: pointOfSale,
     pointOfSale,
     issuedAt,
+    ...(requestDate ? { requestDate } : {}),
     fiscalSnapshot,
   };
 }
@@ -394,6 +405,68 @@ function amountToPesosForPrint(amount: number): number {
   }
 }
 
+function captureArcaCivilDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function civilDateFromStored(value: unknown): string | undefined {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+}
+
+function buildPaymentVoucherQrUrl(
+  voucher: Record<string, unknown>,
+  payment: PaymentVoucherPayment,
+): string | null {
+  const snapshot = isRecord(voucher.fiscalSnapshot) ? voucher.fiscalSnapshot : null;
+  const recipient = snapshot && isRecord(snapshot.recipient) ? snapshot.recipient : null;
+  const fecha = civilDateFromStored(voucher.requestDate);
+  const issuerCuit = normalizeArcaIssuerCuit(payment.business?.cuit);
+  const cae = typeof voucher.cae === "string" ? Number(voucher.cae) : Number.NaN;
+  const tipoCmp = typeof voucher.afipVoucherType === "number" ? voucher.afipVoucherType : Number.NaN;
+  const nroCmp = typeof voucher.invoiceNumber === "number" ? voucher.invoiceNumber : Number.NaN;
+  const pointOfSale = voucher.invoicePointOfSale ?? voucher.pointOfSale;
+  const amount = typeof voucher.amount === "number" ? voucher.amount : Number(voucher.amount ?? voucher.total);
+  const documentType = recipient?.documentType;
+  const documentNumber = recipient?.documentNumber;
+  const noDocument = (documentType === null || documentType === undefined)
+    && (documentNumber === null || documentNumber === undefined);
+  const isConsumerFinal = typeof recipient?.ivaCondition === "string"
+    && recipient.ivaCondition.trim().toLocaleLowerCase().replace(/_/g, " ") === "consumidor final";
+  const tipoDocRec = documentType === "CUIT" ? 80
+    : documentType === "DNI" ? 96
+      : noDocument && isConsumerFinal ? 99 : null;
+  const nroDocRec = tipoDocRec === 99
+    ? 0
+    : tipoDocRec !== null && typeof documentNumber === "string" && /^\d+$/.test(documentNumber)
+      ? Number(documentNumber)
+      : null;
+  if (!fecha || !issuerCuit || tipoDocRec === null || nroDocRec === null) return null;
+
+  return buildArcaQrUrl({
+    ver: 1,
+    fecha,
+    cuit: Number(issuerCuit),
+    ptoVta: Number(pointOfSale),
+    tipoCmp,
+    nroCmp,
+    importe: amount,
+    moneda: "PES",
+    ctz: 1,
+    tipoDocRec,
+    nroDocRec,
+    tipoCodAut: "E",
+    codAut: cae,
+  });
+}
+
 function authorizedPrintDto(value: Record<string, unknown>): Record<string, unknown> {
   const snapshot = isRecord(value.fiscalSnapshot) ? value.fiscalSnapshot : {};
   const snapshotRecipient = isRecord(snapshot.recipient) ? snapshot.recipient : {};
@@ -409,6 +482,7 @@ function authorizedPrintDto(value: Record<string, unknown>): Record<string, unkn
     invoiceNumber: value.invoiceNumber,
     pointOfSale: value.invoicePointOfSale ?? value.pointOfSale,
     issuedAt: value.issuedAt,
+    ...(typeof value.requestDate === "string" ? { requestDate: value.requestDate } : {}),
     recipient: {
       name: snapshotRecipient.name,
       ivaCondition: snapshotRecipient.ivaCondition,
@@ -434,6 +508,7 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
     selectedBillType: string,
     proposedPtoVenta: number,
     reservedRecipient?: RecipientSnapshot,
+    requestDate?: string,
   ): PaymentVoucherInvoiceDto => {
     const code = mapBillType(selectedBillType);
     const total = amountToPesos(payment.total);
@@ -460,7 +535,7 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
       documentNumber: Number.isSafeInteger(numericDocument) ? numericDocument : 0,
       total,
       totalWithDiscount: total,
-      date: (payment.order.date ?? new Date()).toISOString(),
+      date: requestDate ?? (payment.order.date ?? new Date()).toISOString(),
       ptoVenta,
       products: [{
         id: payment.id,
@@ -478,6 +553,7 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
     input: Record<string, unknown>,
     markRemoteDispatchPossible: () => void,
   ): Promise<Record<string, unknown>> => {
+    const capturedRequestDate = captureArcaCivilDate();
     const cashMovementId = typeof input.cashMovementId === "string" ? input.cashMovementId.trim() : "";
     const billType = typeof input.billType === "string" ? input.billType : "";
     const proposedPtoVenta = input.ptoVenta;
@@ -578,7 +654,7 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
 
     let invoice: PaymentVoucherInvoiceDto;
     try {
-      invoice = buildInvoice(payment, billType, ptoVenta, recipient);
+      invoice = buildInvoice(payment, billType, ptoVenta, recipient, capturedRequestDate);
     } catch {
       await failUnclaimedPreparation();
       return { paymentRecorded: true, voucherStatus: "FAILED", message: "Los datos de la factura no son válidos; el pago quedó registrado" };
@@ -590,11 +666,14 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
       amount: amountPesos,
       ptoVenta,
       recipientSnapshot: recipient,
+      requestDate: capturedRequestDate,
     }));
     if (!claim.acquired) {
       const status = safeResultStatus(claim.status);
       return { paymentRecorded: true, voucherStatus: status, ...(status === "UNKNOWN" ? { reconciliationRequired: true } : {}) };
     }
+    const requestDate = claim.requestDate ?? capturedRequestDate;
+    invoice.date = requestDate;
 
     const persistFailure = async (status: "FAILED" | "UNKNOWN", code: string): Promise<void> => {
       const safeErrorCode = SAFE_ERROR_CODES.has(code) ? code : "REMOTE_OUTCOME_UNKNOWN";
@@ -696,6 +775,9 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
       invoicePointOfSale: remoteResult.pointOfSale,
       pointOfSale: remoteResult.pointOfSale,
       issuedAt: remoteResult.issuedAt,
+      // requestDate is required by buildPaymentVoucherQrUrl to construct the
+      // ARCA QR URL. Without it, fecha is undefined and the QR returns null.
+      requestDate,
       fiscalSnapshot: safeFiscalSnapshot(invoice),
     };
     try {
@@ -851,7 +933,8 @@ export function createPaymentVoucherService(dependencies: PaymentVoucherDependen
     }
 
     const trustedVoucher = validateAuthorizedPrintRecord(voucher, payment);
-    return authorizedPrintDto(trustedVoucher);
+    const dto = authorizedPrintDto(trustedVoucher);
+    return { ...dto, qrUrl: buildPaymentVoucherQrUrl(trustedVoucher, payment) };
   };
 
   return { amountToPesos, mapBillType, buildInvoice, issue, reconcile, print };
@@ -916,7 +999,7 @@ const databaseDependencies: PaymentVoucherDependencies = {
         where: { id, businessId, order: { is: { businessId } } },
         include: {
           order: { include: { client: true } },
-          business: { select: { name: true, ptoVenta: true, condicionIva: true } },
+          business: { select: { name: true, cuit: true, ptoVenta: true, condicionIva: true } },
         },
       });
       if (!movement?.order) return null;
@@ -928,6 +1011,7 @@ const databaseDependencies: PaymentVoucherDependencies = {
         paidMethod: movement.paidMethod,
         business: {
           name: movement.business.name,
+          cuit: movement.business.cuit,
           ptoVenta: movement.business.ptoVenta,
           condicionIva: movement.business.condicionIva,
         },
@@ -958,8 +1042,10 @@ const databaseDependencies: PaymentVoucherDependencies = {
       return business?.id === businessId && business.accountStatus !== "MOROSO"
         && business.features?.hasAfipBilling === true;
     },
-    claim: async ({ paymentId, businessId, billType, amount, ptoVenta, recipientSnapshot }) => {
+    claim: async ({ paymentId, businessId, billType, amount, ptoVenta, recipientSnapshot, requestDate }) => {
       const client = currentClient();
+      const requestDateValue = new Date(`${requestDate}T00:00:00.000Z`);
+      if (Number.isNaN(requestDateValue.getTime())) throw new Error("payment_voucher_request_date_invalid");
       let voucher = await client.paymentVoucher.findUnique({ where: { cashMovementId: paymentId } });
       if (voucher && voucher.businessId !== businessId) return { status: "UNKNOWN", attempt: voucher.currentAttempt, acquired: false };
       if (!voucher) {
@@ -984,11 +1070,12 @@ const databaseDependencies: PaymentVoucherDependencies = {
                 amount: new Prisma.Decimal(amount),
                 invoicePointOfSale: ptoVenta,
                 recipientSnapshot: recipientSnapshot as unknown as Prisma.InputJsonValue,
+                requestDate: requestDateValue,
                 startedAt: reservationTime,
               } },
             },
           });
-          return { status: "PENDING", attempt: 1, acquired: true };
+          return { status: "PENDING", attempt: 1, acquired: true, requestDate };
         } catch (error: unknown) {
           if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
           voucher = await client.paymentVoucher.findUnique({ where: { cashMovementId: paymentId } });
@@ -1026,7 +1113,10 @@ const databaseDependencies: PaymentVoucherDependencies = {
           const now = new Date();
           const attemptClaimed = await client.paymentVoucherAttempt.updateMany({
             where: { id: pendingAttempt.id, status: "PREPARING", startedAt: pendingAttempt.startedAt },
-            data: { startedAt: now },
+            data: {
+              startedAt: now,
+              requestDate: pendingAttempt.requestDate ?? requestDateValue,
+            },
           });
           if (attemptClaimed.count !== 1) {
             return { status: voucher.status, attempt: voucher.currentAttempt, acquired: false };
@@ -1036,7 +1126,12 @@ const databaseDependencies: PaymentVoucherDependencies = {
             data: { updatedAt: new Date(now.getTime() + 1) },
           });
           if (voucherClaimed.count !== 1) throw new Error("payment_voucher_preparation_claim_conflict");
-          return { status: voucher.status, attempt: voucher.currentAttempt, acquired: true };
+          return {
+            status: voucher.status,
+            attempt: voucher.currentAttempt,
+            acquired: true,
+            requestDate: (pendingAttempt.requestDate ?? requestDateValue).toISOString().slice(0, 10),
+          };
         }
         return { status: voucher.status, attempt: voucher.currentAttempt, acquired: false };
       }
@@ -1062,11 +1157,12 @@ const databaseDependencies: PaymentVoucherDependencies = {
             amount: new Prisma.Decimal(amount),
             invoicePointOfSale: ptoVenta,
             recipientSnapshot: recipientSnapshot as unknown as Prisma.InputJsonValue,
+            requestDate: requestDateValue,
             startedAt: retryReservationTime,
           } },
         },
       });
-      return { status: "PENDING", attempt, acquired: true };
+      return { status: "PENDING", attempt, acquired: true, requestDate };
     },
     markDispatched: async ({ paymentId, businessId, attempt }) => {
       const client = currentClient();
@@ -1175,6 +1271,7 @@ const databaseDependencies: PaymentVoucherDependencies = {
                 amount: true,
                 invoicePointOfSale: true,
                 recipientSnapshot: true,
+                requestDate: true,
               },
             },
           },
@@ -1189,7 +1286,11 @@ const databaseDependencies: PaymentVoucherDependencies = {
               currentAttemptBillType: latestAttempt.billType,
               currentAttemptPointOfSale: latestAttempt.invoicePointOfSale,
               currentAttemptAmount: Number(latestAttempt.amount.toString()),
-              currentRecipientSnapshot: latestAttempt.recipientSnapshot,
+              ...(latestAttempt.status === "AUTHORIZED" && isRecord(latestAttempt.recipientSnapshot)
+                ? { currentRecipientSnapshot: latestAttempt.recipientSnapshot }
+                : {}),
+              ...(latestAttempt.status === "AUTHORIZED" && latestAttempt.attemptNumber === row.currentAttempt
+                && latestAttempt.requestDate ? { currentAttemptRequestDate: latestAttempt.requestDate } : {}),
             }
           : {};
         const status = statusOverride ?? row.status;
@@ -1243,7 +1344,14 @@ const databaseDependencies: PaymentVoucherDependencies = {
       const session = await auth();
       const user = session?.user;
       if (!user?.id || !user.businessId || !user.role) return { ok: false, definite: true };
-      const result = await prepareAfipVoucherForActor(invoice, user as AuthenticatedUserContext);
+      const requestDate = civilDateFromStored(invoice.date);
+      // This issuance purpose is server-owned and never derived from payment input.
+      const result = await prepareAfipVoucherForActor(
+        invoice,
+        user as AuthenticatedUserContext,
+        requestDate,
+        { issuancePurpose: "payment-voucher" },
+      );
       return "prepared" in result ? { ok: true, capability: result.prepared } : { ok: false, definite: true };
     },
     issue: async (capability, onDispatch) => {

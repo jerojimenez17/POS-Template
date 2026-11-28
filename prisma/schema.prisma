@@ -59,6 +59,7 @@ model Business {
   cashMovements   CashMovement[]
   saleReturns     SaleReturn[]
   fiscalSnapshotGrants AuthorizedFiscalSnapshotGrant[]
+  authorizedArcaQrGrants AuthorizedArcaQrGrant[]
   paymentVouchers PaymentVoucher[]
   stockMovements  StockMovement[]
 
@@ -371,6 +372,7 @@ model Order {
   stockMovements StockMovement[]
   updates        OrderUpdate[]
   cashMovements  CashMovement[]
+  authorizedArcaQrGrant AuthorizedArcaQrGrant?
 
   // Billing fields
   clientIvaCondition   String?
@@ -383,6 +385,7 @@ model Order {
   invoicePointOfSale   Int?
   invoiceIssuedAt      DateTime?
   fiscalSnapshot      Json?
+  qrDataPolicyVersion Int         @default(1)
 
   cashboxSessionId String?
   cashboxSession   CashboxSession? @relation(fields: [cashboxSessionId], references: [id])
@@ -620,6 +623,7 @@ model PaymentVoucherAttempt {
   amount            Decimal                      @db.Decimal(12, 2)
   invoicePointOfSale Int
   recipientSnapshot Json
+  requestDate       DateTime?                    @db.Date
   startedAt         DateTime                     @default(now())
   finishedAt        DateTime?
   safeErrorCode     String?
@@ -641,6 +645,34 @@ model AuthorizedFiscalSnapshotGrant {
   createdAt     DateTime @default(now())
   expiresAt     DateTime
   consumedAt    DateTime?
+
+  @@index([businessId, cae, consumedAt])
+  @@index([expiresAt])
+}
+
+model AuthorizedArcaQrGrant {
+  id                      String   @id @default(cuid())
+  tokenHash               String   @unique
+  businessId              String
+  business                Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  cae                     String
+  billType                String
+  afipVoucherType         Int
+  invoiceNumber           Int
+  pointOfSale             Int
+  fiscalAmount            Decimal  @db.Decimal(12, 2)
+  issuerCuit              String
+  requestDate             DateTime @db.Date
+  recipientIvaCondition   String
+  recipientDocumentType   String?
+  recipientDocumentNumber String?
+  payload                 Json?
+  rawQrData               String?  @db.Text
+  createdAt               DateTime @default(now())
+  expiresAt               DateTime
+  consumedAt              DateTime?
+  orderId                 String?  @unique
+  order                   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([businessId, cae, consumedAt])
   @@index([expiresAt])

@@ -667,3 +667,27 @@ Only this checklist was edited during this QA verification. Source and test file
 - Repository-wide tests/lint/typecheck were not run; only the scoped checks above are reported.
 
 **Step 4 result: PASS for the requested latest fixes.** The published migration remains byte-identical at the Git-object level, the new enum migration and generated client are verified, Remito is represented as a transactional no-AFIP choice, and printing uses authorized persisted POS/number values formatted as `007-0042`. No defect was demonstrated, so source/tests were not modified. **Remito requires deployment of the new database migration before use.**
+
+## Step 4 re-run after Step 5, iteration 2 — 2026-11-26
+
+QA-only verification record for the AFIP date/payload change. No source or test files were edited by QA. Tests use mocks; no live AFIP/ARCA call, database write, or migration application occurred.
+
+- **PASS — complete partial-payment voucher feature:** `npm run test -- ai/features/afip-partial-payment-voucher --maxWorkers=1 --testTimeout=15000` — **12 files, 132/132 tests**.
+- **PASS — requested voucher contract:** `payment-voucher.contract.test.ts --maxWorkers=1 --testTimeout=15000` — **66/66**. The default 5-second timeout was reproduced once (65 passed, the `10.5` parametrized case timed out at 5.035 s); the repeat with 15 seconds passed without assertion failures.
+- **PASS — partial-voucher QR/print behavior:** the QR feature suite passed **55/55**, including the authorized partial voucher's own request date/QR, raw fallback, isolation and print-without-issuance behavior. PDF/receipt/thermal regression batch passed **66/66 across 6 files**.
+- **PASS — Prisma:** `npx prisma validate` reported the schema valid; no database migration was applied.
+- **Separate legacy print result:** `PaymentVoucherRowActionClient.test.tsx` passed 1/1. The adjacent `PrintableTable.test.tsx` legacy suite still has 11 failures / 38 tests (27 pass), also seen in earlier QA; no clean pre-change baseline establishes attribution. QR-specific and partial-voucher print tests pass.
+- **Separate legacy action harness failures:** in the wider 11-file fiscal batch, 42/100 assertions failed in four files because `auth()` was rejected/unmocked in old action fixtures (39 cases) or `auth` was not a mock function in `tests/actions/arca.test.ts` (3 cases). The 4 focused fiscal prepared/public/user-invoice action suites pass 41/41. See the contemporaneous `afip-arca-qr-data/TEST_CHECKLIST.md` entry for exact files and totals.
+
+**Step 4 result for the requested partial-voucher and print scope: PASS.** The default-timeout event is a reproducible runner limit resolved by the enlarged test timeout; legacy action/print failures remain separately classified and do not establish a partial-voucher contract regression. Existing external fiscal-gateway and authoritative `UNKNOWN` reconciliation blockers remain open; mocked tests do not clear them.
+
+## Step 4 QA — post-fix voucher suite and client-edit timeout triage — 2026-11-26
+
+QA-only result update. No source, test, or `SPEC.md` files were edited. Tests use mocks; no live AFIP/ARCA call or database migration/write was performed.
+
+- **PASS — complete partial-payment voucher feature:** `npm run test -- ai/features/afip-partial-payment-voucher --maxWorkers=1 --testTimeout=30000` — **12 files, 133/133 tests**. Includes `payment-voucher-client-edit.test.tsx`.
+- **PASS — client edit with timeout budget:** the client-edit file repeated serially with `--testTimeout=30000` — **1 file, 6/6 tests**. The isolated “legacy-only cuit” case with the same timeout also passes (**1 passed, 5 skipped**).
+- **Triage of default-timeout report:** the serial default-timeout run produced two reported failures: `opens a populated accessible edit dialog...` exceeded Vitest's 5 s limit at 5.055 s; the following `loads a legacy-only cuit...` showed the prior fixture's `20123456789` instead of its own `27123456780`. The latter is not reproducible when isolated or when the full file gets a 30 s timeout. The timed-out first case had rendered the `20123456789` fixture and did not finish cleanup before the next case, so evidence is consistent with timeout-induced DOM/test-state contamination, not a distinct product or test-data defect. Do not report that mismatch as a confirmed bad fixture.
+- The longer-timeout full run removes both reported failures without source/test changes. Thus this is a runner-budget issue; use the documented extended timeout when running the feature serially. The QR-data checklist separately records the actual partial adapter integration proving zero standard-grant creation and its own authorized print DTO.
+
+**Result for reviewer:** complete partial-payment voucher suite **PASS**. The two client-edit symptoms resolve under the extended timeout; one is the 5 s timeout and the apparent value mismatch is a non-reproducible follow-on from that timed-out test, not a confirmed fixture-data failure.

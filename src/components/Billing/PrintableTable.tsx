@@ -11,6 +11,10 @@ import { Session } from "next-auth";
 import { cn } from "@/lib/utils";
 import { Inter } from "next/font/google";
 import { getBusinessBillingInfoAction } from "@/actions/business";
+import {
+  repairOrphanedQrGrantAction,
+  resolveOrderQrPrintDtoAction,
+} from "@/actions/sales/qr-print";
 import moment from "moment";
 import { QRCodeSVG } from "qrcode.react";
 import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML, PDF_STYLES, type PrintOptions } from "@/lib/print";
@@ -18,6 +22,7 @@ import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "
 import QRCode from "qrcode";
 import CAE from "@/models/CAE";
 import { buildReceiptBusinessInfo } from "@/lib/print/receipt-data";
+import { reportQrRendererOutcome } from "@/lib/print/qr-renderer-outcome";
 import PriceEditInput from "./PriceEditInput";
 import DiscountControl from "./DiscountControl";
 
@@ -83,8 +88,57 @@ const PrintableTable = ({
   } | null>(null);
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
   const [qrGenerationFailed, setQrGenerationFailed] = useState(false);
+  const [qrResolution, setQrResolution] = useState<{
+    orderId: string;
+    cae: string;
+    value: string | null;
+    done: boolean;
+  } | null>(null);
+  const hasPrintableCae = Boolean(effectiveCae?.CAE?.trim());
+  const activeCaeNumber = effectiveCae?.CAE ?? "";
+  const resolutionMatchesCurrent = qrResolution?.orderId === effectiveState.id && qrResolution.cae === activeCaeNumber;
+  const serverQrValue = resolutionMatchesCurrent ? qrResolution.value : null;
+  const qrLookupDone = !hasPrintableCae || !effectiveState.id
+    || (resolutionMatchesCurrent && qrResolution.done);
+  const activeQrValue = serverQrValue;
   const contentRef = useRef<HTMLDivElement>(null);
   const lastPrintTrigger = useRef(0);
+  const qrResolutionRequests = useRef(new Map<string, Promise<string | null>>());
+  const repairAttempts = useRef(new Set<string>());
+
+  useEffect(() => {
+    let active = true;
+    const orderId = effectiveState.id;
+    if (!hasPrintableCae || !orderId) return () => { active = false; };
+    const cae = activeCaeNumber;
+    const requestKey = `${orderId}\u0000${cae}`;
+    let request = qrResolutionRequests.current.get(requestKey);
+    if (!request) {
+      request = (async () => {
+        try {
+          let dto = await resolveOrderQrPrintDtoAction(orderId);
+          if (dto.qrKind === "none" && !repairAttempts.current.has(orderId)
+            && typeof repairOrphanedQrGrantAction === "function") {
+            repairAttempts.current.add(orderId);
+            try {
+              await repairOrphanedQrGrantAction(orderId);
+            } catch {
+              // Repair is best-effort; the subsequent read remains authoritative.
+            }
+            dto = await resolveOrderQrPrintDtoAction(orderId);
+          }
+          return dto.qrValue;
+        } catch {
+          return null;
+        }
+      })();
+      qrResolutionRequests.current.set(requestKey, request);
+    }
+    void request.then((value) => {
+      if (active) setQrResolution({ orderId, cae, value, done: true });
+    });
+    return () => { active = false; };
+  }, [effectiveState.id, hasPrintableCae, activeCaeNumber]);
 
   // Fix hydration: Only run on client
   useEffect(() => {
@@ -101,29 +155,39 @@ const PrintableTable = ({
 
   useEffect(() => {
     let active = true;
-    const activeCaeQr = effectiveCae;
-    if (activeCaeQr?.qrData) {
+    const qrValue = effectiveCae?.CAE?.trim() ? serverQrValue : null;
+    if (qrValue) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setQrGenerationFailed(false);
       setQrSvgDataUrl(null);
-      QRCode.toString(activeCaeQr.qrData, { type: "svg", margin: 0, width: 60 })
+      QRCode.toString(qrValue, { type: "svg", margin: 0, width: 60 })
         .then((svgString) => {
+          if (typeof svgString !== "string" || !/<svg[\s>]/.test(svgString)) {
+            throw new Error("QR encoder returned empty output");
+          }
           const dataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
-          if (active) setQrSvgDataUrl(dataUrl);
+          if (active) {
+            setQrSvgDataUrl(dataUrl);
+            if (printMode !== "thermal") {
+              reportQrRendererOutcome("pdf", "generated");
+            }
+          }
         })
-        .catch((error: unknown) => {
+        .catch(() => {
           if (active) {
             setQrSvgDataUrl(null);
             setQrGenerationFailed(true);
+            if (printMode !== "thermal") {
+              reportQrRendererOutcome("pdf", "failed");
+            }
           }
-          console.error("Error generating receipt QR:", error);
         });
     } else {
       setQrSvgDataUrl(null);
       setQrGenerationFailed(false);
     }
     return () => { active = false; };
-  }, [effectiveCae, effectiveCae?.qrData, forceCae]);
+  }, [effectiveCae?.CAE, serverQrValue, printMode]);
 
   const activeCae = effectiveCae;
   const bannerCae = effectiveState.CAE;
@@ -133,6 +197,8 @@ const PrintableTable = ({
   useEffect(() => {
     const hasCae = !!bannerCae?.CAE?.trim();
     if (hasCae && bannerCae) {
+      // This effect keeps the previous banner available for its exit transition.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDisplayBannerCae(bannerCae);
       setIsBannerExiting(false);
     } else if (!hasCae && displayBannerCae?.CAE) {
@@ -143,7 +209,7 @@ const PrintableTable = ({
       }, 300);
       return () => clearTimeout(t);
     }
-  }, [bannerCae?.CAE, bannerCae?.qrData, bannerCae?.vencimiento, displayBannerCae?.CAE]);
+  }, [bannerCae, displayBannerCae?.CAE]);
 
   const receiptBusinessInfo = useMemo(
     () => buildReceiptBusinessInfo(
@@ -184,7 +250,7 @@ const PrintableTable = ({
       cae: activeCaePrint?.CAE ? {
         cae: activeCaePrint.CAE,
         vencimiento: activeCaePrint.vencimiento,
-        qrData: activeCaePrint.qrData,
+        qrValue: serverQrValue,
         ptoVenta: activeCaePrint.ptoVenta ?? effectiveState.ptoVenta,
       } : undefined,
       pointOfSale: effectiveState.ptoVenta ?? activeCaePrint?.ptoVenta,
@@ -221,11 +287,15 @@ const PrintableTable = ({
           filename: filename,
           targetWindow: targetWindowRef?.current || null,
         } as PrintOptions);
+        reportQrRendererOutcome("pdf", "submitted");
+      } catch {
+        reportQrRendererOutcome("pdf", "failed");
+        throw new Error("Invoice print failed");
       } finally {
         document.body.removeChild(content);
       }
     }
-  }, [effectiveState, session, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef, qzTrayEnabled, receiptBusinessInfo, isPresupuesto]);
+  }, [effectiveState, session, printMode, billTypeDisplay, forceCae, qrSvgDataUrl, targetWindowRef, qzTrayEnabled, receiptBusinessInfo, isPresupuesto, serverQrValue]);
 
   useEffect(() => {
     // Keep the externally supplied bill synchronized with the printable view.
@@ -235,13 +305,13 @@ const PrintableTable = ({
 
   useEffect(() => {
     if (printTrigger > lastPrintTrigger.current && isClient) {
-      const activeCaeEff = effectiveCae;
-      if (activeCaeEff?.qrData && !qrSvgDataUrl && !qrGenerationFailed) return;
+      if (!qrLookupDone && effectiveCae?.CAE?.trim()) return;
+      if (activeQrValue && !qrSvgDataUrl && !qrGenerationFailed) return;
 
       lastPrintTrigger.current = printTrigger;
       handlePrint();
     }
-  }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, qrGenerationFailed, forceCae, effectiveCae, effectiveCae?.qrData]);
+  }, [printTrigger, isClient, handlePrint, qrSvgDataUrl, qrGenerationFailed, forceCae, effectiveCae, activeQrValue, qrLookupDone]);
 
   // Prevent browser defaults for F1/F2/F3 (Chrome opens help on F1)
   useEffect(() => {
@@ -514,9 +584,14 @@ const PrintableTable = ({
           aria-hidden={isBannerExiting}
         >
           <div className="flex items-center justify-between gap-4">
-            {displayBannerCae.qrData ? (
+            {serverQrValue ? (
               <div className="shrink-0 bg-white p-1 rounded-sm">
-                <QRCodeSVG value={displayBannerCae.qrData} size={110} level="M" includeMargin={false} />
+                <QRCodeSVG
+                  value={serverQrValue}
+                  size={110}
+                  level="M"
+                  includeMargin={false}
+                />
               </div>
             ) : (
               <div className="w-[110px] shrink-0"></div>

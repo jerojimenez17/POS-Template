@@ -1,4 +1,5 @@
 "use client";
+import { useRef } from "react";
 import { Printer, FileText, Download } from "lucide-react";
 import {
   DropdownMenu,
@@ -14,7 +15,11 @@ import { printThermalReceipt, exportToPDF, type ThermalReceiptData, buildPDFHTML
 import QRCode from "qrcode";
 import { getBillTypeDisplay } from "@/lib/utils/bill-type";
 import { buildReceiptBusinessInfo, type ReceiptBusinessInfo } from "@/lib/print/receipt-data";
-import { useState, useEffect } from "react";
+import {
+  repairOrphanedQrGrantAction,
+  resolveOrderQrPrintDtoAction,
+} from "@/actions/sales/qr-print";
+import { reportQrRendererOutcome } from "@/lib/print/qr-renderer-outcome";
 
 interface PrintOptionsPopoverProps {
   sale: BillState;
@@ -27,34 +32,46 @@ export default function PrintOptionsPopover({
   session,
   qzTrayEnabled = false,
 }: PrintOptionsPopoverProps) {
+  const repairAttempts = useRef(new Set<string>());
 
 
-  const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    if (sale.CAE?.qrData) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setQrSvgDataUrl(null);
-      QRCode.toString(sale.CAE.qrData, { type: "svg", margin: 0, width: 60 })
-        .then((svgString) => {
-          if (active) setQrSvgDataUrl(`data:image/svg+xml;base64,${btoa(svgString)}`);
-        })
-        .catch((error: unknown) => {
-          if (active) setQrSvgDataUrl(null);
-          console.error("Error generating receipt QR:", error);
-        });
-    } else {
-      setQrSvgDataUrl(null);
+  const resolvePersistedQr = async (): Promise<string | null> => {
+    const cae = sale.CAE?.CAE?.trim();
+    if (!cae || !/^\d{14}$/.test(cae) || !sale.id) return null;
+    try {
+      let dto = await resolveOrderQrPrintDtoAction(sale.id);
+      if (dto.qrKind === "none" && !repairAttempts.current.has(sale.id)
+        && typeof repairOrphanedQrGrantAction === "function") {
+        repairAttempts.current.add(sale.id);
+        try {
+          await repairOrphanedQrGrantAction(sale.id);
+        } catch {
+          // The read after repair (or failure) decides what can be printed.
+        }
+        dto = await resolveOrderQrPrintDtoAction(sale.id);
+      }
+      return dto.qrValue;
+    } catch {
+      return null;
     }
-    return () => { active = false; };
-  }, [sale.CAE?.qrData]);
+  };
+
+  const createQrImage = async (qrValue: string | null): Promise<string | null> => {
+    if (!qrValue) return null;
+    try {
+      const svgString = await QRCode.toString(qrValue, { type: "svg", margin: 0, width: 60 });
+      if (typeof svgString !== "string" || !/<svg[\s>]/.test(svgString)) return null;
+      return `data:image/svg+xml;base64,${btoa(svgString)}`;
+    } catch {
+      return null;
+    }
+  };
 
   const hasCAE = Boolean(sale.CAE?.CAE?.trim());
   const isRemito = !hasCAE;
   const billTypeDisplay = getBillTypeDisplay(sale.billType, sale.CAE?.CAE, isRemito);
 
-  const getPrintData = (info: ReceiptBusinessInfo | null): ThermalReceiptData => ({
+  const getPrintData = (info: ReceiptBusinessInfo | null, qrValue: string | null): ThermalReceiptData => ({
     ...buildReceiptBusinessInfo(session?.user?.businessName || "Mi Comercio", sale.CAE?.CAE, info ?? undefined),
     date: sale.date || new Date(),
     documentType: sale.clientDocumentType || sale.typeDocument,
@@ -88,15 +105,19 @@ export default function PrintOptionsPopover({
       ? {
           cae: sale.CAE.CAE,
           vencimiento: sale.CAE.vencimiento,
-          qrData: sale.CAE.qrData,
+          qrValue,
           ptoVenta: sale.CAE.ptoVenta ?? sale.ptoVenta,
         }
       : undefined,
   });
 
   const handlePrintThermal = async () => {
-    const info = hasCAE ? await getBusinessBillingInfoAction() : null;
-    await printThermalReceipt(getPrintData(info), qzTrayEnabled);
+    const [info, qrValue] = await Promise.all([
+      hasCAE ? getBusinessBillingInfoAction() : Promise.resolve(null),
+      resolvePersistedQr(),
+    ]);
+    const receiptData = getPrintData(info, qrValue);
+    await printThermalReceipt(receiptData, qzTrayEnabled);
   };
 
   const handlePrintPDF = async () => {
@@ -105,8 +126,15 @@ export default function PrintOptionsPopover({
       targetWin.document.write("<html><head><title>Generando PDF...</title></head><body style='font-family:sans-serif; text-align:center; padding-top: 50px;'><h2>Generando comprobante, por favor espere...</h2></body></html>");
     }
 
-    const info = hasCAE ? await getBusinessBillingInfoAction() : null;
-    const receiptData = getPrintData(info);
+    const [info, qrValue] = await Promise.all([
+      hasCAE ? getBusinessBillingInfoAction() : Promise.resolve(null),
+      resolvePersistedQr(),
+    ]);
+    const receiptData = getPrintData(info, qrValue);
+    const qrSvgDataUrl = await createQrImage(qrValue);
+    if (qrValue) {
+      reportQrRendererOutcome("pdf", qrSvgDataUrl ? "generated" : "failed");
+    }
     const content = document.createElement("div");
     content.innerHTML = buildPDFHTML(receiptData, {
       invoiceNumber: sale.CAE?.nroComprobante,
@@ -132,9 +160,11 @@ export default function PrintOptionsPopover({
         filename: filename,
         targetWindow: targetWin,
       });
-    } catch(err) {
+      reportQrRendererOutcome("pdf", "submitted");
+    } catch {
+      reportQrRendererOutcome("pdf", "failed");
       if (targetWin) targetWin.close();
-      console.error("PDF Export error:", err);
+      console.error("PDF Export error");
     } finally {
       document.body.removeChild(content);
     }

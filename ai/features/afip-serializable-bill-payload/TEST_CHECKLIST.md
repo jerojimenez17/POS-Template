@@ -38,3 +38,17 @@ Casos de aceptación del paso QA/TDD. Marcar como verificados al implementar el 
 - [x] Emisión válida una vez: Factura B, id `6`, fecha, montos, producto/precio efectivo, headers y exclusión de proveedor/ptoVenta.
 - [x] Guards contra `fiscalBreakdown`, `fiscalSnapshot`, nota de crédito y autorización no permitida.
 - [ ] Falta completar cobertura directa de errores de preflight/credenciales, error de respuesta HTTP posterior al POST, rama de fallo local cliente en `BillButtons` (persistencia/impresión), variaciones de precio y tests de regresión completos de grants single-use.
+
+## Step 4 — revalidación tras Step 5, iteración 2 — 2026-11-26
+
+- **PASS — archivo completo:** `npm run test -- ai/features/afip-serializable-bill-payload --maxWorkers=1` — **1 archivo, 9/9 tests**.
+- **PASS — wire date del gateway:** el test de emisión válida confirma que `request.billState.date` permanece como ISO original completo (`2026-10-01T12:34:56.000Z`), junto con `action: "createVoucher"`, precio efectivo, importes, headers y allowlist. La fecha civil de solicitud no reemplaza el dato remoto preexistente.
+- **Separación de estado:** QR/CAE emplea el `requestDate` civil independiente; el payload remoto mantiene `billState.date`. La suite QR correspondiente pasó 55/55 en esta repetición. No hubo llamada remota real.
+- **Cobertura no cerrada:** la lista de huecos directos arriba continúa pendiente; el resultado 9/9 verifica el archivo actual, no declara completados esos criterios aún no cubiertos.
+- QA sólo añadió esta anotación de estado; no modificó source ni tests.
+
+## Step 4 QA — date regression re-run — 2026-11-26
+
+- **PASS:** `npm run test -- ai/features/afip-serializable-bill-payload --maxWorkers=1 --testTimeout=30000` — **1 archivo, 9/9 tests**.
+- La fecha ISO completa de `billState` sigue inalterada en el payload serializable; `requestDate` civil QR no reemplaza el wire date.
+- QA actualizó sólo el registro de resultados. No se modificaron source, tests ni `SPEC.md`; no hubo llamada AFIP real.
