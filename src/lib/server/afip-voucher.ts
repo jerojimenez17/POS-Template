@@ -33,6 +33,9 @@ import {
   projectAfipInvoiceProduct,
   type AfipInvoiceDTO,
 } from "@/utils/billing";
+import { normalizeArcaIssuerCuit, type ArcaQrPayloadV1 } from "@/services/afip/qr-payload";
+import { captureArcaCivilDate } from "@/services/afip/civil-date";
+import { createAuthorizedArcaQrGrant, type AuthorizedArcaQrClaimsV1 } from "@/lib/server/authorized-arca-qr-grant";
 
 export type AfipVoucherOperationResult =
   | { success: true; data: AfipVoucherSuccessData }
@@ -52,6 +55,12 @@ interface PreparedVoucherPayload {
   tipoFactura: AfipVoucherType;
   isCreditNote: boolean;
   lastVoucherNumber: number;
+  requestDate: string;
+  createAuthorizedQrGrant: boolean;
+}
+
+interface PrepareAfipVoucherOptions {
+  issuancePurpose?: "standard" | "payment-voucher";
 }
 
 export interface PreparedAfipVoucher {
@@ -176,6 +185,55 @@ function preflightError(result: VoucherNumberResult, ptoVenta: number, tipoFactu
   };
 }
 
+function resolveRecipientIvaCondition(billState: Pick<AfipInvoiceDTO, "clientIvaCondition" | "IVACondition">): string {
+  return billState.clientIvaCondition?.trim() || billState.IVACondition?.trim() || "";
+}
+
+function buildAuthorizedInvoiceQrPayload(
+  requestDate: string,
+  cuit: string,
+  billState: AfipInvoiceDTO,
+  data: AfipVoucherSuccessData,
+): ArcaQrPayloadV1 | null {
+  const normalizedCuit = normalizeArcaIssuerCuit(cuit);
+  if (!normalizedCuit) return null;
+  const recipientType = billState.clientDocumentType;
+  const hasNoDocument = recipientType === undefined
+    && (billState.clientDocumentNumber === undefined || billState.clientDocumentNumber.trim() === "");
+  const isConsumerFinal = resolveRecipientIvaCondition(billState).toLocaleLowerCase().replace(/_/g, " ") === "consumidor final";
+  const tipoDocRec = recipientType === "CUIT" ? 80 : recipientType === "DNI" ? 96 : hasNoDocument && isConsumerFinal ? 99 : null;
+  const nroDocRec = tipoDocRec === 99
+    ? 0
+    : tipoDocRec !== null && billState.clientDocumentNumber && /^\d+$/.test(billState.clientDocumentNumber)
+      ? Number(billState.clientDocumentNumber)
+      : null;
+  const cae = Number(data.cae);
+  const nroCmp = typeof data.nroComprobante === "number" ? data.nroComprobante : Number(data.nroComprobante);
+  const ptoVta = typeof data.ptoVenta === "number" ? data.ptoVenta : Number(data.ptoVenta);
+  const amount = data.fiscalSnapshot?.total ?? getEffectiveAfipInvoiceTotal(billState);
+  if (tipoDocRec === null || nroDocRec === null) return null;
+
+  const payload: ArcaQrPayloadV1 = {
+    ver: 1,
+    fecha: requestDate,
+    cuit: Number(normalizedCuit),
+    ptoVta,
+    tipoCmp: getAfipVoucherTypeCode(billState.billType),
+    nroCmp,
+    importe: amount,
+    moneda: "PES",
+    ctz: 1,
+    tipoDocRec,
+    nroDocRec,
+    tipoCodAut: "E",
+    codAut: cae,
+  };
+  return Number.isSafeInteger(payload.cuit)
+    && Number.isSafeInteger(payload.nroDocRec)
+    ? payload
+    : null;
+}
+
 /**
  * Performs all local billing validation and the read-only ARCA sequence lookup.
  * The returned handle is opaque and is only consumable by issuePreparedAfipVoucher.
@@ -183,7 +241,17 @@ function preflightError(result: VoucherNumberResult, ptoVenta: number, tipoFactu
 export async function prepareAfipVoucherForActor(
   billState: BillState | Partial<AfipInvoiceDTO>,
   sessionActor: AuthenticatedUserContext,
+  requestDate?: string,
+  options: PrepareAfipVoucherOptions = {},
 ): Promise<PrepareAfipVoucherResult> {
+  const preparedRequestDate = requestDate && /^\d{4}-\d{2}-\d{2}$/.test(requestDate)
+    ? requestDate
+    : "requestDate" in billState
+      && typeof billState.requestDate === "string"
+      && /^\d{4}-\d{2}-\d{2}$/.test(billState.requestDate)
+      ? billState.requestDate
+      : captureArcaCivilDate();
+
   if (!sessionActor.id
     || (sessionActor.role !== UserRole.USER
       && sessionActor.role !== UserRole.ADMIN
@@ -328,6 +396,8 @@ export async function prepareAfipVoucherForActor(
     tipoFactura,
     isCreditNote,
     lastVoucherNumber: numberResult.success as number,
+    requestDate: preparedRequestDate,
+    createAuthorizedQrGrant: options.issuancePurpose !== "payment-voucher",
   });
   return { success: true, prepared };
 }
@@ -339,6 +409,7 @@ export async function issuePreparedAfipVoucher(
 ): Promise<AfipVoucherOperationResult> {
   const payload = preparedPayloads.get(prepared);
   if (!payload) return { error: "La prevalidación de ARCA ya no está disponible", issuanceNotStarted: true };
+  const requestDate = payload.requestDate;
   // A prepared preflight is single-use: it cannot be replayed to create duplicate vouchers.
   preparedPayloads.delete(prepared);
 
@@ -415,6 +486,8 @@ export async function issuePreparedAfipVoucher(
     documentNumber: Number(billStateWithoutPtoVenta.documentNumber) || 0,
     total: effectiveTotalWithDiscount,
     totalWithDiscount: effectiveTotalWithDiscount,
+    // Keep createVoucher's established bill date wire format. requestDate is
+    // the separately captured ARCA civil date used for the CAE/QR record.
     date: billStateWithoutPtoVenta.date,
   };
 
@@ -493,7 +566,59 @@ export async function issuePreparedAfipVoucher(
         ? "produccion"
         : process.env.AFIP_ENVIRONMENT === "homologacion" ? "homologacion" : "desconocido",
     });
-    if (parsed.kind === "success") return { success: true, data: parsed.data };
+    if (parsed.kind === "success") {
+      let qrAttestationToken: string | undefined;
+      if (!payload.isCreditNote && payload.createAuthorizedQrGrant) {
+        const billType = payload.billState.billType;
+        const rawQrData = typeof parsed.data.qrData === "string" && parsed.data.qrData.trim().length > 0
+          ? parsed.data.qrData
+          : null;
+        const qrPayload = buildAuthorizedInvoiceQrPayload(requestDate, payload.cuit, payload.billState, parsed.data);
+        const amount = parsed.data.fiscalSnapshot?.total ?? effectiveTotalWithDiscount;
+        const invoiceNumber = Number(parsed.data.nroComprobante);
+        const pointOfSale = Number(parsed.data.ptoVenta);
+        const documentType = payload.billState.clientDocumentType ?? null;
+        const recipientDocumentNumber = payload.billState.clientDocumentNumber?.trim()
+          ? payload.billState.clientDocumentNumber ?? null
+          : null;
+        if ((billType === "Factura A" || billType === "Factura B" || billType === "Factura C")
+          && Number.isSafeInteger(invoiceNumber) && invoiceNumber > 0
+          && Number.isSafeInteger(pointOfSale) && pointOfSale > 0
+          && Number.isFinite(amount) && amount > 0) {
+          const claims: AuthorizedArcaQrClaimsV1 = {
+            businessId,
+            cae: parsed.data.cae,
+            billType,
+            afipVoucherType: billType === "Factura A" ? 1 : billType === "Factura B" ? 6 : 11,
+            invoiceNumber,
+            pointOfSale,
+            fiscalAmount: amount.toFixed(2),
+            issuerCuit: payload.cuit,
+            requestDate,
+            recipientIvaCondition: resolveRecipientIvaCondition(payload.billState),
+            recipientDocumentType: documentType === "CUIT" || documentType === "DNI" ? documentType : null,
+            recipientDocumentNumber,
+            payload: qrPayload,
+            rawQrData,
+          };
+          try {
+            const grant = await createAuthorizedArcaQrGrant(claims);
+            qrAttestationToken = grant?.token;
+          } catch {
+            // Attestation persistence is deliberately non-fatal after CAE authorization.
+            qrAttestationToken = undefined;
+          }
+        }
+      }
+      return {
+        success: true,
+        data: {
+          ...parsed.data,
+          requestDate,
+          ...(qrAttestationToken ? { qrAttestationToken } : {}),
+        },
+      };
+    }
     console.warn("[createVoucher] AFIP response shape", parsed.responseShape);
     if (parsed.kind === "afip-error") {
       return {

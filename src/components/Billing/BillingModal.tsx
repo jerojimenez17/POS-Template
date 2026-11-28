@@ -103,11 +103,12 @@ const BillingModal = ({
         // Success
         const caeResult = await updateOrderCaeAction(sale.id, {
           CAE: {
-             CAE: resp.data.cae,
-             vencimiento: resp.data.vencimiento,
-             nroComprobante: resp.data.nroComprobante,
-             qrData: resp.data.qrData,
-           ptoVenta: resp.data.ptoVenta ?? sale.ptoVenta,
+              CAE: resp.data.cae,
+              vencimiento: resp.data.vencimiento,
+              nroComprobante: resp.data.nroComprobante,
+               qrData: "",
+            ptoVenta: resp.data.ptoVenta ?? sale.ptoVenta,
+              ...(resp.data.qrAttestationToken ? { qrAttestationToken: resp.data.qrAttestationToken } : {}),
              ...(resp.data.fiscalSnapshotToken ? { fiscalSnapshotToken: resp.data.fiscalSnapshotToken } : {}),
           },
           IVACondition: ivaCondition,

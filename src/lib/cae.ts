@@ -24,6 +24,8 @@ export const parseCAE = (value: unknown): CAE | undefined => {
       vencimiento: typeof candidate.vencimiento === "string" ? candidate.vencimiento : "",
       nroComprobante: candidate.nroComprobante ?? 0,
       qrData: typeof candidate.qrData === "string" ? candidate.qrData : "",
+      ...(typeof candidate.requestDate === "string" ? { requestDate: candidate.requestDate } : {}),
+      ...(typeof candidate.qrUrl === "string" ? { qrUrl: candidate.qrUrl } : {}),
       ...(candidate.ptoVenta !== undefined ? { ptoVenta: candidate.ptoVenta } : {}),
     };
   }

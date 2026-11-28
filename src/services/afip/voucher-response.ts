@@ -12,7 +12,11 @@ export interface AfipVoucherSuccessData {
   cae: string;
   vencimiento: string;
   nroComprobante: number | string;
+  /** Raw gateway QR is internal-only and is retained only by the server grant flow. */
   qrData: string;
+  requestDate?: string;
+  qrUrl?: string | null;
+  qrAttestationToken?: string;
   ptoVenta?: number | string;
   fiscalSnapshot?: AuthorizedFiscalSnapshotV1;
   fiscalSnapshotToken?: string;
@@ -86,6 +90,13 @@ const validCae = (value: unknown): value is string =>
 
 const first = (...values: unknown[]): unknown => values.find((value) => value !== undefined);
 
+const firstUsableQrData = (...values: unknown[]): string => {
+  const candidate = values.find(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  return candidate ?? "";
+};
+
 const isStructuredError = (value: unknown): boolean =>
   isRecord(value) || Array.isArray(value);
 
@@ -129,6 +140,7 @@ export function parseAfipVoucherResponse(payload: unknown, context: ParseContext
     if (validCae(caeCandidate)) {
       const value = candidate.value;
       if (!value) return { kind: "missing-cae", message: "La Cloud Function respondió sin un CAE válido. Revise la configuración y los logs del servidor.", responseShape };
+      const qrWrapper = candidate.path === "data.afip" && isRecord(root.data) ? root.data : wrapper;
       const fiscalSnapshot = normalizeAuthorizedFiscalSnapshot(value.fiscalSnapshot, {
         afipVoucherType: context.tipoFactura,
       });
@@ -138,7 +150,7 @@ export function parseAfipVoucherResponse(payload: unknown, context: ParseContext
           cae: caeCandidate.trim(),
           vencimiento: String(first(value.CAEFchVto, wrapper.CAEFchVto, root.CAEFchVto) ?? ""),
           nroComprobante: (first(value.nroCbte, value.nroComprobante, wrapper.nroCbte, root.nroCbte) ?? 0) as number | string,
-          qrData: String(first(value.qrData, wrapper.qrData, root.qrData) ?? ""),
+          qrData: firstUsableQrData(value.qrData, qrWrapper.qrData, root.qrData),
           ptoVenta: first(value.ptoVenta, wrapper.ptoVenta, root.ptoVenta, context.ptoVenta) as number | string,
           ...(fiscalSnapshot ? { fiscalSnapshot } : {}),
           sourcePath: candidate.path,

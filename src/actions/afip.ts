@@ -9,6 +9,7 @@ import {
   type AfipVoucherOperationResult,
   type PrepareAfipVoucherResult,
 } from "@/lib/server/afip-voucher";
+import { captureArcaCivilDate } from "@/services/afip/civil-date";
 import { createAuthorizedFiscalSnapshotGrant } from "@/lib/server/fiscal-snapshot-grant";
 import {
   getEffectiveAfipInvoiceTotal,
@@ -17,7 +18,18 @@ import {
   type AfipInvoiceDTO,
 } from "@/utils/billing";
 
-export type CreateAfipVoucherResult = AfipVoucherOperationResult;
+export interface AfipVoucherPublicData {
+  cae: string;
+  vencimiento: string;
+  nroComprobante: number | string;
+  ptoVenta?: number | string;
+  qrAttestationToken?: string;
+  fiscalSnapshotToken?: string;
+}
+
+export type CreateAfipVoucherResult =
+  | { success: true; data: AfipVoucherPublicData }
+  | { error: string | import("@/services/afip/point-sale-validation").AfipPointSaleError; diagnostic?: import("@/services/afip/voucher-response").AfipResponseDiagnostic; issuanceNotStarted?: true };
 
 const CREDIT_NOTE_FIELDS = ["nroAsociado", "ptoVentaAsociado", "caeAsociado", "CbtesAsoc"] as const;
 const TRUSTED_FISCAL_FIELDS = ["fiscalSnapshot", "fiscalBreakdown"] as const;
@@ -114,6 +126,10 @@ export const createAfipVoucherAction = async (
     return plainPreIssueError(message);
   }
 
+  // Fix the ARCA civil date before preparation can await preflight lookups.
+  // The projection above discards any caller-provided requestDate.
+  safeInvoiceInput = { ...safeInvoiceInput, requestDate: captureArcaCivilDate() };
+
   let preparation: PrepareAfipVoucherResult;
   try {
     preparation = await prepareAfipVoucherForActor(
@@ -126,7 +142,10 @@ export const createAfipVoucherAction = async (
     });
     return plainPreIssueError("No se pudo preparar la factura antes de iniciar la emisión");
   }
-  if (!("prepared" in preparation)) return preparation;
+  if (!("prepared" in preparation)) {
+    if ("error" in preparation) return preparation;
+    return plainPreIssueError("No se pudo preparar la factura antes de iniciar la emisión");
+  }
   let invoice: AfipInvoiceDTO;
   try {
     invoice = normalizeAfipInvoiceDTO(safeInvoiceInput);
@@ -142,32 +161,43 @@ export const createAfipVoucherAction = async (
     });
     return plainPreIssueError("No se pudo iniciar la emisión de la factura");
   }
-  if (!("success" in issued) || !issued.data.fiscalSnapshot) return issued;
+  if (!("success" in issued)) return issued;
 
-  const billType = invoice.billType;
-  const invoiceNumber = Number(issued.data.nroComprobante);
-  const pointOfSale = Number(issued.data.ptoVenta);
-  if ((billType !== "Factura A" && billType !== "Factura B" && billType !== "Factura C")
-    || issued.data.fiscalSnapshot.billType !== billType
-    || !Number.isSafeInteger(invoiceNumber) || invoiceNumber <= 0
-    || !Number.isSafeInteger(pointOfSale) || pointOfSale <= 0
-    || Math.abs(issued.data.fiscalSnapshot.total - getEffectiveAfipInvoiceTotal(invoice)) > 0.0100001) return issued;
-
-  try {
-    const fiscalSnapshotToken = await createAuthorizedFiscalSnapshotGrant(
-      sessionUser.businessId,
-      issued.data.cae,
-      issued.data.fiscalSnapshot,
-      { billType, invoiceNumber, pointOfSale },
-    );
-    return { ...issued, data: { ...issued.data, fiscalSnapshotToken } };
-  } catch (error: unknown) {
-    console.error("Could not persist trusted authorized fiscal snapshot grant", {
-      businessId: sessionUser.businessId,
-      errorType: error instanceof Error ? error.name : typeof error,
-    });
-    // The CAE remains authorized, but without the server-side grant it is not
-    // eligible for a credit note. Never fall back to browser-provided amounts.
-    return issued;
+  let fiscalSnapshotToken: string | undefined;
+  const snapshot = issued.data.fiscalSnapshot;
+  if (snapshot) {
+    const billType = invoice.billType;
+    const invoiceNumber = Number(issued.data.nroComprobante);
+    const pointOfSale = Number(issued.data.ptoVenta);
+    const snapshotMatches = (billType === "Factura A" || billType === "Factura B" || billType === "Factura C")
+      && snapshot.billType === billType
+      && Number.isSafeInteger(invoiceNumber) && invoiceNumber > 0
+      && Number.isSafeInteger(pointOfSale) && pointOfSale > 0
+      && Math.abs(snapshot.total - getEffectiveAfipInvoiceTotal(invoice)) <= 0.0100001;
+    if (snapshotMatches) {
+      try {
+        fiscalSnapshotToken = await createAuthorizedFiscalSnapshotGrant(
+          sessionUser.businessId,
+          issued.data.cae,
+          snapshot,
+          { billType, invoiceNumber, pointOfSale },
+        );
+      } catch (error: unknown) {
+        console.error("Could not persist trusted authorized fiscal snapshot grant", {
+          businessId: sessionUser.businessId,
+          errorType: error instanceof Error ? error.name : typeof error,
+        });
+      }
+    }
   }
+
+  const publicData: AfipVoucherPublicData = {
+    cae: issued.data.cae,
+    vencimiento: issued.data.vencimiento,
+    nroComprobante: issued.data.nroComprobante,
+    ...(issued.data.ptoVenta === undefined ? {} : { ptoVenta: issued.data.ptoVenta }),
+    ...(issued.data.qrAttestationToken ? { qrAttestationToken: issued.data.qrAttestationToken } : {}),
+    ...(fiscalSnapshotToken ? { fiscalSnapshotToken } : {}),
+  };
+  return { success: true, data: publicData };
 };

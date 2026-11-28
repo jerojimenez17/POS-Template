@@ -8,13 +8,18 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { consumeAuthorizedFiscalSnapshotGrant } from "@/lib/server/fiscal-snapshot-grant";
+import { consumeAuthorizedArcaQrGrant, getTenantIssuerCuit } from "@/lib/server/authorized-arca-qr-grant";
+import { logQrTelemetry } from "@/lib/server/qr-telemetry";
 interface UpdateCaeInput {
   CAE: {
     CAE: string;
     vencimiento: string;
     nroComprobante: number | string;
-    qrData: string;
+    qrData?: unknown;
+    requestDate?: unknown;
+    qrUrl?: unknown;
     ptoVenta?: number | string;
+    qrAttestationToken?: unknown;
     fiscalSnapshotToken?: string;
   };
   IVACondition: string;
@@ -29,7 +34,14 @@ export const updateOrderCaeAction = async (
   data: UpdateCaeInput
 ) => {
   const parsed = z.object({
-    CAE: z.object({ CAE: z.string(), vencimiento: z.string(), nroComprobante: z.union([z.string(), z.number()]), qrData: z.string(), ptoVenta: z.union([z.string(), z.number()]).optional(), fiscalSnapshotToken: z.string().length(64).optional() }).strict(),
+    CAE: z.object({
+      CAE: z.string(),
+      vencimiento: z.string(),
+      nroComprobante: z.union([z.string(), z.number()]),
+      ptoVenta: z.union([z.string(), z.number()]).optional(),
+      qrAttestationToken: z.unknown().optional(),
+      fiscalSnapshotToken: z.string().length(64).optional(),
+    }).passthrough(),
     IVACondition: z.string(),
     documentType: z.enum(["", "CUIT", "DNI"]).optional(),
     documentNumber: z.union([z.string(), z.number()]).optional(),
@@ -49,7 +61,7 @@ export const updateOrderCaeAction = async (
   if (!businessId) return { error: "No autorizado" };
 
   try {
-    await db.$transaction(async (tx) => {
+    const referencePersisted = await db.$transaction(async (tx) => {
       let fiscalSnapshot: Prisma.InputJsonValue | undefined;
       const existingOrder = await tx.order.findFirst({
         where: { id: orderId, businessId },
@@ -78,6 +90,41 @@ export const updateOrderCaeAction = async (
         if (!trustedSnapshot) throw new Error("La autorización fiscal no coincide con la venta");
         fiscalSnapshot = JSON.parse(JSON.stringify(trustedSnapshot)) as Prisma.InputJsonValue;
       }
+      let qrGrantId: string | undefined;
+      const qrToken = parsed.data.CAE.qrAttestationToken;
+      if (typeof qrToken === "string" && qrToken) {
+        const issuerCuit = await getTenantIssuerCuit(tx, businessId);
+        const billType = parsed.data.billType;
+        const invoiceNumber = Number(parsed.data.CAE.nroComprobante);
+        const pointOfSale = Number(parsed.data.CAE.ptoVenta);
+        const afipVoucherType = billType === "Factura A" ? 1 : billType === "Factura B" ? 6 : billType === "Factura C" ? 11 : undefined;
+        if (issuerCuit !== null && afipVoucherType && Number.isSafeInteger(invoiceNumber) && invoiceNumber > 0
+          && Number.isSafeInteger(pointOfSale) && pointOfSale > 0) {
+          const grant = await consumeAuthorizedArcaQrGrant(tx, qrToken, {
+            businessId,
+            cae: parsed.data.CAE.CAE,
+            billType,
+            afipVoucherType,
+            invoiceNumber,
+            pointOfSale,
+            fiscalAmount: existingOrder.total.toFixed(2),
+            ...(issuerCuit === undefined ? {} : { issuerCuit }),
+            recipientIvaCondition: parsed.data.IVACondition,
+            recipientDocumentType: parsed.data.documentType === "CUIT" || parsed.data.documentType === "DNI"
+              ? parsed.data.documentType : null,
+            recipientDocumentNumber: normalizedDocumentNumber,
+          });
+          qrGrantId = grant?.id;
+        } else {
+          logQrTelemetry({ stage: "save-consume-ref", outcome: "rejected", reason: "binding-mismatch" });
+        }
+      } else {
+        logQrTelemetry({
+          stage: "save-consume-ref",
+          outcome: "rejected",
+          reason: qrToken === undefined || qrToken === "" ? "token-absent" : "binding-mismatch",
+        });
+      }
       await tx.order.update({
         where: { id: orderId, businessId },
         data: {
@@ -85,9 +132,10 @@ export const updateOrderCaeAction = async (
             CAE: parsed.data.CAE.CAE,
             vencimiento: parsed.data.CAE.vencimiento,
             nroComprobante: parsed.data.CAE.nroComprobante,
-            qrData: parsed.data.CAE.qrData,
             ...(parsed.data.CAE.ptoVenta === undefined ? {} : { ptoVenta: parsed.data.CAE.ptoVenta }),
+            ...(qrGrantId ? { qrAttestationId: qrGrantId } : {}),
           },
+          qrDataPolicyVersion: 1,
           billType: parsed.data.billType,
           afipVoucherType: parsed.data.billType === "Factura A" ? 1 : parsed.data.billType === "Factura B" ? 6 : parsed.data.billType === "Factura C" ? 11 : undefined,
           invoiceNumber: Number(parsed.data.CAE.nroComprobante),
@@ -99,7 +147,22 @@ export const updateOrderCaeAction = async (
           ...(fiscalSnapshot ? { fiscalSnapshot } : {}),
         },
       });
+      if (qrGrantId) {
+        const grantLink = tx.authorizedArcaQrGrant?.updateMany;
+        if (typeof grantLink === "function") {
+          const linked = await grantLink.call(tx.authorizedArcaQrGrant, {
+            where: { id: qrGrantId, orderId: null },
+            data: { orderId },
+          });
+          if (linked.count !== 1) throw new Error("QR grant association failed");
+        }
+      }
+      return Boolean(qrGrantId);
     });
+
+    if (referencePersisted) {
+      logQrTelemetry({ stage: "save-consume-ref", outcome: "reference-persisted" });
+    }
 
     await pusherServer.trigger(
       `orders-${businessId}`,

@@ -126,6 +126,7 @@ export const BillReducer = (
         documentNumber: 0,
         typeDocument: "",
         IVACondition: "Consumidor Final",
+        clientIvaCondition: "Consumidor Final",
         paidMethod: "Efectivo",
         twoMethods: false,
         totalSecondMethod: 0,

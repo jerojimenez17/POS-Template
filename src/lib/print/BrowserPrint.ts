@@ -1,4 +1,5 @@
 import { formatInvoiceNumberFull, getBillTypeDisplay, normalizeBillType } from "@/lib/utils/bill-type";
+import { reportQrRendererOutcome } from "@/lib/print/qr-renderer-outcome";
 import { buildReceiptClientData, getDocumentPrintKind, type DocumentPrintKind } from "./receipt-data";
 
 
@@ -85,7 +86,10 @@ export interface ThermalReceiptData {
   cae?: {
     cae: string;
     vencimiento: string;
+    /** Server-resolved print value for standard invoices; null suppresses QR output. */
+    qrValue?: string | null;
     qrData?: string;
+    qrUrl?: string | null;
     ptoVenta?: number | string;
   };
   pointOfSale?: number | string;
@@ -383,17 +387,27 @@ async function tryFallbackHTMLPrint(data: ThermalReceiptData, qrDataUrl: string 
     const html = buildThermalPrintHTML(data, qrDataUrl);
     printWindow.document.write(html);
     printWindow.document.close();
+    reportQrRendererOutcome("thermal-html", "submitted");
     return true;
-  } catch (error) {
-    console.error("Thermal HTML print error:", error);
+  } catch {
+    reportQrRendererOutcome("thermal-html", "failed");
+    console.error("Thermal HTML print error");
     return false;
   }
 }
 
 export async function printThermalReceipt(data: ThermalReceiptData, qzTrayEnabled: boolean = false): Promise<boolean> {
   const receipt = generateThermalReceipt(data);
-  const hasQRCode = Boolean(data.cae?.cae?.trim() && data.cae.qrData?.trim());
-  const qrData = hasQRCode ? data.cae?.qrData?.trim() ?? null : null;
+  const hasResolvedQrValue = data.cae !== undefined && Object.prototype.hasOwnProperty.call(data.cae, "qrValue");
+  const qrValue = hasResolvedQrValue
+    ? typeof data.cae?.qrValue === "string" && data.cae.qrValue.trim() ? data.cae.qrValue : null
+    : typeof data.cae?.qrUrl === "string" && data.cae.qrUrl.trim()
+      ? data.cae.qrUrl
+      : typeof data.cae?.qrData === "string" && data.cae.qrData.trim()
+        ? data.cae.qrData
+        : null;
+  const hasQRCode = Boolean(data.cae?.cae?.trim() && qrValue);
+  const qrData = hasQRCode ? qrValue : null;
   
   let qrDataUrl: string | null = null;
   if (hasQRCode && qrData) {
@@ -405,8 +419,14 @@ export async function printThermalReceipt(data: ThermalReceiptData, qzTrayEnable
         width: 120, 
         errorCorrectionLevel: 'M' 
       });
-    } catch (e) {
-      console.error("Error generating fallback QR data url:", e);
+      if (typeof qrDataUrl !== "string" || !/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(qrDataUrl)) {
+        throw new Error("QR encoder returned empty output");
+      }
+      reportQrRendererOutcome(qzTrayEnabled ? "qz" : "thermal-html", "generated");
+    } catch {
+      qrDataUrl = null;
+      reportQrRendererOutcome(qzTrayEnabled ? "qz" : "thermal-html", "failed");
+      console.error("Could not generate receipt QR image");
     }
   }
 
@@ -459,10 +479,11 @@ export async function printThermalReceipt(data: ThermalReceiptData, qzTrayEnable
 
     // Print to QZ Tray
     await qz.print(config, printData as unknown as string[]);
-    
+    reportQrRendererOutcome("qz", "submitted");
     return true;
-  } catch (error) {
-    console.warn("QZ Tray connection or print failed, falling back to HTML popup:", error);
+  } catch {
+    reportQrRendererOutcome("qz", "failed");
+    console.warn("QZ Tray connection or print failed, falling back to HTML popup");
     return tryFallbackHTMLPrint(data, qrDataUrl);
   }
 }

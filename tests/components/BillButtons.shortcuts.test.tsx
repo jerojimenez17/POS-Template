@@ -692,8 +692,6 @@ describe("BillButtonsDefault - Keyboard Shortcut Remapping", () => {
             cae: "12345678901234",
             vencimiento: "20300101",
             nroComprobante: 1,
-            qrData: "https://arca.test/qr/12345678901234",
-            sourcePath: "data",
           },
         });
         vi.mocked(salesActions.processSaleAction).mockResolvedValue({

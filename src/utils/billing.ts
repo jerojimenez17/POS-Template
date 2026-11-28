@@ -82,6 +82,8 @@ export interface AfipInvoiceDTO {
   total: number;
   totalWithDiscount: number;
   date: string;
+  /** Server-captured civil date for the current ARCA request; stripped from client input. */
+  requestDate?: string;
   ptoVenta?: number;
   products: AfipInvoiceProductDTO[];
   /** Internal-only fields used by the existing trusted credit-note pathway. */
@@ -283,6 +285,11 @@ export function createAfipInvoiceDTO(state: unknown, selectedBillType?: string):
     projected[key] = descriptor.value;
   }
   if (selectedBillType !== undefined) projected.billType = selectedBillType;
+  if (projected.clientDocumentType === ""
+    && projected.clientIvaCondition === "Consumidor Final"
+    && projected.clientDocumentNumber === undefined) {
+    delete projected.clientDocumentType;
+  }
   return normalizeAfipInvoiceDTO(projected);
 }
 

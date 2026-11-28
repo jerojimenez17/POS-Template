@@ -41,6 +41,32 @@ export async function captureElement(
   const { scale = 2 } = options;
   const html2canvas = (await import("html2canvas")).default;
 
+  // Ensure embedded images (including data:image/svg+xml QR codes) are decoded
+  // before html2canvas snapshots the DOM.
+  const images = Array.from(element.querySelectorAll("img"));
+  await Promise.all(
+    images.map(async (img) => {
+      if (typeof img.decode === "function") {
+        try {
+          await img.decode();
+          return;
+        } catch {
+          // Fall back to load/error listeners below if decode() rejects.
+        }
+      }
+      if (img.complete) return;
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          img.removeEventListener("load", done);
+          img.removeEventListener("error", done);
+          resolve();
+        };
+        img.addEventListener("load", done, { once: true });
+        img.addEventListener("error", done, { once: true });
+      });
+    }),
+  );
+
   const canvas = await html2canvas(element, {
     scale,
     useCORS: true,
